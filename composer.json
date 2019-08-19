@@ -1,0 +1,22 @@
+{
+    "name": "lisachenko/z-engine",
+    "description": "Library that provides direct access to native PHP structures",
+    "type": "library",
+    "require": {
+        "php": "~7.4",
+        "ext-ffi": "*"
+    },
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Alexander Lisachenko",
+            "email": "lisachenko.it@gmail.com"
+        }
+    ],
+    "autoload": {
+        "psr-4" : {
+            "ZEngine\\" : "src/"
+        }
+    },
+    "minimum-stability": "stable"
+}
