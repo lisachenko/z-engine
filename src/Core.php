@@ -205,7 +205,8 @@ class Core
      */
     public static function init()
     {
-        self::$engine   = $engine = FFI::load(__DIR__ . '/../include/engine_x64.h');
+        self::$engine   = $engine = FFI::load(__DIR__ . '/../include/engine_x64_nts.h');
+        // TODO: This works only for non-thread-safe versions of PHP
         self::$executor = new Executor($engine->executor_globals);
         self::$compiler = new Compiler($engine->compiler_globals);
     }
