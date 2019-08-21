@@ -220,6 +220,16 @@ class Core
     }
 
     /**
+     * Creates a new instance of specific type
+     *
+     * @param string $type Name of the type
+     */
+    public static function new(string $type, bool $owned = true, bool $persistent = false): CData
+    {
+        return self::$engine->new($type, $owned, $persistent);
+    }
+
+    /**
      * Returns a CType definition for engine by type name
      *
      * @param string $type Name of the type

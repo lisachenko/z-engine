@@ -16,7 +16,7 @@ use FFI\CData;
 
 class ObjectEntry extends ReflectionClass
 {
-    public HashTable $properties;
+    private HashTable $properties;
 
     private CData $pointer;
 

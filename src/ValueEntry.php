@@ -59,6 +59,11 @@ class ValueEntry
         $this->pointer = $value;
     }
 
+    public function getRawData(): ?CData
+    {
+        return $this->pointer->value;
+    }
+
     /**
      * Returns "native" value for userland
      *
@@ -103,7 +108,6 @@ class ValueEntry
     public function setNativeValue($newValue)
     {
         $newType = gettype($newValue);
-        echo $newType;
         switch ($newType) {
             case 'integer':
                 $this->pointer->u1->v->type->cdata = self::IS_LONG;

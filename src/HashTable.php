@@ -58,7 +58,6 @@ class HashTable implements IteratorAggregate
      */
     public function find(string $key): ?ValueEntry
     {
-        $key     = strtolower($key);
         $pointer = Core::call('zend_hash_find', $this->value, FFI::addr(StringEntry::fromString($key)->pointer));
 
         if ($pointer !== null) {
