@@ -796,9 +796,11 @@ struct _zend_class_entry {
 
 typedef struct _zend_executor_globals zend_executor_globals;
 
-
+// #ifndef ZTS
 extern zend_executor_globals executor_globals;
 extern struct _zend_compiler_globals compiler_globals;
+// #endif
+
 
 /**
  * Zend Hash API
