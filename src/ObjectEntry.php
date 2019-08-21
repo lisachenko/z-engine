@@ -13,7 +13,7 @@ namespace ZEngine;
 
 use FFI\CData;
 
-class ObjectEntry extends ClassEntry
+class ObjectEntry extends ReflectionClass
 {
     public HashTable $properties;
 
@@ -22,7 +22,8 @@ class ObjectEntry extends ClassEntry
     public function __construct(CData $pointer)
     {
         $this->pointer = $pointer;
-        parent::__construct($this->pointer->ce);
+        // TODO: Maybe just break this inheritance and keep this separate from ObjectEntry
+        parent::__construct((string) (new StringEntry($this->pointer->ce->name)));
         if ($this->pointer->properties !== null) {
             $this->properties = new HashTable($this->pointer->properties);
         }

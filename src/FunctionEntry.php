@@ -136,12 +136,12 @@ class FunctionEntry
      *
      * @throws \InvalidArgumentException If scope is not available
      */
-    public function getScope(): ClassEntry
+    public function getScope(): ReflectionClass
     {
         if ($this->pointer->common->scope === null) {
             throw new \InvalidArgumentException('Not in a class scope');
         }
-        return new ClassEntry($this->pointer->common->scope);
+        return ReflectionClass::fromClassEntry($this->pointer->common->scope);
     }
 
     /**

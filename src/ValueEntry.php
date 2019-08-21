@@ -128,13 +128,13 @@ class ValueEntry
     /**
      * Type-friendly getter to work with class-entry Zval-s
      */
-    public function getClassEntry(): ClassEntry
+    public function getClass(): ReflectionClass
     {
         if ($this->pointer->u1->v->type !== self::IS_PTR) {
             throw new \UnexpectedValueException('Class entry available only for the type IS_PTR');
         }
 
-        return new ClassEntry($this->pointer->value->ce);
+        return ReflectionClass::fromClassEntry($this->pointer->value->ce);
     }
 
     /**
