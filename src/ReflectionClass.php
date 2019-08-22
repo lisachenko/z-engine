@@ -46,11 +46,7 @@ class ReflectionClass extends NativeReflectionClass
             throw new \ReflectionException("Class {$className} should be in the engine.");
         }
         $classEntry = $classEntryValue->getRawData()->ce;
-
-        $this->pointer         = $classEntry;
-        $this->functionTable   = new HashTable(FFI::addr($classEntry->function_table));
-        $this->propertiesTable = new HashTable(FFI::addr($classEntry->properties_info));
-        $this->constantsTable  = new HashTable(FFI::addr($classEntry->constants_table));
+        $this->initLowLevelStructures($classEntry);
     }
 
     /**
@@ -60,10 +56,15 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @return ReflectionClass
      */
-    public static function fromClassEntry(CData $classEntry)
+    public static function fromClassEntry(CData $classEntry): ReflectionClass
     {
-        $name = new StringEntry($classEntry->name);
-        return new self((string) $name);
+        /** @var ReflectionClass $reflectionClass */
+        $reflectionClass = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $classNameValue  = new StringEntry($classEntry->name);
+        call_user_func([$reflectionClass, 'parent::__construct'], (string) $classNameValue);
+        $reflectionClass->initLowLevelStructures($classEntry);
+
+        return $reflectionClass;
     }
 
     /**
@@ -332,7 +333,6 @@ class ReflectionClass extends NativeReflectionClass
         $this->pointer->parent = $newParent->pointer;
     }
 
-
     /**
      * Declares this class as final/non-final
      *
@@ -346,6 +346,7 @@ class ReflectionClass extends NativeReflectionClass
             $this->pointer->ce_flags->cdata = ($this->pointer->ce_flags & (~Core::ZEND_ACC_FINAL));
         }
     }
+
 
     /**
      * Declares this class as abstract/non-abstract
@@ -437,10 +438,7 @@ class ReflectionClass extends NativeReflectionClass
     public function __debugInfo()
     {
         return [
-            'name'            => $this->getName(),
-//            'functionTable'   => $this->functionTable,
-//            'propertiesTable' => $this->propertiesTable,
-//            'constantsTable'  => $this->constantsTable
+            'name' => $this->getName(),
         ];
     }
 
@@ -450,5 +448,18 @@ class ReflectionClass extends NativeReflectionClass
     private function hasParentClass(): bool
     {
         return $this->pointer->parent_name !== null;
+    }
+
+    /**
+     * Performs low-level initialization of fields
+     *
+     * @param CData $classEntry
+     */
+    private function initLowLevelStructures(CData $classEntry): void
+    {
+        $this->pointer         = $classEntry;
+        $this->functionTable   = new HashTable(FFI::addr($classEntry->function_table));
+        $this->propertiesTable = new HashTable(FFI::addr($classEntry->properties_info));
+        $this->constantsTable  = new HashTable(FFI::addr($classEntry->constants_table));
     }
 }

@@ -165,6 +165,7 @@ class Core
     /* op_array uses strict mode types                               |     |     |     |     */
     public const ZEND_ACC_STRICT_TYPES =            (1 << 31); /*    |     |  X  |     |     */
 
+    public const ZEND_ACC_PPP_MASK = self::ZEND_ACC_PUBLIC | self::ZEND_ACC_PROTECTED | self::ZEND_ACC_PRIVATE;
 
     /**
      * Type of zend_function.type
