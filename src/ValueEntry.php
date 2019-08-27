@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace ZEngine;
 
-use FFI;
 use FFI\CData;
 
 class ValueEntry
@@ -128,6 +127,25 @@ class ValueEntry
             default:
                 throw new \UnexpectedValueException("Unexpected type: {$newType}");
         }
+    }
+
+    /**
+     * This method returns zval.u2.extra field value and used in different places
+     *
+     * hash collision chain
+     * cache slot (for RECV_INIT)
+     * opline number (for FAST_CALL)
+     * line number (for ast nodes)
+     * arguments number for EX(This)
+     * foreach position
+     * foreach iterator index
+     * class constant access flags
+     * single property guard
+     * constant flags
+     */
+    public function getExtraValue(): int
+    {
+        return $this->pointer->u2->extra;
     }
 
     /**
