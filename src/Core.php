@@ -187,6 +187,11 @@ class Core
     public const FAILURE = -1;
 
     /**
+     * This should be equal to ZEND_MM_ALIGNMENT
+     */
+    public const MM_ALIGNMENT = 8;
+
+    /**
      * Provides an access to the executor global state
      */
     public static Executor $executor;
@@ -251,5 +256,18 @@ class Core
     public static function call(string $function, ...$arguments)
     {
         return self::$engine->$function(...$arguments);
+    }
+
+    /**
+     * Returns an aligned size
+     *
+     * @see ZEND_MM_ALIGNED_SIZE(size) macro implementation
+     */
+    public static function getAlignedSize(int $size): int
+    {
+        $mask = ~ (self::MM_ALIGNMENT -1);
+        $size = (($size + self::MM_ALIGNMENT -1) & $mask);
+
+        return $size;
     }
 }
