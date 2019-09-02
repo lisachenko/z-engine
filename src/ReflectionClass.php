@@ -37,7 +37,11 @@ class ReflectionClass extends NativeReflectionClass
 
     public function __construct($classNameOrObject)
     {
-        parent::__construct($classNameOrObject);
+        try {
+            parent::__construct($classNameOrObject);
+        } catch (\ReflectionException $e) {
+            // This can happen during the class-loading. But we still can work with it.
+        }
         $className       = is_string($classNameOrObject) ? $classNameOrObject : get_class($classNameOrObject);
         $normalizedName  = strtolower($className);
 
@@ -61,7 +65,11 @@ class ReflectionClass extends NativeReflectionClass
         /** @var ReflectionClass $reflectionClass */
         $reflectionClass = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
         $classNameValue  = new StringEntry($classEntry->name);
-        call_user_func([$reflectionClass, 'parent::__construct'], (string) $classNameValue);
+        try {
+            call_user_func([$reflectionClass, 'parent::__construct'], (string) $classNameValue);
+        } catch (\ReflectionException $e) {
+            // This can happen during the class-loading. But we still can work with it.
+        }
         $reflectionClass->initLowLevelStructures($classEntry);
 
         return $reflectionClass;
@@ -296,10 +304,14 @@ class ReflectionClass extends NativeReflectionClass
         if (!$this->hasParentClass()) {
             throw new \ReflectionException('Could not remove non-existent parent class');
         }
-        $parentClass      = $this->getParentClass();
-        $parentInterfaces = $parentClass->getInterfaceNames();
-        if (count($parentInterfaces) > 0) {
-            $this->removeInterfaces(...$parentInterfaces);
+        try {
+            $parentClass      = $this->getParentClass();
+            $parentInterfaces = $parentClass->getInterfaceNames();
+            if (count($parentInterfaces) > 0) {
+                $this->removeInterfaces(...$parentInterfaces);
+            }
+        } catch (\ReflectionException $e) {
+            // This can happen during the class-loading (parent not loaded yet). But we ignore this error
         }
         // TODO: Detach all related methods, constants, properties, etc...
         $this->pointer->parent = null;
