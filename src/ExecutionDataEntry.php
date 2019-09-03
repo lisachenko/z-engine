@@ -68,9 +68,9 @@ class ExecutionDataEntry
     /**
      * Returns the "return value"
      */
-    public function getReturnValue(): ValueEntry
+    public function getReturnValue(): ReflectionValue
     {
-        return new ValueEntry($this->pointer->return_value);
+        return ReflectionValue::fromValueEntry($this->pointer->return_value);
     }
 
     /**
@@ -90,9 +90,9 @@ class ExecutionDataEntry
      *
      * This contains following: this + call_info + num_args
      */
-    public function getThis(): ValueEntry
+    public function getThis(): ReflectionValue
     {
-        return new ValueEntry(FFI::addr($this->pointer->This));
+        return ReflectionValue::fromValueEntry(FFI::addr($this->pointer->This));
     }
 
     /**
@@ -108,14 +108,14 @@ class ExecutionDataEntry
      *
      * Argument index is starting from 0.
      */
-    public function getArgument(int $argumentIndex): ValueEntry
+    public function getArgument(int $argumentIndex): ReflectionValue
     {
         if ($argumentIndex >= $this->pointer->This->u2->num_args) {
             throw new \OutOfBoundsException("Argument index is greater than available arguments");
         }
 
         $valuePointer = Core::cast('zval *', $this->pointer) + self::getCallFrameSlot() + $argumentIndex;
-        $valueEntry   = new ValueEntry($valuePointer);
+        $valueEntry   = ReflectionValue::fromValueEntry($valuePointer);
 
         return $valueEntry;
     }
@@ -123,7 +123,7 @@ class ExecutionDataEntry
     /**
      * Returns execution arguments as array of values
      *
-     * @return ValueEntry[]
+     * @return ReflectionValue[]
      */
     public function getArguments(): array
     {

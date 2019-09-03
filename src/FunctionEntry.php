@@ -215,9 +215,9 @@ class FunctionEntry
      *
      * @param int $index
      *
-     * @return ValueEntry
+     * @return ReflectionValue
      */
-    public function getLiteral(int $index): ValueEntry
+    public function getLiteral(int $index): ReflectionValue
     {
         if (!$this->isUserDefined()) {
             throw new \LogicException('Literals are available only for user-defined functions');
@@ -228,13 +228,13 @@ class FunctionEntry
         }
         $literal = $this->pointer->op_array->literals[$index];
 
-        return new ValueEntry($literal);
+        return ReflectionValue::fromValueEntry($literal);
     }
 
     /**
      * Returns list of literals, associated with this entry
      *
-     * @return ValueEntry[]
+     * @return ReflectionValue[]
      */
     public function getLiterals(): iterable
     {
@@ -247,7 +247,7 @@ class FunctionEntry
             while ($literalIndex < $totalLiterals) {
                 $item = $this->pointer->op_array->literals[$literalIndex];
                 $literalIndex++;
-                yield new ValueEntry($item);
+                yield ReflectionValue::fromValueEntry($item);
             }
         };
 

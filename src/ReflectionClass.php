@@ -19,17 +19,17 @@ use ReflectionClass as NativeReflectionClass;
 class ReflectionClass extends NativeReflectionClass
 {
     /**
-     * @var HashTable|ValueEntry[]
+     * @var HashTable|ReflectionValue[]
      */
     private HashTable $functionTable;
 
     /**
-     * @var HashTable|ValueEntry[]
+     * @var HashTable|ReflectionValue[]
      */
     private HashTable $propertiesTable;
 
     /**
-     * @var HashTable|ValueEntry[]
+     * @var HashTable|ReflectionValue[]
      */
     private HashTable $constantsTable;
 
@@ -412,7 +412,7 @@ class ReflectionClass extends NativeReflectionClass
     /**
      * Returns the list of default properties. Only for non-static ones
      *
-     * @return iterable|ValueEntry[]
+     * @return iterable|ReflectionValue[]
      */
     public function getDefaultProperties(): iterable
     {
@@ -420,7 +420,7 @@ class ReflectionClass extends NativeReflectionClass
             $propertyIndex = 0;
             while ($propertyIndex < $this->pointer->default_properties_count) {
                 $value = $this->pointer->default_properties_table[$propertyIndex];
-                yield $propertyIndex => new ValueEntry($value);
+                yield $propertyIndex => ReflectionValue::fromValueEntry($value);
                 $propertyIndex++;
             }
         };
@@ -431,7 +431,7 @@ class ReflectionClass extends NativeReflectionClass
     /**
      * Returns the list of default static members. Only for static ones
      *
-     * @return iterable|ValueEntry[]
+     * @return iterable|ReflectionValue[]
      */
     public function getDefaultStaticMembers(): iterable
     {
@@ -439,7 +439,7 @@ class ReflectionClass extends NativeReflectionClass
             $propertyIndex = 0;
             while ($propertyIndex < $this->pointer->default_static_members_count) {
                 $value = $this->pointer->default_static_members_table[$propertyIndex];
-                yield $propertyIndex => new ValueEntry($value);
+                yield $propertyIndex => ReflectionValue::fromValueEntry($value);
                 $propertyIndex++;
             }
         };

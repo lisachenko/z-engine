@@ -12,9 +12,11 @@ declare(strict_types=1);
 
 namespace ZEngine;
 
+use FFI;
 use FFI\CData;
+use ReflectionClass as NativeReflectionClass;
 
-class ValueEntry
+class ReflectionValue
 {
     /* regular data types */
     public const IS_UNDEF     = 0;
@@ -53,9 +55,31 @@ class ValueEntry
      */
     private static array $constantNames = [];
 
-    public function __construct(CData $value)
+    /**
+     * ReflectionValue constructor.
+     *
+     * @param mixed $value Any value to be reflected
+     */
+    public function __construct($value)
     {
-        $this->pointer = $value;
+        $selfExecutionState = Core::$executor->getExecutionState();
+        $valueEntry         = $selfExecutionState->getArgument(0)->getRawData();
+
+        $this->pointer = $valueEntry;
+    }
+
+    /**
+     * Creates a reflection from the zval structure
+     *
+     * @param CData $valueEntry Pointer to the structure
+     */
+    public static function fromValueEntry(CData $valueEntry): ReflectionValue
+    {
+        /** @var ReflectionValue $reflectionValue */
+        $reflectionValue = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionValue->pointer = $valueEntry;
+
+        return $reflectionValue;
     }
 
     public function getRawData(): ?CData
@@ -93,7 +117,7 @@ class ValueEntry
             case self::IS_PTR:
                 return $this->pointer->value->ptr;
             case self::IS_INDIRECT:
-                return new ValueEntry($this->pointer->value->zv);
+                return ReflectionValue::fromValueEntry($this->pointer->value->zv);
             default:
                 throw new \UnexpectedValueException("Unexpected type: " . self::name($this->pointer->u1->v->type));
         }

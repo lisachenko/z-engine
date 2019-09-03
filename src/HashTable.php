@@ -38,11 +38,11 @@ class HashTable implements IteratorAggregate
             while ($index < $this->value->nNumOfElements) {
                 $item = $this->value->arData[$index];
                 $index++;
-                if ($item->val->u1->v->type === ValueEntry::IS_UNDEF) {
+                if ($item->val->u1->v->type === ReflectionValue::IS_UNDEF) {
                     continue;
                 }
                 $key = $item->key !== null ? (string) (new StringEntry($item->key)) : null;
-                yield $key => new ValueEntry($item->val);
+                yield $key => ReflectionValue::fromValueEntry($item->val);
             }
         };
 
@@ -54,14 +54,14 @@ class HashTable implements IteratorAggregate
      *
      * @param string $key Key to find
      *
-     * @return ValueEntry|null Value or null if not found
+     * @return ReflectionValue|null Value or null if not found
      */
-    public function find(string $key): ?ValueEntry
+    public function find(string $key): ?ReflectionValue
     {
         $pointer = Core::call('zend_hash_find', $this->value, FFI::addr(StringEntry::fromString($key)->pointer));
 
         if ($pointer !== null) {
-            $pointer = new ValueEntry($pointer);
+            $pointer = ReflectionValue::fromValueEntry($pointer);
         }
 
         return $pointer;

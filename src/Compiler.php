@@ -19,14 +19,14 @@ class Compiler
     /**
      * Contains a hashtable with all registered classes
      *
-     * @var HashTable|ValueEntry[]
+     * @var HashTable|ReflectionValue[]
      */
     public HashTable $classTable;
 
     /**
      * Contains a hashtable with all registered functions
      *
-     * @var HashTable|ValueEntry[]
+     * @var HashTable|ReflectionValue[]
      */
     public HashTable $functionTable;
 

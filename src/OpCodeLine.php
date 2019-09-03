@@ -88,7 +88,7 @@ class OpCodeLine
     }
 
     /**
-     * @return mixed|ValueEntry
+     * @return mixed|ReflectionValue
      */
     public function getOp1()
     {
@@ -98,7 +98,7 @@ class OpCodeLine
     }
 
     /**
-     * @return mixed|ValueEntry
+     * @return mixed|ReflectionValue
      */
     public function getOp2()
     {
@@ -108,7 +108,7 @@ class OpCodeLine
     }
 
     /**
-     * @return mixed|ValueEntry
+     * @return mixed|ReflectionValue
      */
     public function getResult()
     {
@@ -222,7 +222,7 @@ class OpCodeLine
                 // # define RT_CONSTANT(opline, node) \
                 // ((zval*)(((char*)(opline)) + (int32_t)(node).constant))
                 $pointer  = FFI::cast('void *', $this->pointer) + $node->constant;
-                $value    = new ValueEntry(Core::cast('zval *', $pointer));
+                $value    = ReflectionValue::fromValueEntry(Core::cast('zval *', $pointer));
 
                 break;
             case self::IS_TMP_VAR:

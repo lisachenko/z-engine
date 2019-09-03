@@ -19,14 +19,14 @@ class Executor
     /**
      * Contains a hashtable with all registered classes
      *
-     * @var HashTable|ValueEntry[string]
+     * @var HashTable|ReflectionValue[string]
      */
     public HashTable $classTable;
 
     /**
      * Contains a hashtable with all registered functions
      *
-     * @var HashTable|ValueEntry[]
+     * @var HashTable|ReflectionValue[]
      */
     public HashTable $functionTable;
 
