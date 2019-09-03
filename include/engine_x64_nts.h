@@ -614,8 +614,8 @@ struct _zend_executor_globals {
 	HashTable *class_table;		/* class table */
 	HashTable *zend_constants;	/* constants table */
 
-	zval          *vm_stack_top;
-	zval          *vm_stack_end;
+	zval          *vm_stack_top; // Actually it's _zend_execute_data *
+	zval          *vm_stack_end; // It's _zend_execute_data *
 	zend_vm_stack  vm_stack;
 	size_t         vm_stack_page_size;
 
@@ -640,6 +640,13 @@ struct _zend_executor_globals {
 	zend_bool vm_interrupt;
 	zend_bool timed_out;
     zend_long hard_timeout;
+};
+
+/* zend_execute.h */
+typedef struct _zend_vm_stack {
+    zval *top;
+    zval *end;
+    zend_vm_stack prev;
 };
 
 /* zend_iterators.h */
