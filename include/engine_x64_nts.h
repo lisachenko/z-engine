@@ -477,6 +477,15 @@ typedef struct _zend_execute_data {
 	void               **run_time_cache;   /* cache op_array->run_time_cache */
 };
 
+/* zend_closurec.c */
+typedef struct _zend_closure {
+	zend_object       std;
+	zend_function     func;
+	zval              this_ptr;
+	zend_class_entry *called_scope;
+	zif_handler       orig_internal_handler;
+} zend_closure;
+
 /* zend_llist.h*/
 typedef struct _zend_llist_element {
     struct _zend_llist_element *next;

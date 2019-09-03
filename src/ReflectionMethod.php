@@ -178,6 +178,19 @@ class ReflectionMethod extends NativeReflectionMethod
     }
 
     /**
+     * Redefines an existing method in the class with closure
+     */
+    public function redefine(\Closure $newCode): void
+    {
+        $this->ensureCompatibleClosure($newCode);
+
+        $selfExecutionState = Core::$executor->getExecutionState();
+        $newCodeEntry       = $selfExecutionState->getArgument(0)->getRawData()->obj;
+        $newCodeEntry       = Core::cast('zend_closure *', $newCodeEntry);
+        FFI::memcpy($this->pointer, FFI::addr($newCodeEntry->func), FFI::sizeof($newCodeEntry->func));
+    }
+
+    /**
      * Returns the iterable generator of opcodes for this function
      *
      * @return iterable|OpCodeLine[]
@@ -264,5 +277,62 @@ class ReflectionMethod extends NativeReflectionMethod
             'class' => $this->getDeclaringClass()->getName(),
             'name'  => $this->getName()
         ];
+    }
+
+    /**
+     * Checks if the given closure signature is compatible to original one (number of arguments, type hints, etc)
+     *
+     * @throws \ReflectionException if closure signature is not compatible with current function/method
+     */
+    private function ensureCompatibleClosure(\Closure $newCode): void
+    {
+        /** @var \ReflectionFunction[] $reflectionPair */
+        $reflectionPair = [$this, new \ReflectionFunction($newCode)];
+        $signatures     = [];
+        foreach ($reflectionPair as $index => $reflectionFunction) {
+            $signature = 'function ';
+            if ($reflectionFunction->returnsReference()) {
+                $signature .= '&';
+            }
+            $signature .= '(';
+            $parameters = [];
+            foreach ($reflectionFunction->getParameters() as $reflectionParameter) {
+                $parameter = '';
+                if ($reflectionParameter->hasType()) {
+                    $type = $reflectionParameter->getType();
+                    if ($type->allowsNull()) {
+                        $parameter .= '?';
+                    }
+                    $parameter .= $type->getName() . ' ';
+                }
+                if ($reflectionParameter->isPassedByReference()) {
+                    $parameter .= '&';
+                }
+                if ($reflectionParameter->isVariadic()) {
+                    $parameter .= '...';
+                }
+                $parameter .= '$';
+                $parameter .= $reflectionParameter->getName();
+                $parameters[] = $parameter;
+            }
+            $signature .= join(', ', $parameters);
+            $signature .= ')';
+            if ($reflectionFunction->hasReturnType()) {
+                $signature .= ': ';
+                $type       = $reflectionFunction->getReturnType();
+                if ($type->allowsNull()) {
+                    $signature .= '?';
+                }
+                $signature .= $type->getName();
+            }
+            $signatures[] = $signature;
+        }
+
+        if ($signatures[0] !== $signatures[1]) {
+            throw new \ReflectionException(
+                'Given function signature: "' . $signatures[1] . '"' .
+                ' should be compatible with original "' . $signatures[0] . '"'
+            );
+        }
     }
 }
