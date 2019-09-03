@@ -19,7 +19,7 @@ class Compiler
     /**
      * Contains a hashtable with all registered classes
      *
-     * @var HashTable|ValueEntry[string]
+     * @var HashTable|ValueEntry[]
      */
     public HashTable $classTable;
 
