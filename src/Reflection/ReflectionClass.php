@@ -210,6 +210,18 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
+     * Removes given methods from the class
+     *
+     * @param string ...$methodNames Name of methods to remove
+     */
+    public function removeMethods(string ...$methodNames): void
+    {
+        foreach ($methodNames as $methodName) {
+            $this->functionTable->delete(strtolower($methodName));
+        }
+    }
+
+    /**
      * @inheritDoc
      */
     public function getTraitNames(): array
