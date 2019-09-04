@@ -23,16 +23,22 @@ use ZEngine\Type\StringEntry;
 class ReflectionClass extends NativeReflectionClass
 {
     /**
+     * Stores the list of methods in the class
+     *
      * @var HashTable|ReflectionValue[]
      */
-    private HashTable $functionTable;
+    private HashTable $methodTable;
 
     /**
+     * Stores the list of properties in the class
+     *
      * @var HashTable|ReflectionValue[]
      */
     private HashTable $propertiesTable;
 
     /**
+     * Stores the list of constants in the class
+     *
      * @var HashTable|ReflectionValue[]
      */
     private HashTable $constantsTable;
@@ -185,7 +191,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function getMethod($name)
     {
-        $functionEntry = $this->functionTable->find(strtolower($name));
+        $functionEntry = $this->methodTable->find(strtolower($name));
         if ($functionEntry === null) {
             throw new \ReflectionException("Method {$name} does not exist");
         }
@@ -199,7 +205,7 @@ class ReflectionClass extends NativeReflectionClass
     public function getMethods($filter = null)
     {
         $methods = [];
-        foreach ($this->functionTable as $methodEntry) {
+        foreach ($this->methodTable as $methodEntry) {
             $functionEntry = $methodEntry->getRawValue()->func;
             if (!isset($filter) || ($functionEntry->common->fn_flags & $filter)) {
                 $methods[] = ReflectionMethod::fromFunctionEntry($functionEntry);
@@ -217,7 +223,7 @@ class ReflectionClass extends NativeReflectionClass
     public function removeMethods(string ...$methodNames): void
     {
         foreach ($methodNames as $methodName) {
-            $this->functionTable->delete(strtolower($methodName));
+            $this->methodTable->delete(strtolower($methodName));
         }
     }
 
@@ -380,10 +386,10 @@ class ReflectionClass extends NativeReflectionClass
         // TODO: what to do with methods from grandparents?
         $oldParentClass = $this->getParentClass();
         if ($oldParentClass !== null) {
-            foreach ($this->functionTable as $functionName => $functionValue) {
+            foreach ($this->methodTable as $functionName => $functionValue) {
                 $functionEntry = $functionValue->getFunctionEntry();
                 if ($functionEntry->getScope()->getName() === $oldParentClass->getName()) {
-                    $this->functionTable->delete($functionName);
+                    $this->methodTable->delete($functionName);
                 }
             }
         }
@@ -515,7 +521,7 @@ class ReflectionClass extends NativeReflectionClass
     private function initLowLevelStructures(CData $classEntry): void
     {
         $this->pointer         = $classEntry;
-        $this->functionTable   = new HashTable(FFI::addr($classEntry->function_table));
+        $this->methodTable     = new HashTable(FFI::addr($classEntry->function_table));
         $this->propertiesTable = new HashTable(FFI::addr($classEntry->properties_info));
         $this->constantsTable  = new HashTable(FFI::addr($classEntry->constants_table));
     }
