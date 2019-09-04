@@ -122,6 +122,18 @@ class ReflectionMethod extends NativeReflectionMethod
     }
 
     /**
+     * Declares method as deprecated/non-deprecated
+     */
+    public function setDeprecated(bool $isDeprecated = true): void
+    {
+        if ($isDeprecated) {
+            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags | Core::ZEND_ACC_DEPRECATED);
+        } else {
+            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags & (~Core::ZEND_ACC_DEPRECATED));
+        }
+    }
+
+    /**
      * Declares method as variadic/non-variadic
      *
      * <span style="color:red; font-weight:bold">Danger!</span> Low-level API, can bring a segmentation fault
