@@ -46,6 +46,9 @@ class ReflectionValue
     public const IS_VOID     = 19;
     public const _IS_NUMBER  = 20;
 
+    /**
+     * Stores the pointer to zval structure, associated with this variable
+     */
     private CData $pointer;
 
     /**
@@ -58,14 +61,17 @@ class ReflectionValue
     /**
      * ReflectionValue constructor.
      *
+     * @TODO: Stack frame is destroyed after call to the constructor, so information will be lost outside this scope
+     * @TODO: Temporary declared as private to find the way to extract original value
+     *
      * @param mixed $value Any value to be reflected
      */
-    public function __construct($value)
+    private function __construct($value)
     {
+        // Trick here is to look at internal structures and steal pointer to our value from current frame
         $selfExecutionState = Core::$executor->getExecutionState();
-        $valueEntry         = $selfExecutionState->getArgument(0)->getRawData();
-
-        $this->pointer = $valueEntry;
+        $valueEntry         = $selfExecutionState->getArgument(0);
+        $this->pointer      = $valueEntry->pointer;
     }
 
     /**
@@ -82,7 +88,10 @@ class ReflectionValue
         return $reflectionValue;
     }
 
-    public function getRawData(): ?CData
+    /**
+     * Returns raw C value entry
+     */
+    public function getRawValue(): ?CData
     {
         return $this->pointer->value;
     }
@@ -126,31 +135,16 @@ class ReflectionValue
     /**
      * Change the existing value of entry to another one
      *
-     * @param $newValue
+     * @param mixed $newValue Value to change to
      */
-    public function setNativeValue($newValue)
+    public function setNativeValue($newValue): void
     {
-        $newType = gettype($newValue);
-        switch ($newType) {
-            case 'integer':
-                $this->pointer->u1->v->type->cdata = self::IS_LONG;
-                $this->pointer->value->lval->cdata = $newValue;
-                break;
-            case 'double':
-                $this->pointer->u1->v->type->cdata = self::IS_DOUBLE;
-                $this->pointer->value->dval->cdata = $newValue;
-                break;
-            case 'boolean':
-                $this->pointer->u1->v->type->cdata = ($newValue === true ? self::IS_TRUE : self::IS_FALSE);
-                $this->pointer->value->lval->cdata = ($newValue === true ? 1 : 0);
-                break;
-            case 'NULL':
-                $this->pointer->u1->v->type->cdata = self::IS_NULL;
-                $this->pointer->value->ptr = null;
-                break;
-            default:
-                throw new \UnexpectedValueException("Unexpected type: {$newType}");
-        }
+        $selfExecutionState = Core::$executor->getExecutionState();
+        $valueEntry         = $selfExecutionState->getArgument(0);
+
+        $this->pointer->value = $valueEntry->pointer->value;
+        $this->pointer->u1    = $valueEntry->pointer->u1;
+        $this->pointer->u2    = $valueEntry->pointer->u2;
     }
 
     /**

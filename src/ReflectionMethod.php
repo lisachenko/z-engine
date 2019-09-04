@@ -29,14 +29,14 @@ class ReflectionMethod extends NativeReflectionMethod
         if ($classEntryValue === null) {
             throw new \ReflectionException("Class {$className} should be in the engine.");
         }
-        $classEntry  = $classEntryValue->getRawData()->ce;
+        $classEntry  = $classEntryValue->getRawValue()->ce;
         $methodTable = new HashTable(FFI::addr($classEntry->function_table));
 
         $methodEntryValue = $methodTable->find(strtolower($methodName));
         if ($methodEntryValue === null) {
             throw new \ReflectionException("Method {$methodName} was not found in the class.");
         }
-        $this->pointer = $methodEntryValue->getRawData()->func;
+        $this->pointer = $methodEntryValue->getRawValue()->func;
     }
 
     /**
@@ -197,7 +197,7 @@ class ReflectionMethod extends NativeReflectionMethod
         $this->ensureCompatibleClosure($newCode);
 
         $selfExecutionState = Core::$executor->getExecutionState();
-        $newCodeEntry       = $selfExecutionState->getArgument(0)->getRawData()->obj;
+        $newCodeEntry       = $selfExecutionState->getArgument(0)->getRawValue()->obj;
         $newCodeEntry       = Core::cast('zend_closure *', $newCodeEntry);
         FFI::memcpy($this->pointer, FFI::addr($newCodeEntry->func), FFI::sizeof($newCodeEntry->func));
     }

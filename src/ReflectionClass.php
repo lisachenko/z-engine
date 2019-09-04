@@ -49,7 +49,7 @@ class ReflectionClass extends NativeReflectionClass
         if ($classEntryValue === null) {
             throw new \ReflectionException("Class {$className} should be in the engine.");
         }
-        $classEntry = $classEntryValue->getRawData()->ce;
+        $classEntry = $classEntryValue->getRawValue()->ce;
         $this->initLowLevelStructures($classEntry);
     }
 
@@ -130,7 +130,7 @@ class ReflectionClass extends NativeReflectionClass
         FFI::memcpy($memory, $this->pointer->interfaces, $itemsSize * $totalInterfaces);
         for ($position = $totalInterfaces, $index = 0; $index < $numInterfacesToAdd; $position++, $index++) {
             $classValueEntry   = Core::$executor->classTable->find(strtolower($interfacesToAdd[$index]));
-            $memory[$position] = $classValueEntry->getRawData()->ce;
+            $memory[$position] = $classValueEntry->getRawValue()->ce;
         }
         if($this->pointer->interfaces !== null) {
             FFI::memcpy($this->pointer->interfaces, $memory, FFI::sizeof($memory));
