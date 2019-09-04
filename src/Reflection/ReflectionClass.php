@@ -16,6 +16,7 @@ use FFI;
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
 use ZEngine\Core;
+use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
 
@@ -177,6 +178,35 @@ class ReflectionClass extends NativeReflectionClass
         }
         // Decrease the total number of interfaces in the class entry
         $this->pointer->num_interfaces = $numResultInterfaces;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getMethod($name)
+    {
+        $functionEntry = $this->functionTable->find(strtolower($name));
+        if ($functionEntry === null) {
+            throw new \ReflectionException("Method {$name} does not exist");
+        }
+
+        return ReflectionMethod::fromFunctionEntry($functionEntry->getRawValue()->func);
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getMethods($filter = null)
+    {
+        $methods = [];
+        foreach ($this->functionTable as $methodEntry) {
+            $functionEntry = $methodEntry->getRawValue()->func;
+            if (!isset($filter) || ($functionEntry->common->fn_flags & $filter)) {
+                $methods[] = ReflectionMethod::fromFunctionEntry($functionEntry);
+            }
+        }
+
+        return $methods;
     }
 
     /**

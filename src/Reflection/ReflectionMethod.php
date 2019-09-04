@@ -290,8 +290,8 @@ class ReflectionMethod extends NativeReflectionMethod
     public function __debugInfo()
     {
         return [
-            'class' => $this->getDeclaringClass()->getName(),
-            'name'  => $this->getName()
+            'name'  => $this->getName(),
+            'class' => $this->getDeclaringClass()->getName()
         ];
     }
 
