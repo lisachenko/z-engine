@@ -14,6 +14,9 @@ namespace ZEngine;
 
 use FFI;
 use FFI\CData;
+use ZEngine\Reflection\ReflectionClass;
+use ZEngine\Reflection\ReflectionValue;
+use ZEngine\Type\StringEntry;
 
 class FunctionEntry
 {

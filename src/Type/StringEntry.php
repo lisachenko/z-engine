@@ -10,10 +10,11 @@
  */
 declare(strict_types=1);
 
-namespace ZEngine;
+namespace ZEngine\Type;
 
 use FFI;
 use FFI\CData;
+use ZEngine\Core;
 
 class StringEntry
 {
@@ -47,7 +48,7 @@ class StringEntry
     }
 
     /**
-     * @return string
+     * Returns a PHP representation of engine string
      */
     private function getStringValue(): string
     {

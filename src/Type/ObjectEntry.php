@@ -10,9 +10,10 @@
  */
 declare(strict_types=1);
 
-namespace ZEngine;
+namespace ZEngine\Type;
 
 use FFI\CData;
+use ZEngine\Reflection\ReflectionClass;
 
 class ObjectEntry extends ReflectionClass
 {

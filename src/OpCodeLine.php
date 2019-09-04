@@ -14,6 +14,7 @@ namespace ZEngine;
 
 use FFI;
 use FFI\CData;
+use ZEngine\Reflection\ReflectionValue;
 
 class OpCodeLine
 {

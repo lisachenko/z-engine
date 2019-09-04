@@ -10,12 +10,14 @@
  */
 declare(strict_types=1);
 
-namespace ZEngine;
+namespace ZEngine\Type;
 
 use FFI;
 use FFI\CData;
 use IteratorAggregate;
 use Traversable;
+use ZEngine\Core;
+use ZEngine\Reflection\ReflectionValue;
 
 class HashTable implements IteratorAggregate
 {

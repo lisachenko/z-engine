@@ -10,11 +10,15 @@
  */
 declare(strict_types=1);
 
-namespace ZEngine;
+namespace ZEngine\Reflection;
 
-use FFI;
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
+use ZEngine\Core;
+use ZEngine\FunctionEntry;
+use ZEngine\Type\HashTable;
+use ZEngine\Type\ObjectEntry;
+use ZEngine\Type\StringEntry;
 
 class ReflectionValue
 {

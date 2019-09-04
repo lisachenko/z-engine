@@ -10,11 +10,14 @@
  */
 declare(strict_types=1);
 
-namespace ZEngine;
+namespace ZEngine\Reflection;
 
 use FFI;
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
+use ZEngine\Core;
+use ZEngine\Type\HashTable;
+use ZEngine\Type\StringEntry;
 
 class ReflectionClass extends NativeReflectionClass
 {

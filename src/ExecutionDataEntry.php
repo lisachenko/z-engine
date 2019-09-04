@@ -14,6 +14,8 @@ namespace ZEngine;
 
 use FFI;
 use FFI\CData;
+use ZEngine\Reflection\ReflectionValue;
+use ZEngine\Type\HashTable;
 
 /*
  * Stack Frame Layout (the whole stack frame is allocated at once)

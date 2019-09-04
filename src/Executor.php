@@ -13,6 +13,8 @@ declare(strict_types=1);
 namespace ZEngine;
 
 use FFI\CData;
+use ZEngine\Reflection\ReflectionValue;
+use ZEngine\Type\HashTable;
 
 class Executor
 {
