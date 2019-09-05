@@ -531,6 +531,32 @@ typedef struct _zend_vm_stack {
     zend_vm_stack prev;
 };
 
+/* zend_API.h */
+typedef struct _zend_function_entry {
+	const char *fname;
+	zif_handler handler;
+	const struct _zend_internal_arg_info *arg_info;
+	uint32_t num_args;
+	uint32_t flags;
+} zend_function_entry;
+
+typedef struct _zend_fcall_info {
+	size_t size;
+	zval function_name;
+	zval *retval;
+	zval *params;
+	zend_object *object;
+	zend_bool no_separation;
+	uint32_t param_count;
+} zend_fcall_info;
+
+typedef struct _zend_fcall_info_cache {
+	zend_function *function_handler;
+	zend_class_entry *calling_scope;
+	zend_class_entry *called_scope;
+	zend_object *object;
+} zend_fcall_info_cache;
+
 /* zend_iterators.h */
 typedef struct _zend_object_iterator zend_object_iterator;
 
