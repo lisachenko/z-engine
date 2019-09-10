@@ -29,7 +29,7 @@ class StringEntry
     {
         $length       = strlen($value);
         $internalSize = FFI::sizeof(Core::type('zend_string')) + $length;
-        $rawMemory    = FFI::new("char[$internalSize]");
+        $rawMemory    = FFI::new("char[$internalSize]", false);
         $zendString   = Core::cast('zend_string', $rawMemory);
         $zendString->len->cdata = $length;
         FFI::memcpy(FFI::cast('char *', $zendString->val), $value, $length);

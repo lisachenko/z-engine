@@ -80,7 +80,6 @@ class ReflectionClassTest extends TestCase
 
     public function testAddTraits()
     {
-        $this->markTestSkipped('This test fails with segfault right now');
         $this->refClass->addTraits(TestTrait::class);
 
         // Trait should be in the list of trait names for this class
@@ -148,8 +147,11 @@ class ReflectionClassTest extends TestCase
 
     public function testSetFileName()
     {
-        $this->markTestSkipped('This test fails with segfault right now');
+        // Take the file name to restore later
+        $originalFileName = $this->refClass->getFileName();
         $this->refClass->setFileName('/etc/passwd');
         $this->assertEquals('/etc/passwd', $this->refClass->getFileName());
+        $this->refClass->setFileName($originalFileName);
+        $this->assertEquals($originalFileName, $this->refClass->getFileName());
     }
 }
