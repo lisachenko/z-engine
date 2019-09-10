@@ -18,5 +18,13 @@
             "ZEngine\\" : "src/"
         }
     },
-    "minimum-stability": "stable"
+    "autoload-dev": {
+        "psr-4" : {
+            "ZEngine\\" : "tests/"
+        }
+    },
+    "minimum-stability": "stable",
+    "require-dev": {
+        "phpunit/phpunit": "^8.3"
+    }
 }

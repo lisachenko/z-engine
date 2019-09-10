@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  ~ Z-Engine framework
+  ~
+  ~ @copyright Copyright 2019, Lisachenko Alexander <lisachenko.it@gmail.com>
+  ~
+  ~ This source file is subject to the license that is bundled
+  ~ with this source code in the file LICENSE.
+  ~
+  -->
+
+<phpunit backupGlobals="false"
+         backupStaticAttributes="false"
+         colors="true"
+         convertErrorsToExceptions="true"
+         convertNoticesToExceptions="true"
+         convertWarningsToExceptions="true"
+         processIsolation="false"
+         stopOnFailure="false"
+         bootstrap="./tests/bootstrap.php"
+>
+    <testsuites>
+        <testsuite name="Z-Engine Test Suite">
+            <directory>./tests/</directory>
+        </testsuite>
+    </testsuites>
+
+    <filter>
+        <whitelist>
+            <directory>./src/</directory>
+        </whitelist>
+    </filter>
+
+    <groups>
+        <exclude>
+            <group>performance</group>
+        </exclude>
+    </groups>
+
+
+    <logging>
+        <log type="coverage-html" target="./build/coverage/html"/>
+        <log type="coverage-xml" target="./build/coverage/xml"/>
+        <log type="coverage-clover" target="./build/logs/clover.xml"/>
+        <log type="coverage-crap4j" target="./build/logs/crap4j.xml"/>
+        <log type="junit" target="./build/logs/junit.xml"/>
+    </logging>
+</phpunit>
