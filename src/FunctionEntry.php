@@ -32,7 +32,7 @@ class FunctionEntry
      */
     public function getName(): string
     {
-        return (string) (new StringEntry($this->pointer->common->function_name));
+        return StringEntry::fromCData($this->pointer->common->function_name)->getStringValue();
     }
 
     /**

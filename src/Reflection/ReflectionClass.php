@@ -74,9 +74,9 @@ class ReflectionClass extends NativeReflectionClass
     {
         /** @var ReflectionClass $reflectionClass */
         $reflectionClass = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
-        $classNameValue  = new StringEntry($classEntry->name);
+        $classNameValue  = StringEntry::fromCData($classEntry->name);
         try {
-            call_user_func([$reflectionClass, 'parent::__construct'], (string) $classNameValue);
+            call_user_func([$reflectionClass, 'parent::__construct'], $classNameValue->getStringValue());
         } catch (\ReflectionException $e) {
             // This can happen during the class-loading. But we still can work with it.
         }
@@ -98,8 +98,8 @@ class ReflectionClass extends NativeReflectionClass
             } else {
                 $rawInterfaceName = $this->pointer->interface_names[$index]->name;
             }
-            $interfaceNameValue = new StringEntry($rawInterfaceName);
-            $interfaceNames[]   = (string) $interfaceNameValue;
+            $interfaceNameValue = StringEntry::fromCData($rawInterfaceName);
+            $interfaceNames[]   = $interfaceNameValue->getStringValue();
         }
 
         return $interfaceNames;
@@ -263,11 +263,11 @@ class ReflectionClass extends NativeReflectionClass
             FFI::memcpy($memory, $this->pointer->trait_names, $itemsSize * $totalTraits);
         }
         for ($position = $totalTraits, $index = 0; $index < $numTraitsToAdd; $position++, $index++) {
-            $name   = StringEntry::fromString($traitsToAdd[$index]);
-            $lcName = StringEntry::fromString(strtolower($traitsToAdd[$index]));
+            $name   = new StringEntry($traitsToAdd[$index]);
+            $lcName = new StringEntry(strtolower($traitsToAdd[$index]));
 
-            $memory[$position]->name    = $name->pointer;
-            $memory[$position]->lc_name = $lcName->pointer;
+            $memory[$position]->name    = $name->getRawValue();
+            $memory[$position]->lc_name = $lcName->getRawValue();
         }
         if($this->pointer->trait_names !== null) {
             FFI::memcpy($this->pointer->trait_names, $memory, FFI::sizeof($memory));
@@ -328,8 +328,8 @@ class ReflectionClass extends NativeReflectionClass
             $rawParentName = $this->pointer->parent_name;
         }
 
-        $parentNameValue = new StringEntry($rawParentName);
-        $classReflection = new ReflectionClass((string)$parentNameValue);
+        $parentNameValue = StringEntry::fromCData($rawParentName);
+        $classReflection = new ReflectionClass($parentNameValue->getStringValue());
 
         return $classReflection;
     }
@@ -443,8 +443,8 @@ class ReflectionClass extends NativeReflectionClass
         if (!$this->isUserDefined()) {
             throw new \ReflectionException('File can be configured only for user-defined class');
         }
-        $stringEntry = StringEntry::fromString($newFileName);
-        $this->pointer->info->user->filename = $stringEntry->pointer;
+        $stringEntry = new StringEntry($newFileName);
+        $this->pointer->info->user->filename = $stringEntry->getRawValue();
     }
 
     /**

@@ -43,7 +43,7 @@ class HashTable implements IteratorAggregate
                 if ($item->val->u1->v->type === ReflectionValue::IS_UNDEF) {
                     continue;
                 }
-                $key = $item->key !== null ? (string) (new StringEntry($item->key)) : null;
+                $key = $item->key !== null ? StringEntry::fromCData($item->key)->getStringValue() : null;
                 yield $key => ReflectionValue::fromValueEntry($item->val);
             }
         };
@@ -60,7 +60,8 @@ class HashTable implements IteratorAggregate
      */
     public function find(string $key): ?ReflectionValue
     {
-        $pointer = Core::call('zend_hash_find', $this->value, FFI::addr(StringEntry::fromString($key)->pointer));
+        $stringEntry = new StringEntry($key);
+        $pointer     = Core::call('zend_hash_find', $this->value, FFI::addr($stringEntry->getRawValue()));
 
         if ($pointer !== null) {
             $pointer = ReflectionValue::fromValueEntry($pointer);
@@ -76,8 +77,8 @@ class HashTable implements IteratorAggregate
      */
     public function delete(string $key): void
     {
-        $key    = strtolower($key);
-        $result = Core::call('zend_hash_del', $this->value, FFI::addr(StringEntry::fromString($key)->pointer));
+        $stringEntry = new StringEntry(strtolower($key));
+        $result      = Core::call('zend_hash_del', $this->value, FFI::addr($stringEntry->getRawValue()));
         if ($result === Core::FAILURE) {
             throw new \RuntimeException("Can not delete an item with key {$key}");
         }

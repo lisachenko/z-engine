@@ -54,9 +54,13 @@ class ReflectionMethod extends NativeReflectionMethod
     {
         /** @var ReflectionMethod $reflectionMethod */
         $reflectionMethod = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
-        $functionName     = new StringEntry($functionEntry->common->function_name);
-        $scopeName        = new StringEntry($functionEntry->common->scope->name);
-        call_user_func([$reflectionMethod, 'parent::__construct'], (string) $scopeName, (string) $functionName);
+        $functionName     = StringEntry::fromCData($functionEntry->common->function_name);
+        $scopeName        = StringEntry::fromCData($functionEntry->common->scope->name);
+        call_user_func(
+            [$reflectionMethod, 'parent::__construct'],
+            $scopeName->getStringValue(),
+            $functionName->getStringValue()
+        );
         $reflectionMethod->pointer = $functionEntry;
 
         return $reflectionMethod;

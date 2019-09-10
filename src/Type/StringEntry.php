@@ -14,44 +14,97 @@ namespace ZEngine\Type;
 
 use FFI;
 use FFI\CData;
+use ReflectionClass;
 use ZEngine\Core;
 
+/**
+ * This class wraps PHP's zend_string structure and provide an API for working with it
+ *
+ * struct _zend_string {
+ *   zend_refcounted_h gc;
+ *   zend_ulong        h;                // hash value
+ *   size_t            len;
+ *   char              val[1];
+ * };
+ */
 class StringEntry
 {
-    public CData $pointer;
+    private CData $pointer;
 
-    public function __construct(CData $pointer)
+    /**
+     * Creates a string entry from the PHP string
+     */
+    public function __construct(string $value)
     {
-        $this->pointer = $pointer;
+        // This code is used to extract a Zval for our $value argument and use its internal pointer
+        $valueArgument = Core::$executor->getExecutionState()->getArgument(0);
+        $this->pointer = $valueArgument->getRawValue()->str[0];
     }
 
-    public static function fromString(string $value): StringEntry
+    /**
+     * Creates a string entry from the zend_string structure
+     *
+     * @param CData $stringPointer Pointer to the structure
+     */
+    public static function fromCData(CData $stringPointer): StringEntry
     {
-        $length       = strlen($value);
-        $internalSize = FFI::sizeof(Core::type('zend_string')) + $length;
-        $rawMemory    = FFI::new("char[$internalSize]", false);
-        $zendString   = Core::cast('zend_string', $rawMemory);
-        $zendString->len->cdata = $length;
-        FFI::memcpy(FFI::cast('char *', $zendString->val), $value, $length);
+        /** @var StringEntry $stringEntry */
+        $stringEntry = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $stringEntry->pointer = $stringPointer;
 
-        return new static($zendString);
+        return $stringEntry;
     }
 
-    public function __toString()
+    /**
+     * Returns raw C value entry
+     */
+    public function getRawValue(): ?CData
     {
-        return $this->getStringValue();
+        return $this->pointer;
     }
 
-    public function __debugInfo()
+    /**
+     * Returns a hash for given string
+     */
+    public function getHash(): int
     {
-        return ['value' => $this->getStringValue()];
+        return $this->pointer->h;
+    }
+
+    /**
+     * Returns a string length
+     */
+    public function getLength(): int
+    {
+        return $this->pointer->len;
+    }
+
+    /**
+     * Returns an internal reference counter value
+     */
+    public function getReferenceCount(): int
+    {
+        return $this->pointer->gc->refcount;
     }
 
     /**
      * Returns a PHP representation of engine string
      */
-    private function getStringValue(): string
+    public function getStringValue(): string
     {
         return FFI::string(FFI::cast('char *', $this->pointer->val), $this->pointer->len);
+    }
+
+    /**
+     * This method returns a dumpable representation of internal value to prevent segfault
+     */
+    public function __debugInfo(): array
+    {
+        return [
+            'value'    => $this->getStringValue(),
+            'length'   => $this->getLength(),
+            'refcount' => $this->getReferenceCount(),
+            'hash'     => $this->getHash(),
+        ];
     }
 }

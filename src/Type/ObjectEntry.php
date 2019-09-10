@@ -25,7 +25,7 @@ class ObjectEntry extends ReflectionClass
     {
         $this->pointer = $pointer;
         // TODO: Maybe just break this inheritance and keep this separate from ObjectEntry
-        parent::__construct((string) (new StringEntry($this->pointer->ce->name)));
+        parent::__construct(StringEntry::fromCData($this->pointer->ce->name)->getStringValue());
         if ($this->pointer->properties !== null) {
             $this->properties = new HashTable($this->pointer->properties);
         }
