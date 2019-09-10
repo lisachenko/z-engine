@@ -16,9 +16,6 @@ use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
 use ZEngine\Core;
 use ZEngine\FunctionEntry;
-use ZEngine\Type\HashTable;
-use ZEngine\Type\ObjectEntry;
-use ZEngine\Type\StringEntry;
 
 class ReflectionValue
 {
@@ -103,37 +100,31 @@ class ReflectionValue
     /**
      * Returns "native" value for userland
      *
+     * TODO: Rewrite this method to work with op_array or symbol_table
      * @return mixed
      */
-    public function getNativeValue()
+    public function getNativeValue($__fakeReturnArgument = null)
     {
-        // TODO: Is it possible to hijack current function execution data to return fake value?
-        switch ($this->pointer->u1->v->type) {
-            case self::IS_TRUE:
-                return true;
-            case self::IS_FALSE:
-                return false;
-            case self::IS_UNDEF:
-            case self::IS_NULL:
-                return null;
-            case self::IS_LONG:
-                return $this->pointer->value->lval;
-            case self::IS_DOUBLE:
-                return $this->pointer->value->dval;
-            case self::IS_STRING:
-                return (string)(new StringEntry($this->pointer->value->str));
-            case self::IS_ARRAY:
-                return new HashTable($this->pointer->value->arr);
-            case self::IS_OBJECT:
-                // TODO: is it possible to find an object by id in PHP or fake current execution state result?
-                return new ObjectEntry($this->pointer->value->obj);
-            case self::IS_PTR:
-                return $this->pointer->value->ptr;
-            case self::IS_INDIRECT:
-                return ReflectionValue::fromValueEntry($this->pointer->value->zv);
-            default:
-                throw new \UnexpectedValueException("Unexpected type: " . self::name($this->pointer->u1->v->type));
+        $selfExecutionState = Core::$executor->getExecutionState();
+        $valueEntry         = $selfExecutionState->getArgument(0);
+
+        if ($this->pointer->u1->v->type !== self::IS_INDIRECT) {
+            $pointer = $this->pointer;
+        } else {
+            // Prevent segmentation faults when returning indirect values directly
+            $pointer = $this->pointer->value->zv;
         }
+
+        $valueEntry->pointer->value = $pointer->value;
+        $valueEntry->pointer->u1    = $pointer->u1;
+        $valueEntry->pointer->u2    = $pointer->u2;
+
+        // TODO: Discover why it's happen. This can be due to refcount and GC, but not sure right now
+        if (!array_key_exists('__fakeReturnArgument', get_defined_vars())) {
+            throw new \ReflectionException('IS_INDIRECT type sometimes brings problems.');
+        }
+
+        return $__fakeReturnArgument;
     }
 
     /**
@@ -212,11 +203,16 @@ class ReflectionValue
         return self::$constantNames[$valueCode];
     }
 
-    public function __debugInfo()
+    /**
+     * Returns var_dump friendly representation of value, otherwise there will be a segfault
+     */
+    public function __debugInfo(): array
     {
+        // TODO: I don't know now how to hijack a return value, so use argument as value holder now
+        $valueHolder = '__MAGIC__RETURN__';
         return [
             'type'  => self::name($this->pointer->u1->v->type),
-            'value' => $this->getNativeValue()
+            'value' => $this->getNativeValue($valueHolder)
         ];
     }
 }
