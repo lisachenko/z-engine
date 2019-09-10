@@ -486,6 +486,144 @@ typedef struct _zend_closure {
 	zif_handler       orig_internal_handler;
 } zend_closure;
 
+/* zend_object_handlers.h */
+
+/* The following rule applies to read_property() and read_dimension() implementations:
+   If you return a zval which is not otherwise referenced by the extension or the engine's
+   symbol table, its reference count should be 0.
+*/
+/* Used to fetch property from the object, read-only */
+typedef zval *(*zend_object_read_property_t)(zend_object *object, zend_string *member, int type, void **cache_slot, zval *rv);
+
+/* Used to fetch dimension from the object, read-only */
+typedef zval *(*zend_object_read_dimension_t)(zend_object *object, zval *offset, int type, zval *rv);
+
+
+/* The following rule applies to write_property() and write_dimension() implementations:
+   If you receive a value zval in write_property/write_dimension, you may only modify it if
+   its reference count is 1.  Otherwise, you must create a copy of that zval before making
+   any changes.  You should NOT modify the reference count of the value passed to you.
+   You must return the final value of the assigned property.
+*/
+/* Used to set property of the object */
+typedef zval *(*zend_object_write_property_t)(zend_object *object, zend_string *member, zval *value, void **cache_slot);
+
+/* Used to set dimension of the object */
+typedef void (*zend_object_write_dimension_t)(zend_object *object, zval *offset, zval *value);
+
+
+/* Used to create pointer to the property of the object, for future direct r/w access */
+typedef zval *(*zend_object_get_property_ptr_ptr_t)(zend_object *object, zend_string *member, int type, void **cache_slot);
+
+/* Used to check if a property of the object exists */
+/* param has_set_exists:
+ * 0 (has) whether property exists and is not NULL
+ * 1 (set) whether property exists and is true
+ * 2 (exists) whether property exists
+ */
+typedef int (*zend_object_has_property_t)(zend_object *object, zend_string *member, int has_set_exists, void **cache_slot);
+
+/* Used to check if a dimension of the object exists */
+typedef int (*zend_object_has_dimension_t)(zend_object *object, zval *member, int check_empty);
+
+/* Used to remove a property of the object */
+typedef void (*zend_object_unset_property_t)(zend_object *object, zend_string *member, void **cache_slot);
+
+/* Used to remove a dimension of the object */
+typedef void (*zend_object_unset_dimension_t)(zend_object *object, zval *offset);
+
+/* Used to get hash of the properties of the object, as hash of zval's */
+typedef HashTable *(*zend_object_get_properties_t)(zend_object *object);
+
+typedef HashTable *(*zend_object_get_debug_info_t)(zend_object *object, int *is_temp);
+
+typedef enum _zend_prop_purpose {
+	/* Used for debugging. Supersedes get_debug_info handler. */
+	ZEND_PROP_PURPOSE_DEBUG,
+	/* Used for (array) casts. */
+	ZEND_PROP_PURPOSE_ARRAY_CAST,
+	/* Used for serialization using the "O" scheme.
+	 * Unserialization will use __wakeup(). */
+	ZEND_PROP_PURPOSE_SERIALIZE,
+	/* Used for var_export().
+	 * The data will be passed to __set_state() when evaluated. */
+	ZEND_PROP_PURPOSE_VAR_EXPORT,
+	/* Used for json_encode(). */
+	ZEND_PROP_PURPOSE_JSON,
+	/* array_key_exists(). Not intended for general use! */
+	_ZEND_PROP_PURPOSE_ARRAY_KEY_EXISTS,
+	/* Dummy member to ensure that "default" is specified. */
+	_ZEND_PROP_PURPOSE_NON_EXHAUSTIVE_ENUM
+} zend_prop_purpose;
+
+/* The return value must be released using zend_release_properties(). */
+typedef zend_array *(*zend_object_get_properties_for_t)(zend_object *object, zend_prop_purpose purpose);
+
+/* Used to call methods */
+/* args on stack! */
+/* Andi - EX(fbc) (function being called) needs to be initialized already in the INIT fcall opcode so that the parameters can be parsed the right way. We need to add another callback for this.
+ */
+typedef zend_function *(*zend_object_get_method_t)(zend_object **object, zend_string *method, const zval *key);
+typedef zend_function *(*zend_object_get_constructor_t)(zend_object *object);
+
+/* Object maintenance/destruction */
+typedef void (*zend_object_dtor_obj_t)(zend_object *object);
+typedef void (*zend_object_free_obj_t)(zend_object *object);
+typedef zend_object* (*zend_object_clone_obj_t)(zend_object *object);
+
+/* Get class name for display in var_dump and other debugging functions.
+ * Must be defined and must return a non-NULL value. */
+typedef zend_string *(*zend_object_get_class_name_t)(const zend_object *object);
+
+typedef int (*zend_object_compare_t)(zval *object1, zval *object2);
+typedef int (*zend_object_compare_zvals_t)(zval *result, zval *op1, zval *op2);
+
+/* Cast an object to some other type.
+ * readobj and retval must point to distinct zvals.
+ */
+typedef int (*zend_object_cast_t)(zend_object *readobj, zval *retval, int type);
+
+/* updates *count to hold the number of elements present and returns SUCCESS.
+ * Returns FAILURE if the object does not have any sense of overloaded dimensions */
+typedef int (*zend_object_count_elements_t)(zend_object *object, zend_long *count);
+
+typedef int (*zend_object_get_closure_t)(zend_object *obj, zend_class_entry **ce_ptr, zend_function **fptr_ptr, zend_object **obj_ptr);
+
+typedef HashTable *(*zend_object_get_gc_t)(zend_object *object, zval **table, int *n);
+
+typedef int (*zend_object_do_operation_t)(zend_uchar opcode, zval *result, zval *op1, zval *op2);
+
+struct _zend_object_handlers {
+	/* offset of real object header (usually zero) */
+	int										offset;
+	/* object handlers */
+	zend_object_free_obj_t					free_obj;             /* required */
+	zend_object_dtor_obj_t					dtor_obj;             /* required */
+	zend_object_clone_obj_t					clone_obj;            /* optional */
+	zend_object_read_property_t				read_property;        /* required */
+	zend_object_write_property_t			write_property;       /* required */
+	zend_object_read_dimension_t			read_dimension;       /* required */
+	zend_object_write_dimension_t			write_dimension;      /* required */
+	zend_object_get_property_ptr_ptr_t		get_property_ptr_ptr; /* required */
+	zend_object_has_property_t				has_property;         /* required */
+	zend_object_unset_property_t			unset_property;       /* required */
+	zend_object_has_dimension_t				has_dimension;        /* required */
+	zend_object_unset_dimension_t			unset_dimension;      /* required */
+	zend_object_get_properties_t			get_properties;       /* required */
+	zend_object_get_method_t				get_method;           /* required */
+	zend_object_get_constructor_t			get_constructor;      /* required */
+	zend_object_get_class_name_t			get_class_name;       /* required */
+	zend_object_compare_t					compare_objects;      /* optional */
+	zend_object_cast_t						cast_object;          /* optional */
+	zend_object_count_elements_t			count_elements;       /* optional */
+	zend_object_get_debug_info_t			get_debug_info;       /* optional */
+	zend_object_get_closure_t				get_closure;          /* optional */
+	zend_object_get_gc_t					get_gc;               /* required */
+	zend_object_do_operation_t				do_operation;         /* optional */
+	zend_object_compare_zvals_t				compare;              /* optional */
+	zend_object_get_properties_for_t		get_properties_for;   /* optional */
+};
+
 /* zend_llist.h*/
 typedef struct _zend_llist_element {
     struct _zend_llist_element *next;
