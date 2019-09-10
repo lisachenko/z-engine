@@ -259,7 +259,9 @@ class ReflectionClass extends NativeReflectionClass
         // Allocate persistent non-owned memory, because this structure should be persistent in Opcache
         $memory    = Core::new("zend_class_name [$numResultTraits]", false, true);
         $itemsSize = FFI::sizeof(Core::type('zend_class_name'));
-        FFI::memcpy($memory, $this->pointer->trait_names, $itemsSize * $totalTraits);
+        if ($this->pointer->num_traits > 0) {
+            FFI::memcpy($memory, $this->pointer->trait_names, $itemsSize * $totalTraits);
+        }
         for ($position = $totalTraits, $index = 0; $index < $numTraitsToAdd; $position++, $index++) {
             $name   = StringEntry::fromString($traitsToAdd[$index]);
             $lcName = StringEntry::fromString(strtolower($traitsToAdd[$index]));
