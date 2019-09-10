@@ -228,21 +228,6 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
-     * @inheritDoc
-     */
-    public function getTraitNames(): array
-    {
-        $traitNames = [];
-        for ($index = 0; $index < $this->pointer->num_traits; $index++) {
-            $rawTraitName   = $this->pointer->trait_names[$index]->name;
-            $traitNameValue = new StringEntry($rawTraitName);
-            $traitNames[]   = (string) $traitNameValue;
-        }
-
-        return $traitNames;
-    }
-
-    /**
      * Gets the traits
      *
      * @return ReflectionClass[] An associative array of traits, with keys as trait
