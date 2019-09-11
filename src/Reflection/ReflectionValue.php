@@ -90,11 +90,13 @@ class ReflectionValue
     }
 
     /**
-     * Returns raw C value entry
+     * Returns value type
+     *
+     * See defined constants IS_XXXX in this class
      */
-    public function getRawValue(): ?CData
+    public function getType(): int
     {
-        return $this->pointer->value;
+        return $this->pointer->u1->v->type;
     }
 
     /**
@@ -162,27 +164,51 @@ class ReflectionValue
     }
 
     /**
-     * Type-friendly getter to work with class-entry Zval-s
+     * Type-friendly getter to return zend_class_entry directly
      */
-    public function getClass(): ReflectionClass
+    public function getRawClass(): CData
     {
         if ($this->pointer->u1->v->type !== self::IS_PTR) {
             throw new \UnexpectedValueException('Class entry available only for the type IS_PTR');
         }
 
-        return ReflectionClass::fromClassEntry($this->pointer->value->ce);
+        return $this->pointer->value->ce;
     }
 
     /**
-     * Type-friendly getter to work with function-entry Zval-s
+     * Type-friendly getter to return zend_function directly
      */
-    public function getFunctionEntry(): FunctionEntry
+    public function getRawFunction(): CData
     {
         if ($this->pointer->u1->v->type !== self::IS_PTR) {
             throw new \UnexpectedValueException('Function entry available only for the type IS_PTR');
         }
 
-        return new FunctionEntry($this->pointer->value->func);
+        return $this->pointer->value->func;
+    }
+
+    /**
+     * Type-friendly getter to return zend_string directly
+     */
+    public function getRawString(): CData
+    {
+        if ($this->pointer->u1->v->type !== self::IS_STRING) {
+            throw new \UnexpectedValueException('String entry available only for the type IS_STRING');
+        }
+
+        return $this->pointer->value->str;
+    }
+
+    /**
+     * Type-friendly getter to return zend_object directly
+     */
+    public function getRawObject(): CData
+    {
+        if ($this->pointer->u1->v->type !== self::IS_OBJECT) {
+            throw new \UnexpectedValueException('Object entry available only for the type IS_OBJECT');
+        }
+
+        return $this->pointer->value->obj;
     }
 
     /**

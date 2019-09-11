@@ -38,7 +38,7 @@ class StringEntry
     {
         // This code is used to extract a Zval for our $value argument and use its internal pointer
         $valueArgument = Core::$executor->getExecutionState()->getArgument(0);
-        $this->pointer = $valueArgument->getRawValue()->str[0];
+        $this->pointer = $valueArgument->getRawString()[0];
     }
 
     /**

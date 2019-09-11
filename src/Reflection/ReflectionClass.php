@@ -59,7 +59,7 @@ class ReflectionClass extends NativeReflectionClass
         if ($classEntryValue === null) {
             throw new \ReflectionException("Class {$className} should be in the engine.");
         }
-        $classEntry = $classEntryValue->getRawValue()->ce;
+        $classEntry = $classEntryValue->getRawClass();
         $this->initLowLevelStructures($classEntry);
     }
 
@@ -140,7 +140,7 @@ class ReflectionClass extends NativeReflectionClass
         FFI::memcpy($memory, $this->pointer->interfaces, $itemsSize * $totalInterfaces);
         for ($position = $totalInterfaces, $index = 0; $index < $numInterfacesToAdd; $position++, $index++) {
             $classValueEntry   = Core::$executor->classTable->find(strtolower($interfacesToAdd[$index]));
-            $memory[$position] = $classValueEntry->getRawValue()->ce;
+            $memory[$position] = $classValueEntry->getRawClass();
         }
         if($this->pointer->interfaces !== null) {
             FFI::memcpy($this->pointer->interfaces, $memory, FFI::sizeof($memory));
@@ -196,17 +196,18 @@ class ReflectionClass extends NativeReflectionClass
             throw new \ReflectionException("Method {$name} does not exist");
         }
 
-        return ReflectionMethod::fromFunctionEntry($functionEntry->getRawValue()->func);
+        return ReflectionMethod::fromFunctionEntry($functionEntry->getRawFunction());
     }
 
     /**
      * @inheritDoc
+     * @return ReflectionMethod[]
      */
     public function getMethods($filter = null)
     {
         $methods = [];
-        foreach ($this->methodTable as $methodEntry) {
-            $functionEntry = $methodEntry->getRawValue()->func;
+        foreach ($this->methodTable as $methodEntryValue) {
+            $functionEntry = $methodEntryValue->getRawFunction();
             if (!isset($filter) || ($functionEntry->common->fn_flags & $filter)) {
                 $methods[] = ReflectionMethod::fromFunctionEntry($functionEntry);
             }
