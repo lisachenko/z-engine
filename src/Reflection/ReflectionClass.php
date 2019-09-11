@@ -349,10 +349,24 @@ class ReflectionClass extends NativeReflectionClass
             if (count($parentInterfaces) > 0) {
                 $this->removeInterfaces(...$parentInterfaces);
             }
+            $methodsToRemove = [];
+            foreach ($this->getMethods() as $reflectionMethod) {
+                $methodClass     = $reflectionMethod->getDeclaringClass();
+                $methodClassName = $methodClass->getName();
+                $isParentMethod  = $parentClass->getName() === $methodClassName;
+                $isGrandMethod   = $parentClass->isSubclassOf($methodClassName);
+
+                if ($isParentMethod || $isGrandMethod) {
+                    $methodsToRemove[] = $reflectionMethod->getName();
+                }
+            }
+            if (count($methodsToRemove) > 0) {
+                $this->removeMethods(...$methodsToRemove);
+            }
         } catch (\ReflectionException $e) {
             // This can happen during the class-loading (parent not loaded yet). But we ignore this error
         }
-        // TODO: Detach all related methods, constants, properties, etc...
+        // TODO: Detach all related constants, properties, etc...
         $this->pointer->parent = null;
     }
 
@@ -370,17 +384,7 @@ class ReflectionClass extends NativeReflectionClass
             $this->removeParentClass();
         }
 
-        // TODO: If we have a parent, then we need to remove all parent methods first
-        // TODO: what to do with methods from grandparents?
-        $oldParentClass = $this->getParentClass();
-        if ($oldParentClass !== null) {
-            foreach ($this->methodTable as $functionName => $functionValue) {
-                $functionEntry = $functionValue->getFunctionEntry();
-                if ($functionEntry->getScope()->getName() === $oldParentClass->getName()) {
-                    $this->methodTable->delete($functionName);
-                }
-            }
-        }
+        // TODO: Add new interfaces, methods and properties from new parent class
         $this->pointer->parent = $newParent->pointer;
     }
 
