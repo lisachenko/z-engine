@@ -212,14 +212,20 @@ class ReflectionMethod extends NativeReflectionMethod
         $this->ensureCompatibleClosure($newCode);
         $hash = $this->class . '::' . $this->name;
         if (!isset(self::$originalMethods[$hash])) {
-            $pointer = Core::new('zend_function *');
+            $pointer = Core::new('zend_function *', false);
             FFI::memcpy(FFI::addr($pointer), $this->pointer, FFI::sizeof($this->pointer));
             self::$originalMethods[$hash] = $pointer;
         }
         $selfExecutionState = Core::$executor->getExecutionState();
         $newCodeEntry       = $selfExecutionState->getArgument(0)->getRawObject();
         $newCodeEntry       = Core::cast('zend_closure *', $newCodeEntry);
+
+        // Copy only common op_array part from original one to keep name, scope, etc
+        FFI::memcpy($newCodeEntry->func, $this->pointer[0], FFI::sizeof($newCodeEntry->func->common));
+
+        // Replace original method with redefined closure
         FFI::memcpy($this->pointer, FFI::addr($newCodeEntry->func), FFI::sizeof($newCodeEntry->func));
+
     }
 
     /**
