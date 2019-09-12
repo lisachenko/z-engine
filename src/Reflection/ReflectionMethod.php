@@ -24,6 +24,13 @@ class ReflectionMethod extends NativeReflectionMethod
 {
     private CData $pointer;
 
+    /**
+     * This static property holds all original zend_function* entries for redefined methods
+     *
+     * @var array|CData[]
+     */
+    private static array $originalMethods = [];
+
     public function __construct(string $className, string $methodName)
     {
         parent::__construct($className, $methodName);
@@ -203,11 +210,27 @@ class ReflectionMethod extends NativeReflectionMethod
     public function redefine(\Closure $newCode): void
     {
         $this->ensureCompatibleClosure($newCode);
-
+        $hash = $this->class . '::' . $this->name;
+        if (!isset(self::$originalMethods[$hash])) {
+            $pointer = Core::new('zend_function *');
+            FFI::memcpy(FFI::addr($pointer), $this->pointer, FFI::sizeof($this->pointer));
+            self::$originalMethods[$hash] = $pointer;
+        }
         $selfExecutionState = Core::$executor->getExecutionState();
         $newCodeEntry       = $selfExecutionState->getArgument(0)->getRawObject();
         $newCodeEntry       = Core::cast('zend_closure *', $newCodeEntry);
         FFI::memcpy($this->pointer, FFI::addr($newCodeEntry->func), FFI::sizeof($newCodeEntry->func));
+    }
+
+    /**
+     * Checks if this method was redefined or not
+     */
+    public function isRedefined(): bool
+    {
+        $hash        = $this->class . '::' . $this->name;
+        $isRedefined = isset(self::$originalMethods[$hash]);
+
+        return $isRedefined;
     }
 
     /**

@@ -21,4 +21,10 @@ class TestClass
     {
         die('Method should not be called and must be removed');
     }
+
+    public function reflectedMethod(): ?string
+    {
+        // If we make this method static in runtime, then $this won't be passed to it
+        return isset($this) ? get_class($this) : null;
+    }
 }
