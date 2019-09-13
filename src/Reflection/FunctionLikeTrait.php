@@ -16,14 +16,13 @@ use FFI;
 use FFI\CData;
 use ZEngine\Core;
 use ZEngine\OpCodeLine;
-use ZEngine\Type\StringEntry;
 
 trait FunctionLikeTrait
 {
     private CData $pointer;
 
     /**
-     * This static property holds all original zend_function* entries for redefined methods
+     * This static property holds all original zend_function* entries for redefined entries
      *
      * @var array|CData[]
      */
