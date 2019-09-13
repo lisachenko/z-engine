@@ -14,6 +14,8 @@ namespace ZEngine;
 
 use FFI;
 use FFI\CData;
+use ZEngine\Reflection\ReflectionFunction;
+use ZEngine\Reflection\ReflectionMethod;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\HashTable;
 
@@ -76,15 +78,21 @@ class ExecutionDataEntry
     }
 
     /**
-     * Returns the current function entry
+     * Returns the current function or method
      */
-    public function getFunction(): FunctionEntry
+    public function getFunction(): \ReflectionFunctionAbstract
     {
         if ($this->pointer->func === null) {
             throw new \InvalidArgumentException('Function entry is not available in the current context');
         }
 
-        return new FunctionEntry($this->pointer->func);
+        if ($this->pointer->func->common->scope === null) {
+            $reflection = ReflectionFunction::fromCData($this->pointer->func);
+        } else {
+            $reflection = ReflectionMethod::fromCData($this->pointer->func);
+        }
+
+        return $reflection;
     }
 
     /**

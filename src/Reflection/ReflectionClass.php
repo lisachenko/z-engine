@@ -70,7 +70,7 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @return ReflectionClass
      */
-    public static function fromClassEntry(CData $classEntry): ReflectionClass
+    public static function fromCData(CData $classEntry): ReflectionClass
     {
         /** @var ReflectionClass $reflectionClass */
         $reflectionClass = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
@@ -196,7 +196,7 @@ class ReflectionClass extends NativeReflectionClass
             throw new \ReflectionException("Method {$name} does not exist");
         }
 
-        return ReflectionMethod::fromFunctionEntry($functionEntry->getRawFunction());
+        return ReflectionMethod::fromCData($functionEntry->getRawFunction());
     }
 
     /**
@@ -209,7 +209,7 @@ class ReflectionClass extends NativeReflectionClass
         foreach ($this->methodTable as $methodEntryValue) {
             $functionEntry = $methodEntryValue->getRawFunction();
             if (!isset($filter) || ($functionEntry->common->fn_flags & $filter)) {
-                $methods[] = ReflectionMethod::fromFunctionEntry($functionEntry);
+                $methods[] = ReflectionMethod::fromCData($functionEntry);
             }
         }
 

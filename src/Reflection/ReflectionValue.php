@@ -15,7 +15,6 @@ namespace ZEngine\Reflection;
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
 use ZEngine\Core;
-use ZEngine\FunctionEntry;
 
 class ReflectionValue
 {

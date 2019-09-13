@@ -16,20 +16,12 @@ use FFI;
 use FFI\CData;
 use ReflectionMethod as NativeReflectionMethod;
 use ZEngine\Core;
-use ZEngine\OpCodeLine;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
 
 class ReflectionMethod extends NativeReflectionMethod
 {
-    private CData $pointer;
-
-    /**
-     * This static property holds all original zend_function* entries for redefined methods
-     *
-     * @var array|CData[]
-     */
-    private static array $originalMethods = [];
+    use FunctionLikeTrait;
 
     public function __construct(string $className, string $methodName)
     {
@@ -57,7 +49,7 @@ class ReflectionMethod extends NativeReflectionMethod
      *
      * @return ReflectionMethod
      */
-    public static function fromFunctionEntry(CData $functionEntry): ReflectionMethod
+    public static function fromCData(CData $functionEntry): ReflectionMethod
     {
         /** @var ReflectionMethod $reflectionMethod */
         $reflectionMethod = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
@@ -137,48 +129,6 @@ class ReflectionMethod extends NativeReflectionMethod
     }
 
     /**
-     * Declares method as deprecated/non-deprecated
-     */
-    public function setDeprecated(bool $isDeprecated = true): void
-    {
-        if ($isDeprecated) {
-            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags | Core::ZEND_ACC_DEPRECATED);
-        } else {
-            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags & (~Core::ZEND_ACC_DEPRECATED));
-        }
-    }
-
-    /**
-     * Declares method as variadic/non-variadic
-     *
-     * <span style="color:red; font-weight:bold">Danger!</span> Low-level API, can bring a segmentation fault
-     * @internal
-     */
-    public function setVariadic(bool $isVariadic = true): void
-    {
-        if ($isVariadic) {
-            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags | Core::ZEND_ACC_VARIADIC);
-        } else {
-            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags & (~Core::ZEND_ACC_VARIADIC));
-        }
-    }
-
-    /**
-     * Declares method as generator/non-generator
-     *
-     * <span style="color:red; font-weight:bold">Danger!</span> Low-level API, can bring a segmentation fault
-     * @internal
-     */
-    public function setGenerator(bool $isGenerator = true): void
-    {
-        if ($isGenerator) {
-            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags | Core::ZEND_ACC_GENERATOR);
-        } else {
-            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags & (~Core::ZEND_ACC_GENERATOR));
-        }
-    }
-
-    /**
      * Gets the declaring class
      *
      * @throws \InvalidArgumentException If scope is not available
@@ -189,7 +139,7 @@ class ReflectionMethod extends NativeReflectionMethod
             throw new \InvalidArgumentException('Not in a class scope');
         }
 
-        return ReflectionClass::fromClassEntry($this->pointer->common->scope);
+        return ReflectionClass::fromCData($this->pointer->common->scope);
     }
 
     /**
@@ -201,126 +151,13 @@ class ReflectionMethod extends NativeReflectionMethod
             return null;
         }
 
-        return static::fromFunctionEntry($this->pointer->common->prototype);
+        return static::fromCData($this->pointer->common->prototype);
     }
 
     /**
-     * Redefines an existing method in the class with closure
+     * Returns a user-friendly representation of internal structure to prevent segfault
      */
-    public function redefine(\Closure $newCode): void
-    {
-        $this->ensureCompatibleClosure($newCode);
-        $hash = $this->class . '::' . $this->name;
-        if (!isset(self::$originalMethods[$hash])) {
-            $pointer = Core::new('zend_function *', false);
-            FFI::memcpy(FFI::addr($pointer), $this->pointer, FFI::sizeof($this->pointer));
-            self::$originalMethods[$hash] = $pointer;
-        }
-        $selfExecutionState = Core::$executor->getExecutionState();
-        $newCodeEntry       = $selfExecutionState->getArgument(0)->getRawObject();
-        $newCodeEntry       = Core::cast('zend_closure *', $newCodeEntry);
-
-        // Copy only common op_array part from original one to keep name, scope, etc
-        FFI::memcpy($newCodeEntry->func, $this->pointer[0], FFI::sizeof($newCodeEntry->func->common));
-
-        // Replace original method with redefined closure
-        FFI::memcpy($this->pointer, FFI::addr($newCodeEntry->func), FFI::sizeof($newCodeEntry->func));
-
-    }
-
-    /**
-     * Checks if this method was redefined or not
-     */
-    public function isRedefined(): bool
-    {
-        $hash        = $this->class . '::' . $this->name;
-        $isRedefined = isset(self::$originalMethods[$hash]);
-
-        return $isRedefined;
-    }
-
-    /**
-     * Returns the iterable generator of opcodes for this function
-     *
-     * @return iterable|OpCodeLine[]
-     */
-    public function getOpCodes(): iterable
-    {
-        if (!$this->isUserDefined()) {
-            throw new \LogicException('Opcodes are available only for user-defined functions');
-        }
-        $opcodeEntryGenerator = function () {
-            $opcodeIndex  = 0;
-            $totalOpcodes = $this->pointer->op_array->last;
-            while ($opcodeIndex < $totalOpcodes) {
-                $opCode = new OpCodeLine(
-                    FFI::addr($this->pointer->op_array->opcodes[$opcodeIndex++])
-                );
-                yield $opCode;
-            }
-        };
-
-        return $opcodeEntryGenerator();
-    }
-
-    /**
-     * Returns the total number of literals
-     */
-    public function getNumberOfLiterals(): int
-    {
-        if (!$this->isUserDefined()) {
-            throw new \LogicException('Literals are available only for user-defined functions');
-        }
-        $lastLiteral = $this->pointer->op_array->last_literal;
-
-        return $lastLiteral;
-    }
-
-    /**
-     * Returns one single literal's value by it's index
-     *
-     * @param int $index
-     *
-     * @return ReflectionValue
-     */
-    public function getLiteral(int $index): ReflectionValue
-    {
-        if (!$this->isUserDefined()) {
-            throw new \LogicException('Literals are available only for user-defined functions');
-        }
-        $lastLiteral = $this->pointer->op_array->last_literal;
-        if ($index > $lastLiteral) {
-            throw new \OutOfBoundsException("Literal index {$index} is out of bounds, last is {$lastLiteral}");
-        }
-        $literal = $this->pointer->op_array->literals[$index];
-
-        return ReflectionValue::fromValueEntry($literal);
-    }
-
-    /**
-     * Returns list of literals, associated with this entry
-     *
-     * @return ReflectionValue[]
-     */
-    public function getLiterals(): iterable
-    {
-        if (!$this->isUserDefined()) {
-            throw new \LogicException('Literals are available only for user-defined functions');
-        }
-        $literalValueGenerator = function () {
-            $literalIndex  = 0;
-            $totalLiterals = $this->pointer->op_array->last_literal;
-            while ($literalIndex < $totalLiterals) {
-                $item = $this->pointer->op_array->literals[$literalIndex];
-                $literalIndex++;
-                yield ReflectionValue::fromValueEntry($item);
-            }
-        };
-
-        return $literalValueGenerator();
-    }
-
-    public function __debugInfo()
+    public function __debugInfo(): array
     {
         return [
             'name'  => $this->getName(),
@@ -329,59 +166,10 @@ class ReflectionMethod extends NativeReflectionMethod
     }
 
     /**
-     * Checks if the given closure signature is compatible to original one (number of arguments, type hints, etc)
-     *
-     * @throws \ReflectionException if closure signature is not compatible with current function/method
+     * Returns the hash key for function or method
      */
-    private function ensureCompatibleClosure(\Closure $newCode): void
+    protected function getHash(): string
     {
-        /** @var \ReflectionFunction[] $reflectionPair */
-        $reflectionPair = [$this, new \ReflectionFunction($newCode)];
-        $signatures     = [];
-        foreach ($reflectionPair as $index => $reflectionFunction) {
-            $signature = 'function ';
-            if ($reflectionFunction->returnsReference()) {
-                $signature .= '&';
-            }
-            $signature .= '(';
-            $parameters = [];
-            foreach ($reflectionFunction->getParameters() as $reflectionParameter) {
-                $parameter = '';
-                if ($reflectionParameter->hasType()) {
-                    $type = $reflectionParameter->getType();
-                    if ($type->allowsNull()) {
-                        $parameter .= '?';
-                    }
-                    $parameter .= $type->getName() . ' ';
-                }
-                if ($reflectionParameter->isPassedByReference()) {
-                    $parameter .= '&';
-                }
-                if ($reflectionParameter->isVariadic()) {
-                    $parameter .= '...';
-                }
-                $parameter .= '$';
-                $parameter .= $reflectionParameter->getName();
-                $parameters[] = $parameter;
-            }
-            $signature .= join(', ', $parameters);
-            $signature .= ')';
-            if ($reflectionFunction->hasReturnType()) {
-                $signature .= ': ';
-                $type       = $reflectionFunction->getReturnType();
-                if ($type->allowsNull()) {
-                    $signature .= '?';
-                }
-                $signature .= $type->getName();
-            }
-            $signatures[] = $signature;
-        }
-
-        if ($signatures[0] !== $signatures[1]) {
-            throw new \ReflectionException(
-                'Given function signature: "' . $signatures[1] . '"' .
-                ' should be compatible with original "' . $signatures[0] . '"'
-            );
-        }
+        return $this->class . '::' . $this->name;
     }
 }
