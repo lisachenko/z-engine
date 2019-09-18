@@ -13,22 +13,43 @@ declare(strict_types=1);
 namespace ZEngine\Type;
 
 use FFI\CData;
+use ZEngine\Core;
 use ZEngine\Reflection\ReflectionClass;
 
-class ObjectEntry extends ReflectionClass
+class ObjectEntry
 {
     private HashTable $properties;
 
     private CData $pointer;
 
-    public function __construct(CData $pointer)
+    public function __construct(object $instance)
     {
-        $this->pointer = $pointer;
-        // TODO: Maybe just break this inheritance and keep this separate from ObjectEntry
-        parent::__construct(StringEntry::fromCData($this->pointer->ce->name)->getStringValue());
-        if ($this->pointer->properties !== null) {
-            $this->properties = new HashTable($this->pointer->properties);
-        }
+        // This code is used to extract a Zval for our $value argument and use its internal pointer
+        $valueArgument = Core::$executor->getExecutionState()->getArgument(0);
+        $pointer = $valueArgument->getRawObject();
+        $this->initLowLevelStructures($pointer);
+    }
+
+    /**
+     * Creates an object entry from the zend_object structure
+     *
+     * @param CData $pointer Pointer to the structure
+     */
+    public static function fromCData(CData $pointer): ObjectEntry
+    {
+        /** @var ObjectEntry $objectEntry */
+        $objectEntry = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $objectEntry->initLowLevelStructures($pointer);
+
+        return $objectEntry;
+    }
+
+    /**
+     * Returns the class reflection for current object
+     */
+    public function getClass(): ReflectionClass
+    {
+        return ReflectionClass::fromCData($this->pointer->ce);
     }
 
     /**
@@ -41,16 +62,39 @@ class ObjectEntry extends ReflectionClass
         return $this->pointer->handle;
     }
 
-    public function __debugInfo()
+    /**
+     * Returns an internal reference counter value
+     */
+    public function getReferenceCount(): int
+    {
+        return $this->pointer->gc->refcount;
+    }
+
+    /**
+     * This method returns a dumpable representation of internal value to prevent segfault
+     */
+    public function __debugInfo(): array
     {
         $info = [
-            'handle' => $this->getHandle(),
-            'class'  => $this->getName()
+            'class'    => $this->getClass()->getName(),
+            'handle'   => $this->getHandle(),
+            'refcount' => $this->getReferenceCount()
         ];
         if (isset($this->properties)) {
             $info['properties'] = $this->properties;
         }
 
         return $info;
+    }
+
+    /**
+     * Performs low-level initialization of object
+     */
+    private function initLowLevelStructures(CData $pointer): void
+    {
+        $this->pointer = $pointer;
+        if ($this->pointer->properties !== null) {
+            $this->properties = new HashTable($this->pointer->properties);
+        }
     }
 }
