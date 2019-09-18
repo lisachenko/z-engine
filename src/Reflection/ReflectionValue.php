@@ -16,6 +16,29 @@ use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
 use ZEngine\Core;
 
+/**
+ * Class ReflectionValue represents a value in PHP
+ *
+ * typedef union _zend_value {
+ *   zend_long         lval;                // long value
+ *   double            dval;                // double value
+ *   zend_refcounted  *counted;
+ *   zend_string      *str;
+ *   zend_array       *arr;
+ *   zend_object      *obj;
+ *   zend_resource    *res;
+ *   zend_reference   *ref;
+ *   zend_ast_ref     *ast;
+ *   zval             *zv;
+ *   void             *ptr;
+ *   zend_class_entry *ce;
+ *   zend_function    *func;
+ *   struct {
+ *     uint32_t w1;
+ *     uint32_t w2;
+ *   } ww;
+ * } zend_value;
+ */
 class ReflectionValue
 {
     /* regular data types */
@@ -163,6 +186,18 @@ class ReflectionValue
     }
 
     /**
+     * Type-friendly getter to return indirect value directly
+     */
+    public function getIndirectValue(): self
+    {
+        if ($this->pointer->u1->v->type !== self::IS_INDIRECT) {
+            throw new \UnexpectedValueException('Indirect entry available only for the type IS_INDIRECT');
+        }
+
+        return self::fromValueEntry($this->pointer->value->zv);
+    }
+
+    /**
      * Type-friendly getter to return zend_class_entry directly
      */
     public function getRawClass(): CData
@@ -208,6 +243,14 @@ class ReflectionValue
         }
 
         return $this->pointer->value->obj;
+    }
+
+    /**
+     * Returns the raw zval structure
+     */
+    public function getRawValue(): CData
+    {
+        return $this->pointer;
     }
 
     /**
