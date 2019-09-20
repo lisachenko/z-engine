@@ -33,6 +33,19 @@ class ReflectionClassTest extends TestCase
         $this->assertFalse($isMethodExists, 'Method should be removed');
     }
 
+    public function testAddMethod()
+    {
+        $methodName = 'newMethod';
+        $this->refClass->addMethod($methodName, function (string $argument): string {
+            return $argument;
+        });
+        $isMethodExists = method_exists(TestClass::class, $methodName);
+        $this->assertTrue($isMethodExists);
+        $instance = new TestClass();
+        $result = $instance->$methodName('Test');
+        $this->assertSame('Test', $result);
+    }
+
     public function testSetAbstract()
     {
         $this->refClass->setAbstract(true);

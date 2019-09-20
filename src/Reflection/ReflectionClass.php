@@ -16,7 +16,7 @@ use FFI;
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
 use ZEngine\Core;
-use ZEngine\Reflection\ReflectionValue;
+use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
 
@@ -214,6 +214,25 @@ class ReflectionClass extends NativeReflectionClass
         }
 
         return $methods;
+    }
+
+    /**
+     * Adds a new method to the class in runtime
+     */
+    public function addMethod(string $methodName, \Closure $method)
+    {
+        $closureEntry = new ClosureEntry($method);
+        // This line will make this closure live until the end of script/request
+        $closureEntry->getClosureObjectEntry()->incrementReferenceCount();
+        $closureEntry->setCalledScope($this->name);
+
+        // TODO: replace with ReflectionFunction instead of low-level structures
+        $rawFunction  = $closureEntry->getRawFunction();
+        $funcName     = (new StringEntry($methodName))->getRawValue();
+        $rawFunction->common->function_name = $funcName;
+
+        $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawFunction);
+        $this->methodTable->add(strtolower($methodName), $valueEntry);
     }
 
     /**
