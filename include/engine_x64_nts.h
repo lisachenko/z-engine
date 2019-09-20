@@ -1065,6 +1065,7 @@ extern struct _zend_compiler_globals compiler_globals;
  */
 extern int zend_hash_del(HashTable *ht, zend_string *key);
 extern zval* zend_hash_find(const HashTable *ht, zend_string *key);
+extern zval* zend_hash_add_or_update(HashTable *ht, zend_string *key, zval *pData, uint32_t flag);
 
 /**
  * Opcode API

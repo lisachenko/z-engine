@@ -21,6 +21,12 @@ use ZEngine\Reflection\ReflectionValue;
 
 class HashTable implements IteratorAggregate
 {
+    private const HASH_UPDATE          = (1 << 0);
+    private const HASH_ADD             = (1 << 1);
+    private const HASH_UPDATE_INDIRECT = (1 << 2);
+    private const HASH_ADD_NEW         = (1 << 3);
+    private const HASH_ADD_NEXT        = (1 << 4);
+
     public CData $value;
 
     public function __construct(CData $hashInstance)
@@ -77,10 +83,31 @@ class HashTable implements IteratorAggregate
      */
     public function delete(string $key): void
     {
-        $stringEntry = new StringEntry(strtolower($key));
+        $stringEntry = new StringEntry($key);
         $result      = Core::call('zend_hash_del', $this->value, FFI::addr($stringEntry->getRawValue()));
         if ($result === Core::FAILURE) {
             throw new \RuntimeException("Can not delete an item with key {$key}");
+        }
+    }
+
+    /**
+     * Adds new value to the HashTable
+     *
+     * @param string $key Key to use
+     * @param CData  $value
+     */
+    public function add(string $key, ReflectionValue $value): void
+    {
+        $stringEntry = new StringEntry($key);
+        $result      = Core::call(
+            'zend_hash_add_or_update',
+            $this->value,
+            FFI::addr($stringEntry->getRawValue()),
+            $value->getRawValue(),
+            self::HASH_ADD_NEW
+        );
+        if ($result === Core::FAILURE) {
+            throw new \RuntimeException("Can not add an item with key {$key}");
         }
     }
 
