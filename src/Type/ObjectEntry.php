@@ -16,6 +16,18 @@ use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionClass;
 
+/**
+ * Class ObjectEntry represents ab object instance in PHP
+ *
+ * struct _zend_object {
+ *   zend_refcounted_h gc;
+ *   uint32_t          handle;
+ *   zend_class_entry *ce;
+ *   const zend_object_handlers *handlers;
+ *   HashTable        *properties;
+ *   zval              properties_table[1];
+ * };
+ */
 class ObjectEntry
 {
     private HashTable $properties;
@@ -53,6 +65,21 @@ class ObjectEntry
     }
 
     /**
+     * Changes the class of object to another one
+     *
+     * <span style="color:red; font-weight:bold">Danger!</span> Low-level API, can bring a segmentation fault
+     * @internal
+     */
+    public function setClass(string $newClass): void
+    {
+        $classEntryValue = Core::$executor->classTable->find(strtolower($newClass));
+        if ($classEntryValue === null) {
+            throw new \ReflectionException("Class {$newClass} was not found");
+        }
+        $this->pointer->ce = $classEntryValue->getRawClass();
+    }
+
+    /**
      * Returns an object handle, this should be equal to spl_object_id
      *
      * @see spl_object_id()
@@ -63,11 +90,35 @@ class ObjectEntry
     }
 
     /**
+     * Changes object internal handle to another one
+     */
+    public function setHandle(int $newHandle): void
+    {
+        $this->pointer->handle = $newHandle;
+    }
+
+    /**
      * Returns an internal reference counter value
      */
     public function getReferenceCount(): int
     {
         return $this->pointer->gc->refcount;
+    }
+
+    /**
+     * Increments a reference counter, so this object will live more than current scope
+     */
+    public function incrementReferenceCount(): void
+    {
+        $this->pointer->gc->refcount++;
+    }
+
+    /**
+     * Decrements a reference counter
+     */
+    public function decrementReferenceCount(): void
+    {
+        $this->pointer->gc->refcount--;
     }
 
     /**
