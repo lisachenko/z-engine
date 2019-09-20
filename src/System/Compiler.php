@@ -10,7 +10,7 @@
  */
 declare(strict_types=1);
 
-namespace ZEngine;
+namespace ZEngine\System;
 
 use FFI\CData;
 use ZEngine\Reflection\ReflectionValue;

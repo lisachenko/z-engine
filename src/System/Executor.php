@@ -10,9 +10,10 @@
  */
 declare(strict_types=1);
 
-namespace ZEngine;
+namespace ZEngine\System;
 
 use FFI\CData;
+use ZEngine\ExecutionDataEntry;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\HashTable;
 
@@ -35,7 +36,7 @@ class Executor
     /**
      * Holds an internal pointer to the executor_globals structure
      */
-    public CData $pointer;
+    private CData $pointer;
 
     public function __construct(CData $pointer)
     {

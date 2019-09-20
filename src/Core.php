@@ -15,6 +15,8 @@ namespace ZEngine;
 use FFI;
 use FFI\CData;
 use FFI\CType;
+use ZEngine\System\Compiler;
+use ZEngine\System\Executor;
 
 /**
  * Class Core
