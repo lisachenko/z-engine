@@ -10,14 +10,16 @@
  */
 declare(strict_types=1);
 
-namespace ZEngine;
+namespace ZEngine\System;
 
 use FFI;
 use FFI\CData;
+use ZEngine\Core;
 use ZEngine\Reflection\ReflectionFunction;
 use ZEngine\Reflection\ReflectionMethod;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\HashTable;
+use ZEngine\Type\OpLine;
 
 /*
  * Stack Frame Layout (the whole stack frame is allocated at once)
@@ -50,9 +52,9 @@ use ZEngine\Type\HashTable;
  */
 
 /**
- * ExecutionDataEntry provides an access to general information from executor
+ * ExecutionData provides an access to general information from executor
  */
-class ExecutionDataEntry
+class ExecutionData
 {
     private CData $pointer;
 
@@ -64,9 +66,9 @@ class ExecutionDataEntry
     /**
      * Returns the currently executed opline
      */
-    public function getOpline(): OpCodeLine
+    public function getOpline(): OpLine
     {
-        return new OpCodeLine($this->pointer->opline);
+        return new OpLine($this->pointer->opline);
     }
 
     /**
@@ -156,12 +158,12 @@ class ExecutionDataEntry
     /**
      * Returns the previous execution data entry (aka stack)
      */
-    public function getPrevious(): ExecutionDataEntry
+    public function getPrevious(): ExecutionData
     {
         if ($this->pointer->prev_execute_data === null) {
             throw new \LogicException('There is no previous execution data. Top of the stack?');
         }
-        return new ExecutionDataEntry($this->pointer->prev_execute_data);
+        return new ExecutionData($this->pointer->prev_execute_data);
     }
 
     public function getSymbolTable(): HashTable

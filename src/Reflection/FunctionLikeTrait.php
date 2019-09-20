@@ -15,7 +15,7 @@ namespace ZEngine\Reflection;
 use FFI;
 use FFI\CData;
 use ZEngine\Core;
-use ZEngine\OpCodeLine;
+use ZEngine\Type\OpLine;
 
 trait FunctionLikeTrait
 {
@@ -116,7 +116,7 @@ trait FunctionLikeTrait
     /**
      * Returns the iterable generator of opcodes for this function
      *
-     * @return iterable|OpCodeLine[]
+     * @return iterable|OpLine[]
      */
     public function getOpCodes(): iterable
     {
@@ -127,7 +127,7 @@ trait FunctionLikeTrait
             $opcodeIndex  = 0;
             $totalOpcodes = $this->pointer->op_array->last;
             while ($opcodeIndex < $totalOpcodes) {
-                $opCode = new OpCodeLine(
+                $opCode = new OpLine(
                     FFI::addr($this->pointer->op_array->opcodes[$opcodeIndex++])
                 );
                 yield $opCode;

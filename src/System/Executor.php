@@ -13,7 +13,6 @@ declare(strict_types=1);
 namespace ZEngine\System;
 
 use FFI\CData;
-use ZEngine\ExecutionDataEntry;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\HashTable;
 
@@ -48,10 +47,10 @@ class Executor
     /**
      * Returns an execution state with scope, variables, etc.
      */
-    public function getExecutionState(): ExecutionDataEntry
+    public function getExecutionState(): ExecutionData
     {
         // current_execute_data refers to the getExecutionState itself, so we move to the previous item
-        $executionState = new ExecutionDataEntry($this->pointer->current_execute_data->prev_execute_data);
+        $executionState = new ExecutionData($this->pointer->current_execute_data->prev_execute_data);
 
         return $executionState;
     }

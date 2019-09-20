@@ -10,13 +10,15 @@
  */
 declare(strict_types=1);
 
-namespace ZEngine;
+namespace ZEngine\Type;
 
 use FFI;
 use FFI\CData;
+use ZEngine\Core;
 use ZEngine\Reflection\ReflectionValue;
+use ZEngine\System\OpCode;
 
-class OpCodeLine
+class OpLine
 {
     /**
      * Unused operand

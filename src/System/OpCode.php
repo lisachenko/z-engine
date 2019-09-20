@@ -10,10 +10,11 @@
  */
 declare(strict_types=1);
 
-namespace ZEngine;
+namespace ZEngine\System;
 
 use Closure;
 use FFI\CData;
+use ZEngine\Core;
 
 /**
  * Hold all internal opcode constants and provide an API to hook any existing opcode
@@ -259,7 +260,7 @@ final class OpCode
 
                 return Core::ZEND_USER_OPCODE_DISPATCH;
             }
-            $executionState = new ExecutionDataEntry($state);
+            $executionState = new ExecutionData($state);
             $handleResult   = $handler($executionState);
 
             return $handleResult;
