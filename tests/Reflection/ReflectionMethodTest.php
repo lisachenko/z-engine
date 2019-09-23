@@ -207,6 +207,13 @@ class ReflectionMethodTest extends TestCase
         $this->assertSame('Yes', $result);
     }
 
+    public function testGetDeclaringClassReturnsCorrectInstance(): void
+    {
+        $class = $this->refMethod->getDeclaringClass();
+        $this->assertInstanceOf(ReflectionClass::class, $class);
+        $this->assertSame(TestClass::class, $class->getName());
+    }
+
     public function testSetDeclaringClass(): void
     {
         try {
