@@ -27,8 +27,10 @@ use ZEngine\Core;
  *   char              val[1];
  * };
  */
-class StringEntry
+class StringEntry implements ReferenceCountedInterface
 {
+    use ReferenceCountedTrait;
+
     private CData $pointer;
 
     /**
@@ -80,14 +82,6 @@ class StringEntry
     }
 
     /**
-     * Returns an internal reference counter value
-     */
-    public function getReferenceCount(): int
-    {
-        return $this->pointer->gc->refcount;
-    }
-
-    /**
      * Returns a PHP representation of engine string
      */
     public function getStringValue(): string
@@ -106,5 +100,13 @@ class StringEntry
             'refcount' => $this->getReferenceCount(),
             'hash'     => $this->getHash(),
         ];
+    }
+
+    /**
+     * This method should return an instance of zend_refcounted_h
+     */
+    protected function getGC(): CData
+    {
+        return $this->pointer->gc;
     }
 }

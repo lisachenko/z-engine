@@ -17,7 +17,7 @@ use ZEngine\Core;
 use ZEngine\Reflection\ReflectionClass;
 
 /**
- * Class ObjectEntry represents ab object instance in PHP
+ * Class ObjectEntry represents an object instance in PHP
  *
  * struct _zend_object {
  *   zend_refcounted_h gc;
@@ -28,8 +28,10 @@ use ZEngine\Reflection\ReflectionClass;
  *   zval              properties_table[1];
  * };
  */
-class ObjectEntry
+class ObjectEntry implements ReferenceCountedInterface
 {
+    use ReferenceCountedTrait;
+
     private HashTable $properties;
 
     private CData $pointer;
@@ -98,30 +100,6 @@ class ObjectEntry
     }
 
     /**
-     * Returns an internal reference counter value
-     */
-    public function getReferenceCount(): int
-    {
-        return $this->pointer->gc->refcount;
-    }
-
-    /**
-     * Increments a reference counter, so this object will live more than current scope
-     */
-    public function incrementReferenceCount(): void
-    {
-        $this->pointer->gc->refcount++;
-    }
-
-    /**
-     * Decrements a reference counter
-     */
-    public function decrementReferenceCount(): void
-    {
-        $this->pointer->gc->refcount--;
-    }
-
-    /**
      * This method returns a dumpable representation of internal value to prevent segfault
      */
     public function __debugInfo(): array
@@ -136,6 +114,14 @@ class ObjectEntry
         }
 
         return $info;
+    }
+
+    /**
+     * This method should return an instance of zend_refcounted_h
+     */
+    protected function getGC(): CData
+    {
+        return $this->pointer->gc;
     }
 
     /**

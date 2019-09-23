@@ -19,19 +19,21 @@ use Traversable;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionValue;
 
-class HashTable implements IteratorAggregate
+class HashTable implements IteratorAggregate, ReferenceCountedInterface
 {
+    use ReferenceCountedTrait;
+
     private const HASH_UPDATE          = (1 << 0);
     private const HASH_ADD             = (1 << 1);
     private const HASH_UPDATE_INDIRECT = (1 << 2);
     private const HASH_ADD_NEW         = (1 << 3);
     private const HASH_ADD_NEXT        = (1 << 4);
 
-    public CData $value;
+    private CData $pointer;
 
     public function __construct(CData $hashInstance)
     {
-        $this->value = $hashInstance;
+        $this->pointer = $hashInstance;
     }
 
     /**
@@ -43,8 +45,8 @@ class HashTable implements IteratorAggregate
     {
         $iterator = function () {
             $index = 0;
-            while ($index < $this->value->nNumOfElements) {
-                $item = $this->value->arData[$index];
+            while ($index < $this->pointer->nNumOfElements) {
+                $item = $this->pointer->arData[$index];
                 $index++;
                 if ($item->val->u1->v->type === ReflectionValue::IS_UNDEF) {
                     continue;
@@ -67,7 +69,7 @@ class HashTable implements IteratorAggregate
     public function find(string $key): ?ReflectionValue
     {
         $stringEntry = new StringEntry($key);
-        $pointer     = Core::call('zend_hash_find', $this->value, FFI::addr($stringEntry->getRawValue()));
+        $pointer     = Core::call('zend_hash_find', $this->pointer, FFI::addr($stringEntry->getRawValue()));
 
         if ($pointer !== null) {
             $pointer = ReflectionValue::fromValueEntry($pointer);
@@ -84,7 +86,7 @@ class HashTable implements IteratorAggregate
     public function delete(string $key): void
     {
         $stringEntry = new StringEntry($key);
-        $result      = Core::call('zend_hash_del', $this->value, FFI::addr($stringEntry->getRawValue()));
+        $result      = Core::call('zend_hash_del', $this->pointer, FFI::addr($stringEntry->getRawValue()));
         if ($result === Core::FAILURE) {
             throw new \RuntimeException("Can not delete an item with key {$key}");
         }
@@ -101,7 +103,7 @@ class HashTable implements IteratorAggregate
         $stringEntry = new StringEntry($key);
         $result      = Core::call(
             'zend_hash_add_or_update',
-            $this->value,
+            $this->pointer,
             FFI::addr($stringEntry->getRawValue()),
             $value->getRawValue(),
             self::HASH_ADD_NEW
@@ -114,5 +116,13 @@ class HashTable implements IteratorAggregate
     public function __debugInfo()
     {
         return iterator_to_array($this->getIterator());
+    }
+
+    /**
+     * This method should return an instance of zend_refcounted_h
+     */
+    protected function getGC(): CData
+    {
+        return $this->pointer->gc;
     }
 }
