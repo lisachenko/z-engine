@@ -219,7 +219,7 @@ class ReflectionClass extends NativeReflectionClass
     /**
      * Adds a new method to the class in runtime
      */
-    public function addMethod(string $methodName, \Closure $method)
+    public function addMethod(string $methodName, \Closure $method): ReflectionMethod
     {
         $closureEntry = new ClosureEntry($method);
         // This line will make this closure live until the end of script/request
@@ -231,8 +231,20 @@ class ReflectionClass extends NativeReflectionClass
         $funcName     = (new StringEntry($methodName))->getRawValue();
         $rawFunction->common->function_name = $funcName;
 
+        // Adjust the scope of our function to our class
+        $classScopeValue = Core::$executor->classTable->find(strtolower($this->name));
+        $rawFunction->common->scope = $classScopeValue->getRawClass();
+
+        // Clean closure flag
+        $rawFunction->common->fn_flags &= (~Core::ZEND_ACC_CLOSURE);
+
         $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawFunction);
         $this->methodTable->add(strtolower($methodName), $valueEntry);
+
+        $refMethod = ReflectionMethod::fromCData($rawFunction);
+        $refMethod->setPublic();
+
+        return $refMethod;
     }
 
     /**
