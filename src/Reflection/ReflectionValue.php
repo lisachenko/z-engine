@@ -293,6 +293,30 @@ class ReflectionValue
     }
 
     /**
+     * Type-friendly getter to return zend_resource directly
+     */
+    public function getRawResource(): CData
+    {
+        if ($this->pointer->u1->v->type !== self::IS_RESOURCE) {
+            throw new \UnexpectedValueException('Resource entry available only for the type IS_RESOURCE');
+        }
+
+        return $this->pointer->value->res;
+    }
+
+    /**
+     * Type-friendly getter to return zend_resource directly
+     */
+    public function getRawReference(): CData
+    {
+        if ($this->pointer->u1->v->type !== self::IS_REFERENCE) {
+            throw new \UnexpectedValueException('Reference entry available only for the type IS_REFERENCE');
+        }
+
+        return $this->pointer->value->ref;
+    }
+
+    /**
      * Returns the raw zval structure
      */
     public function getRawValue(): CData
