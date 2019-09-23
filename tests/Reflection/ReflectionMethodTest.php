@@ -206,4 +206,14 @@ class ReflectionMethodTest extends TestCase
         // Our method now returns Yes instead of class name
         $this->assertSame('Yes', $result);
     }
+
+    public function testSetDeclaringClass(): void
+    {
+        try {
+            $this->refMethod->setDeclaringClass(self::class);
+            $this->assertSame(self::class, $this->refMethod->getDeclaringClass()->getName());
+        } finally {
+            $this->refMethod->setDeclaringClass(TestClass::class);
+        }
+    }
 }

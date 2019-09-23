@@ -143,6 +143,22 @@ class ReflectionMethod extends NativeReflectionMethod
     }
 
     /**
+     * Changes the declaring class name for this method
+     *
+     * @param string $className New class name for this method
+     */
+    public function setDeclaringClass(string $className): void
+    {
+        $lcName = strtolower($className);
+
+        $classEntryValue = Core::$executor->classTable->find($lcName);
+        if ($classEntryValue === null) {
+            throw new \ReflectionException("Class {$className} was not found");
+        }
+        $this->pointer->common->scope = $classEntryValue->getRawClass();
+    }
+
+    /**
      * Returns the method prototype or null if no prototype for this method
      */
     public function getPrototype(): ?ReflectionMethod
