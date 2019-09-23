@@ -19,6 +19,30 @@ use Traversable;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionValue;
 
+/**
+ * Class HashTable provides general access to the internal array objects, aka hash-table
+ *
+ * struct _zend_array {
+ *     zend_refcounted_h gc;
+ *     union {
+ *         struct {
+ *             zend_uchar    flags;
+ *             zend_uchar    _unused;
+ *             zend_uchar    nIteratorsCount;
+ *             zend_uchar    _unused2;
+ *         } v;
+ *         uint32_t flags;
+ *     } u;
+ *     uint32_t          nTableMask;
+ *     Bucket           *arData;
+ *     uint32_t          nNumUsed;
+ *     uint32_t          nNumOfElements;
+ *     uint32_t          nTableSize;
+ *     uint32_t          nInternalPointer;
+ *     zend_long         nNextFreeElement;
+ *     dtor_func_t       pDestructor;
+ * };
+ */
 class HashTable implements IteratorAggregate, ReferenceCountedInterface
 {
     use ReferenceCountedTrait;
