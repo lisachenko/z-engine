@@ -1077,3 +1077,10 @@ extern user_opcode_handler_t zend_get_user_opcode_handler(zend_uchar opcode);
  * Exceptions hook
  */
 extern void (*zend_throw_exception_hook)(zval *ex);
+
+void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+int munmap(void *addr, size_t length);
+int mprotect(void *addr, size_t len, int prot);
+
+// from <unistd.h>
+int getpagesize(void);

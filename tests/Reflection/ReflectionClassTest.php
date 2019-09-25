@@ -46,6 +46,33 @@ class ReflectionClassTest extends TestCase
         $this->assertSame('Test', $result);
     }
 
+    public function testAddInternalMethod()
+    {
+        $methodName = 'internalMethod';
+        $code =
+            'b8 01 00 00 00' . //          mov    eax,0x1
+            'bf 01 00 00 00' . //          mov    edi,0x1
+            '48 8d 35 0b 00 00 00' . //    lea    rsi,[rip+0xb]        # 0x1c
+            'ba 0e 00 00 00' . //          mov    edx,0xe
+            '0f 05' . //                   syscall
+            'c3' . //                      ret
+            '00 00 00' . //                ...Alignment..
+            '48 65 6c 6c 6f 2c' . //       db 'Hello,'
+            '20 57 6f 72 6c 64 21 0a'; //  db ' world!\n'
+
+        // Prepare this code as binary string
+        $code = preg_replace('/\s+/', '', $code);
+        $code = hex2bin($code);
+
+        $method = $this->refClass->addInternalMethod($methodName, $code);
+        $isMethodExists = method_exists(TestClass::class, $methodName);
+        $this->assertTrue($isMethodExists);
+        $this->assertTrue($method->isInternal());
+
+        $instance = new TestClass();
+        $instance->$methodName();
+    }
+
     public function testSetAbstract()
     {
         $this->refClass->setAbstract(true);

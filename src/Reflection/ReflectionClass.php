@@ -248,6 +248,43 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
+     * Defines a method as machine bytecode
+     *
+     * @param string $methodName Method to add
+     * @param string $code Platform dependent source-code with relative addressing
+     *
+     * @return ReflectionMethod
+     */
+    public function addInternalMethod(string $methodName, string $code)
+    {
+        $pageSize = Core::call('getpagesize');
+        $rawCode  = Core::call('mmap', null, $pageSize, 0x7, 0x22, -1, 0);
+        FFI::memcpy($rawCode, $code, strlen($code));
+
+        $rawFunction = Core::new('zend_internal_function', false);
+        $rawFunction->type = Core::ZEND_INTERNAL_FUNCTION;
+        $rawFunction->num_args = 0;
+        $rawFunction->required_num_args = 0;
+        $rawFunction->arg_info = null;
+        $rawFunction->fn_flags |= Core::ZEND_ACC_PUBLIC;
+        $rawFunction->handler = FFI::cast('void *', $rawCode);
+
+        $funcName = (new StringEntry($methodName))->getRawValue();
+        $rawFunction->function_name = $funcName;
+
+        // Adjust the scope of our function to our class
+        $classScopeValue = Core::$executor->classTable->find(strtolower($this->name));
+        $rawFunction->scope = $classScopeValue->getRawClass();
+
+        $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawFunction);
+        $this->methodTable->add(strtolower($methodName), $valueEntry);
+
+        $refMethod = ReflectionMethod::fromCData($rawFunction);
+
+        return $refMethod;
+    }
+
+    /**
      * Removes given methods from the class
      *
      * @param string ...$methodNames Name of methods to remove
