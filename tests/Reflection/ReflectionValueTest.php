@@ -96,7 +96,7 @@ class ReflectionValueTest extends TestCase
         $this->assertInstanceOf(CData::class, $rawFunction);
 
         // Let's check the name from this structure
-        $functionName = StringEntry::fromCData($rawFunction->common->function_name);
+        $functionName = StringEntry::fromCData($rawFunction->function_name);
         $this->assertSame('var_dump', $functionName->getStringValue());
     }
 

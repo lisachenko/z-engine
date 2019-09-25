@@ -34,9 +34,9 @@ trait FunctionLikeTrait
     public function setDeprecated(bool $isDeprecated = true): void
     {
         if ($isDeprecated) {
-            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags | Core::ZEND_ACC_DEPRECATED);
+            $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_DEPRECATED;
         } else {
-            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags & (~Core::ZEND_ACC_DEPRECATED));
+            $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_DEPRECATED);
         }
     }
 
@@ -49,9 +49,9 @@ trait FunctionLikeTrait
     public function setVariadic(bool $isVariadic = true): void
     {
         if ($isVariadic) {
-            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags | Core::ZEND_ACC_VARIADIC);
+            $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_VARIADIC;
         } else {
-            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags & (~Core::ZEND_ACC_VARIADIC));
+            $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_VARIADIC);
         }
     }
 
@@ -64,9 +64,9 @@ trait FunctionLikeTrait
     public function setGenerator(bool $isGenerator = true): void
     {
         if ($isGenerator) {
-            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags | Core::ZEND_ACC_GENERATOR);
+            $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_GENERATOR;
         } else {
-            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags & (~Core::ZEND_ACC_GENERATOR));
+            $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_GENERATOR);
         }
     }
 
@@ -254,5 +254,21 @@ trait FunctionLikeTrait
                 ' should be compatible with original "' . $signatures[0] . '"'
             );
         }
+    }
+
+    /**
+     * Returns a pointer to the common structure (to work natively with zend_function and zend_internal_function)
+     */
+    private function getCommonPointer(): CData
+    {
+        // For zend_internal_function we have same fields directly in current structure
+        if ($this->isInternal()) {
+            $pointer = $this->pointer;
+        } else {
+            // zend_function uses "common" struct to store all important fields
+            $pointer = $this->pointer->common;
+        }
+
+        return $pointer;
     }
 }

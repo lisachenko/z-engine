@@ -44,7 +44,12 @@ class ReflectionFunction extends NativeReflectionFunction
     {
         /** @var ReflectionFunction $reflectionFunction */
         $reflectionFunction = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
-        $functionName       = StringEntry::fromCData($functionEntry->common->function_name);
+        if ($functionEntry->type === Core::ZEND_INTERNAL_FUNCTION) {
+            $functionNamePtr = $functionEntry->function_name;
+        } else {
+            $functionNamePtr = $functionEntry->common->function_name;
+        }
+        $functionName = StringEntry::fromCData($functionNamePtr);
         call_user_func(
             [$reflectionFunction, 'parent::__construct'],
             $functionName->getStringValue()

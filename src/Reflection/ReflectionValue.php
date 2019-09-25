@@ -257,7 +257,7 @@ class ReflectionValue
     }
 
     /**
-     * Type-friendly getter to return zend_function directly
+     * Type-friendly getter to return zend_function/zend_internal_function directly
      */
     public function getRawFunction(): CData
     {
@@ -265,7 +265,13 @@ class ReflectionValue
             throw new \UnexpectedValueException('Function entry available only for the type IS_PTR');
         }
 
-        return $this->pointer->value->func;
+        $function = $this->pointer->value->func;
+        // If we have an internal function, then we should cast it to the zend_internal_function
+        if ($function->type === Core::ZEND_INTERNAL_FUNCTION) {
+            $function = Core::cast('zend_internal_function *', $function);
+        }
+
+        return $function;
     }
 
     /**

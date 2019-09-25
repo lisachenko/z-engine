@@ -43,7 +43,7 @@ class ReflectionMethod extends NativeReflectionMethod
     }
 
     /**
-     * Creates a reflection from the zend_function structure
+     * Creates a reflection from the zend_function/zend_internal_function structure
      *
      * @param CData $functionEntry Pointer to the structure
      *
@@ -53,8 +53,16 @@ class ReflectionMethod extends NativeReflectionMethod
     {
         /** @var ReflectionMethod $reflectionMethod */
         $reflectionMethod = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
-        $functionName     = StringEntry::fromCData($functionEntry->common->function_name);
-        $scopeName        = StringEntry::fromCData($functionEntry->common->scope->name);
+        if ($functionEntry->type !== Core::ZEND_INTERNAL_FUNCTION) {
+            $functionNamePtr = $functionEntry->common->function_name;
+            $scopeNamePtr    = $functionEntry->common->scope->name;
+        } else {
+            $functionNamePtr = $functionEntry->function_name;
+            $scopeNamePtr    = $functionEntry->scope->name;
+        }
+
+        $scopeName    = StringEntry::fromCData($scopeNamePtr);
+        $functionName = StringEntry::fromCData($functionNamePtr);
         call_user_func(
             [$reflectionMethod, 'parent::__construct'],
             $scopeName->getStringValue(),
@@ -71,9 +79,9 @@ class ReflectionMethod extends NativeReflectionMethod
     public function setFinal(bool $isFinal = true): void
     {
         if ($isFinal) {
-            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags | Core::ZEND_ACC_FINAL);
+            $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_FINAL;
         } else {
-            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags & (~Core::ZEND_ACC_FINAL));
+            $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_FINAL);
         }
     }
 
@@ -83,9 +91,9 @@ class ReflectionMethod extends NativeReflectionMethod
     public function setAbstract(bool $isAbstract = true): void
     {
         if ($isAbstract) {
-            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags | Core::ZEND_ACC_ABSTRACT);
+            $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_ABSTRACT;
         } else {
-            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags & (~Core::ZEND_ACC_ABSTRACT));
+            $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_ABSTRACT);
         }
     }
 
@@ -94,8 +102,8 @@ class ReflectionMethod extends NativeReflectionMethod
      */
     public function setPublic(): void
     {
-        $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags & (~Core::ZEND_ACC_PPP_MASK));
-        $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags | Core::ZEND_ACC_PUBLIC);
+        $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_PPP_MASK);
+        $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_PUBLIC;
     }
 
     /**
@@ -103,8 +111,8 @@ class ReflectionMethod extends NativeReflectionMethod
      */
     public function setProtected(): void
     {
-        $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags & (~Core::ZEND_ACC_PPP_MASK));
-        $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags | Core::ZEND_ACC_PROTECTED);
+        $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_PPP_MASK);
+        $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_PROTECTED;
     }
 
     /**
@@ -112,8 +120,8 @@ class ReflectionMethod extends NativeReflectionMethod
      */
     public function setPrivate(): void
     {
-        $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags & (~Core::ZEND_ACC_PPP_MASK));
-        $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags | Core::ZEND_ACC_PRIVATE);
+        $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_PPP_MASK);
+        $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_PRIVATE;
     }
 
     /**
@@ -122,9 +130,9 @@ class ReflectionMethod extends NativeReflectionMethod
     public function setStatic(bool $isStatic = true): void
     {
         if ($isStatic) {
-            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags | Core::ZEND_ACC_STATIC);
+            $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_STATIC;
         } else {
-            $this->pointer->common->fn_flags = ($this->pointer->common->fn_flags & (~Core::ZEND_ACC_STATIC));
+            $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_STATIC);
         }
     }
 
@@ -135,11 +143,11 @@ class ReflectionMethod extends NativeReflectionMethod
      */
     public function getDeclaringClass(): ReflectionClass
     {
-        if ($this->pointer->common->scope === null) {
+        if ($this->getCommonPointer()->scope === null) {
             throw new \InvalidArgumentException('Not in a class scope');
         }
 
-        return ReflectionClass::fromCData($this->pointer->common->scope);
+        return ReflectionClass::fromCData($this->getCommonPointer()->scope);
     }
 
     /**
@@ -155,7 +163,7 @@ class ReflectionMethod extends NativeReflectionMethod
         if ($classEntryValue === null) {
             throw new \ReflectionException("Class {$className} was not found");
         }
-        $this->pointer->common->scope = $classEntryValue->getRawClass();
+        $this->getCommonPointer()->scope = $classEntryValue->getRawClass();
     }
 
     /**
@@ -163,11 +171,11 @@ class ReflectionMethod extends NativeReflectionMethod
      */
     public function getPrototype(): ?ReflectionMethod
     {
-        if ($this->pointer->common->prototype === null) {
+        if ($this->getCommonPointer()->prototype === null) {
             return null;
         }
 
-        return static::fromCData($this->pointer->common->prototype);
+        return static::fromCData($this->getCommonPointer()->prototype);
     }
 
     /**
