@@ -17,6 +17,12 @@ namespace ZEngine\Type;
  */
 interface ReferenceCountedInterface
 {
+    public const GC_COLLECTABLE      = (1 << 4);
+    public const GC_PROTECTED        = (1 << 5); // used for recursion detection
+    public const GC_IMMUTABLE        = (1 << 6); // can't be canged in place
+    public const GC_PERSISTENT       = (1 << 7); // allocated using malloc
+    public const GC_PERSISTENT_LOCAL = (1 << 8); // persistent, but thread-local
+
     /**
      * Returns an internal reference counter value
      */
@@ -31,4 +37,19 @@ interface ReferenceCountedInterface
      * Decrements a reference counter
      */
     public function decrementReferenceCount(): void;
+
+    /**
+     * Checks if this variable is immutable or not
+     */
+    public function isImmutable(): bool;
+
+    /**
+     * Checks if this variable is persistent (allocated using malloc)
+     */
+    public function isPersistent(): bool;
+
+    /**
+     * Checks if this variable is persistent for thread via thread-local-storage (TLS)
+     */
+    public function isPersistentLocal(): bool;
 }

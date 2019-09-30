@@ -44,6 +44,30 @@ trait ReferenceCountedTrait
     }
 
     /**
+     * Checks if this variable is immutable or not
+     */
+    public function isImmutable(): bool
+    {
+        return (bool) ($this->getGC()->u->type_info & ReferenceCountedInterface::GC_IMMUTABLE);
+    }
+
+    /**
+     * Checks if this variable is persistent (allocated using malloc)
+     */
+    public function isPersistent(): bool
+    {
+        return (bool) ($this->getGC()->u->type_info & ReferenceCountedInterface::GC_PERSISTENT);
+    }
+
+    /**
+     * Checks if this variable is persistent for thread via thread-local-storage (TLS)
+     */
+    public function isPersistentLocal(): bool
+    {
+        return (bool) ($this->getGC()->u->type_info & ReferenceCountedInterface::GC_PERSISTENT_LOCAL);
+    }
+
+    /**
      * This method should return an instance of zend_refcounted_h
      */
     abstract protected function getGC(): CData;
