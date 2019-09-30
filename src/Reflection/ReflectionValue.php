@@ -323,6 +323,18 @@ class ReflectionValue
     }
 
     /**
+     * Type-friendly getter to return pointer
+     */
+    public function getRawPointer(): CData
+    {
+        if ($this->pointer->u1->v->type !== self::IS_PTR) {
+            throw new \UnexpectedValueException('Pointer entry available only for the type IS_PTR');
+        }
+
+        return $this->pointer->value->ptr;
+    }
+
+    /**
      * Returns the raw zval structure
      */
     public function getRawValue(): CData

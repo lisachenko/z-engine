@@ -521,6 +521,21 @@ class ReflectionClass extends NativeReflectionClass
         return iterator_to_array($iterator());
     }
 
+    /**
+     * @inheritDoc
+     * @return ReflectionClassConstant
+     */
+    public function getReflectionConstant($name)
+    {
+        $constantEntry = $this->constantsTable->find($name);
+        if ($constantEntry === null) {
+            throw new \ReflectionException("Constant {$name} does not exist");
+        }
+        $constantPtr = Core::cast('zend_class_constant *', $constantEntry->getRawPointer());
+
+        return ReflectionClassConstant::fromCData($constantPtr, $name);
+    }
+
     public function __debugInfo()
     {
         return [

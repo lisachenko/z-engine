@@ -14,6 +14,8 @@ namespace ZEngine\Stub;
 
 class TestClass
 {
+    public const SOME_CONST = 123;
+
     /**
      * This method will be removed during the test, do not call it or use it
      */

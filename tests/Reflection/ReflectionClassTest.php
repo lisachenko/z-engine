@@ -91,6 +91,12 @@ class ReflectionClassTest extends TestCase
         $this->assertInstanceOf(TestClass::class, $instance);
     }
 
+    public function testGetClassConstantsReturnsExtendedClass()
+    {
+        $refConstant = $this->refClass->getReflectionConstant('SOME_CONST');
+        $this->assertInstanceOf(ReflectionClassConstant::class, $refConstant);
+    }
+
     public function testAddTraits()
     {
         $this->refClass->addTraits(TestTrait::class);
