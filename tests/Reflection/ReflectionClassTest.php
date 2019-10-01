@@ -15,6 +15,7 @@ namespace ZEngine\Reflection;
 
 use PHPUnit\Framework\TestCase;
 use ZEngine\Stub\TestClass;
+use ZEngine\Stub\TestInterface;
 use ZEngine\Stub\TestTrait;
 
 class ReflectionClassTest extends TestCase
@@ -122,11 +123,11 @@ class ReflectionClassTest extends TestCase
     {
         $object = new TestClass();
 
-        $this->refClass->addInterfaces(\Throwable::class);
-        $this->assertInstanceOf(\Throwable::class, $object);
+        $this->refClass->addInterfaces(TestInterface::class);
+        $this->assertInstanceOf(TestInterface::class, $object);
 
         // As we adjusted list of interfaces, typehint should pass
-        $checkTypehint = function (\Throwable $e): \Throwable {
+        $checkTypehint = function (TestInterface $e): TestInterface {
             return $e;
         };
 
@@ -134,7 +135,7 @@ class ReflectionClassTest extends TestCase
         $this->assertSame($object, $value);
 
         // Also, interface should be in the list of interface names for this class
-        $this->assertContains(\Throwable::class, $this->refClass->getInterfaceNames());
+        $this->assertContains(TestInterface::class, $this->refClass->getInterfaceNames());
     }
 
     /**
@@ -142,11 +143,11 @@ class ReflectionClassTest extends TestCase
      */
     public function testRemoveInterfaces(): void
     {
-        $this->refClass->removeInterfaces(\Throwable::class);
-        $this->assertNotInstanceOf(\Throwable::class, $this);
+        $this->refClass->removeInterfaces(TestInterface::class);
+        $this->assertNotInstanceOf(TestInterface::class, $this);
 
         // Also, interface should not be in the list of interface names for this class
-        $this->assertNotContains(\Throwable::class, $this->refClass->getInterfaceNames());
+        $this->assertNotContains(TestInterface::class, $this->refClass->getInterfaceNames());
     }
 
     public function testSetStartLine(): void

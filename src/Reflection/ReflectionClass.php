@@ -139,13 +139,19 @@ class ReflectionClass extends NativeReflectionClass
         $itemsSize = FFI::sizeof(Core::type('zend_class_entry *'));
         FFI::memcpy($memory, $this->pointer->interfaces, $itemsSize * $totalInterfaces);
         for ($position = $totalInterfaces, $index = 0; $index < $numInterfacesToAdd; $position++, $index++) {
-            $classValueEntry   = Core::$executor->classTable->find(strtolower($interfacesToAdd[$index]));
+            $interfaceName = $interfacesToAdd[$index];
+            if (!interface_exists($interfaceName)) {
+                throw new \ReflectionException("Interface {$interfaceName} was not found");
+            }
+            $classValueEntry = Core::$executor->classTable->find(strtolower($interfaceName));
             $memory[$position] = $classValueEntry->getRawClass();
         }
         if($this->pointer->interfaces !== null) {
             FFI::memcpy($this->pointer->interfaces, $memory, FFI::sizeof($memory));
         } else {
             $this->pointer->interfaces = Core::cast('zend_class_entry **', FFI::addr($memory));
+            // We should also add ZEND_ACC_RESOLVED_INTERFACES explicitly, because this flag was not set
+            $this->pointer->ce_flags |= Core::ZEND_ACC_RESOLVED_INTERFACES;
         };
         $this->pointer->num_interfaces = $numResultInterfaces;
     }
@@ -171,7 +177,9 @@ class ReflectionClass extends NativeReflectionClass
 
         // If we remove all interfaces then just clear $this->pointer->interfaces field
         if ($numResultInterfaces === 0) {
+            // We should also clean ZEND_ACC_RESOLVED_INTERFACES
             $this->pointer->interfaces = null;
+            $this->pointer->ce_flags &= (~ Core::ZEND_ACC_RESOLVED_INTERFACES);
         } else {
             // Allocate persistent non-owned memory, because this structure should be persistent in Opcache
             $memory = Core::new("zend_class_entry *[$numResultInterfaces]", false, true);
