@@ -52,7 +52,7 @@ class ReflectionValueTest extends TestCase
     public function testGetType($value, int $expectedType): void
     {
         $argument         = Core::$executor->getExecutionState()->getArgument(0);
-        $argType          = $argument->getType();
+        $argType          = ($argument->getType() & 0xFF); // Use only low byte to get type name
         $expectedTypeName = ReflectionValue::name($expectedType);
         $argTypeName      = ReflectionValue::name($argType);
         $this->assertSame(

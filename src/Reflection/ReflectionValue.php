@@ -152,8 +152,8 @@ class ReflectionValue
         // Allocate non-owned Zval
         $entry = Core::new('zval', false);
 
-        $entry->u1->v->type = $type;
-        $entry->value->zv   = Core::cast('zval', $value);
+        $entry->u1->type_info = $type;
+        $entry->value->zv     = Core::cast('zval', $value);
 
         return self::fromValueEntry(FFI::addr($entry));
     }
@@ -165,7 +165,7 @@ class ReflectionValue
      */
     public function getType(): int
     {
-        return $this->pointer->u1->v->type;
+        return $this->pointer->u1->type_info;
     }
 
     /**
@@ -353,6 +353,8 @@ class ReflectionValue
             self::$constantNames = array_flip((new \ReflectionClass(self::class))->getConstants());
         }
 
+        // We should use only low byte to get the name of constant
+        $valueCode &= 0xFF;
         if (!isset(self::$constantNames[$valueCode])) {
             throw new \UnexpectedValueException('Unknown code ' . $valueCode . '. New version of PHP?');
         }
