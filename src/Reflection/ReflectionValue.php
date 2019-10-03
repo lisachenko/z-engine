@@ -16,6 +16,7 @@ use FFI;
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
 use ZEngine\Core;
+use ZEngine\Type\ReferenceEntry;
 
 /**
  * Class ReflectionValue represents a value in PHP
@@ -171,13 +172,12 @@ class ReflectionValue
     /**
      * Returns "native" value for userland
      *
-     * TODO: Rewrite this method to work with op_array or symbol_table
-     * @return mixed
+     * @param mixed $returnValue
      */
-    public function getNativeValue($__fakeReturnArgument = null)
+    public function getNativeValue(&$returnValue): void
     {
-        $selfExecutionState = Core::$executor->getExecutionState();
-        $valueEntry         = $selfExecutionState->getArgument(0);
+        $reference  = new ReferenceEntry($returnValue);
+        $valueEntry = $reference->getValue();
 
         if ($this->pointer->u1->v->type !== self::IS_INDIRECT) {
             $pointer = $this->pointer;
@@ -189,13 +189,6 @@ class ReflectionValue
         $valueEntry->pointer->value = $pointer->value;
         $valueEntry->pointer->u1    = $pointer->u1;
         $valueEntry->pointer->u2    = $pointer->u2;
-
-        // TODO: Discover why it's happen. This can be due to refcount and GC, but not sure right now
-        if (!array_key_exists('__fakeReturnArgument', get_defined_vars())) {
-            throw new \ReflectionException('IS_INDIRECT type sometimes brings problems.');
-        }
-
-        return $__fakeReturnArgument;
     }
 
     /**
@@ -368,10 +361,11 @@ class ReflectionValue
     public function __debugInfo(): array
     {
         // TODO: I don't know now how to hijack a return value, so use argument as value holder now
-        $valueHolder = '__MAGIC__RETURN__';
+        $this->getNativeValue($nativeValue);
+
         return [
             'type'  => self::name($this->pointer->u1->v->type),
-            'value' => $this->getNativeValue($valueHolder)
+            'value' => $nativeValue
         ];
     }
 }

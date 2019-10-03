@@ -29,9 +29,8 @@ class ReflectionValueTest extends TestCase
         // This prevents optimization of opcodes and $value variable GC
         static $currentValue;
         $currentValue = $value;
-        $argument      = Core::$executor->getExecutionState()->getArgument(0);
-        $fakeValue     = null;
-        $returnedValue = $argument->getNativeValue($fakeValue);
+        $argument     = Core::$executor->getExecutionState()->getArgument(0);
+        $argument->getNativeValue($returnedValue);
         $this->assertSame($currentValue, $returnedValue);
     }
 

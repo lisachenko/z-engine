@@ -26,7 +26,7 @@ class ReferenceEntryTest extends TestCase
         // At that point we will get a ReflectionValue instance of original variable
         $refValue = $reference->getValue();
         $this->assertInstanceOf(ReflectionValue::class, $refValue);
-        $__fakeReturn = null;
-        $this->assertSame($value, $refValue->getNativeValue($__fakeReturn));
+        $refValue->getNativeValue($originalValue);
+        $this->assertSame($value, $originalValue);
     }
 }
