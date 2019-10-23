@@ -213,8 +213,33 @@ class Core
      */
     public static function init()
     {
-        self::$engine   = $engine = FFI::load(__DIR__ . '/../include/engine_x64_nts.h');
-        // TODO: This works only for non-thread-safe versions of PHP
+        $isThreadSafe      = ZEND_THREAD_SAFE;
+        $isWindowsPlatform = stripos(PHP_OS, 'WIN') === 0;
+        $is64BitPlatform   = PHP_INT_SIZE === 8;
+
+        // TODO: support ts/nts x86/x64 combination
+        if ($isThreadSafe || !$is64BitPlatform) {
+            throw new \RuntimeException('Only x64 non thread-safe versions of PHP are supported');
+        }
+
+        $definition = file_get_contents(__DIR__ . '/../include/engine_x64_nts.h');
+        $macros     = [
+            'ZEND_API'      => '__declspec(dllimport)',
+            'ZEND_FASTCALL' => $isWindowsPlatform ? '__vectorcall' : '',
+
+            'ZEND_MAX_RESERVED_RESOURCES' => '6'
+        ];
+
+        // Simple macros resolving
+        $definition = strtr($definition, $macros);
+        $arguments  = [$definition];
+
+        // For Windows platform we should load symbols from the shared php7.dll library
+        if ($isWindowsPlatform) {
+            $arguments[] = 'php7.dll';
+        }
+        self::$engine = $engine = FFI::cdef(...$arguments);
+        assert(!$isThreadSafe, 'Following properties available only for non thread-safe version');
         self::$executor = new Executor($engine->executor_globals);
         self::$compiler = new Compiler($engine->compiler_globals);
     }

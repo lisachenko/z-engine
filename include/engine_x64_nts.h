@@ -422,7 +422,7 @@ struct _zend_op_array {
     int last_literal;
     zval *literals;
 
-    void *reserved[/* ZEND_MAX_RESERVED_RESOURCES */ 6];
+    void *reserved[ZEND_MAX_RESERVED_RESOURCES];
 };
 
 /* zend_internal_function_handler */
@@ -443,7 +443,7 @@ typedef struct _zend_internal_function {
 
 	zif_handler handler;
 	struct _zend_module_entry *module;
-	void *reserved[/* ZEND_MAX_RESERVED_RESOURCES */ 6];
+	void *reserved[ZEND_MAX_RESERVED_RESOURCES];
 } zend_internal_function;
 
 union _zend_function {
@@ -1050,30 +1050,30 @@ struct _zend_executor_globals {
 
     zend_bool exception_ignore_args;
 
-    void *reserved[/* ZEND_MAX_RESERVED_RESOURCES */ 6];
+    void *reserved[ZEND_MAX_RESERVED_RESOURCES];
 };
 typedef struct _zend_executor_globals zend_executor_globals;
 
 // #ifndef ZTS
-extern zend_executor_globals executor_globals;
-extern struct _zend_compiler_globals compiler_globals;
+ZEND_API zend_executor_globals executor_globals;
+ZEND_API struct _zend_compiler_globals compiler_globals;
 // #endif
 
 
 /**
  * Zend Hash API
  */
-extern int zend_hash_del(HashTable *ht, zend_string *key);
-extern zval* zend_hash_find(const HashTable *ht, zend_string *key);
-extern zval* zend_hash_add_or_update(HashTable *ht, zend_string *key, zval *pData, uint32_t flag);
+ZEND_API int ZEND_FASTCALL zend_hash_del(HashTable *ht, zend_string *key);
+ZEND_API zval ZEND_FASTCALL *zend_hash_find(const HashTable *ht, zend_string *key);
+ZEND_API zval ZEND_FASTCALL *zend_hash_add_or_update(HashTable *ht, zend_string *key, zval *pData, uint32_t flag);
 
 /**
  * Opcode API
  */
-extern int zend_set_user_opcode_handler(zend_uchar opcode, user_opcode_handler_t handler);
-extern user_opcode_handler_t zend_get_user_opcode_handler(zend_uchar opcode);
+ZEND_API int zend_set_user_opcode_handler(zend_uchar opcode, user_opcode_handler_t handler);
+ZEND_API user_opcode_handler_t zend_get_user_opcode_handler(zend_uchar opcode);
 
 /**
  * Exceptions hook
  */
-extern void (*zend_throw_exception_hook)(zval *ex);
+ZEND_API void (*zend_throw_exception_hook)(zval *ex);
