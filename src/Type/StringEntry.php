@@ -90,6 +90,20 @@ class StringEntry implements ReferenceCountedInterface
     }
 
     /**
+     * This methods releases a string entry
+     *
+     * @see zend_string.h:zend_string_release function
+     */
+    public function release(): void
+    {
+        if (!$this->isImmutable() /* Only non-interned string can be released */) {
+            if ($this->decrementReferenceCount() === 0) {
+                FFI::free($this->pointer);
+            }
+        }
+    }
+
+    /**
      * This method returns a dumpable representation of internal value to prevent segfault
      */
     public function __debugInfo(): array

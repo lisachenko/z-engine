@@ -31,12 +31,12 @@ interface ReferenceCountedInterface
     /**
      * Increments a reference counter, so this object will live more than current scope
      */
-    public function incrementReferenceCount(): void;
+    public function incrementReferenceCount(): int;
 
     /**
      * Decrements a reference counter
      */
-    public function decrementReferenceCount(): void;
+    public function decrementReferenceCount(): int;
 
     /**
      * Checks if this variable is immutable or not

@@ -30,17 +30,19 @@ trait ReferenceCountedTrait
     /**
      * Increments a reference counter, so this object will live more than current scope
      */
-    public function incrementReferenceCount(): void
+    public function incrementReferenceCount(): int
     {
-        $this->getGC()->refcount++;
+        return $this->getGC()->refcount++;
     }
 
     /**
      * Decrements a reference counter
      */
-    public function decrementReferenceCount(): void
+    public function decrementReferenceCount(): int
     {
-        $this->getGC()->refcount--;
+        assert($this->getGC()->refcount > 0);
+
+        return $this->getGC()->refcount--;
     }
 
     /**
