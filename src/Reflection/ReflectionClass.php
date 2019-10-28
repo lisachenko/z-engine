@@ -125,6 +125,8 @@ class ReflectionClass extends NativeReflectionClass
      * Adds interfaces to the current class
      *
      * @param string ...$interfaceNames Name of interfaces to add
+     *
+     * @see zend_inheritance.c:zend_do_implement_interface() function implementation for details
      */
     public function addInterfaces(string ...$interfaceNames): void
     {
@@ -134,25 +136,36 @@ class ReflectionClass extends NativeReflectionClass
         $totalInterfaces     = count($availableInterfaces);
         $numResultInterfaces = $totalInterfaces + $numInterfacesToAdd;
 
-        // Allocate persistent non-owned memory, because this structure should be persistent in Opcache
-        $memory    = Core::new("zend_class_entry *[$numResultInterfaces]", false, true);
+        // Memory should be non-owned to keep it live more that $memory variable in this method.
+        // If class is internal, then we should use realloc methods and mark this memory persistent
+        // If class is user-defined, then we should not use persistent memory to prevent leak and mark it non-persistent
+        $isPersistent = $this->isInternal() ? true : false;
+        $memory       = Core::new("zend_class_entry *[$numResultInterfaces]", false, $isPersistent);
+
         $itemsSize = FFI::sizeof(Core::type('zend_class_entry *'));
-        FFI::memcpy($memory, $this->pointer->interfaces, $itemsSize * $totalInterfaces);
+        if ($totalInterfaces > 0) {
+            FFI::memcpy($memory, $this->pointer->interfaces, $itemsSize * $totalInterfaces);
+        }
         for ($position = $totalInterfaces, $index = 0; $index < $numInterfacesToAdd; $position++, $index++) {
             $interfaceName = $interfacesToAdd[$index];
             if (!interface_exists($interfaceName)) {
                 throw new \ReflectionException("Interface {$interfaceName} was not found");
             }
-            $classValueEntry = Core::$executor->classTable->find(strtolower($interfaceName));
-            $memory[$position] = $classValueEntry->getRawClass();
+            $classValueEntry   = Core::$executor->classTable->find(strtolower($interfaceName));
+            $interfaceClass    = $classValueEntry->getRawClass();
+            $memory[$position] = $interfaceClass;
         }
-        if($this->pointer->interfaces !== null) {
-            FFI::memcpy($this->pointer->interfaces, $memory, FFI::sizeof($memory));
-        } else {
-            $this->pointer->interfaces = Core::cast('zend_class_entry **', FFI::addr($memory));
-            // We should also add ZEND_ACC_RESOLVED_INTERFACES explicitly, because this flag was not set
+
+        // As we don't have realloc methods in PHP, we can free non-persistent memory to prevent leaks
+        if ($totalInterfaces > 0 && !$isPersistent) {
+            FFI::free($this->pointer->interfaces);
+        }
+        $this->pointer->interfaces = Core::cast('zend_class_entry **', FFI::addr($memory));
+
+        // We should also add ZEND_ACC_RESOLVED_INTERFACES explicitly with first interface
+        if ($totalInterfaces === 0 && $numInterfacesToAdd > 0) {
             $this->pointer->ce_flags |= Core::ZEND_ACC_RESOLVED_INTERFACES;
-        };
+        }
         $this->pointer->num_interfaces = $numResultInterfaces;
     }
 
@@ -175,20 +188,30 @@ class ReflectionClass extends NativeReflectionClass
         $totalInterfaces     = count($availableInterfaces);
         $numResultInterfaces = $totalInterfaces - count($indexesToRemove);
 
+        // If class is internal, then we should use realloc methods and mark this memory persistent
+        // If class is user-defined, then we should not use persistent memory to prevent leak and mark it non-persistent
+        $isPersistent = $this->isInternal() ? true : false;
+
         // If we remove all interfaces then just clear $this->pointer->interfaces field
         if ($numResultInterfaces === 0) {
+            if ($totalInterfaces > 0 && !$isPersistent) {
+                FFI::free($this->pointer->interfaces);
+            }
             // We should also clean ZEND_ACC_RESOLVED_INTERFACES
             $this->pointer->interfaces = null;
             $this->pointer->ce_flags &= (~ Core::ZEND_ACC_RESOLVED_INTERFACES);
         } else {
-            // Allocate persistent non-owned memory, because this structure should be persistent in Opcache
-            $memory = Core::new("zend_class_entry *[$numResultInterfaces]", false, true);
+            // Allocate non-owned memory, either persistent (for internal classes) or not (for user-defined)
+            $memory = Core::new("zend_class_entry *[$numResultInterfaces]", false, $isPersistent);
             for ($index = 0, $destIndex = 0; $index < $this->pointer->num_interfaces; $index++) {
                 if (!isset($indexesToRemove[$index])) {
                     $memory[$destIndex++] = $this->pointer->interfaces[$index];
                 }
             }
-            FFI::memcpy($this->pointer->interfaces, $memory, FFI::sizeof($memory));
+            if ($totalInterfaces > 0 && !$isPersistent) {
+                FFI::free($this->pointer->interfaces);
+            }
+            $this->pointer->interfaces = Core::cast('zend_class_entry **', FFI::addr($memory));
         }
         // Decrease the total number of interfaces in the class entry
         $this->pointer->num_interfaces = $numResultInterfaces;

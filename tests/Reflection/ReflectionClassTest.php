@@ -150,6 +150,22 @@ class ReflectionClassTest extends TestCase
         $this->assertNotContains(TestInterface::class, $this->refClass->getInterfaceNames());
     }
 
+    public function testAddRemoveInterfacesToInternalClass(): void
+    {
+        $refClosureClass = new ReflectionClass(\Closure::class);
+        $refClosureClass->addInterfaces(TestInterface::class);
+
+        $checkTypeHint = function (TestInterface $e): TestInterface {
+            return $e;
+        };
+        // Closure should implements TestInterface right now, so it should pass itself
+        $result = $checkTypeHint($checkTypeHint);
+        $this->assertInstanceOf(TestInterface::class, $result);
+
+        $refClosureClass->removeInterfaces(TestInterface::class);
+        $this->assertNotInstanceOf(TestInterface::class, $result);
+    }
+
     public function testSetStartLine(): void
     {
         $this->assertSame(15, $this->refClass->getStartLine());
