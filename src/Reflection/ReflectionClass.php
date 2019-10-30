@@ -320,25 +320,32 @@ class ReflectionClass extends NativeReflectionClass
         $totalTraits     = count($availableTraits);
         $numResultTraits = $totalTraits + $numTraitsToAdd;
 
-        // Allocate persistent non-owned memory, because this structure should be persistent in Opcache
-        $memory    = Core::new("zend_class_name [$numResultTraits]", false, true);
+        // Memory should be non-owned to keep it live more that $memory variable in this method.
+        // If this class is internal then we should use persistent memory
+        // If this class is user-defined and we are not in CLI, then use persistent memory, otherwise non-persistent
+        $isPersistent = $this->isInternal() || PHP_SAPI !== 'cli';
+        $memory       = Core::new("zend_class_name [$numResultTraits]", false, $isPersistent);
+
         $itemsSize = FFI::sizeof(Core::type('zend_class_name'));
-        if ($this->pointer->num_traits > 0) {
+        if ($totalTraits > 0) {
             FFI::memcpy($memory, $this->pointer->trait_names, $itemsSize * $totalTraits);
         }
         for ($position = $totalTraits, $index = 0; $index < $numTraitsToAdd; $position++, $index++) {
-            $name   = new StringEntry($traitsToAdd[$index]);
-            $lcName = new StringEntry(strtolower($traitsToAdd[$index]));
+            $traitName   = $traitsToAdd[$index];
+            $lcTraitName = strtolower($traitName);
+            $name        = new StringEntry($traitName);
+            $lcName      = new StringEntry($lcTraitName);
 
             $memory[$position]->name    = $name->getRawValue();
             $memory[$position]->lc_name = $lcName->getRawValue();
         }
-        if($this->pointer->trait_names !== null) {
-            FFI::memcpy($this->pointer->trait_names, $memory, FFI::sizeof($memory));
-        } else {
-            $this->pointer->trait_names = Core::cast('zend_class_name *', FFI::addr($memory));
-        };
-        $this->pointer->num_traits = $numResultTraits;
+        // As we don't have realloc methods in PHP, we can free non-persistent memory to prevent leaks
+        if ($totalTraits > 0 && !$isPersistent) {
+            FFI::free($this->pointer->trait_names);
+        }
+
+        $this->pointer->trait_names = Core::cast('zend_class_name *', FFI::addr($memory));
+        $this->pointer->num_traits  = $numResultTraits;
     }
 
     /**
