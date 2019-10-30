@@ -137,9 +137,9 @@ class ReflectionClass extends NativeReflectionClass
         $numResultInterfaces = $totalInterfaces + $numInterfacesToAdd;
 
         // Memory should be non-owned to keep it live more that $memory variable in this method.
-        // If class is internal, then we should use realloc methods and mark this memory persistent
-        // If class is user-defined, then we should not use persistent memory to prevent leak and mark it non-persistent
-        $isPersistent = $this->isInternal() ? true : false;
+        // If this class is internal then we should use persistent memory
+        // If this class is user-defined and we are not in CLI, then use persistent memory, otherwise non-persistent
+        $isPersistent = $this->isInternal() || PHP_SAPI !== 'cli';
         $memory       = Core::new("zend_class_entry *[$numResultInterfaces]", false, $isPersistent);
 
         $itemsSize = FFI::sizeof(Core::type('zend_class_entry *'));
@@ -188,9 +188,10 @@ class ReflectionClass extends NativeReflectionClass
         $totalInterfaces     = count($availableInterfaces);
         $numResultInterfaces = $totalInterfaces - count($indexesToRemove);
 
-        // If class is internal, then we should use realloc methods and mark this memory persistent
-        // If class is user-defined, then we should not use persistent memory to prevent leak and mark it non-persistent
-        $isPersistent = $this->isInternal() ? true : false;
+        // Memory should be non-owned to keep it live more that $memory variable in this method.
+        // If this class is internal then we should use persistent memory
+        // If this class is user-defined and we are not in CLI, then use persistent memory, otherwise non-persistent
+        $isPersistent = $this->isInternal() || PHP_SAPI !== 'cli';
 
         // If we remove all interfaces then just clear $this->pointer->interfaces field
         if ($numResultInterfaces === 0) {
