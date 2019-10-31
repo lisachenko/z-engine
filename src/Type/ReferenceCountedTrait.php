@@ -32,7 +32,7 @@ trait ReferenceCountedTrait
      */
     public function incrementReferenceCount(): int
     {
-        return $this->getGC()->refcount++;
+        return ++$this->getGC()->refcount;
     }
 
     /**
@@ -42,7 +42,7 @@ trait ReferenceCountedTrait
     {
         assert($this->getGC()->refcount > 0);
 
-        return $this->getGC()->refcount--;
+        return --$this->getGC()->refcount;
     }
 
     /**
