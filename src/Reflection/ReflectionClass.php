@@ -131,7 +131,7 @@ class ReflectionClass extends NativeReflectionClass
     public function addInterfaces(string ...$interfaceNames): void
     {
         $availableInterfaces = $this->getInterfaceNames();
-        $interfacesToAdd     = array_diff($interfaceNames, $availableInterfaces);
+        $interfacesToAdd     = array_values(array_diff($interfaceNames, $availableInterfaces));
         $numInterfacesToAdd  = count($interfacesToAdd);
         $totalInterfaces     = count($availableInterfaces);
         $numResultInterfaces = $totalInterfaces + $numInterfacesToAdd;
@@ -315,7 +315,7 @@ class ReflectionClass extends NativeReflectionClass
     public function addTraits(string ...$traitNames): void
     {
         $availableTraits = $this->getTraitNames();
-        $traitsToAdd     = array_diff($traitNames, $availableTraits);
+        $traitsToAdd     = array_values(array_diff($traitNames, $availableTraits));
         $numTraitsToAdd  = count($traitsToAdd);
         $totalTraits     = count($availableTraits);
         $numResultTraits = $totalTraits + $numTraitsToAdd;
