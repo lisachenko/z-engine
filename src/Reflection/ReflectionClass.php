@@ -367,18 +367,33 @@ class ReflectionClass extends NativeReflectionClass
         $totalTraits     = count($availableTraits);
         $numResultTraits = $totalTraits - count($indexesToRemove);
 
-        // If we remove all traits then just clear $this->pointer->trait_names field
-        if ($numResultTraits === 0) {
-            $this->pointer->trait_names = null;
+        // Memory should be non-owned to keep it live more that $memory variable in this method.
+        // If this class is internal then we should use persistent memory
+        // If this class is user-defined and we are not in CLI, then use persistent memory, otherwise non-persistent
+        $isPersistent = $this->isInternal() || PHP_SAPI !== 'cli';
+
+        if ($numResultTraits > 0) {
+            $memory = Core::new("zend_class_name[$numResultTraits]", false, $isPersistent);
         } else {
-            // Allocate persistent non-owned memory, because this structure should be persistent in Opcache
-            $memory = Core::new("zend_class_name[$numResultTraits]", false, true);
-            for ($index = 0, $destIndex = 0; $index < $this->pointer->num_traits; $index++) {
-                if (!isset($indexesToRemove[$index])) {
-                    $memory[$destIndex++] = $this->pointer->trait_names[$index];
-                }
+            $memory = null;
+        }
+        for ($index = 0, $destIndex = 0; $index < $totalTraits; $index++) {
+            $traitNameStruct = $this->pointer->trait_names[$index];
+            if (!isset($indexesToRemove[$index])) {
+                $memory[$destIndex++] = $traitNameStruct;
+            } else {
+                // Clean strings to prevent memory leaks
+                StringEntry::fromCData($traitNameStruct->name)->release();
+                StringEntry::fromCData($traitNameStruct->lc_name)->release();
             }
-            FFI::memcpy($this->pointer->trait_names, $memory, FFI::sizeof($memory));
+        }
+        if ($totalTraits > 0 && !$isPersistent) {
+            FFI::free($this->pointer->trait_names);
+        }
+        if ($numResultTraits > 0) {
+            $this->pointer->trait_names = Core::cast('zend_class_name *', FFI::addr($memory));
+        } else {
+            $this->pointer->trait_names = null;
         }
         $this->pointer->num_traits = $numResultTraits;
     }
