@@ -270,10 +270,8 @@ class ReflectionClass extends NativeReflectionClass
         // Clean closure flag
         $rawFunction->common->fn_flags &= (~Core::ZEND_ACC_CLOSURE);
 
-        $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawFunction);
-        $this->methodTable->add(strtolower($methodName), $valueEntry);
-
-        $refMethod = ReflectionMethod::fromCData($rawFunction);
+        $isPersistent = $this->isInternal() || PHP_SAPI !== 'cli';
+        $refMethod    = $this->addRawMethod($methodName, $rawFunction, $isPersistent);
         $refMethod->setPublic();
 
         return $refMethod;
@@ -616,5 +614,24 @@ class ReflectionClass extends NativeReflectionClass
         $this->methodTable     = new HashTable(FFI::addr($classEntry->function_table));
         $this->propertiesTable = new HashTable(FFI::addr($classEntry->properties_info));
         $this->constantsTable  = new HashTable(FFI::addr($classEntry->constants_table));
+    }
+
+    /**
+     * Adds a low-level function(method) to the class
+     *
+     * @param string $methodName Method name to use
+     * @param CData  $rawFunction zend_function instance
+     * @param bool   $isPersistent Whether this method is persistent or not
+     *
+     * @return ReflectionMethod
+     */
+    private function addRawMethod(string $methodName, CData $rawFunction, bool $isPersistent = true): ReflectionMethod
+    {
+        $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawFunction, $isPersistent);
+        $this->methodTable->add(strtolower($methodName), $valueEntry);
+
+        $refMethod = ReflectionMethod::fromCData($rawFunction);
+
+        return $refMethod;
     }
 }

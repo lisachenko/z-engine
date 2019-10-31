@@ -148,10 +148,10 @@ class ReflectionValue
      *
      * @return ReflectionValue
      */
-    public static function newEntry(int $type, CData $value): ReflectionValue
+    public static function newEntry(int $type, CData $value, bool $isPersistent = false): ReflectionValue
     {
         // Allocate non-owned Zval
-        $entry = Core::new('zval', false);
+        $entry = Core::new('zval', false, $isPersistent);
 
         $entry->u1->type_info = $type;
         $entry->value->zv     = Core::cast('zval', $value);
