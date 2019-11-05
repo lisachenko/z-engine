@@ -27,7 +27,7 @@ Library provides and extension for classic reflection API to manipulate internal
   - `setStartLine(int $newStartLine): void` Updates meta-information about the class start line
   - `setEndLine(int $newEndLine): void` Updates meta-information about the class end line
   - `setFileName(string $newFileName): void` Sets a new filename for this class
-  - `setParent(?string $newParent = null)` \[WIP\] Configures a new parent class for this one, `null` - to clear parent.
+  - `setParent(string $newParent)` \[WIP\] Configures a new parent class for this one
   - `removeParentClass(): void` \[WIP\] Removes the parent class
   - `removeTraits(string ...$traitNames): void` \[WIP\] Removes existing traits from the class
   - `addTraits(string ...$traitNames): void` \[WIP\] Adds new traits to the class

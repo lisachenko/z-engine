@@ -456,19 +456,23 @@ class ReflectionClass extends NativeReflectionClass
     /**
      * Configures a new parent class for this one
      *
-     * By default, methods are not copied, need to perform by hand
-     *
-     * @param string|null $newParent New parent class name or null
+     * @param string $newParent New parent class name
      */
-    public function setParent(?string $newParent = null)
+    public function setParent(string $newParent)
     {
         // If this class has a parent, then we need to detach it first
         if ($this->hasParentClass()) {
             $this->removeParentClass();
         }
 
-        // TODO: Add new interfaces, methods and properties from new parent class
-        $this->pointer->parent = $newParent->pointer;
+        // Look for the parent zend_class_entry
+        $parentClassValue = Core::$executor->classTable->find(strtolower($newParent));
+        if ($parentClassValue === null) {
+            throw new \ReflectionException("Class {$newParent} was not found");
+        }
+
+        // Call API to reduce the boilerplate code
+        Core::call('zend_do_inheritance_ex', $this->pointer, $parentClassValue->getRawClass(), 0);
     }
 
     /**

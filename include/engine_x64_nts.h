@@ -1074,6 +1074,6 @@ ZEND_API int zend_set_user_opcode_handler(zend_uchar opcode, user_opcode_handler
 ZEND_API user_opcode_handler_t zend_get_user_opcode_handler(zend_uchar opcode);
 
 /**
- * Exceptions hook
+ * Zend inheritance API
  */
-ZEND_API void (*zend_throw_exception_hook)(zval *ex);
+ZEND_API void zend_do_inheritance_ex(zend_class_entry *ce, zend_class_entry *parent_ce, zend_bool checked);
