@@ -323,7 +323,7 @@ class Core
      */
     public static function free(CData $variable): void
     {
-        self::$engine->free($variable);
+        FFI::free($variable);
     }
 
     /**
