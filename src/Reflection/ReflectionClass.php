@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace ZEngine\Reflection;
 
-use FFI;
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
 use ZEngine\Core;
@@ -142,9 +141,9 @@ class ReflectionClass extends NativeReflectionClass
         $isPersistent = $this->isInternal() || PHP_SAPI !== 'cli';
         $memory       = Core::new("zend_class_entry *[$numResultInterfaces]", false, $isPersistent);
 
-        $itemsSize = FFI::sizeof(Core::type('zend_class_entry *'));
+        $itemsSize = Core::sizeof(Core::type('zend_class_entry *'));
         if ($totalInterfaces > 0) {
-            FFI::memcpy($memory, $this->pointer->interfaces, $itemsSize * $totalInterfaces);
+            Core::memcpy($memory, $this->pointer->interfaces, $itemsSize * $totalInterfaces);
         }
         for ($position = $totalInterfaces, $index = 0; $index < $numInterfacesToAdd; $position++, $index++) {
             $interfaceName = $interfacesToAdd[$index];
@@ -158,9 +157,9 @@ class ReflectionClass extends NativeReflectionClass
 
         // As we don't have realloc methods in PHP, we can free non-persistent memory to prevent leaks
         if ($totalInterfaces > 0 && !$isPersistent) {
-            FFI::free($this->pointer->interfaces);
+            Core::free($this->pointer->interfaces);
         }
-        $this->pointer->interfaces = Core::cast('zend_class_entry **', FFI::addr($memory));
+        $this->pointer->interfaces = Core::cast('zend_class_entry **', Core::addr($memory));
 
         // We should also add ZEND_ACC_RESOLVED_INTERFACES explicitly with first interface
         if ($totalInterfaces === 0 && $numInterfacesToAdd > 0) {
@@ -196,7 +195,7 @@ class ReflectionClass extends NativeReflectionClass
         // If we remove all interfaces then just clear $this->pointer->interfaces field
         if ($numResultInterfaces === 0) {
             if ($totalInterfaces > 0 && !$isPersistent) {
-                FFI::free($this->pointer->interfaces);
+                Core::free($this->pointer->interfaces);
             }
             // We should also clean ZEND_ACC_RESOLVED_INTERFACES
             $this->pointer->interfaces = null;
@@ -210,9 +209,9 @@ class ReflectionClass extends NativeReflectionClass
                 }
             }
             if ($totalInterfaces > 0 && !$isPersistent) {
-                FFI::free($this->pointer->interfaces);
+                Core::free($this->pointer->interfaces);
             }
-            $this->pointer->interfaces = Core::cast('zend_class_entry **', FFI::addr($memory));
+            $this->pointer->interfaces = Core::cast('zend_class_entry **', Core::addr($memory));
         }
         // Decrease the total number of interfaces in the class entry
         $this->pointer->num_interfaces = $numResultInterfaces;
@@ -324,9 +323,9 @@ class ReflectionClass extends NativeReflectionClass
         $isPersistent = $this->isInternal() || PHP_SAPI !== 'cli';
         $memory       = Core::new("zend_class_name [$numResultTraits]", false, $isPersistent);
 
-        $itemsSize = FFI::sizeof(Core::type('zend_class_name'));
+        $itemsSize = Core::sizeof(Core::type('zend_class_name'));
         if ($totalTraits > 0) {
-            FFI::memcpy($memory, $this->pointer->trait_names, $itemsSize * $totalTraits);
+            Core::memcpy($memory, $this->pointer->trait_names, $itemsSize * $totalTraits);
         }
         for ($position = $totalTraits, $index = 0; $index < $numTraitsToAdd; $position++, $index++) {
             $traitName   = $traitsToAdd[$index];
@@ -339,10 +338,10 @@ class ReflectionClass extends NativeReflectionClass
         }
         // As we don't have realloc methods in PHP, we can free non-persistent memory to prevent leaks
         if ($totalTraits > 0 && !$isPersistent) {
-            FFI::free($this->pointer->trait_names);
+            Core::free($this->pointer->trait_names);
         }
 
-        $this->pointer->trait_names = Core::cast('zend_class_name *', FFI::addr($memory));
+        $this->pointer->trait_names = Core::cast('zend_class_name *', Core::addr($memory));
         $this->pointer->num_traits  = $numResultTraits;
     }
 
@@ -386,10 +385,10 @@ class ReflectionClass extends NativeReflectionClass
             }
         }
         if ($totalTraits > 0 && !$isPersistent) {
-            FFI::free($this->pointer->trait_names);
+            Core::free($this->pointer->trait_names);
         }
         if ($numResultTraits > 0) {
-            $this->pointer->trait_names = Core::cast('zend_class_name *', FFI::addr($memory));
+            $this->pointer->trait_names = Core::cast('zend_class_name *', Core::addr($memory));
         } else {
             $this->pointer->trait_names = null;
         }
@@ -615,9 +614,9 @@ class ReflectionClass extends NativeReflectionClass
     private function initLowLevelStructures(CData $classEntry): void
     {
         $this->pointer         = $classEntry;
-        $this->methodTable     = new HashTable(FFI::addr($classEntry->function_table));
-        $this->propertiesTable = new HashTable(FFI::addr($classEntry->properties_info));
-        $this->constantsTable  = new HashTable(FFI::addr($classEntry->constants_table));
+        $this->methodTable     = new HashTable(Core::addr($classEntry->function_table));
+        $this->propertiesTable = new HashTable(Core::addr($classEntry->properties_info));
+        $this->constantsTable  = new HashTable(Core::addr($classEntry->constants_table));
     }
 
     /**

@@ -253,6 +253,45 @@ class Core
     }
 
     /**
+     * Returns the size of given type
+     */
+    public static function sizeof($cType): int
+    {
+        return FFI::sizeof($cType);
+    }
+
+    /**
+     * Returns the size of given type
+     */
+    public static function addr(CData $variable): CData
+    {
+        return FFI::addr($variable);
+    }
+
+    /**
+     * Copies $size bytes from memory area $source to memory area $target.
+     * $source may be any native data structure (FFI\CData) or PHP string.
+     *
+     * @param CData $target
+     * @param mixed $source
+     * @param int $size
+     */
+    public static function memcpy(CData &$target, &$source, int $size): void
+    {
+        FFI::memcpy($target, $source, $size);
+    }
+
+    /**
+     * Creates a PHP string from $size bytes of memory area pointed by
+     * $source. If size is omitted, $source must be zero terminated
+     * array of C chars.
+     */
+    public static function string(CData $source, int $size = 0): string
+    {
+        return FFI::string($source, $size);
+    }
+
+    /**
      * Creates a new instance of specific type
      *
      * @param string $type Name of the type
@@ -260,6 +299,14 @@ class Core
     public static function new(string $type, bool $owned = true, bool $persistent = false): CData
     {
         return self::$engine->new($type, $owned, $persistent);
+    }
+
+    /**
+     * Returns the size of given type
+     */
+    public static function free(CData $variable): void
+    {
+        self::$engine->free($variable);
     }
 
     /**

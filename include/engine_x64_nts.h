@@ -1,3 +1,6 @@
+#define FFI_SCOPE "ZEngine"
+#define FFI_LIB "ZEND_LIBRARY_NAME"
+
 typedef int64_t zend_long;
 typedef uint64_t zend_ulong;
 typedef int64_t zend_off_t;

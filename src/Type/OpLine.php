@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace ZEngine\Type;
 
-use FFI;
 use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionValue;
@@ -224,7 +223,7 @@ class OpLine
             case self::IS_CONST:
                 // # define RT_CONSTANT(opline, node) \
                 // ((zval*)(((char*)(opline)) + (int32_t)(node).constant))
-                $pointer  = FFI::cast('void *', $this->pointer) + $node->constant;
+                $pointer  = Core::cast('void *', $this->pointer) + $node->constant;
                 $value    = ReflectionValue::fromValueEntry(Core::cast('zval *', $pointer));
 
                 break;
