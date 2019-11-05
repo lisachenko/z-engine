@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace ZEngine\Reflection;
 
-use FFI;
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
 use ZEngine\Core;
@@ -156,7 +155,7 @@ class ReflectionValue
         $entry->u1->type_info = $type;
         $entry->value->zv     = Core::cast('zval', $value);
 
-        return self::fromValueEntry(FFI::addr($entry));
+        return self::fromValueEntry(Core::addr($entry));
     }
 
     /**

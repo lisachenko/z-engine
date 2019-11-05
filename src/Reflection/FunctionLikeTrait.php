@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace ZEngine\Reflection;
 
-use FFI;
 use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Type\OpLine;
@@ -79,7 +78,7 @@ trait FunctionLikeTrait
         $hash = $this->getHash();
         if (!isset(self::$originalEntries[$hash])) {
             $pointer = Core::new('zend_function *', false);
-            FFI::memcpy(FFI::addr($pointer), $this->pointer, FFI::sizeof($this->pointer));
+            Core::memcpy(Core::addr($pointer), $this->pointer, Core::sizeof($this->pointer));
             self::$originalEntries[$hash] = $pointer;
         }
         $selfExecutionState = Core::$executor->getExecutionState();
@@ -87,10 +86,10 @@ trait FunctionLikeTrait
         $newCodeEntry       = Core::cast('zend_closure *', $newCodeEntry);
 
         // Copy only common op_array part from original one to keep name, scope, etc
-        FFI::memcpy($newCodeEntry->func, $this->pointer[0], FFI::sizeof($newCodeEntry->func->common));
+        Core::memcpy($newCodeEntry->func, $this->pointer[0], Core::sizeof($newCodeEntry->func->common));
 
         // Replace original method with redefined closure
-        FFI::memcpy($this->pointer, FFI::addr($newCodeEntry->func), FFI::sizeof($newCodeEntry->func));
+        Core::memcpy($this->pointer, Core::addr($newCodeEntry->func), Core::sizeof($newCodeEntry->func));
 
     }
 
@@ -128,7 +127,7 @@ trait FunctionLikeTrait
             $totalOpcodes = $this->pointer->op_array->last;
             while ($opcodeIndex < $totalOpcodes) {
                 $opCode = new OpLine(
-                    FFI::addr($this->pointer->op_array->opcodes[$opcodeIndex++])
+                    Core::addr($this->pointer->op_array->opcodes[$opcodeIndex++])
                 );
                 yield $opCode;
             }

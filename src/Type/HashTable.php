@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace ZEngine\Type;
 
-use FFI;
 use FFI\CData;
 use IteratorAggregate;
 use Traversable;
@@ -93,7 +92,7 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
     public function find(string $key): ?ReflectionValue
     {
         $stringEntry = new StringEntry($key);
-        $pointer     = Core::call('zend_hash_find', $this->pointer, FFI::addr($stringEntry->getRawValue()));
+        $pointer     = Core::call('zend_hash_find', $this->pointer, Core::addr($stringEntry->getRawValue()));
 
         if ($pointer !== null) {
             $pointer = ReflectionValue::fromValueEntry($pointer);
@@ -110,7 +109,7 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
     public function delete(string $key): void
     {
         $stringEntry = new StringEntry($key);
-        $result      = Core::call('zend_hash_del', $this->pointer, FFI::addr($stringEntry->getRawValue()));
+        $result      = Core::call('zend_hash_del', $this->pointer, Core::addr($stringEntry->getRawValue()));
         if ($result === Core::FAILURE) {
             throw new \RuntimeException("Can not delete an item with key {$key}");
         }
@@ -128,7 +127,7 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
         $result      = Core::call(
             'zend_hash_add_or_update',
             $this->pointer,
-            FFI::addr($stringEntry->getRawValue()),
+            Core::addr($stringEntry->getRawValue()),
             $value->getRawValue(),
             self::HASH_ADD_NEW
         );

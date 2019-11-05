@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace ZEngine\Reflection;
 
-use FFI;
 use FFI\CData;
 use ReflectionClassConstant as NativeReflectionClassConstant;
 use ZEngine\Core;
@@ -42,7 +41,7 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
             throw new \ReflectionException("Class {$className} should be in the engine.");
         }
         $classEntry      = $classEntryValue->getRawClass();
-        $constantsTable  = new HashTable(FFI::addr($classEntry->constants_table));
+        $constantsTable  = new HashTable(Core::addr($classEntry->constants_table));
 
         $constantEntry = $constantsTable->find($constantName);
         if ($constantEntry === null) {

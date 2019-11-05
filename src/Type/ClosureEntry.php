@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace ZEngine\Type;
 
-use FFI;
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
 use ZEngine\Core;
@@ -106,7 +105,7 @@ class ClosureEntry
         $selfExecutionState = Core::$executor->getExecutionState();
         $objectArgument     = $selfExecutionState->getArgument(0);
         $objectZval         = $objectArgument->getRawValue();
-        FFI::memcpy($this->pointer->this_ptr, $objectZval[0], FFI::sizeof(Core::type('zval')));
+        Core::memcpy($this->pointer->this_ptr, $objectZval[0], Core::sizeof(Core::type('zval')));
     }
 
     /**

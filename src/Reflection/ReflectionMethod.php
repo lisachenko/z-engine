@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace ZEngine\Reflection;
 
-use FFI;
 use FFI\CData;
 use ReflectionMethod as NativeReflectionMethod;
 use ZEngine\Core;
@@ -33,7 +32,7 @@ class ReflectionMethod extends NativeReflectionMethod
             throw new \ReflectionException("Class {$className} should be in the engine.");
         }
         $classEntry  = $classEntryValue->getRawClass();
-        $methodTable = new HashTable(FFI::addr($classEntry->function_table));
+        $methodTable = new HashTable(Core::addr($classEntry->function_table));
 
         $methodEntryValue = $methodTable->find(strtolower($methodName));
         if ($methodEntryValue === null) {

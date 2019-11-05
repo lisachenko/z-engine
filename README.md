@@ -24,13 +24,14 @@ Pre-requisites and initialization
 --------------
 
 As this library depends on `FFI`, it requires PHP>=7.4 and `FFI` extension to be enabled.
-It should work in CLI mode without any troubles, whereas for web mode `preload` mode should be implemented (not done yet), so please configure `ffi.enable` to be `true`.
+It should work in CLI mode without any troubles, whereas for web mode `preload` mode should be activated.
 Also, current version is limited to x64 non-thread-safe versions of PHP.
 
 To install this library, simply add it via `composer`:
 ```shell script
 composer require lisachenko/z-engine
 ```
+To activate a `preload` mode, please add `Core::preload()` call into your script, specified by `opcache.preload`. This call will be done during the server preload and will be used by library to bypass unnecessary C headers processing during each request.
 
 Next step is to init library itself with short call to the `Core::init()`:
 ```php

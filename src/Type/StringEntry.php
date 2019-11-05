@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace ZEngine\Type;
 
-use FFI;
 use FFI\CData;
 use ReflectionClass;
 use ZEngine\Core;
@@ -86,7 +85,7 @@ class StringEntry implements ReferenceCountedInterface
      */
     public function getStringValue(): string
     {
-        return FFI::string(FFI::cast('char *', $this->pointer->val), $this->pointer->len);
+        return Core::string(Core::cast('char *', $this->pointer->val), $this->pointer->len);
     }
 
     /**
@@ -98,7 +97,7 @@ class StringEntry implements ReferenceCountedInterface
     {
         if (!$this->isImmutable() /* Only non-interned string can be released */) {
             if ($this->decrementReferenceCount() === 0) {
-                FFI::free($this->pointer);
+                Core::free($this->pointer);
             }
         }
     }

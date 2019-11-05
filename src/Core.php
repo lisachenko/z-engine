@@ -15,6 +15,7 @@ namespace ZEngine;
 use FFI;
 use FFI\CData;
 use FFI\CType;
+use ZEngine\Macro\DefinitionLoader;
 use ZEngine\System\Compiler;
 use ZEngine\System\Executor;
 
@@ -222,26 +223,42 @@ class Core
             throw new \RuntimeException('Only x64 non thread-safe versions of PHP are supported');
         }
 
-        $definition = file_get_contents(__DIR__ . '/../include/engine_x64_nts.h');
-        $macros     = [
-            'ZEND_API'      => '__declspec(dllimport)',
-            'ZEND_FASTCALL' => $isWindowsPlatform ? '__vectorcall' : '',
+        try {
+            $engine = FFI::scope('ZEngine');
+        } catch (FFI\Exception $e) {
+            if (ini_get('ffi.enable') === 'preload' && PHP_SAPI !== 'cli') {
+                throw new \RuntimeException('Preload mode requires that you call Core::preload before');
+            }
+            // If not, then load definitions by hand
+            $definition = file_get_contents(DefinitionLoader::wrap(__DIR__.'/../include/engine_x64_nts.h'));
+            $arguments  = [$definition];
 
-            'ZEND_MAX_RESERVED_RESOURCES' => '6'
-        ];
+            // For Windows platform we should load symbols from the shared php7.dll library
+            if ($isWindowsPlatform) {
+                $arguments[] = 'php7.dll';
+            }
 
-        // Simple macros resolving
-        $definition = strtr($definition, $macros);
-        $arguments  = [$definition];
-
-        // For Windows platform we should load symbols from the shared php7.dll library
-        if ($isWindowsPlatform) {
-            $arguments[] = 'php7.dll';
+            $engine = FFI::cdef(...$arguments);
         }
-        self::$engine = $engine = FFI::cdef(...$arguments);
+        self::$engine = $engine;
+
         assert(!$isThreadSafe, 'Following properties available only for non thread-safe version');
         self::$executor = new Executor($engine->executor_globals);
         self::$compiler = new Compiler($engine->compiler_globals);
+    }
+
+    /**
+     * Preloads definition and Core for ffi.preload mode, should be called during preload stage for better performance
+     */
+    public static function preload()
+    {
+        $definition = file_get_contents(DefinitionLoader::wrap(__DIR__.'/../include/engine_x64_nts.h'));
+        $tempFile   = tempnam(sys_get_temp_dir(), 'php_ffi');
+        file_put_contents($tempFile, $definition);
+        FFI::load($tempFile);
+
+        // Performs initialization of properties, otherwise we will get an error about uninitialized properties
+        Core::init();
     }
 
     /**
@@ -253,6 +270,45 @@ class Core
     }
 
     /**
+     * Returns the size of given type
+     */
+    public static function sizeof($cType): int
+    {
+        return FFI::sizeof($cType);
+    }
+
+    /**
+     * Returns the size of given type
+     */
+    public static function addr(CData $variable): CData
+    {
+        return FFI::addr($variable);
+    }
+
+    /**
+     * Copies $size bytes from memory area $source to memory area $target.
+     * $source may be any native data structure (FFI\CData) or PHP string.
+     *
+     * @param CData $target
+     * @param mixed $source
+     * @param int $size
+     */
+    public static function memcpy(CData &$target, &$source, int $size): void
+    {
+        FFI::memcpy($target, $source, $size);
+    }
+
+    /**
+     * Creates a PHP string from $size bytes of memory area pointed by
+     * $source. If size is omitted, $source must be zero terminated
+     * array of C chars.
+     */
+    public static function string(CData $source, int $size = 0): string
+    {
+        return FFI::string($source, $size);
+    }
+
+    /**
      * Creates a new instance of specific type
      *
      * @param string $type Name of the type
@@ -260,6 +316,14 @@ class Core
     public static function new(string $type, bool $owned = true, bool $persistent = false): CData
     {
         return self::$engine->new($type, $owned, $persistent);
+    }
+
+    /**
+     * Returns the size of given type
+     */
+    public static function free(CData $variable): void
+    {
+        self::$engine->free($variable);
     }
 
     /**

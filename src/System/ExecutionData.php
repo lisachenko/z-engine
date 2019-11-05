@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace ZEngine\System;
 
-use FFI;
 use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionFunction;
@@ -104,7 +103,7 @@ class ExecutionData
      */
     public function getThis(): ReflectionValue
     {
-        return ReflectionValue::fromValueEntry(FFI::addr($this->pointer->This));
+        return ReflectionValue::fromValueEntry(Core::addr($this->pointer->This));
     }
 
     /**
@@ -180,8 +179,8 @@ class ExecutionData
     {
         static $slotSize;
         if ($slotSize === null) {
-            $alignedSizeOfExecuteData = Core::getAlignedSize(FFI::sizeof(Core::type('zend_execute_data')));
-            $alignedSizeOfZval        = Core::getAlignedSize(FFI::sizeof(Core::type('zval')));
+            $alignedSizeOfExecuteData = Core::getAlignedSize(Core::sizeof(Core::type('zend_execute_data')));
+            $alignedSizeOfZval        = Core::getAlignedSize(Core::sizeof(Core::type('zval')));
 
             $slotSize = intdiv(($alignedSizeOfExecuteData + $alignedSizeOfZval) - 1, $alignedSizeOfZval);
         }
