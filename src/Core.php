@@ -15,6 +15,7 @@ namespace ZEngine;
 use FFI;
 use FFI\CData;
 use FFI\CType;
+use ZEngine\Macro\DefinitionLoader;
 use ZEngine\System\Compiler;
 use ZEngine\System\Executor;
 
@@ -222,26 +223,42 @@ class Core
             throw new \RuntimeException('Only x64 non thread-safe versions of PHP are supported');
         }
 
-        $definition = file_get_contents(__DIR__ . '/../include/engine_x64_nts.h');
-        $macros     = [
-            'ZEND_API'      => '__declspec(dllimport)',
-            'ZEND_FASTCALL' => $isWindowsPlatform ? '__vectorcall' : '',
+        try {
+            $engine = FFI::scope('ZEngine');
+        } catch (FFI\Exception $e) {
+            if (ini_get('ffi.enable') === 'preload' && PHP_SAPI !== 'cli') {
+                throw new \RuntimeException('Preload mode requires that you call Core::preload before');
+            }
+            // If not, then load definitions by hand
+            $definition = file_get_contents(DefinitionLoader::wrap(__DIR__.'/../include/engine_x64_nts.h'));
+            $arguments  = [$definition];
 
-            'ZEND_MAX_RESERVED_RESOURCES' => '6'
-        ];
+            // For Windows platform we should load symbols from the shared php7.dll library
+            if ($isWindowsPlatform) {
+                $arguments[] = 'php7.dll';
+            }
 
-        // Simple macros resolving
-        $definition = strtr($definition, $macros);
-        $arguments  = [$definition];
-
-        // For Windows platform we should load symbols from the shared php7.dll library
-        if ($isWindowsPlatform) {
-            $arguments[] = 'php7.dll';
+            $engine = FFI::cdef(...$arguments);
         }
-        self::$engine = $engine = FFI::cdef(...$arguments);
+        self::$engine = $engine;
+
         assert(!$isThreadSafe, 'Following properties available only for non thread-safe version');
         self::$executor = new Executor($engine->executor_globals);
         self::$compiler = new Compiler($engine->compiler_globals);
+    }
+
+    /**
+     * Preloads definition and Core for ffi.preload mode, should be called during preload stage for better performance
+     */
+    public static function preload()
+    {
+        $definition = file_get_contents(DefinitionLoader::wrap(__DIR__.'/../include/engine_x64_nts.h'));
+        $tempFile   = tempnam(sys_get_temp_dir(), 'php_ffi');
+        file_put_contents($tempFile, $definition);
+        FFI::load($tempFile);
+
+        // Performs initialization of properties, otherwise we will get an error about uninitialized properties
+        Core::init();
     }
 
     /**
