@@ -2,7 +2,7 @@ Z-Engine library
 -----------------
 
 Have you ever dreamed about mocking a final class or redefining final method? Or maybe have an ability to work with existing classes in runtime?
-`Z-Engline` is a PHP7.4 library that provides an API to PHP. Forget about all existing limitations and use this library to transform your existing code in runtime by declaring new methods, adding new interfaces to the classes and even installing your own system hooks, like opcode compilation, object initalization and much more.
+`Z-Engine` is a PHP7.4 library that provides an API to PHP. Forget about all existing limitations and use this library to transform your existing code in runtime by declaring new methods, adding new interfaces to the classes and even installing your own system hooks, like opcode compilation, object initalization and much more.
 
 [![Build Status](https://secure.travis-ci.org/lisachenko/z-engine.png?branch=master)](https://travis-ci.org/lisachenko/z-engine)
 [![GitHub release](https://img.shields.io/github/release/lisachenko/z-engine.svg)](https://github.com/lisachenko/z-engine/releases/latest)
@@ -28,7 +28,7 @@ It should work in CLI mode without any troubles, whereas for web mode `preload` 
 Also, current version is limited to x64 non-thread-safe versions of PHP.
 
 To install this library, simply add it via `composer`:
-```shell script
+```bash
 composer require lisachenko/z-engine
 ```
 To activate a `preload` mode, please add `Core::preload()` call into your script, specified by `opcache.preload`. This call will be done during the server preload and will be used by library to bypass unnecessary C headers processing during each request.
