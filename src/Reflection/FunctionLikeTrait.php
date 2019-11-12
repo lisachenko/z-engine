@@ -20,13 +20,6 @@ trait FunctionLikeTrait
 {
     private CData $pointer;
 
-    /**
-     * This static property holds all original zend_function* entries for redefined entries
-     *
-     * @var array|CData[]
-     */
-    private static array $originalEntries = [];
-
      /**
      * Declares method as deprecated/non-deprecated
      */
@@ -75,33 +68,26 @@ trait FunctionLikeTrait
     public function redefine(\Closure $newCode): void
     {
         $this->ensureCompatibleClosure($newCode);
-        $hash = $this->getHash();
-        if (!isset(self::$originalEntries[$hash])) {
-            $pointer = Core::new('zend_function *', false);
-            Core::memcpy(Core::addr($pointer), $this->pointer, Core::sizeof($this->pointer));
-            self::$originalEntries[$hash] = $pointer;
+
+        if (!$this->isInternal()) {
+            $selfExecutionState = Core::$executor->getExecutionState();
+            $newCodeEntry       = $selfExecutionState->getArgument(0)->getRawObject();
+            $newCodeEntry       = Core::cast('zend_closure *', $newCodeEntry);
+
+            // Copy only common op_array part from original one to keep name, scope, etc
+            Core::memcpy($newCodeEntry->func, $this->pointer[0], Core::sizeof($newCodeEntry->func->common));
+
+            // Replace original method with redefined closure
+            Core::memcpy($this->pointer, Core::addr($newCodeEntry->func), Core::sizeof($newCodeEntry->func));
+        } else {
+            // For internal function we can simply adjust a handler
+            $this->pointer->handler = function (CData $executeData, CData $returnValue) use ($newCode): void {
+                $rawValue   = ReflectionValue::fromValueEntry($returnValue);
+                $stackTrace = debug_backtrace(0, 2);
+                $result     = $newCode(...$stackTrace[1]['args']);
+                $rawValue->setNativeValue($result);
+            };
         }
-        $selfExecutionState = Core::$executor->getExecutionState();
-        $newCodeEntry       = $selfExecutionState->getArgument(0)->getRawObject();
-        $newCodeEntry       = Core::cast('zend_closure *', $newCodeEntry);
-
-        // Copy only common op_array part from original one to keep name, scope, etc
-        Core::memcpy($newCodeEntry->func, $this->pointer[0], Core::sizeof($newCodeEntry->func->common));
-
-        // Replace original method with redefined closure
-        Core::memcpy($this->pointer, Core::addr($newCodeEntry->func), Core::sizeof($newCodeEntry->func));
-
-    }
-
-    /**
-     * Checks if this method was redefined or not
-     */
-    public function isRedefined(): bool
-    {
-        $hash        = $this->getHash();
-        $isRedefined = isset(self::$originalEntries[$hash]);
-
-        return $isRedefined;
     }
 
     /**
