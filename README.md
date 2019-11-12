@@ -4,7 +4,7 @@ Z-Engine library
 Have you ever dreamed about mocking a final class or redefining final method? Or maybe have an ability to work with existing classes in runtime?
 `Z-Engine` is a PHP7.4 library that provides an API to PHP. Forget about all existing limitations and use this library to transform your existing code in runtime by declaring new methods, adding new interfaces to the classes and even installing your own system hooks, like opcode compilation, object initalization and much more.
 
-[![Build Status](https://secure.travis-ci.org/lisachenko/z-engine.png?branch=master)](https://travis-ci.org/lisachenko/z-engine)
+[![Build Status](https://img.shields.io/travis/com/lisachenko/z-engine/master)](https://travis-ci.org/lisachenko/z-engine)
 [![GitHub release](https://img.shields.io/github/release/lisachenko/z-engine.svg)](https://github.com/lisachenko/z-engine/releases/latest)
 [![Total Downloads](https://img.shields.io/packagist/dt/lisachenko/z-engine.svg)](https://packagist.org/packages/lisachenko/z-engine)
 [![Daily Downloads](https://img.shields.io/packagist/dd/lisachenko/z-engine.svg)](https://packagist.org/packages/lisachenko/z-engine)
