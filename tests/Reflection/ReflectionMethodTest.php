@@ -197,7 +197,6 @@ class ReflectionMethodTest extends TestCase
         });
         // Check that all main info were preserved
         $this->assertFalse($this->refMethod->isClosure());
-        $this->assertTrue($this->refMethod->isRedefined());
         $this->assertSame('reflectedMethod', $this->refMethod->getName());
 
         $test   = new TestClass();

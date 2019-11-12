@@ -76,12 +76,25 @@ class ReflectionFunctionTest extends TestCase
         });
         // Check that all main info were preserved
         $this->assertFalse($this->refFunction->isClosure());
-        $this->assertTrue($this->refFunction->isRedefined());
         $this->assertSame('testFunction', $this->refFunction->getShortName());
 
         $result = testFunction();
 
         // Our function now returns Yes instead of Test
         $this->assertSame('Yes', $result);
+    }
+
+    public function testRedefineInternalFunc(): void
+    {
+        $originalValue = zend_version();
+        $refFunction   = new ReflectionFunction('zend_version');
+
+        $refFunction->redefine(function () {
+            return 'Z-Engine';
+        });
+
+        $modifiedValue = zend_version();
+        $this->assertNotSame($originalValue, $modifiedValue);
+        $this->assertSame('Z-Engine', $modifiedValue);
     }
 }
