@@ -944,6 +944,22 @@ struct _zend_compiler_globals {
     HashTable *delayed_autoloads; /* Usually empty */
 };
 
+#ifdef ZEND_WIN32
+typedef struct _OSVERSIONINFOEXA {
+    uint32_t dwOSVersionInfoSize;
+    uint32_t dwMajorVersion;
+    uint32_t dwMinorVersion;
+    uint32_t dwBuildNumber;
+    uint32_t dwPlatformId;
+    char  szCSDVersion[128];
+    uint16_t  wServicePackMajor;
+    uint16_t  wServicePackMinor;
+    uint16_t  wSuiteMask;
+    char  wProductType;
+    char  wReserved;
+} OSVERSIONINFOEX;
+#endif
+
 struct _zend_executor_globals {
 	zval uninitialized_zval;
 	zval error_zval;
@@ -995,10 +1011,9 @@ struct _zend_executor_globals {
 	zend_bool timed_out;
     zend_long hard_timeout;
 
-// TODO: Windows-dependent code
-// #ifdef ZEND_WIN32
-//    	OSVERSIONINFOEX windows_version_info;
-// #endif
+#ifdef ZEND_WIN32
+    OSVERSIONINFOEX windows_version_info;
+#endif
 
     HashTable regular_list;
     HashTable persistent_list;
@@ -1041,10 +1056,9 @@ struct _zend_executor_globals {
 
     void *saved_fpu_cw_ptr;
 
-// TODO: Platform-dependent code
-//    #if XPFPA_HAVE_CW
-//    	XPFPA_CW_DATATYPE saved_fpu_cw;
-//    #endif
+#ifdef XPFPA_HAVE_CW
+    XPFPA_CW_DATATYPE saved_fpu_cw;
+#endif
 
     zend_function trampoline;
     zend_op       call_trampoline_op;
@@ -1057,10 +1071,10 @@ struct _zend_executor_globals {
 };
 typedef struct _zend_executor_globals zend_executor_globals;
 
-// #ifndef ZTS
+#ifndef ZTS
 ZEND_API zend_executor_globals executor_globals;
 ZEND_API struct _zend_compiler_globals compiler_globals;
-// #endif
+#endif
 
 
 /**

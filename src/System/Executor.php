@@ -15,6 +15,7 @@ namespace ZEngine\System;
 use FFI\CData;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\HashTable;
+use ZEngine\Type\ObjectEntry;
 
 class Executor
 {
@@ -33,6 +34,13 @@ class Executor
     public HashTable $functionTable;
 
     /**
+     * Represents the global object storage
+     *
+     * @var ObjectStore|ObjectEntry[]
+     */
+    public ObjectStore $objectStore;
+
+    /**
      * Holds an internal pointer to the executor_globals structure
      */
     private CData $pointer;
@@ -42,6 +50,7 @@ class Executor
         $this->pointer       = $pointer;
         $this->classTable    = new HashTable($pointer->class_table);
         $this->functionTable = new HashTable($pointer->function_table);
+        $this->objectStore   = new ObjectStore($pointer->objects_store);
     }
 
     /**
