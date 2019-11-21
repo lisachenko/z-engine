@@ -32,6 +32,9 @@ class DefinitionLoader extends PhpStreamFilter
      */
     public function filter($in, $out, &$consumed, $closing)
     {
+        /** Simple pattern to match if(n?)def..endif constructions */
+        static $pattern = '/^#(ifn?def) +(.*?)\n([\s\S]*?)(#endif)/m';
+
         while ($bucket = stream_bucket_make_writeable($in)) {
             $this->data .= $bucket->data;
         }
@@ -39,8 +42,22 @@ class DefinitionLoader extends PhpStreamFilter
         if ($closing || feof($this->stream)) {
             $consumed = strlen($this->data);
 
+            $macros = $this->resolveSystemMacros();
+            // Now we emulate resolution of ifdef..endif constructions
+            $transformedData = $this->data;
+            $transformedData = preg_replace_callback($pattern, function (array $matches) use ($macros): string {
+                [, $keyword, $macro, $body] = $matches;
+                if ($keyword === 'ifdef' && !isset($macros[$macro])) {
+                    $body = '';
+                } elseif ($keyword === 'ifndef' && isset($macros[$macro])) {
+                    $body = '';
+                }
+
+                return $body;
+            }, $transformedData);
+
             // Simple macros resolving via strtr
-            $transformedData = strtr($this->data, $this->resolveSystemMacros());
+            $transformedData = strtr($transformedData, $macros);
 
             $bucket = stream_bucket_new($this->stream, $transformedData);
             stream_bucket_append($out, $bucket);
@@ -97,6 +114,14 @@ class DefinitionLoader extends PhpStreamFilter
             'ZEND_MAX_RESERVED_RESOURCES' => '6',
             'ZEND_LIBRARY_NAME'           => $isWindowsPlatform ? 'php7.dll' : '',
         ];
+
+        if ($isWindowsPlatform) {
+            $macros['ZEND_WIN32'] = '1';
+        }
+
+        if ($isThreadSafe) {
+            $macros['ZTS'] = '1';
+        }
 
         return $macros;
     }

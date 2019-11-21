@@ -15,6 +15,7 @@ namespace ZEngine\Type;
 use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionClass;
+use ZEngine\Reflection\ReflectionValue;
 
 /**
  * Class ObjectEntry represents an object instance in PHP
@@ -97,6 +98,20 @@ class ObjectEntry implements ReferenceCountedInterface
     public function setHandle(int $newHandle): void
     {
         $this->pointer->handle = $newHandle;
+    }
+
+    /**
+     * Returns a PHP instance of object, associated with this entry
+     */
+    public function getNativeValue(): object
+    {
+        $entry = ReflectionValue::newEntry(ReflectionValue::IS_OBJECT, $this->pointer[0]);
+        $entry->getNativeValue($realObject);
+
+        // TODO: Incapsulate memory management into ReflectionValue->release() method
+        Core::free($entry->getRawValue());
+
+        return $realObject;
     }
 
     /**
