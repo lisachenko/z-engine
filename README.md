@@ -96,3 +96,24 @@ ReflectionMethod
    - `setDeprecated(bool $isDeprecated = true): void` Declares this method as deprecated/non-deprecated
    - `redefine(\Closure $newCode): void` Redefines this method with a closure definition
    - `getOpCodes(): iterable`: \[WIP\] Returns the list of opcodes for this method
+
+ObjectStore API
+-------------
+
+Every object in PHP has it's own unique identifier, which can be received via `spl_object_id($object)`. Sometimes
+we are looking for the way to get an object by it's identifier. Unfortunately, PHP doesn't provide such an API, whereas
+internally there is an instance of `zend_objects_store` structure which is stored in the global `executor_globals`
+variable (aka EG).
+
+This library provides an `ObjectStore` API via `Core::$executor->objectStore` which implements an `ArrayAccess` and
+`Countable` interface. This means that you can get any existing object by accessing this store with object handle:
+
+```php
+use ZEngine\Core;
+
+$instance = new stdClass();
+$handle   = spl_object_id($instance);
+
+$objectEntry = Core::$executor->objectStore[$handle];
+var_dump($objectEntry);
+```
