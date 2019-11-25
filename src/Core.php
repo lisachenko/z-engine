@@ -253,9 +253,13 @@ class Core
     public static function preload()
     {
         $definition = file_get_contents(DefinitionLoader::wrap(__DIR__.'/../include/engine_x64_nts.h'));
-        $tempFile   = tempnam(sys_get_temp_dir(), 'php_ffi');
-        file_put_contents($tempFile, $definition);
-        FFI::load($tempFile);
+        try {
+            $tempFile = tempnam(sys_get_temp_dir(), 'php_ffi');
+            file_put_contents($tempFile, $definition);
+            FFI::load($tempFile);
+        } finally {
+            unlink($tempFile);
+        }
 
         // Performs initialization of properties, otherwise we will get an error about uninitialized properties
         Core::init();
