@@ -111,8 +111,9 @@ class DefinitionLoader extends PhpStreamFilter
             'ZEND_API'      => '__declspec(dllimport)',
             'ZEND_FASTCALL' => $isWindowsPlatform ? '__vectorcall' : '',
 
-            'ZEND_MAX_RESERVED_RESOURCES' => '6',
-            'ZEND_LIBRARY_NAME'           => $isWindowsPlatform ? 'php7.dll' : '',
+            'ZEND_MAX_RESERVED_RESOURCES'  => '6',
+            'INTERNAL_FUNCTION_PARAMETERS' => 'zend_execute_data *execute_data, zval *return_value',
+            'ZEND_LIBRARY_NAME'            => $isWindowsPlatform ? 'php7.dll' : '',
         ];
 
         if ($isWindowsPlatform) {

@@ -429,7 +429,7 @@ struct _zend_op_array {
 };
 
 /* zend_internal_function_handler */
-typedef void (*zif_handler)(/* INTERNAL_FUNCTION_PARAMETERS */ zend_execute_data *execute_data, zval *return_value);
+typedef void (*zif_handler)(INTERNAL_FUNCTION_PARAMETERS);
 
 typedef struct _zend_internal_function {
     /* Common elements */
@@ -491,6 +491,8 @@ typedef struct _zend_closure {
 
 /* zend_object_handlers.h */
 
+extern const ZEND_API zend_object_handlers std_object_handlers;
+
 /* The following rule applies to read_property() and read_dimension() implementations:
    If you return a zval which is not otherwise referenced by the extension or the engine's
    symbol table, its reference count should be 0.
@@ -517,6 +519,15 @@ typedef void (*zend_object_write_dimension_t)(zend_object *object, zval *offset,
 
 /* Used to create pointer to the property of the object, for future direct r/w access */
 typedef zval *(*zend_object_get_property_ptr_ptr_t)(zend_object *object, zend_string *member, int type, void **cache_slot);
+
+/* Used to set object value. Can be used to override assignments and scalar
+   write ops (like ++, +=) on the object */
+typedef void (*zend_object_set_t)(zval *object, zval *value);
+
+/* Used to get object value. Can be used when converting object value to
+ * one of the basic types and when using scalar ops (like ++, +=) on the object
+ */
+typedef zval* (*zend_object_get_t)(zval *object, zval *rv);
 
 /* Used to check if a property of the object exists */
 /* param has_set_exists:
@@ -566,6 +577,7 @@ typedef zend_array *(*zend_object_get_properties_for_t)(zend_object *object, zen
 /* args on stack! */
 /* Andi - EX(fbc) (function being called) needs to be initialized already in the INIT fcall opcode so that the parameters can be parsed the right way. We need to add another callback for this.
  */
+typedef int (*zend_object_call_method_t)(zend_string *method, zend_object *object, INTERNAL_FUNCTION_PARAMETERS);
 typedef zend_function *(*zend_object_get_method_t)(zend_object **object, zend_string *method, const zval *key);
 typedef zend_function *(*zend_object_get_constructor_t)(zend_object *object);
 
@@ -608,12 +620,15 @@ struct _zend_object_handlers {
     zend_object_read_dimension_t            read_dimension;       /* required */
     zend_object_write_dimension_t           write_dimension;      /* required */
     zend_object_get_property_ptr_ptr_t      get_property_ptr_ptr; /* required */
+    zend_object_get_t                       get;                  /* optional */
+    zend_object_set_t                       set;                  /* optional */
     zend_object_has_property_t              has_property;         /* required */
     zend_object_unset_property_t            unset_property;       /* required */
     zend_object_has_dimension_t             has_dimension;        /* required */
     zend_object_unset_dimension_t           unset_dimension;      /* required */
     zend_object_get_properties_t            get_properties;       /* required */
     zend_object_get_method_t                get_method;           /* required */
+    zend_object_call_method_t               call_method;          /* optional */
     zend_object_get_constructor_t           get_constructor;      /* required */
     zend_object_get_class_name_t            get_class_name;       /* required */
     zend_object_compare_t                   compare_objects;      /* optional */
