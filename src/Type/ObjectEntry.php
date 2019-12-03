@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace ZEngine\Type;
 
 use FFI\CData;
+use ReflectionClass as NativeReflectionClass;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionValue;
@@ -53,7 +54,7 @@ class ObjectEntry implements ReferenceCountedInterface
     public static function fromCData(CData $pointer): ObjectEntry
     {
         /** @var ObjectEntry $objectEntry */
-        $objectEntry = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $objectEntry = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
         $objectEntry->initLowLevelStructures($pointer);
 
         return $objectEntry;
