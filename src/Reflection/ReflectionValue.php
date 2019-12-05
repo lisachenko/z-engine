@@ -15,6 +15,8 @@ namespace ZEngine\Reflection;
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
 use ZEngine\Core;
+use ZEngine\Type\ReferenceCountedInterface;
+use ZEngine\Type\ReferenceCountedTrait;
 use ZEngine\Type\ReferenceEntry;
 
 /**
@@ -67,8 +69,10 @@ use ZEngine\Type\ReferenceEntry;
  *   } ww;
  * } zend_value;
  */
-class ReflectionValue
+class ReflectionValue implements ReferenceCountedInterface
 {
+    use ReferenceCountedTrait;
+
     /* regular data types */
     public const IS_UNDEF     = 0;
     public const IS_NULL      = 1;
@@ -91,11 +95,13 @@ class ReflectionValue
     public const _IS_ERROR   = 15;
 
     /* fake types used only for type hinting (Z_TYPE(zv) can not use them) */
-    public const _IS_BOOL    = 16;
-    public const IS_CALLABLE = 17;
-    public const IS_ITERABLE = 18;
-    public const IS_VOID     = 19;
-    public const _IS_NUMBER  = 20;
+    public const _IS_BOOL          = 16;
+    public const IS_CALLABLE       = 17;
+    public const IS_ITERABLE       = 18;
+    public const IS_VOID           = 19;
+    public const _IS_NUMBER        = 20;
+
+    private const Z_TYPE_FLAGS_MASK = 0xFF00;
 
     /**
      * Stores the pointer to zval structure, associated with this variable
@@ -175,19 +181,10 @@ class ReflectionValue
      */
     public function getNativeValue(&$returnValue): void
     {
-        $reference  = new ReferenceEntry($returnValue);
-        $valueEntry = $reference->getValue();
+        $reference = new ReferenceEntry($returnValue);
+        $dstZval   = $reference->getValue()->pointer;
 
-        if ($this->pointer->u1->v->type !== self::IS_INDIRECT) {
-            $pointer = $this->pointer;
-        } else {
-            // Prevent segmentation faults when returning indirect values directly
-            $pointer = $this->pointer->value->zv;
-        }
-
-        $valueEntry->pointer->value = $pointer->value;
-        $valueEntry->pointer->u1    = $pointer->u1;
-        $valueEntry->pointer->u2    = $pointer->u2;
+        $this->copy($dstZval);
     }
 
     /**
@@ -198,11 +195,7 @@ class ReflectionValue
     public function setNativeValue($newValue): void
     {
         $selfExecutionState = Core::$executor->getExecutionState();
-        $valueEntry         = $selfExecutionState->getArgument(0);
-
-        $this->pointer->value = $valueEntry->pointer->value;
-        $this->pointer->u1    = $valueEntry->pointer->u1;
-        $this->pointer->u2    = $valueEntry->pointer->u2;
+        $selfExecutionState->getArgument(0)->copy($this->pointer);
     }
 
     /**
@@ -335,6 +328,36 @@ class ReflectionValue
     }
 
     /**
+     * Performs copying of current value to another one
+     *
+     * @param CData $dstZval Address to copy value to
+     *
+     *@see zend_types.h:ZVAL_COPY(z, v) macro
+     */
+    public function copy(CData $dstZval): void
+    {
+        $typeInfo = $this->getType();
+        $gc       = $this->pointer->value->counted;
+
+        // Content of ZVAL_COPY_VALUE_EX
+        if (PHP_INT_SIZE === 4) {                       // if SIZEOF_SIZE_T == 4
+            $w2 = $this->pointer->value->ww->w2;        // uint32_t _w2 = v->value.ww.w2;
+            $dstZval->value->counted = $gc;             // Z_COUNTED_P(z) = gc;
+            $dstZval->value->ww->w2  = $w2;             // z->value.ww.w2 = _w2;
+            $dstZval->u1->type_info  = $typeInfo;       // Z_TYPE_INFO_P(z) = t;
+        } elseif (PHP_INT_SIZE === 8) {
+            $dstZval->value->counted = $gc;             // Z_COUNTED_P(z) = gc;
+            $dstZval->u1->type_info  = $typeInfo;       // Z_TYPE_INFO_P(z) = t;
+        } else {
+            throw new \UnexpectedValueException('Unknown SIZEOF_SIZE_T');
+        }
+
+        if ($this->isTypeInfoRefCounted($typeInfo)) {
+            $this->incrementReferenceCount();
+        }
+    }
+
+    /**
      * Returns the type name of code
      *
      * @param int $valueCode Integer value of type
@@ -366,5 +389,24 @@ class ReflectionValue
             'type'  => self::name($this->pointer->u1->v->type),
             'value' => $nativeValue
         ];
+    }
+
+    /**
+     * @inheritDoc
+     */
+    protected function getGC(): CData
+    {
+        return $this->pointer->value->counted->gc;
+    }
+
+    /**
+     * Checks if the current value is refcounted or not
+     *
+     * @param int $typeInfo Value type information
+     * @see zend_types.h:Z_TYPE_INFO_REFCOUNTED(t) macro
+     */
+    private function isTypeInfoRefCounted(int $typeInfo): bool
+    {
+        return ($typeInfo & self::Z_TYPE_FLAGS_MASK) != 0;
     }
 }
