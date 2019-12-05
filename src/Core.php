@@ -366,4 +366,12 @@ class Core
 
         return $size;
     }
+
+    /**
+     * Returns standard object handlers
+     */
+    public static function getStandardObjectHandlers(): CData
+    {
+        return self::$engine->std_object_handlers;
+    }
 }
