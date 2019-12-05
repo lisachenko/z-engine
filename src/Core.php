@@ -298,7 +298,7 @@ class Core
      * @param mixed $source
      * @param int $size
      */
-    public static function memcpy(CData &$target, &$source, int $size): void
+    public static function memcpy(CData $target, $source, int $size): void
     {
         FFI::memcpy($target, $source, $size);
     }
