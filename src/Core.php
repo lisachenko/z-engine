@@ -187,6 +187,7 @@ class Core
     public const ZEND_USER_OPCODE_LEAVE       = 4; /* return to calling op_array within the same executor */
     public const ZEND_USER_OPCODE_DISPATCH_TO = 0x100; /* call original handler of returned opcode */
 
+    public const SUCCESS = 0;
     public const FAILURE = -1;
 
     /**
