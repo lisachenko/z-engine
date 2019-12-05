@@ -29,6 +29,8 @@ trait ReferenceCountedTrait
 
     /**
      * Increments a reference counter, so this object will live more than current scope
+     *
+     * @see zend_types.h:zend_gc_addref(zend_refcounted_h *p)
      */
     public function incrementReferenceCount(): int
     {
@@ -37,6 +39,8 @@ trait ReferenceCountedTrait
 
     /**
      * Decrements a reference counter
+     *
+     * @see zend_types.h:zend_gc_delref(zend_refcounted_h *p)
      */
     public function decrementReferenceCount(): int
     {
