@@ -1109,3 +1109,6 @@ ZEND_API user_opcode_handler_t zend_get_user_opcode_handler(zend_uchar opcode);
  * Zend inheritance API
  */
 ZEND_API void zend_do_inheritance_ex(zend_class_entry *ce, zend_class_entry *parent_ce, zend_bool checked);
+ZEND_API zend_object ZEND_FASTCALL *zend_objects_new(zend_class_entry *ce);
+ZEND_API void ZEND_FASTCALL zend_object_std_init(zend_object *object, zend_class_entry *ce);
+ZEND_API void object_properties_init(zend_object *object, zend_class_entry *class_type);

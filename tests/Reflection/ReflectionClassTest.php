@@ -13,10 +13,14 @@ declare(strict_types=1);
 namespace ZEngine\Reflection;
 
 
+use Closure;
 use PHPUnit\Framework\TestCase;
+use ZEngine\ClassExtension\ObjectCreateTrait;
+use ZEngine\Stub\NativeNumber;
 use ZEngine\Stub\TestClass;
 use ZEngine\Stub\TestInterface;
 use ZEngine\Stub\TestTrait;
+use ZEngine\System\OpCode;
 
 class ReflectionClassTest extends TestCase
 {
@@ -190,5 +194,157 @@ class ReflectionClassTest extends TestCase
         $this->assertEquals('/etc/passwd', $this->refClass->getFileName());
         $this->refClass->setFileName($originalFileName);
         $this->assertEquals($originalFileName, $this->refClass->getFileName());
+    }
+
+    /**
+     * @runInSeparateProcess
+     */
+    public function testInstallUserCreateObjectHandler(): void
+    {
+        $log = '';
+        $this->refClass->setCreateObjectHandler(function ($classType, $initializer) use (&$log) {
+            $log    .= 'Before initialization.' . PHP_EOL;
+            $object = $initializer($classType);
+            $log    .= 'After initialization.';
+
+            return $object;
+        });
+        $instance = new TestClass();
+        // We should get instance of our original object, because we are calling default handler
+        $this->assertInstanceOf(TestClass::class, $instance);
+
+        $this->assertStringStartsWith('Before initialization.', $log);
+        $this->assertStringEndsWith('After initialization.', $log);
+
+        $this->markTestIncomplete('Initialization object handler brings segfaults thus run it separately');
+    }
+
+    /**
+     * @runInSeparateProcess
+     */
+    public function testInstallCastObjectHandler(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+        $this->refClass->setCastObjectHandler(function (object $object, int $castTo) {
+            switch ($castTo) {
+                case ReflectionValue::IS_LONG:
+                case ReflectionValue::_IS_NUMBER:
+                    return 1;
+                case ReflectionValue::IS_DOUBLE:
+                    return 2.0;
+                case ReflectionValue::IS_STRING:
+                    return 'test';
+                case ReflectionValue::_IS_BOOL:
+                    return false;
+            }
+            throw new \UnexpectedValueException("Unknown type " . ReflectionValue::name($castTo));
+        });
+
+        $testClass = new TestClass();
+        $long      = (int)$testClass;
+        $this->assertSame(1, $long);
+        $double = (float)$testClass;
+        $this->assertSame(2.0, $double);
+        $string = (string)$testClass;
+        $this->assertSame('test', $string);
+        $bool = (bool)$testClass;
+        $this->assertSame(false, $bool);
+        $this->markTestIncomplete('Initialization object handler brings segfaults thus run it separately');
+    }
+
+    /**
+     * @runInSeparateProcess
+     */
+    public function testInstallCompareValuesHandler(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+        $this->refClass->setCompareValuesHandler(function ($left, $right) {
+            if (is_object($left)) {
+                $left = spl_object_id($left);
+            }
+            if (is_object($right)) {
+                $right = spl_object_id($right);
+            }
+
+            return $left <=> $right;
+        });
+
+        $first    = new TestClass();
+        $second   = new TestClass();
+        $firstId  = spl_object_id($first);
+        $secondId = spl_object_id($second);
+
+        // As we compare values by object_id, then we should expect same values as simple int comparison
+        $this->assertSame($firstId < $secondId, $first < $second);
+        $this->assertSame($firstId == $secondId, $first == $second);
+        $this->assertSame($firstId >= $secondId, $first >= $second);
+
+        // We can also compare objects with values directly, look at $secondId arg
+        $this->assertSame($firstId < $secondId, $first < $secondId);
+        $this->assertSame($firstId > $secondId, $firstId > $second);
+
+        $this->markTestIncomplete('Initialization object handler brings segfaults thus run it separately');
+    }
+
+    /**
+     * @runInSeparateProcess
+     */
+    public function testInstallDoOperationHandler(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+        $this->refClass->setDoOperationHandler(function (int $opcode, $left, $right) {
+            if (is_object($left)) {
+                $left = spl_object_id($left);
+            }
+            if (is_object($right)) {
+                $right = spl_object_id($right);
+            }
+            switch ($opcode) {
+                case OpCode::ADD:
+                    return $left + $right;
+                case OpCode::SUB:
+                    return $left - $right;
+                case OpCode::MUL:
+                    return $left * $right;
+                case OpCode::DIV:
+                    return $left / $right;
+            }
+            throw new \UnexpectedValueException("Opcode " . OpCode::name($opcode) . " wasn't held.");
+        });
+
+        $first    = new TestClass();
+        $second   = new TestClass();
+        $firstId  = spl_object_id($first);
+        $secondId = spl_object_id($second);
+
+        // As we compare values by object_id, then we should expect same values as simple int comparison
+        $this->assertSame($firstId + $secondId, $first + $second);
+        $this->assertSame($firstId - $secondId, $first - $second);
+        $this->assertSame($firstId * $secondId, $first * $second);
+        $this->assertSame($firstId / $secondId, $first / $second);
+
+        $this->markTestIncomplete('Initialization object handler brings segfaults thus run it separately');
+    }
+
+
+    public function testInstallExtensionHandlers(): void
+    {
+        $refClass = new ReflectionClass(NativeNumber::class);
+        $refClass->installExtensionHandlers();
+
+        $a = new NativeNumber(46);
+        $b = new NativeNumber(2);
+
+        $c = $a + $b;
+        $this->assertSame(48, (int) $c);
+        $d = $a / $b;
+        $this->assertSame(23.0, (float) $d);
+        $e = $a > 10 && $a < 50;
+        $this->assertTrue($e, 'Number should be equal to 46');
+        $f = ($a * 2) < 100;
+        $this->assertTrue($f, '46*2=92 is less than 100');
     }
 }
