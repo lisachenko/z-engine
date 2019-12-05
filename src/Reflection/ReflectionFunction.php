@@ -49,11 +49,13 @@ class ReflectionFunction extends NativeReflectionFunction
         } else {
             $functionNamePtr = $functionEntry->common->function_name;
         }
-        $functionName = StringEntry::fromCData($functionNamePtr);
-        call_user_func(
-            [$reflectionFunction, 'parent::__construct'],
-            $functionName->getStringValue()
-        );
+        if ($functionNamePtr !== null) {
+            $functionName = StringEntry::fromCData($functionNamePtr);
+            call_user_func(
+                [$reflectionFunction, 'parent::__construct'],
+                $functionName->getStringValue()
+            );
+        }
         $reflectionFunction->pointer = $functionEntry;
 
         return $reflectionFunction;
