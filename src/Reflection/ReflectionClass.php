@@ -247,6 +247,68 @@ class ReflectionClass extends NativeReflectionClass
         return $methods;
     }
 
+
+    /**
+    * add a new magic method to the class in runtime
+    */
+    public function addMagicMethod(string $methodName, \Closure $method): ReflectionMethod
+    {
+        $closureEntry = new ClosureEntry($method);
+        // This line will make this closure live until the end of script/request
+        $closureEntry->getClosureObjectEntry()->incrementReferenceCount();
+        $closureEntry->setCalledScope($this->name);
+
+        // TODO: replace with ReflectionFunction instead of low-level structures
+        $rawFunction  = $closureEntry->getRawFunction();
+        $funcName     = (new StringEntry($methodName))->getRawValue();
+        $rawFunction->common->function_name = $funcName;
+
+        // Adjust the scope of our function to our class
+        $classScopeValue = Core::$executor->classTable->find(strtolower($this->name));
+        $rawFunction->common->scope = $classScopeValue->getRawClass();
+
+        // Clean closure flag
+        $rawFunction->common->fn_flags &= (~Core::ZEND_ACC_CLOSURE);
+
+        $isPersistent = $this->isInternal() || PHP_SAPI !== 'cli';
+        //$refMethod    = $this->addRawMethod($methodName, $rawFunction, $isPersistent);
+
+        $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawFunction, $isPersistent);
+
+        /*
+        * 指针指向地址
+        */
+        $map = [
+            '__construct'=>'constructor',
+            'destructor'=>'destructor',
+            'clone'=>'clone',
+            '__get'=>'__get',
+            '__set'=>'__set',
+            '__unset'=>'__unset',
+            '__isset'=>'__isset',
+            '__call'=>'__call',
+            '__callstatic'=>'__callstatic',
+            '__tostring'=>'__tostring',
+            '__debugInfo'=>'__debugInfo',
+            'serialize_func'=>'serialize_func',
+            'unserialize_func'=>'unserialize_func',
+        ];
+        $innerMethodName = $map[$methodName];
+        $this->pointer->{$innerMethodName} = Core::addr($rawFunction);
+
+
+        $this->methodTable->add(strtolower($methodName), $valueEntry);
+
+        /*魔术方法不在函数的表中,都是专门的表中*/
+        $refMethod = ReflectionMethod::fromCData($rawFunction);
+
+        $refMethod->setPublic();
+
+        return $refMethod;
+    } 
+
+
+
     /**
      * Adds a new method to the class in runtime
      */
