@@ -117,3 +117,155 @@ $handle   = spl_object_id($instance);
 $objectEntry = Core::$executor->objectStore[$handle];
 var_dump($objectEntry);
 ```
+
+Object Extensions API
+---------------------
+
+With the help of `z-engine` library it is possible to overload standard operators for your classes without diving deep
+into the PHP engine implementation. For example, let's say you want to define native matrix operators and use it:
+
+```php
+<?php
+
+use ZEngine\ClassExtension\ObjectCastInterface;
+use ZEngine\ClassExtension\ObjectCompareValuesInterface;
+use ZEngine\ClassExtension\ObjectCreateInterface;
+use ZEngine\ClassExtension\ObjectCreateTrait;
+use ZEngine\ClassExtension\ObjectDoOperationInterface;
+
+class Matrix implements
+    ObjectCreateInterface,
+    ObjectCompareValuesInterface,
+    ObjectDoOperationInterface,
+    ObjectCastInterface
+{
+    use ObjectCreateTrait;
+
+    // ...
+}
+$a = new Matrix([10, 20, 30]);
+$b = new Matrix([1, 2, 3]);
+$c = $a + $b; // Matrix([11, 22, 33])
+$c *= 2;      // Matrix([22, 44, 66])
+```
+
+There are two ways of activating custom handlers.
+First way is to implement several system interfaces like
+`ObjectCastInterface`, `ObjectCompareValuesInterface`, `ObjectCreateInterface` and `ObjectDoOperationInterface`. After
+that you should create an instance of `ReflectionClass` provided by this package and call `installExtensionHandlers`
+method to install extensions:
+
+```php
+use ZEngine\Reflection\ReflectionClass as ReflectionClassEx;
+
+// ... initialization logic
+
+$refClass = new ReflectionClassEx(Matrix::class);
+$refClass->installExtensionHandlers();
+```
+
+if you don't have an access to the code (eg. vendor), then you can still have an ability to define custom handlers.
+You need to define callbacks as closures explicitly and assign them via `set***Handler()` methods in the
+`ReflectionClass`.
+
+```php
+use ZEngine\ClassExtension\ObjectCreateTrait;
+use ZEngine\Reflection\ReflectionClass as ReflectionClassEx;
+
+$refClass = new ReflectionClassEx(Matrix::class);
+$handler  = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+$refClass->setCreateObjectHandler($handler);
+$refClass->setCompareValuesHandler(function ($left, $right) {
+    if (is_object($left)) {
+        $left = spl_object_id($left);
+    }
+    if (is_object($right)) {
+        $right = spl_object_id($right);
+    }
+
+    // Just for example, object with bigger object_id is considered bigger that object with smaller object_id
+    return $left <=> $right;
+});
+```
+
+Library provides following interfaces:
+
+First one is `ObjectCastInterface` which provides a hook for handling casting a class instance to scalars. Typical
+examples are following: 1) explicit `$value = (int) $objectInstance` or implicit: `$value = 10 + $objectInstance;` in
+the case when `do_operation` handler is not installed. Please note, that this handler doesn't handle casting to `array`
+type as it is implemented in a different way.
+
+```php
+<?php
+
+/**
+ * Interface ObjectCastInterface allows to cast given object to scalar values, like integer, floats, etc
+ */
+interface ObjectCastInterface
+{
+    /**
+     * Performs casting of given object to another value
+     *
+     * @param object $instance Instance of object that should be casted
+     * @param int $typeTo Type of casting, @see ReflectionValue::IS_* constants
+     *
+     * @return mixed Casted value
+     */
+    public static function __cast(object $instance, int $typeTo);
+}
+```
+
+Next `ObjectCompareValuesInterface` interface is used to control the comparison logic. For example, you can compare
+two objects or even compare object with scalar values: `if ($object > 10 || $object < $anotherObject)`
+
+```php
+<?php
+
+/**
+ * Interface ObjectCompareValuesInterface allows to perform comparison of objects
+ */
+interface ObjectCompareValuesInterface
+{
+    /**
+     * Performs comparison of given object with another value
+     *
+     * @param mixed $one     First side of operation
+     * @param mixed $another Another side of operation
+     *
+     * @return int Result of comparison: 1 is greater, -1 is less, 0 is equal
+     */
+    public static function __compare($one, $another): int;
+}
+```
+Handler should check arguments (one of them should be an instance of your class) and return integer result -1..1. Where
+1 is greater, -1 is less and 0 is equal.
+
+The interface `ObjectDoOperationInterface` is the most powerful one because it gives you control over math operators
+applied to your object (such as ADD, SUB, MUL, DIV, POW, etc).
+
+```php
+<?php
+
+/**
+ * Interface ObjectDoOperationInterface allows to perform math operations (aka operator overloading) on object
+ */
+interface ObjectDoOperationInterface
+{
+    /**
+     * Performs casting of given object to another value
+     *
+     * @param int $opCode Operation code
+     * @param mixed $left left side of operation
+     * @param mixed $right Right side of operation
+     *
+     * @return mixed Result of operation value
+     */
+    public static function __doOperation(int $opCode, $left, $right);
+}
+```
+This handler receives an opcode (see `OpCode::*` constants) and two arguments (one of them is an instance of class) and
+returns a value for that operation. In this handler you can return a new instance of your object to have a chain of
+immutable instances of objects.
+
+Important reminder: you **MUST** install the `create_object` handler first in order to install hooks in runtime. Also
+you can not install the `create_object` handler for the object if it is internal one.
