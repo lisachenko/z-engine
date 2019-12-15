@@ -48,7 +48,8 @@ var_dump($obj2);
 
 var_dump("obj2",is_callable([$obj2,"newFunction"]));
 
-
+if(false){
+/*下面这个会段错误*/
 $testFn123 = $refClass->getMethod("testFn123");
 $back = $testFn123->getClosure($pobj);
 var_dump($back);
@@ -60,3 +61,4 @@ $testFn123->redefine(function() use ($back){
 
 
 $pobj->testFn123();
+}

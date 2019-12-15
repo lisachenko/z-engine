@@ -208,7 +208,7 @@ class Core
     /**
      * Stores an internal instance of low-level FFI binding
      */
-    private static FFI $engine;
+    public static FFI $engine;
 
     /**
      * Performs Z-engine core initialization

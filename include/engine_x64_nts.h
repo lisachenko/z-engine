@@ -1109,3 +1109,8 @@ ZEND_API user_opcode_handler_t zend_get_user_opcode_handler(zend_uchar opcode);
  * Zend inheritance API
  */
 ZEND_API void zend_do_inheritance_ex(zend_class_entry *ce, zend_class_entry *parent_ce, zend_bool checked);
+
+
+/**/
+ZEND_API void zval_ptr_dtor(zval *zval_ptr);
+ZEND_API void (*zend_throw_exception_hook)(zval *ex);

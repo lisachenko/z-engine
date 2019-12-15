@@ -19,3 +19,18 @@ use ZEngine\Core;
  */
 Core::preload();
 
+/*全局变量*/
+//Core::$engine->zend_throw_exception_hook = function($ex){
+
+
+   	//Core::call("php_printf","Caught\n");
+   	//echo "Caught\n";
+
+    //zval_ptr_dtor(ex); // destroy the thrown object
+    //Core::call("zval_ptr_dtor",$ex);
+    
+    //EG(exception) = NULL; // nullify it, as if it never happened
+
+    //Core::$engine->executor_globals->exception = NULL;
+//};
+
