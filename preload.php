@@ -19,18 +19,33 @@ use ZEngine\Core;
  */
 Core::preload();
 
+//global $orig_zend_write;
+$orig_zend_write = clone Core::$engine->zend_write;
+
+
 /*全局变量*/
-//Core::$engine->zend_throw_exception_hook = function($ex){
+Core::$engine->zend_write = function($str, $len){
+    //global $orig_zend_write;
+    //$orig_zend_write("{\n\t", 3);
+    $ret = $orig_zend_write($str, $len);
+    //$orig_zend_write("}\n", 2);
+    return $ret;
+};
 
 
-   	//Core::call("php_printf","Caught\n");
-   	//echo "Caught\n";
+// Core::$engine->zend_throw_exception_hook = function($ex){
 
-    //zval_ptr_dtor(ex); // destroy the thrown object
-    //Core::call("zval_ptr_dtor",$ex);
+
+//    	Core::call("zend_write","Caught\n");
+//    	//echo "Caught\n";
+
+//     //zval_ptr_dtor(ex); // destroy the thrown object
+//     //Core::call("zval_ptr_dtor",$ex);
     
-    //EG(exception) = NULL; // nullify it, as if it never happened
+//     //EG(exception) = NULL; // nullify it, as if it never happened
 
-    //Core::$engine->executor_globals->exception = NULL;
-//};
+//     //Core::$executor->exception = NULL;
+//     //
+//     //return;
+// };
 

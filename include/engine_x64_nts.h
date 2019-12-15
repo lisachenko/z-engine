@@ -1113,4 +1113,12 @@ ZEND_API void zend_do_inheritance_ex(zend_class_entry *ce, zend_class_entry *par
 
 /**/
 ZEND_API void zval_ptr_dtor(zval *zval_ptr);
-ZEND_API void (*zend_throw_exception_hook)(zval *ex);
+
+
+/*zend engine 处理异常的方法*/
+//ZEND_API void (*zend_throw_exception_hook)(zval *ex);
+extern ZEND_API void (*zend_throw_exception_hook)(zval *ex);
+
+
+typedef int (*zend_write_func_t)(const char *str, size_t str_length);
+extern zend_write_func_t zend_write;
