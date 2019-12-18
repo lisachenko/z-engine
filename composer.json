@@ -6,7 +6,10 @@
         "php": "~7.4",
         "ext-ffi": "*"
     },
-    "license": "MIT",
+    "license": [
+        "RPL-1.5",
+        "proprietary"
+    ],
     "authors": [
         {
             "name": "Alexander Lisachenko",
