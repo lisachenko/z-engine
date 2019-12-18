@@ -15,8 +15,25 @@ namespace ZEngine\Type;
 use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionValue;
+use ZEngine\System\ExecutionData;
 use ZEngine\System\OpCode;
 
+/**
+ * Class OpLine represents one operation that should be performed by the engine
+ *
+ * struct _zend_op {
+ *   const void *handler;
+ *   znode_op op1;
+ *   znode_op op2;
+ *   znode_op result;
+ *   uint32_t extended_value;
+ *   uint32_t lineno;
+ *   zend_uchar opcode;
+ *   zend_uchar op1_type;
+ *   zend_uchar op2_type;
+ *   zend_uchar result_type;
+ * };
+ */
 class OpLine
 {
     /**
@@ -58,11 +75,22 @@ class OpLine
      */
     public const IS_CV = (1<<3);
 
-    public CData $pointer;
+    /**
+     * Execution context (if present).
+     *
+     * It is used for resolving all temporary variables that are stored in
+     */
+    private ?ExecutionData $context;
 
-    public function __construct(CData $pointer)
+    /**
+     * Stores the _zend_op * structure pointer
+     */
+    private CData $opline;
+
+    public function __construct(CData $opline, ExecutionData $context = null)
     {
-        $this->pointer = $pointer;
+        $this->opline  = $opline;
+        $this->context = $context;
     }
 
     /**
@@ -70,7 +98,7 @@ class OpLine
      */
     public function getHandler(): CData
     {
-        return $this->pointer->handler;
+        return $this->opline->handler;
     }
 
     /**
@@ -78,7 +106,7 @@ class OpLine
      */
     public function getOp1Type(): int
     {
-        return $this->pointer->op1_type;
+        return $this->opline->op1_type;
     }
 
     /**
@@ -86,35 +114,35 @@ class OpLine
      */
     public function getOp2Type(): int
     {
-        return $this->pointer->op2_type;
+        return $this->opline->op2_type;
     }
 
     /**
-     * @return mixed|ReflectionValue
+     *
      */
-    public function getOp1()
+    public function getOp1(): ?ReflectionValue
     {
-        $value = $this->dumpOpValue($this->pointer->op1, $this->pointer->op1_type);
+        $value = $this->getValuePointer($this->opline->op1, $this->opline->op1_type);
 
         return $value;
     }
 
     /**
-     * @return mixed|ReflectionValue
+     * Returns the second operand
      */
-    public function getOp2()
+    public function getOp2(): ?ReflectionValue
     {
-        $value = $this->dumpOpValue($this->pointer->op2, $this->pointer->op2_type);
+        $value = $this->getValuePointer($this->opline->op2, $this->opline->op2_type);
 
         return $value;
     }
 
     /**
-     * @return mixed|ReflectionValue
+     * Returns the "result" value
      */
-    public function getResult()
+    public function getResult(): ?ReflectionValue
     {
-        $value = $this->dumpOpValue($this->pointer->result, $this->pointer->result_type);
+        $value = $this->getValuePointer($this->opline->result, $this->opline->result_type);
 
         return $value;
     }
@@ -124,7 +152,7 @@ class OpLine
      */
     public function getCode(): int
     {
-        return $this->pointer->opcode;
+        return $this->opline->opcode;
     }
 
     /**
@@ -136,7 +164,7 @@ class OpLine
      */
     public function setCode(int $newCode): void
     {
-        $this->pointer->opcode->cdata = $newCode;
+        $this->opline->opcode->cdata = $newCode;
     }
 
     /**
@@ -144,7 +172,7 @@ class OpLine
      */
     public function getName(): string
     {
-        $opCodeName = OpCode::name($this->pointer->opcode);
+        $opCodeName = OpCode::name($this->opline->opcode);
 
         return $opCodeName;
     }
@@ -154,7 +182,7 @@ class OpLine
      */
     public function getLine(): int
     {
-        return $this->pointer->lineno;
+        return $this->opline->lineno;
     }
 
     /**
@@ -164,15 +192,13 @@ class OpLine
      */
     public function setLine(int $newLine): void
     {
-        $this->pointer->lineno->cdata = $newLine;
+        $this->opline->lineno = $newLine;
     }
 
     /**
      * Returns the type name of operand
      *
      * @param int $opType Integer value of opType
-     *
-     * @return string
      */
     public static function typeName(int $opType): string
     {
@@ -190,64 +216,68 @@ class OpLine
     public function __debugInfo(): array
     {
         $humanCode   = $this->getName();
-        $op1TypeName = self::typeName($this->pointer->op1_type);
-        $op2TypeName = self::typeName($this->pointer->op2_type);
-        $resTypeName = self::typeName($this->pointer->result_type);
+        $op1TypeName = self::typeName($this->opline->op1_type);
+        $op2TypeName = self::typeName($this->opline->op2_type);
+        $resTypeName = self::typeName($this->opline->result_type);
 
         return [
             $humanCode => [
-                $op1TypeName => $this->getOp1(),
-                $op2TypeName => $this->getOp2(),
-            ],
-            'line'     => $this->getLine(),
-            'result'   => [$resTypeName => $this->getResult()]
+                'op1'    => [$op1TypeName => $this->getOp1()],
+                'op2'    => [$op2TypeName => $this->getOp2()],
+                'result' => [$resTypeName => $this->getResult()],
+                'line'   => $this->getLine()
+            ]
         ];
     }
 
     /**
-     * This utility function dumps a value from opCode node
+     * This utility function returns a pointer to value for given op_node and it's type
      *
-     * @param CData $node Instance of op1/op2/result node
+     * @param CData $node   Instance of op1/op2/result node
      * @param int   $opType operation code type, eg IS_CONST, IS_CV...
      *
-     * @return mixed Extracted value
+     * @return ReflectionValue|null Extracted value or null, if value could not be resolved (eg. not in runtime)
+     *
+     * @see zend_execute.c:zend_get_zval_ptr
      */
-    private function dumpOpValue(CData $node, int $opType)
+    private function getValuePointer(CData $node, int $opType): ?ReflectionValue
     {
-        $value = null;
+        $pointer = null;
 
         switch ($opType) {
-            case self::IS_UNUSED:
-                $value = null;
-                break;
             case self::IS_CONST:
-                // # define RT_CONSTANT(opline, node) \
-                // ((zval*)(((char*)(opline)) + (int32_t)(node).constant))
-                $pointer  = Core::cast('void *', $this->pointer) + $node->constant;
-                $value    = ReflectionValue::fromValueEntry(Core::cast('zval *', $pointer));
-
+                $pointer = self::getRuntimeConstant($this->opline, $node);
                 break;
             case self::IS_TMP_VAR:
-                // Just return a string with $node->var converted offset
-                $value = '~' . ($node->var - 96) / 16;
-                break;
             case self::IS_VAR:
-                // #define ZEND_CALL_VAR(call, n) \
-                // ((zval*)(((char*)(call)) + ((int)(n))))
-                // #define EX_VAR_NUM(n)			ZEND_CALL_VAR_NUM(execute_data, n)
-                // #define EX_VAR_TO_NUM(n) \
-                // ((uint32_t)(ZEND_CALL_VAR(NULL, n) - ZEND_CALL_VAR_NUM(NULL, 0)))
-                // Just return a string with $node->var converted offset
-                return '!' . ($node->var - 96) / 16;
             case self::IS_CV:
-                // TODO: How to use a pointer to the op_array->vars field in FFI? It doesn't work, PHP unwraps it...
-//                $value = $this->opArray->vars[($node->var - 80) / 16];
-//                $value = '$' . (string) new StringEntry($value);
-                return '$' . ($node->var - 80) / 16;
+            case self::IS_UNUSED: // For some opcodes IS_UNUSED still used, in most cases it points to an IS_UNDEF value
+                // All these types requires context to be present, otherwise we can't resolve such nodes
+                if (isset($this->context)) {
+                    $pointer = $this->context->getCallVariable($node->var);
+                }
                 break;
             default:
-                $value = $node;
+               throw new \InvalidArgumentException('Received invalid opcode type: ' . $opType);
         }
+        $value = isset($pointer) ? ReflectionValue::fromValueEntry($pointer) : null;
+
+        return $value;
+    }
+
+    /**
+     * Returns value for a runtime-constant with IS_CONST type
+     *
+     * @see zend_compile.h:RT_CONSTANT macro definition
+     *
+     * @return CData zval* pointer
+     */
+    private static function getRuntimeConstant(CData $opline, CData $node): CData
+    {
+        // ((zval*)(((char*)(opline)) + (int32_t)(node).constant))
+        $pointer  = Core::cast('char *', $opline) + $node->constant;
+        $value    = Core::cast('zval *', $pointer);
+
         return $value;
     }
 }

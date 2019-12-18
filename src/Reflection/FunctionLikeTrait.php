@@ -108,18 +108,17 @@ trait FunctionLikeTrait
         if (!$this->isUserDefined()) {
             throw new \LogicException('Opcodes are available only for user-defined functions');
         }
-        $opcodeEntryGenerator = function () {
-            $opcodeIndex  = 0;
-            $totalOpcodes = $this->pointer->op_array->last;
-            while ($opcodeIndex < $totalOpcodes) {
-                $opCode = new OpLine(
-                    Core::addr($this->pointer->op_array->opcodes[$opcodeIndex++])
-                );
-                yield $opCode;
-            }
-        };
+        $opCodes      = [];
+        $opcodeIndex  = 0;
+        $totalOpcodes = $this->pointer->op_array->last;
+        while ($opcodeIndex < $totalOpcodes) {
+            $opCode = new OpLine(
+                Core::addr($this->pointer->op_array->opcodes[$opcodeIndex++])
+            );
+            $opCodes[] = $opCode;
+        }
 
-        return $opcodeEntryGenerator();
+        return $opCodes;
     }
 
     /**
