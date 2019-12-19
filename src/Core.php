@@ -304,16 +304,6 @@ class Core
     }
 
     /**
-     * Creates a PHP string from $size bytes of memory area pointed by
-     * $source. If size is omitted, $source must be zero terminated
-     * array of C chars.
-     */
-    public static function string(CData $source, int $size = 0): string
-    {
-        return FFI::string($source, $size);
-    }
-
-    /**
      * Creates a new instance of specific type
      *
      * @param string $type Name of the type
