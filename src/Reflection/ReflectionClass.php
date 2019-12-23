@@ -83,15 +83,23 @@ class ReflectionClass extends NativeReflectionClass
     {
         /** @var ReflectionClass $reflectionClass */
         $reflectionClass = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
-        $classNameValue  = StringEntry::fromCData($classEntry->name);
+        $reflectionClass->initLowLevelStructures($classEntry);
+        $classNameValue = StringEntry::fromCData($classEntry->name);
         try {
             call_user_func([$reflectionClass, 'parent::__construct'], $classNameValue->getStringValue());
         } catch (\ReflectionException $e) {
             // This can happen during the class-loading. But we still can work with it.
         }
-        $reflectionClass->initLowLevelStructures($classEntry);
 
         return $reflectionClass;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getName()
+    {
+        return StringEntry::fromCData($this->pointer->name)->getStringValue();
     }
 
     /**
@@ -722,12 +730,37 @@ class ReflectionClass extends NativeReflectionClass
 
         // User handlers are only allowed with std_object_handler (when create_object handler is empty)
         if ($currentHandler === null) {
-            self::allocateClassObjectHandlers($this->name);
+            self::allocateClassObjectHandlers($this->getName());
         }
 
         $this->pointer->create_object = static function (CData $classType) use ($handler, $initializer) {
             return $handler($classType, $initializer);
         };
+    }
+
+    /**
+     * Installs the handler when another class implements current interface
+     *
+     * @param Closure $handler Callback function (ReflectionClass $reflectionClass)
+     */
+    public function setInterfaceGetsImplementedHandler(Closure $handler): void
+    {
+        if (!$this->isInterface()) {
+            throw new \LogicException("Interface implemented handler can be installed only for interfaces");
+        }
+
+        $this->pointer->interface_gets_implemented = function (CData $interfaceType, CData $classType) use ($handler) {
+            $refClass = ReflectionClass::fromCData($classType);
+            $handler($refClass);
+
+            return Core::SUCCESS;
+        };
+
+        // At the end of request we should clear this callback to prevent segmentation fault on subsequent requests
+        // TODO: Implement better global clean-up procedure to deal with modified entries
+        register_shutdown_function(function () {
+            $this->pointer->interface_gets_implemented = null;
+        });
     }
 
     /**

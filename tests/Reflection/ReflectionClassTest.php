@@ -219,6 +219,27 @@ class ReflectionClassTest extends TestCase
         $this->markTestIncomplete('Initialization object handler brings segfaults thus run it separately');
     }
 
+    public function testInstallInterfaceGetsImplementedHandler(): void
+    {
+        $log = '';
+        $refInterface = new ReflectionClass(TestInterface::class);
+        $refInterface->setInterfaceGetsImplementedHandler(function (ReflectionClass $classType) use (&$log) {
+            $log = 'Class ' . $classType->getName() . ' implements interface';
+        });
+
+        // Check that log line is empty now
+        $this->assertSame('', $log);
+
+        // Now we expect that at this point of time our callback will be called
+        $anonymousInterfaceImplementation = new class implements TestInterface {};
+
+        // Of course, we should get an instance of our TestInterface
+        $this->assertInstanceOf(TestInterface::class, $anonymousInterfaceImplementation);
+
+        // ... and log entry will contain a record about anonymous class that implements interface
+        $this->assertStringContainsString('class@anonymous', $log);
+    }
+
     /**
      * @runInSeparateProcess
      */
