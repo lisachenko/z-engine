@@ -270,6 +270,12 @@ immutable instances of objects.
 Important reminder: you **MUST** install the `create_object` handler first in order to install hooks in runtime. Also
 you can not install the `create_object` handler for the object if it is internal one.
 
+There is one extra method called `setInterfaceGetsImplementedHandler` which is useful for installing special handler for
+interfaces. The `interface_gets_implemented` callback uses the same memory slot as `create_object` handler for object,
+and will be called each time when any class will implement this interface. This gives interesting options for
+automatic class extensions registration, for example, if a class implements the `ObjectCreateInterface` then
+automatically call `ReflectionClass->installExtensionHandlers()` for it in callback.
+
 Code of Conduct
 --------------
 
