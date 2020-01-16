@@ -276,6 +276,42 @@ and will be called each time when any class will implement this interface. This 
 automatic class extensions registration, for example, if a class implements the `ObjectCreateInterface` then
 automatically call `ReflectionClass->installExtensionHandlers()` for it in callback.
 
+Abstract Syntax Tree API
+--------------
+
+As you know, PHP7 uses an abstract syntax tree for working with abstract model of source code to simplify future
+development of language syntax. Unfortunately, this information is not provided back to the userland level. There are
+several PHP extensions like [nikic/php-ast](https://github.com/nikic/php-ast) and
+[sgolemon/astkit](https://github.com/sgolemon/astkit/) that provide low-level bindings to the underlying AST structures.
+`Z-Engine` provides access to the AST via `Compiler::parseString(string $source, string $fileName = '')` method. This
+method will return a top-level node of tree that implements `NodeInterface`. PHP has four types of AST nodes, they are:
+declaration node (classes, methods, etc), list node (can contain any number of children nodes), simple node (contains
+up to 4 children nodes, depending of type) and special value node class that can store any value in it (typically string
+or numeric).
+
+Here are an example of parsing simple PHP code:
+
+```php
+use ZEngine\Core;
+
+$ast = Core::$compiler->parseString('echo "Hello, world!", PHP_EOL;', 'hi.php');
+echo $ast->dump();
+```
+Output will be like that:
+```
+   1: AST_STMT_LIST
+   1:   AST_STMT_LIST
+   1:     AST_ECHO
+   1:       AST_ZVAL string('Hello, world!')
+   1:     AST_ECHO
+   1:       AST_CONST
+   1:         AST_ZVAL attrs(0001) string('PHP_EOL')
+```
+
+Node provides simple API to mutate children nodes via call to the `Node->replaceChild(int $index, ?Node $node)`. You can
+create your own nodes in runtime or use a result from `Compiler::parseString(string $source, string $fileName = '')` as
+replacement for your code.
+
 Code of Conduct
 --------------
 

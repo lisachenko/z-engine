@@ -680,6 +680,12 @@ typedef struct _zend_stack {
 typedef struct _zend_vm_stack *zend_vm_stack;
 typedef struct _zend_ini_entry zend_ini_entry;
 
+typedef enum {
+    ON_TOKEN,
+    ON_FEEDBACK,
+    ON_STOP
+} zend_php_scanner_event;
+
 /* zend_execute.h */
 typedef struct _zend_vm_stack {
     zval *top;
@@ -896,16 +902,16 @@ typedef struct _zend_objects_store {
 struct _zend_compiler_globals {
     zend_stack loop_var_stack;
 
-    zend_class_entry *active_class_entry; /* Usually empty */
+    zend_class_entry *active_class_entry;
 
-    zend_string *compiled_filename; /* Usually empty */
+    zend_string *compiled_filename;
 
-    int zend_lineno; /* Usually 0 */
+    int zend_lineno;
 
-    zend_op_array *active_op_array; /* Usually null */
+    zend_op_array *active_op_array;
 
     HashTable *function_table;    /* function symbol table */
-    HashTable *class_table;        /* class table */
+    HashTable *class_table;       /* class table */
 
     HashTable filenames_table; /* List of loaded files */
 
@@ -919,44 +925,46 @@ struct _zend_compiler_globals {
 
     zend_bool ini_parser_unbuffered_errors;
 
-    zend_llist open_files; /* Usually empty */
+    zend_llist open_files;
 
     struct _zend_ini_parser_param *ini_parser_param;
 
-    uint32_t start_lineno; /* 0 */
-    zend_bool increment_lineno; /* 0 */
+    zend_bool skip_shebang;
+    zend_bool increment_lineno;
 
     zend_string *doc_comment;
     uint32_t extra_fn_flags;
 
     uint32_t compiler_options; /* set of ZEND_COMPILE_* constants */
 
-    zend_oparray_context context; /* Empty context */
-    zend_file_context file_context; /* Empty context */
+    zend_oparray_context context;
+    zend_file_context file_context;
 
     zend_arena *arena;
 
     HashTable interned_strings; /* Cache of all interned string */
 
-    const zend_encoding ** script_encoding_list;
+    const zend_encoding **script_encoding_list;
     size_t script_encoding_list_size;
     zend_bool multibyte;
     zend_bool detect_unicode;
     zend_bool encoding_declared;
 
-    zend_ast *ast; /* Usually empty */
+    zend_ast *ast;
     zend_arena *ast_arena;
 
     zend_stack delayed_oplines_stack;
-    HashTable *memoized_exprs; /* Usually empty */
+    HashTable *memoized_exprs;
     int memoize_mode;
 
     void   *map_ptr_base;
     size_t  map_ptr_size;
     size_t  map_ptr_last;
 
-    HashTable *delayed_variance_obligations; /* Usually empty */
-    HashTable *delayed_autoloads; /* Usually empty */
+    HashTable *delayed_variance_obligations;
+    HashTable *delayed_autoloads;
+
+    uint32_t rtd_key_counter;
 };
 
 #ifdef ZEND_WIN32
@@ -1091,6 +1099,112 @@ ZEND_API zend_executor_globals executor_globals;
 ZEND_API struct _zend_compiler_globals compiler_globals;
 #endif
 
+/* stdio.h */
+typedef struct {
+    int level; /* fill/empty level of buffer */
+    unsigned flags; /* File status flags */
+    char fd; /* File descriptor */
+    unsigned char hold; /* Ungetc char if no buffer */
+    int bsize; /* Buffer size */
+    unsigned char *buffer; /* Data transfer buffer */
+    unsigned char *curp; /* Current active pointer */
+    unsigned istemp; /* Temporary file indicator */
+    short token; /* Used for validity checking */
+} FILE;
+
+/* zend_stream.h */
+typedef size_t (*zend_stream_fsizer_t)(void* handle);
+typedef ssize_t (*zend_stream_reader_t)(void* handle, char *buf, size_t len);
+typedef void   (*zend_stream_closer_t)(void* handle);
+
+typedef enum {
+    ZEND_HANDLE_FILENAME,
+    ZEND_HANDLE_FP,
+    ZEND_HANDLE_STREAM
+} zend_stream_type;
+
+typedef struct _zend_stream {
+    void        *handle;
+    int         isatty;
+    zend_stream_reader_t   reader;
+    zend_stream_fsizer_t   fsizer;
+    zend_stream_closer_t   closer;
+} zend_stream;
+
+typedef struct _zend_file_handle {
+    union {
+        FILE          *fp;
+        zend_stream   stream;
+    } handle;
+    const char        *filename;
+    zend_string       *opened_path;
+    zend_stream_type  type;
+    /* free_filename is used by wincache */
+    /* TODO: Clean up filename vs opened_path mess */
+    zend_bool         free_filename;
+    char              *buf;
+    size_t            len;
+} zend_file_handle;
+
+/* zend_ptr_stack.h */
+typedef struct _zend_ptr_stack {
+    int top, max;
+    void **elements;
+    void **top_element;
+    zend_bool persistent;
+} zend_ptr_stack;
+
+/* zend_multibyte.h */
+typedef size_t (*zend_encoding_filter)(unsigned char **str, size_t *str_length, const unsigned char *buf, size_t length);
+
+/* zend_language_scanner.h */
+typedef struct _zend_lex_state {
+    unsigned int yy_leng;
+    unsigned char *yy_start;
+    unsigned char *yy_text;
+    unsigned char *yy_cursor;
+    unsigned char *yy_marker;
+    unsigned char *yy_limit;
+    int yy_state;
+    zend_stack state_stack;
+    zend_ptr_stack heredoc_label_stack;
+
+    zend_file_handle *in;
+    uint32_t lineno;
+    zend_string *filename;
+
+    /* original (unfiltered) script */
+    unsigned char *script_org;
+    size_t script_org_size;
+
+    /* filtered script */
+    unsigned char *script_filtered;
+    size_t script_filtered_size;
+
+    /* input/output filters */
+    zend_encoding_filter input_filter;
+    zend_encoding_filter output_filter;
+    const zend_encoding *script_encoding;
+
+    /* hooks */
+    void (*on_event)(zend_php_scanner_event event, int token, int line, void *context);
+    void *on_event_context;
+
+    zend_ast *ast;
+    zend_arena *ast_arena;
+} zend_lex_state;
+
+typedef struct _zend_heredoc_label {
+    char *label;
+    int length;
+    int indentation;
+    zend_bool indentation_uses_spaces;
+} zend_heredoc_label;
+
+/**
+ * Global hooks
+ */
+extern ZEND_API zend_ast_process_t zend_ast_process;
 
 /**
  * Zend Hash API
@@ -1112,3 +1226,32 @@ ZEND_API void zend_do_inheritance_ex(zend_class_entry *ce, zend_class_entry *par
 ZEND_API zend_object ZEND_FASTCALL *zend_objects_new(zend_class_entry *ce);
 ZEND_API void ZEND_FASTCALL zend_object_std_init(zend_object *object, zend_class_entry *ce);
 ZEND_API void object_properties_init(zend_object *object, zend_class_entry *class_type);
+
+/**
+ * Language scanner API
+ */
+ZEND_API void zend_save_lexical_state(zend_lex_state *lex_state);
+ZEND_API void zend_restore_lexical_state(zend_lex_state *lex_state);
+ZEND_API int zend_prepare_string_for_scanning(zval *str, char *filename);
+ZEND_API void zend_lex_tstring(zval *zv);
+
+/**
+ * Abstract Syntax Tree (AST) API
+ */
+ZEND_API int zendparse(void);
+ZEND_API void ZEND_FASTCALL zend_ast_destroy(zend_ast *ast);
+ZEND_API zend_ast * ZEND_FASTCALL zend_ast_create_list_0(zend_ast_kind kind);
+ZEND_API zend_ast * ZEND_FASTCALL zend_ast_list_add(zend_ast *list, zend_ast *op);
+ZEND_API zend_ast * ZEND_FASTCALL zend_ast_create_zval_ex(zval *zv, zend_ast_attr attr);
+ZEND_API zend_ast * ZEND_FASTCALL zend_ast_create_0(zend_ast_kind kind);
+ZEND_API zend_ast * ZEND_FASTCALL zend_ast_create_1(zend_ast_kind kind, zend_ast *child);
+ZEND_API zend_ast * ZEND_FASTCALL zend_ast_create_2(zend_ast_kind kind, zend_ast *child1, zend_ast *child2);
+ZEND_API zend_ast * ZEND_FASTCALL zend_ast_create_3(zend_ast_kind kind, zend_ast *child1, zend_ast *child2, zend_ast *child3);
+ZEND_API zend_ast * ZEND_FASTCALL zend_ast_create_4(
+    zend_ast_kind kind, zend_ast *child1, zend_ast *child2,
+    zend_ast *child3, zend_ast *child4
+);
+ZEND_API zend_ast *zend_ast_create_decl(
+    zend_ast_kind kind, uint32_t flags, uint32_t start_lineno, zend_string *doc_comment,
+    zend_string *name, zend_ast *child0, zend_ast *child1, zend_ast *child2, zend_ast *child3
+);
