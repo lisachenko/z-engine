@@ -102,11 +102,37 @@ class StringEntry implements ReferenceCountedInterface
      */
     public function release(): void
     {
-        if (!$this->isImmutable() /* Only non-interned string can be released */) {
+        if (!$this->isInterned()) {
             if ($this->decrementReferenceCount() === 0) {
                 Core::free($this->pointer);
             }
         }
+    }
+
+    /**
+     * Creates a copy of string value
+     *
+     * @see zend_string.h::zend_string_copy function
+     *
+     * @return self
+     */
+    public function copy(): self
+    {
+        if (!$this->isInterned()) {
+            $this->incrementReferenceCount();
+        }
+
+        return $this;
+    }
+
+    /**
+     * Alias to check if this string is interned (aka immutable)
+     *
+     * @return bool
+     */
+    public function isInterned(): bool
+    {
+        return $this->isImmutable();
     }
 
     /**
