@@ -15,6 +15,8 @@ namespace ZEngine;
 use FFI;
 use FFI\CData;
 use FFI\CType;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 use ZEngine\Macro\DefinitionLoader;
 use ZEngine\System\Compiler;
 use ZEngine\System\Executor;
@@ -246,6 +248,8 @@ class Core
         assert(!$isThreadSafe, 'Following properties available only for non thread-safe version');
         self::$executor = new Executor($engine->executor_globals);
         self::$compiler = new Compiler($engine->compiler_globals);
+
+        self::preloadFrameworkClasses();
     }
 
     /**
@@ -363,5 +367,28 @@ class Core
     public static function getStandardObjectHandlers(): CData
     {
         return self::$engine->std_object_handlers;
+    }
+
+    /**
+     * This method preloads all framework classes to bypass all possible hooks
+     */
+    private static function preloadFrameworkClasses(): void
+    {
+        $hasOpcache = function_exists('opcache_compile_file');
+
+        $dir = new RecursiveDirectoryIterator(__DIR__, RecursiveDirectoryIterator::KEY_AS_PATHNAME);
+
+        /** @var \SplFileInfo[] $iterator */
+        $iterator = new RecursiveIteratorIterator($dir, RecursiveIteratorIterator::SELF_FIRST);
+        foreach ($iterator as $fileInfo) {
+            if ($fileInfo->isFile()) {
+                $sourceFile = $fileInfo->getPathname();
+                if ($hasOpcache) {
+                    opcache_compile_file($sourceFile);
+                } else {
+                    include_once $sourceFile;
+                }
+            }
+        }
     }
 }
