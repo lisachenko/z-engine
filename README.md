@@ -312,6 +312,40 @@ Node provides simple API to mutate children nodes via call to the `Node->replace
 create your own nodes in runtime or use a result from `Compiler::parseString(string $source, string $fileName = '')` as
 replacement for your code.
 
+Modifying the Abstract Syntax Tree
+--------------
+When PHP 7 compiles PHP code it converts it into an abstract syntax tree (AST) before finally generating Opcodes that
+are persisted in Opcache. The `zend_ast_process` hook is called for every compiled script and allows you to modify the
+AST after it is parsed and created.
+
+To install the `zend_ast_process` hook, make a static call to the `Core::setASTProcessHandler(callable $callback)`
+method that accepts a callback which will be called during AST processing and will receive a `NodeInterface $node` as
+top-level element of parsed source code.
+
+```php
+use ZEngine\Core;
+use ZEngine\AbstractSyntaxTree\NodeInterface;
+
+Core::setASTProcessHandler(function (NodeInterface $ast) {
+    echo "Parsed AST:", PHP_EOL, $ast->dump();
+    // Let's modify Yes to No )
+    echo $ast->getChild(0)->getChild(0)->getChild(0)->getValue()->setNativeValue('No');
+});
+
+eval('echo "Yes";');
+
+// Parsed AST:
+//    1: AST_STMT_LIST
+//    1:   AST_STMT_LIST
+//    1:     AST_ECHO
+//    1:       AST_ZVAL string('Yes')
+// No
+```
+
+You can see that result of evaluation is changed from "Yes" to "No" because we have adjusted given AST in our callback.
+But be aware, that this is one of the most complicated hooks to use, because it requires perfect understanding of the
+AST possibilities. Creating an invalid AST here can cause weird behavior or crashes.
+
 Code of Conduct
 --------------
 

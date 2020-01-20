@@ -17,6 +17,7 @@ use FFI\CData;
 use FFI\CType;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use ZEngine\AbstractSyntaxTree\NodeFactory;
 use ZEngine\Macro\DefinitionLoader;
 use ZEngine\System\Compiler;
 use ZEngine\System\Executor;
@@ -367,6 +368,19 @@ class Core
     public static function getStandardObjectHandlers(): CData
     {
         return self::$engine->std_object_handlers;
+    }
+
+    /**
+     * Installs a hook for the `zend_ast_process` engine global callback
+     *
+     * @param callable $callback function(NodeInterface $node): void callback
+     */
+    public static function setASTProcessHandler(callable $callback): void
+    {
+        self::$engine->zend_ast_process = function (CData $ast) use ($callback): void {
+            $node = NodeFactory::fromCData($ast);
+            $callback($node);
+        };
     }
 
     /**
