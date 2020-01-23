@@ -395,13 +395,14 @@ class Core
         /** @var \SplFileInfo[] $iterator */
         $iterator = new RecursiveIteratorIterator($dir, RecursiveIteratorIterator::SELF_FIRST);
         foreach ($iterator as $fileInfo) {
-            if ($fileInfo->isFile()) {
-                $sourceFile = $fileInfo->getPathname();
-                if ($hasOpcache) {
-                    opcache_compile_file($sourceFile);
-                } else {
-                    include_once $sourceFile;
-                }
+            if (!$fileInfo->isFile()) {
+                continue;
+            }
+            $sourceFile = $fileInfo->getPathname();
+            if (!$hasOpcache) {
+                include_once $sourceFile;
+            } elseif (!opcache_is_script_cached($sourceFile)) {
+                opcache_compile_file($sourceFile);
             }
         }
     }
