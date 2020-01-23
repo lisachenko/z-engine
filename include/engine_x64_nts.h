@@ -1240,14 +1240,14 @@ ZEND_API void zend_lex_tstring(zval *zv);
  */
 ZEND_API int zendparse(void);
 ZEND_API void ZEND_FASTCALL zend_ast_destroy(zend_ast *ast);
-ZEND_API zend_ast * ZEND_FASTCALL zend_ast_create_list_0(zend_ast_kind kind);
-ZEND_API zend_ast * ZEND_FASTCALL zend_ast_list_add(zend_ast *list, zend_ast *op);
-ZEND_API zend_ast * ZEND_FASTCALL zend_ast_create_zval_ex(zval *zv, zend_ast_attr attr);
-ZEND_API zend_ast * ZEND_FASTCALL zend_ast_create_0(zend_ast_kind kind);
-ZEND_API zend_ast * ZEND_FASTCALL zend_ast_create_1(zend_ast_kind kind, zend_ast *child);
-ZEND_API zend_ast * ZEND_FASTCALL zend_ast_create_2(zend_ast_kind kind, zend_ast *child1, zend_ast *child2);
-ZEND_API zend_ast * ZEND_FASTCALL zend_ast_create_3(zend_ast_kind kind, zend_ast *child1, zend_ast *child2, zend_ast *child3);
-ZEND_API zend_ast * ZEND_FASTCALL zend_ast_create_4(
+ZEND_API zend_ast ZEND_FASTCALL *zend_ast_create_list_0(zend_ast_kind kind);
+ZEND_API zend_ast ZEND_FASTCALL *zend_ast_list_add(zend_ast *list, zend_ast *op);
+ZEND_API zend_ast ZEND_FASTCALL *zend_ast_create_zval_ex(zval *zv, zend_ast_attr attr);
+ZEND_API zend_ast ZEND_FASTCALL *zend_ast_create_0(zend_ast_kind kind);
+ZEND_API zend_ast ZEND_FASTCALL *zend_ast_create_1(zend_ast_kind kind, zend_ast *child);
+ZEND_API zend_ast ZEND_FASTCALL *zend_ast_create_2(zend_ast_kind kind, zend_ast *child1, zend_ast *child2);
+ZEND_API zend_ast ZEND_FASTCALL *zend_ast_create_3(zend_ast_kind kind, zend_ast *child1, zend_ast *child2, zend_ast *child3);
+ZEND_API zend_ast ZEND_FASTCALL *zend_ast_create_4(
     zend_ast_kind kind, zend_ast *child1, zend_ast *child2,
     zend_ast *child3, zend_ast *child4
 );
