@@ -6,8 +6,6 @@ Have you ever dreamed about mocking a final class or redefining final method? Or
 
 [![Build Status](https://img.shields.io/travis/com/lisachenko/z-engine/master)](https://travis-ci.org/lisachenko/z-engine)
 [![GitHub release](https://img.shields.io/github/release/lisachenko/z-engine.svg)](https://github.com/lisachenko/z-engine/releases/latest)
-[![Total Downloads](https://img.shields.io/packagist/dt/lisachenko/z-engine.svg)](https://packagist.org/packages/lisachenko/z-engine)
-[![Daily Downloads](https://img.shields.io/packagist/dd/lisachenko/z-engine.svg)](https://packagist.org/packages/lisachenko/z-engine)
 [![Minimum PHP Version](http://img.shields.io/badge/php-%3E%3D%207.4-8892BF.svg)](https://php.net/)
 [![License](https://img.shields.io/packagist/l/lisachenko/z-engine.svg)](https://packagist.org/packages/lisachenko/z-engine)
 
