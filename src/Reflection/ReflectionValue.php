@@ -118,17 +118,16 @@ class ReflectionValue implements ReferenceCountedInterface
     /**
      * ReflectionValue constructor.
      *
-     * @TODO: Stack frame is destroyed after call to the constructor, so information will be lost outside this scope
-     * @TODO: Temporary declared as private to find the way to extract original value
-     *
      * @param mixed $value Any value to be reflected
      */
-    private function __construct($value)
+    public function __construct($value)
     {
         // Trick here is to look at internal structures and steal pointer to our value from current frame
         $selfExecutionState = Core::$executor->getExecutionState();
         $valueEntry         = $selfExecutionState->getArgument(0);
-        $this->pointer      = $valueEntry->pointer;
+        $newEntry           = self::newEntry($valueEntry->getType(), $valueEntry->getRawValue()[0]);
+        $valueEntry->copy($newEntry->getRawValue());
+        $this->pointer = $newEntry->getRawValue();
     }
 
     /**

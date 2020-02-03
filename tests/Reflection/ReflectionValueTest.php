@@ -22,6 +22,17 @@ use ZEngine\Type\StringEntry;
 class ReflectionValueTest extends TestCase
 {
     /**
+     * @dataProvider valueTypeProvider
+     */
+    public function testConstructorWorks($value, int $expectedType)
+    {
+        $refValue = new ReflectionValue($value);
+        $type     = $refValue->getType() & 0xFF;
+
+        $this->assertSame($expectedType, $type);
+    }
+
+    /**
      * @dataProvider valueProvider
      */
     public function testGetNativeValue($value): void
