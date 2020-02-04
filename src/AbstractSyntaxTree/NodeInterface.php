@@ -67,10 +67,10 @@ interface NodeInterface
     /**
      * Replace one child node with another one without checks
      *
-     * @param int       $index Child node index
-     * @param Node|null $node  New node to use or null to unset child
+     * @param int           $index Child node index
+     * @param NodeInterface $node  New node to use
      */
-    public function replaceChild(int $index, ?Node $node): void;
+    public function replaceChild(int $index, NodeInterface $node): void;
 
     /**
      * Return concrete child by index (can be empty)
@@ -78,4 +78,11 @@ interface NodeInterface
      * @param int $index Index of child node
      */
     public function getChild(int $index): ?NodeInterface;
+
+    /**
+     * Removes a child node from the tree and returns the removed node.
+     *
+     * @param int $index Index of the node to remove
+     */
+    public function removeChild(int $index): NodeInterface;
 }

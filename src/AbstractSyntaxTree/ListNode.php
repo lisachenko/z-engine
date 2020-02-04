@@ -59,9 +59,9 @@ class ListNode extends Node
     /**
      * Adds one or several nodes to the list
      *
-     * @param Node ...$nodes List of nodes to add
+     * @param NodeInterface ...$nodes List of nodes to add
      */
-    public function add(Node ...$nodes): void
+    public function append(NodeInterface ...$nodes): void
     {
         // This variable can be redeclared (if list will grow during node addition)
         $selfNode = Core::cast('zend_ast *', $this->node);

@@ -173,17 +173,36 @@ class Node implements NodeInterface
     /**
      * Replace one child node with another one without checks
      *
-     * @param int       $index Child node index
-     * @param Node|null $node  New node to use or null to unset child
+     * @param int           $index Child node index
+     * @param NodeInterface $node  New node to use
      */
-    public function replaceChild(int $index, ?Node $node): void
+    public function replaceChild(int $index, NodeInterface $node): void
     {
         $totalChildren = $this->getChildrenCount();
         if ($index >= $totalChildren) {
             throw new \OutOfBoundsException('Child index is out of range, there are ' . $totalChildren . ' children.');
         }
         $castChildren = Core::cast('zend_ast **', $this->node->child);
-        $castChildren[$index] = $node ? Core::cast('zend_ast *', $node->node) : null;
+        $castChildren[$index] = Core::cast('zend_ast *', $node->node);
+    }
+
+    /**
+     * Removes a child node from the tree and returns the removed node.
+     *
+     * @param int $index Index of the node to remove
+     */
+    public function removeChild(int $index): NodeInterface
+    {
+        $totalChildren = $this->getChildrenCount();
+        if ($index >= $totalChildren) {
+            throw new \OutOfBoundsException('Child index is out of range, there are ' . $totalChildren . ' children.');
+        }
+        $castChildren = Core::cast('zend_ast **', $this->node->child);
+        $child        = NodeFactory::fromCData($castChildren[$index]);
+
+        $castChildren[$index] = null;
+
+        return $child;
     }
 
     /**
