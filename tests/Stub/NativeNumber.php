@@ -12,6 +12,9 @@ declare(strict_types=1);
 
 namespace ZEngine\Stub;
 
+use ZEngine\ClassExtension\Hook\CastObjectHook;
+use ZEngine\ClassExtension\Hook\CompareValuesHook;
+use ZEngine\ClassExtension\Hook\DoOperationHook;
 use ZEngine\ClassExtension\ObjectCastInterface;
 use ZEngine\ClassExtension\ObjectCompareValuesInterface;
 use ZEngine\ClassExtension\ObjectCreateInterface;
@@ -42,26 +45,31 @@ class NativeNumber implements
      * @param NativeNumber $instance
      * @inheritDoc
      */
-    public static function __cast(object $instance, int $typeTo)
+    public static function __cast(CastObjectHook $hook)
     {
+        $typeTo = $hook->getCastType();
         switch ($typeTo) {
             case ReflectionValue::_IS_NUMBER:
             case ReflectionValue::IS_LONG:
-                return (int) $instance->value;
+                return (int) $hook->getObject()->value;
             case ReflectionValue::IS_DOUBLE:
-                return (float) $instance->value;
+                return (float) $hook->getObject()->value;
         }
 
         throw new \UnexpectedValueException('Can not cast number to the ' . ReflectionValue::name($typeTo));
     }
 
     /**
-     * @inheritDoc
+     * Performs comparison of given object with another value
+     *
+     * @param CompareValuesHook $hook Instance of current hook
+     *
+     * @return int Result of comparison: 1 is greater, -1 is less, 0 is equal
      */
-    public static function __compare($one, $another): int
+    public static function __compare(CompareValuesHook $hook): int
     {
-        $left  = self::getNumericValue($one);
-        $right = self::getNumericValue($another);
+        $left  = self::getNumericValue($hook->getFirst());
+        $right = self::getNumericValue($hook->getSecond());
 
         return $left <=> $right;
     }
@@ -69,10 +77,11 @@ class NativeNumber implements
     /**
      * @inheritDoc
      */
-    public static function __doOperation(int $opCode, $left, $right)
+    public static function __doOperation(DoOperationHook $hook)
     {
-        $left  = self::getNumericValue($left);
-        $right = self::getNumericValue($right);
+        $opCode = $hook->getOpcode();
+        $left   = self::getNumericValue($hook->getFirst());
+        $right  = self::getNumericValue($hook->getSecond());
         switch ($opCode) {
             case OpCode::ADD:
                 $result = $left + $right;
@@ -109,5 +118,5 @@ class NativeNumber implements
         }
 
         return $left;
-}
+    }
 }

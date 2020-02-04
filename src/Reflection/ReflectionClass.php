@@ -15,10 +15,23 @@ namespace ZEngine\Reflection;
 use Closure;
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
+use ZEngine\ClassExtension\Hook\CastObjectHook;
+use ZEngine\ClassExtension\Hook\CompareValuesHook;
+use ZEngine\ClassExtension\Hook\CreateObjectHook;
+use ZEngine\ClassExtension\Hook\DoOperationHook;
+use ZEngine\ClassExtension\Hook\GetPropertiesForHook;
+use ZEngine\ClassExtension\Hook\GetPropertyPointerHook;
+use ZEngine\ClassExtension\Hook\InterfaceGetsImplementedHook;
+use ZEngine\ClassExtension\Hook\ReadPropertyHook;
+use ZEngine\ClassExtension\Hook\WritePropertyHook;
 use ZEngine\ClassExtension\ObjectCastInterface;
 use ZEngine\ClassExtension\ObjectCompareValuesInterface;
 use ZEngine\ClassExtension\ObjectCreateInterface;
 use ZEngine\ClassExtension\ObjectDoOperationInterface;
+use ZEngine\ClassExtension\ObjectGetPropertiesForInterface;
+use ZEngine\ClassExtension\ObjectGetPropertyPointerInterface;
+use ZEngine\ClassExtension\ObjectReadPropertyInterface;
+use ZEngine\ClassExtension\ObjectWritePropertyInterface;
 use ZEngine\Core;
 use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\HashTable;
@@ -636,6 +649,21 @@ class ReflectionClass extends NativeReflectionClass
             $handler = parent::getMethod('__compare')->getClosure();
             $this->setCompareValuesHandler($handler);
         }
+
+        if ($this->implementsInterface(ObjectReadPropertyInterface::class)) {
+            $handler = parent::getMethod('__fieldRead')->getClosure();
+            $this->setReadPropertyHandler($handler);
+        }
+
+        if ($this->implementsInterface(ObjectWritePropertyInterface::class)) {
+            $handler = parent::getMethod('__fieldWrite')->getClosure();
+            $this->setWritePropertyHandler($handler);
+        }
+
+        if ($this->implementsInterface(ObjectGetPropertyPointerInterface::class)) {
+            $handler = parent::getMethod('__fieldPointer')->getClosure();
+            $this->setGetPropertyPointerHandler($handler);
+        }
     }
 
     public function __debugInfo()
@@ -656,13 +684,8 @@ class ReflectionClass extends NativeReflectionClass
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
-        $handlers->cast_object = function (CData $objectZval, CData $returnZval, int $castType) use ($handler) {
-            ReflectionValue::fromValueEntry($objectZval)->getNativeValue($objectInstance);
-            $result = $handler($objectInstance, $castType);
-            ReflectionValue::fromValueEntry($returnZval)->setNativeValue($result);
-
-            return Core::SUCCESS;
-        };
+        $hook = new CastObjectHook($handler, $handlers);
+        $hook->install();
     }
 
     /**
@@ -676,14 +699,68 @@ class ReflectionClass extends NativeReflectionClass
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
-        $handlers->compare = function (CData $returnZval, CData $leftZval, CData $rightZval) use ($handler) {
-            ReflectionValue::fromValueEntry($leftZval)->getNativeValue($leftValue);
-            ReflectionValue::fromValueEntry($rightZval)->getNativeValue($rightValue);
-            $result = $handler($leftValue, $rightValue);
-            ReflectionValue::fromValueEntry($returnZval)->setNativeValue($result);
+        $hook = new CompareValuesHook($handler, $handlers);
+        $hook->install();
+    }
 
-            return Core::SUCCESS;
-        };
+    /**
+     * Installs the "read_property" handler for the current class
+     *
+     * @param Closure $handler Callback function (object $instance, string $fieldName, int $type): mixed;
+     *
+     * @see ObjectReadPropertyInterface
+     */
+    public function setReadPropertyHandler(Closure $handler): void
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new ReadPropertyHook($handler, $handlers);
+        $hook->install();
+    }
+
+    /**
+     * Installs the "write_property" handler for the current class
+     *
+     * @param Closure $handler Callback function (object $instance, string $fieldName, $value): mixed;
+     *
+     * @see ObjectWritePropertyInterface
+     */
+    public function setWritePropertyHandler(Closure $handler): void
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new WritePropertyHook($handler, $handlers);
+        $hook->install();
+    }
+
+    /**
+     * Installs the "get_property_ptr_ptr" handler for the current class
+     *
+     * @param Closure $handler Callback function (object $instance, string $fieldName, int $type): mixed;
+     *
+     * @see ObjectGetPropertyPointerInterface
+     */
+    public function setGetPropertyPointerHandler(Closure $handler): void
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new GetPropertyPointerHook($handler, $handlers);
+        $hook->install();
+    }
+
+    /**
+     * Installs the "get_properties_for" handler for the current class
+     *
+     * @param Closure $handler Callback function (object $instance, int $reason): array;
+     *
+     * @see ObjectGetPropertiesForInterface
+     */
+    public function setGetPropertiesForHandler(Closure $handler): void
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new GetPropertiesForHook($handler, $handlers);
+        $hook->install();
     }
 
     /**
@@ -697,15 +774,8 @@ class ReflectionClass extends NativeReflectionClass
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
-        $handlers->do_operation = function (int $opcode, $resultZval, $leftZval, $rightZval) use ($handler) {
-            ReflectionValue::fromValueEntry($leftZval)->getNativeValue($leftValue);
-            ReflectionValue::fromValueEntry($rightZval)->getNativeValue($rightValue);
-            $result = $handler($opcode, $leftValue, $rightValue);
-
-            ReflectionValue::fromValueEntry($resultZval)->setNativeValue($result);
-
-            return Core::SUCCESS;
-        };
+        $hook = new DoOperationHook($handler, $handlers);
+        $hook->install();
     }
 
     /**
@@ -717,25 +787,14 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setCreateObjectHandler(Closure $handler): void
     {
-        $currentHandler = $this->pointer->create_object;
-        $initializer    = static function (CData $classType) use ($currentHandler) {
-            if ($currentHandler === null) {
-                $object = self::newInstanceRaw($classType);
-            } else {
-                $object = $currentHandler($classType);
-            }
-
-            return $object;
-        };
-
         // User handlers are only allowed with std_object_handler (when create_object handler is empty)
-        if ($currentHandler === null) {
-            self::allocateClassObjectHandlers($this->getName());
+        if ($this->pointer->create_object !== null) {
+            throw new \LogicException("Create object handler is available for user-defined classes only");
         }
+        self::allocateClassObjectHandlers($this->getName());
 
-        $this->pointer->create_object = static function (CData $classType) use ($handler, $initializer) {
-            return $handler($classType, $initializer);
-        };
+        $hook = new CreateObjectHook($handler, $this->pointer);
+        $hook->install();
     }
 
     /**
@@ -749,18 +808,32 @@ class ReflectionClass extends NativeReflectionClass
             throw new \LogicException("Interface implemented handler can be installed only for interfaces");
         }
 
-        $this->pointer->interface_gets_implemented = function (CData $interfaceType, CData $classType) use ($handler) {
-            $refClass = ReflectionClass::fromCData($classType);
-            $handler($refClass);
+        $hook = new InterfaceGetsImplementedHook($handler, $this->pointer);
+        $hook->install();
+    }
 
-            return Core::SUCCESS;
-        };
+    /**
+     * Creates a new instance of zend_object.
+     *
+     * This method is useful within create_object handler
+     *
+     * @param CData $classType zend_class_entry type to create
+     *
+     * @return CData Instance of zend_object *
+     * @see zend_objects.c:zend_objects_new
+     */
+    public static function newInstanceRaw(CData $classType): CData
+    {
+        $objectSize = Core::sizeof(Core::type('zend_object'));
+        $totalSize  = $objectSize + self::getObjectPropertiesSize($classType);
+        $memory     = Core::new("char[{$totalSize}]", false);
+        $object     = Core::cast('zend_object *', $memory);
 
-        // At the end of request we should clear this callback to prevent segmentation fault on subsequent requests
-        // TODO: Implement better global clean-up procedure to deal with modified entries
-        register_shutdown_function(function () {
-            $this->pointer->interface_gets_implemented = null;
-        });
+        Core::call('zend_object_std_init', $object, $classType);
+        $object->handlers = self::getObjectHandlers($classType);
+        Core::call('object_properties_init', $object, $classType);
+
+        return $object;
     }
 
     /**
@@ -801,30 +874,6 @@ class ReflectionClass extends NativeReflectionClass
         $refMethod = ReflectionMethod::fromCData($rawFunction);
 
         return $refMethod;
-    }
-
-    /**
-     * Creates a new instance of zend_object.
-     *
-     * This method is useful within create_object handler
-     *
-     * @param CData $classType zend_class_entry type to create
-     *
-     * @return CData Instance of zend_object *
-     * @see zend_objects.c:zend_objects_new
-     */
-    private static function newInstanceRaw(CData $classType): CData
-    {
-        $objectSize = Core::sizeof(Core::type('zend_object'));
-        $totalSize  = $objectSize + self::getObjectPropertiesSize($classType);
-        $memory     = Core::new("char[{$totalSize}]", false);
-        $object     = Core::cast('zend_object *', $memory);
-
-        Core::call('zend_object_std_init', $object, $classType);
-        $object->handlers = self::getObjectHandlers($classType);
-        Core::call('object_properties_init', $object, $classType);
-
-        return $object;
     }
 
     /**

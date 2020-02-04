@@ -12,6 +12,8 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension;
 
+use ZEngine\ClassExtension\Hook\CastObjectHook;
+
 /**
  * Interface ObjectCastInterface allows to cast given object to scalar values, like integer, floats, etc
  */
@@ -20,10 +22,9 @@ interface ObjectCastInterface
     /**
      * Performs casting of given object to another value
      *
-     * @param object $instance Instance of object that should be casted
-     * @param int $typeTo Type of casting, @see ReflectionValue::IS_* constants
+     * @param CastObjectHook $hook Instance of current hook
      *
      * @return mixed Casted value
      */
-    public static function __cast(object $instance, int $typeTo);
+    public static function __cast(CastObjectHook $hook);
 }

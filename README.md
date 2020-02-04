@@ -195,6 +195,7 @@ type as it is implemented in a different way.
 
 ```php
 <?php
+use ZEngine\ClassExtension\Hook\CastObjectHook;
 
 /**
  * Interface ObjectCastInterface allows to cast given object to scalar values, like integer, floats, etc
@@ -204,20 +205,22 @@ interface ObjectCastInterface
     /**
      * Performs casting of given object to another value
      *
-     * @param object $instance Instance of object that should be casted
-     * @param int $typeTo Type of casting, @see ReflectionValue::IS_* constants
+     * @param CastObjectHook $hook Instance of current hook
      *
      * @return mixed Casted value
      */
-    public static function __cast(object $instance, int $typeTo);
+    public static function __cast(CastObjectHook $hook);
 }
 ```
+To get the type of casting, you should check `$hook->getCastType()` method which will return the integer value of type.
+Possible values are declared as public constants in the `ReflectionValue` class. For example `ReflectionValue::IS_LONG`.
 
 Next `ObjectCompareValuesInterface` interface is used to control the comparison logic. For example, you can compare
 two objects or even compare object with scalar values: `if ($object > 10 || $object < $anotherObject)`
 
 ```php
 <?php
+use ZEngine\ClassExtension\Hook\CompareValuesHook;
 
 /**
  * Interface ObjectCompareValuesInterface allows to perform comparison of objects
@@ -227,15 +230,15 @@ interface ObjectCompareValuesInterface
     /**
      * Performs comparison of given object with another value
      *
-     * @param mixed $one     First side of operation
-     * @param mixed $another Another side of operation
+     * @param CompareValuesHook $hook Instance of current hook
      *
      * @return int Result of comparison: 1 is greater, -1 is less, 0 is equal
      */
-    public static function __compare($one, $another): int;
+    public static function __compare(CompareValuesHook $hook): int;
 }
 ```
-Handler should check arguments (one of them should be an instance of your class) and return integer result -1..1. Where
+Handler should check arguments which can be received by calling `$hook->getFirst()` and `$hook->getSecond()` methods
+(one of them should return an instance of your class) and return integer result -1..1. Where
 1 is greater, -1 is less and 0 is equal.
 
 The interface `ObjectDoOperationInterface` is the most powerful one because it gives you control over math operators
@@ -243,6 +246,7 @@ applied to your object (such as ADD, SUB, MUL, DIV, POW, etc).
 
 ```php
 <?php
+use ZEngine\ClassExtension\Hook\DoOperationHook;
 
 /**
  * Interface ObjectDoOperationInterface allows to perform math operations (aka operator overloading) on object
@@ -250,20 +254,18 @@ applied to your object (such as ADD, SUB, MUL, DIV, POW, etc).
 interface ObjectDoOperationInterface
 {
     /**
-     * Performs casting of given object to another value
+     * Performs an operation on given object
      *
-     * @param int $opCode Operation code
-     * @param mixed $left left side of operation
-     * @param mixed $right Right side of operation
+     * @param DoOperationHook $hook Instance of current hook
      *
      * @return mixed Result of operation value
      */
-    public static function __doOperation(int $opCode, $left, $right);
+    public static function __doOperation(DoOperationHook $hook);
 }
 ```
-This handler receives an opcode (see `OpCode::*` constants) and two arguments (one of them is an instance of class) and
-returns a value for that operation. In this handler you can return a new instance of your object to have a chain of
-immutable instances of objects.
+This handler receives an opcode (see `OpCode::*` constants) via `$hook->getOpcode()` and two arguments (one of them is
+an instance of class) via `$hook->getFirst()` and `$hook->getSecond()` and returns a value for that operation.
+In this handler you can return a new instance of your object to have a chain of immutable instances of objects.
 
 Important reminder: you **MUST** install the `create_object` handler first in order to install hooks in runtime. Also
 you can not install the `create_object` handler for the object if it is internal one.
@@ -316,15 +318,16 @@ When PHP 7 compiles PHP code it converts it into an abstract syntax tree (AST) b
 are persisted in Opcache. The `zend_ast_process` hook is called for every compiled script and allows you to modify the
 AST after it is parsed and created.
 
-To install the `zend_ast_process` hook, make a static call to the `Core::setASTProcessHandler(callable $callback)`
-method that accepts a callback which will be called during AST processing and will receive a `NodeInterface $node` as
-top-level element of parsed source code.
+To install the `zend_ast_process` hook, make a static call to the `Core::setASTProcessHandler(Closure $callback)`
+method that accepts a callback which will be called during AST processing and will receive a `AstProcessHook $hook` as
+an argument. You can access top-level node item via `$hook->getAST(): NodeInterface` method.
 
 ```php
 use ZEngine\Core;
-use ZEngine\AbstractSyntaxTree\NodeInterface;
+use ZEngine\System\Hook\AstProcessHook;
 
-Core::setASTProcessHandler(function (NodeInterface $ast) {
+Core::setASTProcessHandler(function (AstProcessHook $hook) {
+    $ast = $hook->getAST();
     echo "Parsed AST:", PHP_EOL, $ast->dump();
     // Let's modify Yes to No )
     echo $ast->getChild(0)->getChild(0)->getChild(0)->getValue()->setNativeValue('No');

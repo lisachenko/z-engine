@@ -16,6 +16,8 @@ class TestClass
 {
     public const SOME_CONST = 123;
 
+    public int $property = 42;
+
     /**
      * This method will be removed during the test, do not call it or use it
      */

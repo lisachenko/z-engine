@@ -12,15 +12,16 @@ declare(strict_types=1);
 
 namespace ZEngine;
 
+use Closure;
 use FFI;
 use FFI\CData;
 use FFI\CType;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
-use ZEngine\AbstractSyntaxTree\NodeFactory;
 use ZEngine\Macro\DefinitionLoader;
 use ZEngine\System\Compiler;
 use ZEngine\System\Executor;
+use ZEngine\System\Hook\AstProcessHook;
 
 /**
  * Class Core
@@ -373,14 +374,12 @@ class Core
     /**
      * Installs a hook for the `zend_ast_process` engine global callback
      *
-     * @param callable $callback function(NodeInterface $node): void callback
+     * @param Closure $handler function(NodeInterface $node): void callback
      */
-    public static function setASTProcessHandler(callable $callback): void
+    public static function setASTProcessHandler(Closure $handler): void
     {
-        self::$engine->zend_ast_process = function (CData $ast) use ($callback): void {
-            $node = NodeFactory::fromCData($ast);
-            $callback($node);
-        };
+        $hook = new AstProcessHook($handler, self::$engine);
+        $hook->install();
     }
 
     /**
@@ -388,8 +387,6 @@ class Core
      */
     private static function preloadFrameworkClasses(): void
     {
-        $hasOpcache = function_exists('opcache_compile_file');
-
         $dir = new RecursiveDirectoryIterator(__DIR__, RecursiveDirectoryIterator::KEY_AS_PATHNAME);
 
         /** @var \SplFileInfo[] $iterator */
@@ -398,12 +395,8 @@ class Core
             if (!$fileInfo->isFile()) {
                 continue;
             }
-            $sourceFile = $fileInfo->getPathname();
-            if (!$hasOpcache) {
-                include_once $sourceFile;
-            } elseif (!opcache_is_script_cached($sourceFile)) {
-                opcache_compile_file($sourceFile);
-            }
+
+            include_once $fileInfo->getPathname();
         }
     }
 }
