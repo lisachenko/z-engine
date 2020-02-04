@@ -15,7 +15,16 @@ namespace ZEngine\Reflection;
 
 use Closure;
 use PHPUnit\Framework\TestCase;
+use ZEngine\ClassExtension\Hook\CastObjectHook;
+use ZEngine\ClassExtension\Hook\CompareValuesHook;
+use ZEngine\ClassExtension\Hook\CreateObjectHook;
+use ZEngine\ClassExtension\Hook\DoOperationHook;
+use ZEngine\ClassExtension\Hook\GetPropertiesForHook;
+use ZEngine\ClassExtension\Hook\InterfaceGetsImplementedHook;
+use ZEngine\ClassExtension\Hook\ReadPropertyHook;
+use ZEngine\ClassExtension\Hook\WritePropertyHook;
 use ZEngine\ClassExtension\ObjectCreateTrait;
+use ZEngine\Core;
 use ZEngine\Stub\NativeNumber;
 use ZEngine\Stub\TestClass;
 use ZEngine\Stub\TestInterface;
@@ -202,9 +211,9 @@ class ReflectionClassTest extends TestCase
     public function testInstallUserCreateObjectHandler(): void
     {
         $log = '';
-        $this->refClass->setCreateObjectHandler(function ($classType, $initializer) use (&$log) {
+        $this->refClass->setCreateObjectHandler(function (CreateObjectHook $hook) use (&$log) {
             $log    .= 'Before initialization.' . PHP_EOL;
-            $object = $initializer($classType);
+            $object = $hook->proceed();
             $log    .= 'After initialization.';
 
             return $object;
@@ -223,8 +232,10 @@ class ReflectionClassTest extends TestCase
     {
         $log = '';
         $refInterface = new ReflectionClass(TestInterface::class);
-        $refInterface->setInterfaceGetsImplementedHandler(function (ReflectionClass $classType) use (&$log) {
-            $log = 'Class ' . $classType->getName() . ' implements interface';
+        $refInterface->setInterfaceGetsImplementedHandler(function (InterfaceGetsImplementedHook $hook) use (&$log) {
+            $log = 'Class ' . $hook->getClass()->getName() . ' implements interface';
+
+            return Core::SUCCESS;
         });
 
         // Check that log line is empty now
@@ -247,8 +258,9 @@ class ReflectionClassTest extends TestCase
     {
         $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
         $this->refClass->setCreateObjectHandler($handler);
-        $this->refClass->setCastObjectHandler(function (object $object, int $castTo) {
-            switch ($castTo) {
+        $this->refClass->setCastObjectHandler(function (CastObjectHook $hook) {
+            $castType = $hook->getCastType();
+            switch ($castType) {
                 case ReflectionValue::IS_LONG:
                 case ReflectionValue::_IS_NUMBER:
                     return 1;
@@ -259,7 +271,7 @@ class ReflectionClassTest extends TestCase
                 case ReflectionValue::_IS_BOOL:
                     return false;
             }
-            throw new \UnexpectedValueException("Unknown type " . ReflectionValue::name($castTo));
+            throw new \UnexpectedValueException("Unknown type " . ReflectionValue::name($castType));
         });
 
         $testClass = new TestClass();
@@ -277,11 +289,68 @@ class ReflectionClassTest extends TestCase
     /**
      * @runInSeparateProcess
      */
+    public function testInstallReadPropertyHandler(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+        $this->refClass->setReadPropertyHandler(function (ReadPropertyHook $hook) {
+            // Return the name of field as value
+            return $hook->getMemberName();
+        });
+        $instance = new TestClass();
+        $value    = $instance->property;
+        $this->assertNotSame(42, $value);
+        $this->assertSame('property', $value);
+    }
+
+    /**
+     * @runInSeparateProcess
+     */
+    public function testInstallWritePropertyHandler(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+        $this->refClass->setWritePropertyHandler(function (WritePropertyHook $hook) {
+            // We can change value, for example by multiply it
+            return $hook->getValue() * 2;
+        });
+        $instance = new TestClass();
+        $instance->property = 10;
+        $this->assertNotSame(42, $instance->property);
+        $this->assertSame(20, $instance->property);
+    }
+
+    /**
+     * @runInSeparateProcess
+     */
+    public function testInstallGetPropertiesForHandler(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+        $this->refClass->setGetPropertiesForHandler(function (GetPropertiesForHook $hook) {
+            return ['a' => 1, 'b' => true, 'c' => 42.0];
+        });
+        $instance = new TestClass();
+        $instance->property = 10;
+        $castValue = (array) $instance;
+
+        // We expect that our handler is called, thus no existing public fields will be returned
+        $this->assertArrayNotHasKey('property', $castValue);
+
+        // Instead we can control how to cast object to array
+        $this->assertSame(['a' => 1, 'b' => true, 'c' => 42.0], $castValue);
+    }
+
+    /**
+     * @runInSeparateProcess
+     */
     public function testInstallCompareValuesHandler(): void
     {
         $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
         $this->refClass->setCreateObjectHandler($handler);
-        $this->refClass->setCompareValuesHandler(function ($left, $right) {
+        $this->refClass->setCompareValuesHandler(function (CompareValuesHook $hook) {
+            $left  = $hook->getFirst();
+            $right = $hook->getSecond();
             if (is_object($left)) {
                 $left = spl_object_id($left);
             }
@@ -316,14 +385,18 @@ class ReflectionClassTest extends TestCase
     {
         $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
         $this->refClass->setCreateObjectHandler($handler);
-        $this->refClass->setDoOperationHandler(function (int $opcode, $left, $right) {
+        $this->refClass->setDoOperationHandler(function (DoOperationHook $hook) {
+            $opCode = $hook->getOpcode();
+            $left   = $hook->getFirst();
+            $right  = $hook->getSecond();
+
             if (is_object($left)) {
                 $left = spl_object_id($left);
             }
             if (is_object($right)) {
                 $right = spl_object_id($right);
             }
-            switch ($opcode) {
+            switch ($opCode) {
                 case OpCode::ADD:
                     return $left + $right;
                 case OpCode::SUB:
@@ -333,7 +406,7 @@ class ReflectionClassTest extends TestCase
                 case OpCode::DIV:
                     return $left / $right;
             }
-            throw new \UnexpectedValueException("Opcode " . OpCode::name($opcode) . " wasn't held.");
+            throw new \UnexpectedValueException("Opcode " . OpCode::name($opCode) . " wasn't held.");
         });
 
         $first    = new TestClass();

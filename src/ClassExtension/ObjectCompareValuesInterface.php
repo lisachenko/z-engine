@@ -12,6 +12,8 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension;
 
+use ZEngine\ClassExtension\Hook\CompareValuesHook;
+
 /**
  * Interface ObjectCompareValuesInterface allows to perform comparison of objects
  */
@@ -20,10 +22,9 @@ interface ObjectCompareValuesInterface
     /**
      * Performs comparison of given object with another value
      *
-     * @param mixed $one     First side of operation
-     * @param mixed $another Another side of operation
+     * @param CompareValuesHook $hook Instance of current hook
      *
      * @return int Result of comparison: 1 is greater, -1 is less, 0 is equal
      */
-    public static function __compare($one, $another): int;
+    public static function __compare(CompareValuesHook $hook): int;
 }

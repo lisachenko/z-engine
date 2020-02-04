@@ -12,8 +12,8 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension;
 
-use Closure;
 use FFI\CData;
+use ZEngine\ClassExtension\Hook\CreateObjectHook;
 
 /**
  * Trait ObjectCreateTrait contains default hook implementation for object initialization
@@ -23,13 +23,12 @@ trait ObjectCreateTrait
     /**
      * Performs low-level initialization of object during new instances creation
      *
-     * @param CData   $classType Class type to initialize (zend_class_entry)
-     * @param Closure $initializer Original initializer that accepts a zend_class_entry and creates a new zend_object
+     * @param CreateObjectHook $hook Hook instance that provides proceed() and setClassType() method
      *
      * @return CData Pointer to the zend_object instance
      */
-    public static function __init(CData $classType, Closure $initializer): CData
+    public static function __init(CreateObjectHook $hook): CData
     {
-        return $initializer($classType);
+        return $hook->proceed();
     }
 }

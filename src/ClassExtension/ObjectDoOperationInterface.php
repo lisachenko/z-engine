@@ -12,19 +12,19 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension;
 
+use ZEngine\ClassExtension\Hook\DoOperationHook;
+
 /**
  * Interface ObjectDoOperationInterface allows to perform math operations (aka operator overloading) on object
  */
 interface ObjectDoOperationInterface
 {
     /**
-     * Performs casting of given object to another value
+     * Performs an operation on given object
      *
-     * @param int $opCode Operation code
-     * @param mixed $left left side of operation
-     * @param mixed $right Right side of operation
+     * @param DoOperationHook $hook Instance of current hook
      *
      * @return mixed Result of operation value
      */
-    public static function __doOperation(int $opCode, $left, $right);
+    public static function __doOperation(DoOperationHook $hook);
 }

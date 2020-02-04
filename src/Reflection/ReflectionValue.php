@@ -271,6 +271,18 @@ class ReflectionValue implements ReferenceCountedInterface
     }
 
     /**
+     * Type-friendly getter to return zend_array directly
+     */
+    public function getRawArray(): CData
+    {
+        if ($this->pointer->u1->v->type !== self::IS_ARRAY) {
+            throw new \UnexpectedValueException('Array entry is available only for the type IS_ARRAY');
+        }
+
+        return $this->pointer->value->arr;
+    }
+
+    /**
      * Type-friendly getter to return zend_object directly
      */
     public function getRawObject(): CData
