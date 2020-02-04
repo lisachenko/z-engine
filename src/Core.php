@@ -388,8 +388,6 @@ class Core
      */
     private static function preloadFrameworkClasses(): void
     {
-        $hasOpcache = function_exists('opcache_compile_file');
-
         $dir = new RecursiveDirectoryIterator(__DIR__, RecursiveDirectoryIterator::KEY_AS_PATHNAME);
 
         /** @var \SplFileInfo[] $iterator */
@@ -398,12 +396,8 @@ class Core
             if (!$fileInfo->isFile()) {
                 continue;
             }
-            $sourceFile = $fileInfo->getPathname();
-            if (!$hasOpcache) {
-                include_once $sourceFile;
-            } elseif (!opcache_is_script_cached($sourceFile)) {
-                opcache_compile_file($sourceFile);
-            }
+
+            include_once $fileInfo->getPathname();
         }
     }
 }
