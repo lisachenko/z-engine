@@ -63,4 +63,17 @@ class Executor
 
         return $executionState;
     }
+
+    /**
+     * Set a new fake scope and returns previous value (to restore it later)
+     *
+     * @return CData|null
+     */
+    public function setFakeScope(?CData $newScope): ?CData
+    {
+        $oldScope = $this->pointer->fake_scope;
+        $this->pointer->fake_scope = $newScope;
+
+        return $oldScope;
+    }
 }

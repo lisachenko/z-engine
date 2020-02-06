@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
+use ZEngine\Core;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
 
@@ -78,7 +79,15 @@ class GetPropertiesForHook extends AbstractHook
             throw new \LogicException('Original handler is not available');
         }
 
-        $result = ($this->originalHandler)($this->object, $this->purpose);
+        // As we will play with EG(fake_scope), we won't be able to access private or protected members, need to unpack
+        $originalHandler = $this->originalHandler;
+
+        $object  = $this->object;
+        $purpose = $this->purpose;
+
+        $previousScope = Core::$executor->setFakeScope($object->value->obj->ce);
+        $result        = ($originalHandler)($object, $purpose);
+        Core::$executor->setFakeScope($previousScope);
 
         return $result;
     }
