@@ -14,59 +14,53 @@ namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
 
 /**
- * Receiving hook for object field write operation
+ * Receiving hook for object field check operation
  */
-class WritePropertyHook extends AbstractPropertyHook
+class HasPropertyHook extends AbstractPropertyHook
 {
-    protected const HOOK_FIELD = 'write_property';
+    protected const HOOK_FIELD = 'has_property';
 
     /**
-     * Value to write
+     * Check type:
+     *  - 0 (has) whether property exists and is not NULL
+     *  - 1 (set) whether property exists and is true
+     *  - 2 (exists) whether property exists
      */
-    protected CData $value;
+    protected int $type;
 
     /**
-     * typedef zval *(*zend_object_write_property_t)(zval *object, zval *member, zval *value, void **cache_slot);
+     * typedef int (*zend_object_has_property_t)(zval *object, zval *member, int has_set_exists, void **cache_slot);
      *
      * @inheritDoc
      */
-    public function handle(...$rawArguments): CData
+    public function handle(...$rawArguments): int
     {
-        [$this->object, $this->member, $this->value, $this->cacheSlot] = $rawArguments;
+        [$this->object, $this->member, $this->type, $this->cacheSlot] = $rawArguments;
 
         $result = ($this->userHandler)($this);
-        ReflectionValue::fromValueEntry($this->value)->setNativeValue($result);
 
-        return $this->proceed();
+        return $result;
     }
 
     /**
-     * Returns value to write
+     * Returns the check type:
+     *  - 0 (has) whether property exists and is not NULL
+     *  - 1 (set) whether property exists and is true
+     *  - 2 (exists) whether property exists
      */
-    public function getValue()
+    public function getType(): int
     {
-        ReflectionValue::fromValueEntry($this->value)->getNativeValue($value);
-
-        return $value;
-    }
-
-    /**
-     * Returns value to write
-     *
-     * @param mixed $newValue Value to set
-     */
-    public function setValue($newValue)
-    {
-        ReflectionValue::fromValueEntry($this->value)->setNativeValue($newValue);
+        return $this->type;
     }
 
     /**
      * Proceeds with default handler
      */
-    protected function proceed()
+    public function proceed(): int
     {
         if (!$this->hasOriginalHandler()) {
             throw new \LogicException('Original handler is not available');
@@ -77,11 +71,11 @@ class WritePropertyHook extends AbstractPropertyHook
 
         $object    = $this->object;
         $member    = $this->member;
-        $value     = $this->value;
+        $type      = $this->type;
         $cacheSlot = $this->cacheSlot;
 
         $previousScope = Core::$executor->setFakeScope($object->value->obj->ce);
-        $result        = ($originalHandler)($object, $member, $value, $cacheSlot);
+        $result        = ($originalHandler)($object, $member, $type, $cacheSlot);
         Core::$executor->setFakeScope($previousScope);
 
         return $result;

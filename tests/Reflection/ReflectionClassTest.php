@@ -20,8 +20,10 @@ use ZEngine\ClassExtension\Hook\CompareValuesHook;
 use ZEngine\ClassExtension\Hook\CreateObjectHook;
 use ZEngine\ClassExtension\Hook\DoOperationHook;
 use ZEngine\ClassExtension\Hook\GetPropertiesForHook;
+use ZEngine\ClassExtension\Hook\HasPropertyHook;
 use ZEngine\ClassExtension\Hook\InterfaceGetsImplementedHook;
 use ZEngine\ClassExtension\Hook\ReadPropertyHook;
+use ZEngine\ClassExtension\Hook\UnsetPropertyHook;
 use ZEngine\ClassExtension\Hook\WritePropertyHook;
 use ZEngine\ClassExtension\ObjectCreateTrait;
 use ZEngine\Core;
@@ -325,6 +327,47 @@ class ReflectionClassTest extends TestCase
 
         // This check address https://github.com/lisachenko/z-engine/issues/32
         $instance->setSecret(200);
+    }
+
+    /**
+     * @runInSeparateProcess
+     */
+    public function testInstallUnsetPropertyHandler(): void
+    {
+        $logEntry = '';
+        $handler  = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+        $this->refClass->setUnsetPropertyHandler(function (UnsetPropertyHook $hook) use (&$logEntry) {
+            // do nothing, so property will exist
+            $logEntry = $hook->getMemberName();
+        });
+        $instance = new TestClass();
+        unset($instance->property);
+        // Property should remain
+        $this->assertObjectHasAttribute('property', $instance);
+        // Hook should be called and we will receive the property name
+        $this->assertSame('property', $logEntry);
+    }
+
+    /**
+     * @runInSeparateProcess
+     */
+    public function testInstallHasPropertyHandler(): void
+    {
+        $logEntry = '';
+        $handler  = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+        $this->refClass->setHasPropertyHandler(function (HasPropertyHook $hook) use (&$logEntry) {
+            $logEntry = $hook->getMemberName();
+            // Let's inverse presence of field :)
+            return (int)(!$hook->proceed());
+        });
+
+        $instance = new TestClass();
+        $this->assertFalse(isset($instance->property));
+        $this->assertSame('property', $logEntry);
+        $this->assertTrue(isset($instance->unknown));
+        $this->assertSame('unknown', $logEntry);
     }
 
     /**

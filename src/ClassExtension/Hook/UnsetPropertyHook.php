@@ -14,41 +14,26 @@ namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
 
 /**
- * Receiving hook for indirect property access (by reference or via $this->field++)
+ * Receiving hook for object field unset operation
  */
-class GetPropertyPointerHook extends AbstractPropertyHook
+class UnsetPropertyHook extends AbstractPropertyHook
 {
-
-    protected const HOOK_FIELD = 'get_property_ptr_ptr';
-
-    /**
-     * Hook access type
-     */
-    protected int $type;
+    protected const HOOK_FIELD = 'unset_property';
 
     /**
-     * typedef zval *(*zend_object_get_property_ptr_ptr_t)(zval *object, zval *member, int type, void **cache_slot)
+     * typedef void (*zend_object_unset_property_t)(zval *object, zval *member, void **cache_slot);
      *
      * @inheritDoc
      */
-    public function handle(...$rawArguments)
+    public function handle(...$rawArguments): void
     {
-        [$this->object, $this->member, $this->type, $this->cacheSlot] = $rawArguments;
+        [$this->object, $this->member, $this->cacheSlot] = $rawArguments;
 
-        $result = ($this->userHandler)($this);
-
-        return $result;
-    }
-
-    /**
-     * Returns the access type
-     */
-    public function getAccessType(): int
-    {
-        return $this->type;
+        ($this->userHandler)($this);
     }
 
     /**
@@ -65,13 +50,10 @@ class GetPropertyPointerHook extends AbstractPropertyHook
 
         $object    = $this->object;
         $member    = $this->member;
-        $type      = $this->type;
         $cacheSlot = $this->cacheSlot;
 
-        $previousScope = Core::$executor->setFakeScope($object->value->obj->ce);
-        $result        = ($originalHandler)($object, $member, $type, $cacheSlot);
+        $previousScope = Core::$executor->setFakeScope(Core::$executor->getExecutionState()->getThis()->getRawObject()->ce);
+        ($originalHandler)($object, $member, $cacheSlot);
         Core::$executor->setFakeScope($previousScope);
-
-        return $result;
     }
 }

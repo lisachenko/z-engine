@@ -14,35 +14,19 @@ namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
 use ZEngine\Core;
-use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
 
 /**
  * Receiving hook for object field read operation
  */
-class ReadPropertyHook extends AbstractHook
+class ReadPropertyHook extends AbstractPropertyHook
 {
     protected const HOOK_FIELD = 'read_property';
-
-    /**
-     * Object instance
-     */
-    protected CData $object;
-
-    /**
-     * Member name
-     */
-    protected CData $member;
 
     /**
      * Hook access type
      */
     protected int $type;
-
-    /**
-     * Internal cache slot (for native callback only)
-     */
-    private ?CData $cacheSlot;
 
     /**
      * Internal pointer of retval (for native callback only)
@@ -62,26 +46,6 @@ class ReadPropertyHook extends AbstractHook
         $refValue = new ReflectionValue($result);
 
         return $refValue->getRawValue();
-    }
-
-    /**
-     * Returns an object instance
-     */
-    public function getObject(): object
-    {
-        ReflectionValue::fromValueEntry($this->object)->getNativeValue($objectInstance);
-
-        return $objectInstance;
-    }
-
-    /**
-     * Returns a member name
-     */
-    public function getMemberName(): string
-    {
-        ReflectionValue::fromValueEntry($this->member)->getNativeValue($memberName);
-
-        return $memberName;
     }
 
     /**
