@@ -21,8 +21,10 @@ use ZEngine\ClassExtension\Hook\CreateObjectHook;
 use ZEngine\ClassExtension\Hook\DoOperationHook;
 use ZEngine\ClassExtension\Hook\GetPropertiesForHook;
 use ZEngine\ClassExtension\Hook\GetPropertyPointerHook;
+use ZEngine\ClassExtension\Hook\HasPropertyHook;
 use ZEngine\ClassExtension\Hook\InterfaceGetsImplementedHook;
 use ZEngine\ClassExtension\Hook\ReadPropertyHook;
+use ZEngine\ClassExtension\Hook\UnsetPropertyHook;
 use ZEngine\ClassExtension\Hook\WritePropertyHook;
 use ZEngine\ClassExtension\ObjectCastInterface;
 use ZEngine\ClassExtension\ObjectCompareValuesInterface;
@@ -30,7 +32,9 @@ use ZEngine\ClassExtension\ObjectCreateInterface;
 use ZEngine\ClassExtension\ObjectDoOperationInterface;
 use ZEngine\ClassExtension\ObjectGetPropertiesForInterface;
 use ZEngine\ClassExtension\ObjectGetPropertyPointerInterface;
+use ZEngine\ClassExtension\ObjectHasPropertyInterface;
 use ZEngine\ClassExtension\ObjectReadPropertyInterface;
+use ZEngine\ClassExtension\ObjectUnsetPropertyInterface;
 use ZEngine\ClassExtension\ObjectWritePropertyInterface;
 use ZEngine\Core;
 use ZEngine\Type\ClosureEntry;
@@ -730,6 +734,36 @@ class ReflectionClass extends NativeReflectionClass
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new WritePropertyHook($handler, $handlers);
+        $hook->install();
+    }
+
+    /**
+     * Installs the "unset_property" handler for the current class
+     *
+     * @param Closure $handler Callback function (object $instance, string $fieldName): void;
+     *
+     * @see ObjectUnsetPropertyInterface
+     */
+    public function setUnsetPropertyHandler(Closure $handler): void
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new UnsetPropertyHook($handler, $handlers);
+        $hook->install();
+    }
+
+    /**
+     * Installs the "has_property" handler for the current class
+     *
+     * @param Closure $handler Callback function (object $instance, string $fieldName, int $type): int;
+     *
+     * @see ObjectHasPropertyInterface
+     */
+    public function setHasPropertyHandler(Closure $handler): void
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new HasPropertyHook($handler, $handlers);
         $hook->install();
     }
 
