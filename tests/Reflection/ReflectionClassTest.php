@@ -294,13 +294,17 @@ class ReflectionClassTest extends TestCase
         $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
         $this->refClass->setCreateObjectHandler($handler);
         $this->refClass->setReadPropertyHandler(function (ReadPropertyHook $hook) {
-            // Return the name of field as value
-            return $hook->getMemberName();
+            $value = $hook->proceed();
+            return $value * 2;
         });
         $instance = new TestClass();
         $value    = $instance->property;
         $this->assertNotSame(42, $value);
-        $this->assertSame('property', $value);
+        $this->assertSame(42 * 2, $value);
+
+        // This check address https://github.com/lisachenko/z-engine/issues/32
+        $secret = $instance->tellSecret();
+        $this->assertSame(100500 * 2, $secret);
     }
 
     /**
@@ -318,6 +322,9 @@ class ReflectionClassTest extends TestCase
         $instance->property = 10;
         $this->assertNotSame(42, $instance->property);
         $this->assertSame(20, $instance->property);
+
+        // This check address https://github.com/lisachenko/z-engine/issues/32
+        $instance->setSecret(200);
     }
 
     /**

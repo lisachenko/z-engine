@@ -108,7 +108,17 @@ class WritePropertyHook extends AbstractHook
             throw new \LogicException('Original handler is not available');
         }
 
-        $result = ($this->originalHandler)($this->object, $this->member, $this->value, $this->cacheSlot);
+        // As we will play with EG(fake_scope), we won't be able to access private or protected members, need to unpack
+        $originalHandler = $this->originalHandler;
+
+        $object    = $this->object;
+        $member    = $this->member;
+        $value     = $this->value;
+        $cacheSlot = $this->cacheSlot;
+
+        $previousScope = Core::$executor->setFakeScope($object->value->obj->ce);
+        $result        = ($originalHandler)($object, $member, $value, $cacheSlot);
+        Core::$executor->setFakeScope($previousScope);
 
         return $result;
     }

@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
+use ZEngine\Core;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
 
@@ -100,7 +101,18 @@ class ReadPropertyHook extends AbstractHook
             throw new \LogicException('Original handler is not available');
         }
 
-        $result = ($this->originalHandler)($this->object, $this->member, $this->type, $this->cacheSlot, $this->rv);
+        // As we will play with EG(fake_scope), we won't be able to access private or protected members, need to unpack
+        $originalHandler = $this->originalHandler;
+
+        $object    = $this->object;
+        $member    = $this->member;
+        $type      = $this->type;
+        $cacheSlot = $this->cacheSlot;
+        $rv        = $this->rv;
+
+        $previousScope = Core::$executor->setFakeScope($object->value->obj->ce);
+        $result        = ($originalHandler)($object, $member, $type, $cacheSlot, $rv);
+        Core::$executor->setFakeScope($previousScope);
 
         ReflectionValue::fromValueEntry($result)->getNativeValue($phpResult);
 
