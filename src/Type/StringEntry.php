@@ -15,6 +15,7 @@ namespace ZEngine\Type;
 use FFI\CData;
 use ReflectionClass;
 use ZEngine\Core;
+use ZEngine\Reflection\ReflectionValue;
 
 /**
  * This class wraps PHP's zend_string structure and provide an API for working with it
@@ -85,7 +86,13 @@ class StringEntry implements ReferenceCountedInterface
      */
     public function getStringValue(): string
     {
-        return Core::string(Core::cast('char *', $this->pointer->val), $this->pointer->len);
+        $entry = ReflectionValue::newEntry(ReflectionValue::IS_STRING, $this->pointer[0]);
+        $entry->getNativeValue($realString);
+
+        // TODO: Incapsulate memory management into ReflectionValue->release() method
+        Core::free($entry->getRawValue());
+
+        return $realString;
     }
 
     /**
@@ -95,11 +102,37 @@ class StringEntry implements ReferenceCountedInterface
      */
     public function release(): void
     {
-        if (!$this->isImmutable() /* Only non-interned string can be released */) {
+        if (!$this->isInterned()) {
             if ($this->decrementReferenceCount() === 0) {
                 Core::free($this->pointer);
             }
         }
+    }
+
+    /**
+     * Creates a copy of string value
+     *
+     * @see zend_string.h::zend_string_copy function
+     *
+     * @return self
+     */
+    public function copy(): self
+    {
+        if (!$this->isInterned()) {
+            $this->incrementReferenceCount();
+        }
+
+        return $this;
+    }
+
+    /**
+     * Alias to check if this string is interned (aka immutable)
+     *
+     * @return bool
+     */
+    public function isInterned(): bool
+    {
+        return $this->isImmutable();
     }
 
     /**

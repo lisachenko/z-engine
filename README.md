@@ -6,8 +6,6 @@ Have you ever dreamed about mocking a final class or redefining final method? Or
 
 [![Build Status](https://img.shields.io/travis/com/lisachenko/z-engine/master)](https://travis-ci.org/lisachenko/z-engine)
 [![GitHub release](https://img.shields.io/github/release/lisachenko/z-engine.svg)](https://github.com/lisachenko/z-engine/releases/latest)
-[![Total Downloads](https://img.shields.io/packagist/dt/lisachenko/z-engine.svg)](https://packagist.org/packages/lisachenko/z-engine)
-[![Daily Downloads](https://img.shields.io/packagist/dd/lisachenko/z-engine.svg)](https://packagist.org/packages/lisachenko/z-engine)
 [![Minimum PHP Version](http://img.shields.io/badge/php-%3E%3D%207.4-8892BF.svg)](https://php.net/)
 [![License](https://img.shields.io/packagist/l/lisachenko/z-engine.svg)](https://packagist.org/packages/lisachenko/z-engine)
 
@@ -117,3 +115,285 @@ $handle   = spl_object_id($instance);
 $objectEntry = Core::$executor->objectStore[$handle];
 var_dump($objectEntry);
 ```
+
+Object Extensions API
+---------------------
+
+With the help of `z-engine` library it is possible to overload standard operators for your classes without diving deep
+into the PHP engine implementation. For example, let's say you want to define native matrix operators and use it:
+
+```php
+<?php
+
+use ZEngine\ClassExtension\ObjectCastInterface;
+use ZEngine\ClassExtension\ObjectCompareValuesInterface;
+use ZEngine\ClassExtension\ObjectCreateInterface;
+use ZEngine\ClassExtension\ObjectCreateTrait;
+use ZEngine\ClassExtension\ObjectDoOperationInterface;
+
+class Matrix implements
+    ObjectCreateInterface,
+    ObjectCompareValuesInterface,
+    ObjectDoOperationInterface,
+    ObjectCastInterface
+{
+    use ObjectCreateTrait;
+
+    // ...
+}
+$a = new Matrix([10, 20, 30]);
+$b = new Matrix([1, 2, 3]);
+$c = $a + $b; // Matrix([11, 22, 33])
+$c *= 2;      // Matrix([22, 44, 66])
+```
+
+There are two ways of activating custom handlers.
+First way is to implement several system interfaces like
+`ObjectCastInterface`, `ObjectCompareValuesInterface`, `ObjectCreateInterface` and `ObjectDoOperationInterface`. After
+that you should create an instance of `ReflectionClass` provided by this package and call `installExtensionHandlers`
+method to install extensions:
+
+```php
+use ZEngine\Reflection\ReflectionClass as ReflectionClassEx;
+
+// ... initialization logic
+
+$refClass = new ReflectionClassEx(Matrix::class);
+$refClass->installExtensionHandlers();
+```
+
+if you don't have an access to the code (eg. vendor), then you can still have an ability to define custom handlers.
+You need to define callbacks as closures explicitly and assign them via `set***Handler()` methods in the
+`ReflectionClass`.
+
+```php
+use ZEngine\ClassExtension\ObjectCreateTrait;
+use ZEngine\Reflection\ReflectionClass as ReflectionClassEx;
+
+$refClass = new ReflectionClassEx(Matrix::class);
+$handler  = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+$refClass->setCreateObjectHandler($handler);
+$refClass->setCompareValuesHandler(function ($left, $right) {
+    if (is_object($left)) {
+        $left = spl_object_id($left);
+    }
+    if (is_object($right)) {
+        $right = spl_object_id($right);
+    }
+
+    // Just for example, object with bigger object_id is considered bigger that object with smaller object_id
+    return $left <=> $right;
+});
+```
+
+Library provides following interfaces:
+
+First one is `ObjectCastInterface` which provides a hook for handling casting a class instance to scalars. Typical
+examples are following: 1) explicit `$value = (int) $objectInstance` or implicit: `$value = 10 + $objectInstance;` in
+the case when `do_operation` handler is not installed. Please note, that this handler doesn't handle casting to `array`
+type as it is implemented in a different way.
+
+```php
+<?php
+use ZEngine\ClassExtension\Hook\CastObjectHook;
+
+/**
+ * Interface ObjectCastInterface allows to cast given object to scalar values, like integer, floats, etc
+ */
+interface ObjectCastInterface
+{
+    /**
+     * Performs casting of given object to another value
+     *
+     * @param CastObjectHook $hook Instance of current hook
+     *
+     * @return mixed Casted value
+     */
+    public static function __cast(CastObjectHook $hook);
+}
+```
+To get the type of casting, you should check `$hook->getCastType()` method which will return the integer value of type.
+Possible values are declared as public constants in the `ReflectionValue` class. For example `ReflectionValue::IS_LONG`.
+
+Next `ObjectCompareValuesInterface` interface is used to control the comparison logic. For example, you can compare
+two objects or even compare object with scalar values: `if ($object > 10 || $object < $anotherObject)`
+
+```php
+<?php
+use ZEngine\ClassExtension\Hook\CompareValuesHook;
+
+/**
+ * Interface ObjectCompareValuesInterface allows to perform comparison of objects
+ */
+interface ObjectCompareValuesInterface
+{
+    /**
+     * Performs comparison of given object with another value
+     *
+     * @param CompareValuesHook $hook Instance of current hook
+     *
+     * @return int Result of comparison: 1 is greater, -1 is less, 0 is equal
+     */
+    public static function __compare(CompareValuesHook $hook): int;
+}
+```
+Handler should check arguments which can be received by calling `$hook->getFirst()` and `$hook->getSecond()` methods
+(one of them should return an instance of your class) and return integer result -1..1. Where
+1 is greater, -1 is less and 0 is equal.
+
+The interface `ObjectDoOperationInterface` is the most powerful one because it gives you control over math operators
+applied to your object (such as ADD, SUB, MUL, DIV, POW, etc).
+
+```php
+<?php
+use ZEngine\ClassExtension\Hook\DoOperationHook;
+
+/**
+ * Interface ObjectDoOperationInterface allows to perform math operations (aka operator overloading) on object
+ */
+interface ObjectDoOperationInterface
+{
+    /**
+     * Performs an operation on given object
+     *
+     * @param DoOperationHook $hook Instance of current hook
+     *
+     * @return mixed Result of operation value
+     */
+    public static function __doOperation(DoOperationHook $hook);
+}
+```
+This handler receives an opcode (see `OpCode::*` constants) via `$hook->getOpcode()` and two arguments (one of them is
+an instance of class) via `$hook->getFirst()` and `$hook->getSecond()` and returns a value for that operation.
+In this handler you can return a new instance of your object to have a chain of immutable instances of objects.
+
+Important reminder: you **MUST** install the `create_object` handler first in order to install hooks in runtime. Also
+you can not install the `create_object` handler for the object if it is internal one.
+
+There is one extra method called `setInterfaceGetsImplementedHandler` which is useful for installing special handler for
+interfaces. The `interface_gets_implemented` callback uses the same memory slot as `create_object` handler for object,
+and will be called each time when any class will implement this interface. This gives interesting options for
+automatic class extensions registration, for example, if a class implements the `ObjectCreateInterface` then
+automatically call `ReflectionClass->installExtensionHandlers()` for it in callback.
+
+Abstract Syntax Tree API
+--------------
+
+As you know, PHP7 uses an abstract syntax tree for working with abstract model of source code to simplify future
+development of language syntax. Unfortunately, this information is not provided back to the userland level. There are
+several PHP extensions like [nikic/php-ast](https://github.com/nikic/php-ast) and
+[sgolemon/astkit](https://github.com/sgolemon/astkit/) that provide low-level bindings to the underlying AST structures.
+`Z-Engine` provides access to the AST via `Compiler::parseString(string $source, string $fileName = '')` method. This
+method will return a top-level node of tree that implements `NodeInterface`. PHP has four types of AST nodes, they are:
+declaration node (classes, methods, etc), list node (can contain any number of children nodes), simple node (contains
+up to 4 children nodes, depending of type) and special value node class that can store any value in it (typically string
+or numeric).
+
+Here are an example of parsing simple PHP code:
+
+```php
+use ZEngine\Core;
+
+$ast = Core::$compiler->parseString('echo "Hello, world!", PHP_EOL;', 'hi.php');
+echo $ast->dump();
+```
+Output will be like that:
+```
+   1: AST_STMT_LIST
+   1:   AST_STMT_LIST
+   1:     AST_ECHO
+   1:       AST_ZVAL string('Hello, world!')
+   1:     AST_ECHO
+   1:       AST_CONST
+   1:         AST_ZVAL attrs(0001) string('PHP_EOL')
+```
+
+Node provides simple API to mutate children nodes via call to the `Node->replaceChild(int $index, ?Node $node)`. You can
+create your own nodes in runtime or use a result from `Compiler::parseString(string $source, string $fileName = '')` as
+replacement for your code.
+
+Modifying the Abstract Syntax Tree
+--------------
+When PHP 7 compiles PHP code it converts it into an abstract syntax tree (AST) before finally generating Opcodes that
+are persisted in Opcache. The `zend_ast_process` hook is called for every compiled script and allows you to modify the
+AST after it is parsed and created.
+
+To install the `zend_ast_process` hook, make a static call to the `Core::setASTProcessHandler(Closure $callback)`
+method that accepts a callback which will be called during AST processing and will receive a `AstProcessHook $hook` as
+an argument. You can access top-level node item via `$hook->getAST(): NodeInterface` method.
+
+```php
+use ZEngine\Core;
+use ZEngine\System\Hook\AstProcessHook;
+
+Core::setASTProcessHandler(function (AstProcessHook $hook) {
+    $ast = $hook->getAST();
+    echo "Parsed AST:", PHP_EOL, $ast->dump();
+    // Let's modify Yes to No )
+    echo $ast->getChild(0)->getChild(0)->getChild(0)->getValue()->setNativeValue('No');
+});
+
+eval('echo "Yes";');
+
+// Parsed AST:
+//    1: AST_STMT_LIST
+//    1:   AST_STMT_LIST
+//    1:     AST_ECHO
+//    1:       AST_ZVAL string('Yes')
+// No
+```
+
+You can see that result of evaluation is changed from "Yes" to "No" because we have adjusted given AST in our callback.
+But be aware, that this is one of the most complicated hooks to use, because it requires perfect understanding of the
+AST possibilities. Creating an invalid AST here can cause weird behavior or crashes.
+
+Code of Conduct
+--------------
+
+This project adheres to the Contributor Covenant [code of conduct](CODE_OF_CONDUCT.md).
+By participating, you are expected to uphold this code.
+Please report any unacceptable behavior.
+
+License
+-------
+
+In order help ensure fairness and sharing, this library is dual-licensed. Be
+aware that _all_ usage, unless otherwise specified, is under the [**RPL-1.5** license](LICENSE)!
+
+- Reciprocal Public License 1.5 (RPL-1.5): https://opensource.org/licenses/RPL-1.5
+
+You should read the _entire_ license; especially the `PREAMBLE` at the
+beginning. In short, the word `reciprocal` means "giving something back in
+return for what you are getting". It is _**not** a freeware license_. This
+license _requires_ that you open-source _all_ of your own source code for _any_
+project which uses this library! Creating and maintaining this library is
+endless hard work for me. That's why there is _one_ simple requirement for you:
+Give _something_ back to the world. Whether that's code _or_ financial support
+for this project is entirely up to you, but _nothing else_ grants you _any_
+right to use this library.
+
+Furthermore, the library is _also_ available _to certain entities_ under a
+modified version of the RPL-1.5, which has been modified to allow you to use the
+library _without_ open-sourcing your own project. The modified license
+(see [LICENSE_PREMIUM](LICENSE_PREMIUM))
+is granted to certain entities, at _our_ discretion, and for a _limited_ period
+of time (unless otherwise agreed), pursuant to our terms. Currently, we are
+granting this license to all
+premium subscribers for
+the duration of their subscriptions. You can become a premium subscriber by
+either contributing substantial amounts of high-quality code, or by subscribing
+for a fee. This licensing ensures fairness and stimulates the continued growth
+of this library through both code contributions and the financial support it
+needs.
+
+You are not required to accept this License since you have not signed it,
+however _nothing else_ grants you permission to _use_, copy, distribute, modify,
+or create derivatives of either the Software (this library) or any Extensions
+created by a Contributor. These actions are prohibited by law if you do not
+accept this License. Therefore, by performing any of these actions You indicate
+Your acceptance of this License and Your agreement to be bound by all its terms
+and conditions. IF YOU DO NOT AGREE WITH ALL THE TERMS AND CONDITIONS OF THIS
+LICENSE DO NOT USE, MODIFY, CREATE DERIVATIVES, OR DISTRIBUTE THE SOFTWARE. IF
+IT IS IMPOSSIBLE FOR YOU TO COMPLY WITH ALL THE TERMS AND CONDITIONS OF THIS
+LICENSE THEN YOU CAN NOT USE, MODIFY, CREATE DERIVATIVES, OR DISTRIBUTE THE
+SOFTWARE.

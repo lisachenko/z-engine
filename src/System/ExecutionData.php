@@ -14,6 +14,7 @@ namespace ZEngine\System;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Reflection\FunctionLikeTrait;
 use ZEngine\Reflection\ReflectionFunction;
 use ZEngine\Reflection\ReflectionMethod;
 use ZEngine\Reflection\ReflectionValue;
@@ -51,7 +52,18 @@ use ZEngine\Type\OpLine;
  */
 
 /**
- * ExecutionData provides an access to general information from executor
+ * ExecutionData provides information about current stack frame
+ *
+ * typedef struct _zend_execute_data {
+ *   const zend_op       *opline;           // executed opline
+ *   zend_execute_data   *call;             // current call
+ *   zval                *return_value;
+ *   zend_function       *func;             // executed function
+ *   zval                 This;             // this + call_info + num_args
+ *   zend_execute_data   *prev_execute_data;
+ *   zend_array          *symbol_table;
+ *   void               **run_time_cache;   // cache op_array->run_time_cache
+ * };
  */
 class ExecutionData
 {
@@ -67,7 +79,17 @@ class ExecutionData
      */
     public function getOpline(): OpLine
     {
-        return new OpLine($this->pointer->opline);
+        return new OpLine($this->pointer->opline, $this);
+    }
+
+    /**
+     * Moves current opline pointer to the next one
+     *
+     * Use it only within opcode handlers!
+     */
+    public function nextOpline(): void
+    {
+        $this->pointer->opline++;
     }
 
     /**
@@ -80,6 +102,8 @@ class ExecutionData
 
     /**
      * Returns the current function or method
+     *
+     * @return FunctionLikeTrait
      */
     public function getFunction(): \ReflectionFunctionAbstract
     {
@@ -118,14 +142,16 @@ class ExecutionData
      * Returns the argument by it's index
      *
      * Argument index is starting from 0.
+     *
+     * @see zend_compile.h:ZEND_CALL_ARG(call, n) macro
      */
     public function getArgument(int $argumentIndex): ReflectionValue
     {
         if ($argumentIndex >= $this->pointer->This->u2->num_args) {
             throw new \OutOfBoundsException("Argument index is greater than available arguments");
         }
-
-        $valuePointer = Core::cast('zval *', $this->pointer) + self::getCallFrameSlot() + $argumentIndex;
+        // In PHP it is ZEND_CALL_VAR_NUM(call, ((int)(n)) - 1) but we start numeration from 0 in Z-Engine, so no "-1"
+        $valuePointer = $this->getCallVariableByNumber($argumentIndex);
         $valueEntry   = ReflectionValue::fromValueEntry($valuePointer);
 
         return $valueEntry;
@@ -138,8 +164,9 @@ class ExecutionData
      */
     public function getArguments(): array
     {
-        $arguments = [];
-        for ($index = 0; $index < $this->pointer->This->u2->num_args; $index++) {
+        $arguments      = [];
+        $totalArguments = $this->pointer->This->u2->num_args;
+        for ($index = 0; $index < $totalArguments; $index++) {
             $arguments[] = $this->getArgument($index);
         }
 
@@ -165,9 +192,59 @@ class ExecutionData
         return new ExecutionData($this->pointer->prev_execute_data);
     }
 
+    /**
+     * Returns the current symbol table.
+     *
+     * Engine doesn't use symbol tables. Instead optimized opcodes and operands are used.
+     * Symbol table is used only for tricky cases like variable variable $$variable and super-globals.
+     *
+     * <span style="color:red; font-weight: bold">Warning!</span> Do not use it as it's not recommended.
+     *
+     * @internal
+     */
     public function getSymbolTable(): HashTable
     {
         return new HashTable($this->pointer->symbol_table);
+    }
+
+    /**
+     * Returns call variable from the stack
+     *
+     * <span style="color:red; font-weight: bold">Only for the Z-Engine library</span>
+     *
+     * @param int $variableOffset Variable offset
+     *
+     * @return CData zval* pointer
+     * @see zend_compile.h:ZEND_CALL_VAR(call, n) macro
+     * @internal
+     */
+    public function getCallVariable(int $variableOffset): CData
+    {
+        // ((zval*)(((char*)(call)) + ((int)(n))))
+        $pointer  = Core::cast('char *', $this->pointer) + $variableOffset;
+        $value    = Core::cast('zval *', $pointer);
+
+        return $value;
+    }
+
+    /**
+     * Returns call variable from the stack by number
+     *
+     * <span style="color:red; font-weight: bold">Only for the Z-Engine library</span>
+     *
+     * @param CData $call zend_execute_data
+     * @param int $variableNum Variable number
+     *
+     * @return CData zval* pointer
+     * @see zend_compile.h:ZEND_CALL_VAR_NUM(call, n) macro
+     * @internal
+     */
+    public function getCallVariableByNumber(int $variableNum): CData
+    {
+        // (((zval*)(call)) + (ZEND_CALL_FRAME_SLOT + ((int)(n))))
+        $pointer = Core::cast('zval *', $this->pointer);
+
+        return $pointer + self::getCallFrameSlot() + $variableNum;
     }
 
     /**

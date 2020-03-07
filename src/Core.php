@@ -12,12 +12,16 @@ declare(strict_types=1);
 
 namespace ZEngine;
 
+use Closure;
 use FFI;
 use FFI\CData;
 use FFI\CType;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 use ZEngine\Macro\DefinitionLoader;
 use ZEngine\System\Compiler;
 use ZEngine\System\Executor;
+use ZEngine\System\Hook\AstProcessHook;
 
 /**
  * Class Core
@@ -246,6 +250,8 @@ class Core
         assert(!$isThreadSafe, 'Following properties available only for non thread-safe version');
         self::$executor = new Executor($engine->executor_globals);
         self::$compiler = new Compiler($engine->compiler_globals);
+
+        self::preloadFrameworkClasses();
     }
 
     /**
@@ -304,16 +310,6 @@ class Core
     }
 
     /**
-     * Creates a PHP string from $size bytes of memory area pointed by
-     * $source. If size is omitted, $source must be zero terminated
-     * array of C chars.
-     */
-    public static function string(CData $source, int $size = 0): string
-    {
-        return FFI::string($source, $size);
-    }
-
-    /**
      * Creates a new instance of specific type
      *
      * @param string $type Name of the type
@@ -365,5 +361,42 @@ class Core
         $size = (($size + self::MM_ALIGNMENT -1) & $mask);
 
         return $size;
+    }
+
+    /**
+     * Returns standard object handlers
+     */
+    public static function getStandardObjectHandlers(): CData
+    {
+        return self::$engine->std_object_handlers;
+    }
+
+    /**
+     * Installs a hook for the `zend_ast_process` engine global callback
+     *
+     * @param Closure $handler function(NodeInterface $node): void callback
+     */
+    public static function setASTProcessHandler(Closure $handler): void
+    {
+        $hook = new AstProcessHook($handler, self::$engine);
+        $hook->install();
+    }
+
+    /**
+     * This method preloads all framework classes to bypass all possible hooks
+     */
+    private static function preloadFrameworkClasses(): void
+    {
+        $dir = new RecursiveDirectoryIterator(__DIR__, RecursiveDirectoryIterator::KEY_AS_PATHNAME);
+
+        /** @var \SplFileInfo[] $iterator */
+        $iterator = new RecursiveIteratorIterator($dir, RecursiveIteratorIterator::SELF_FIRST);
+        foreach ($iterator as $fileInfo) {
+            if (!$fileInfo->isFile()) {
+                continue;
+            }
+
+            include_once $fileInfo->getPathname();
+        }
     }
 }

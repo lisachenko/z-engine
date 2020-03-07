@@ -12,8 +12,30 @@ declare(strict_types=1);
 
 namespace ZEngine\Reflection;
 
+use Closure;
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
+use ZEngine\ClassExtension\Hook\CastObjectHook;
+use ZEngine\ClassExtension\Hook\CompareValuesHook;
+use ZEngine\ClassExtension\Hook\CreateObjectHook;
+use ZEngine\ClassExtension\Hook\DoOperationHook;
+use ZEngine\ClassExtension\Hook\GetPropertiesForHook;
+use ZEngine\ClassExtension\Hook\GetPropertyPointerHook;
+use ZEngine\ClassExtension\Hook\HasPropertyHook;
+use ZEngine\ClassExtension\Hook\InterfaceGetsImplementedHook;
+use ZEngine\ClassExtension\Hook\ReadPropertyHook;
+use ZEngine\ClassExtension\Hook\UnsetPropertyHook;
+use ZEngine\ClassExtension\Hook\WritePropertyHook;
+use ZEngine\ClassExtension\ObjectCastInterface;
+use ZEngine\ClassExtension\ObjectCompareValuesInterface;
+use ZEngine\ClassExtension\ObjectCreateInterface;
+use ZEngine\ClassExtension\ObjectDoOperationInterface;
+use ZEngine\ClassExtension\ObjectGetPropertiesForInterface;
+use ZEngine\ClassExtension\ObjectGetPropertyPointerInterface;
+use ZEngine\ClassExtension\ObjectHasPropertyInterface;
+use ZEngine\ClassExtension\ObjectReadPropertyInterface;
+use ZEngine\ClassExtension\ObjectUnsetPropertyInterface;
+use ZEngine\ClassExtension\ObjectWritePropertyInterface;
 use ZEngine\Core;
 use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\HashTable;
@@ -44,6 +66,11 @@ class ReflectionClass extends NativeReflectionClass
 
     private CData $pointer;
 
+    /**
+     * Stores all allocated zend_object_handler pointers per class
+     */
+    private static array $objectHandlers = [];
+
     public function __construct($classNameOrObject)
     {
         try {
@@ -72,16 +99,24 @@ class ReflectionClass extends NativeReflectionClass
     public static function fromCData(CData $classEntry): ReflectionClass
     {
         /** @var ReflectionClass $reflectionClass */
-        $reflectionClass = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
-        $classNameValue  = StringEntry::fromCData($classEntry->name);
+        $reflectionClass = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionClass->initLowLevelStructures($classEntry);
+        $classNameValue = StringEntry::fromCData($classEntry->name);
         try {
             call_user_func([$reflectionClass, 'parent::__construct'], $classNameValue->getStringValue());
         } catch (\ReflectionException $e) {
             // This can happen during the class-loading. But we still can work with it.
         }
-        $reflectionClass->initLowLevelStructures($classEntry);
 
         return $reflectionClass;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getName()
+    {
+        return StringEntry::fromCData($this->pointer->name)->getStringValue();
     }
 
     /**
@@ -550,7 +585,6 @@ class ReflectionClass extends NativeReflectionClass
         }
     }
 
-
     /**
      * Declares this class as abstract/non-abstract
      *
@@ -565,6 +599,7 @@ class ReflectionClass extends NativeReflectionClass
             $this->pointer->ce_flags->cdata = ($this->pointer->ce_flags & (~Core::ZEND_ACC_IMPLICIT_ABSTRACT_CLASS));
         }
     }
+
 
     /**
      * Sets a new start line for the class in the file
@@ -653,11 +688,248 @@ class ReflectionClass extends NativeReflectionClass
         return ReflectionClassConstant::fromCData($constantPtr, $name);
     }
 
+    /**
+     * Installs user-defined object handlers for given class to control extra-features of this class
+     */
+    public function installExtensionHandlers(): void
+    {
+        if (!$this->implementsInterface(ObjectCreateInterface::class)) {
+            $str = 'Class ' . $this->name . ' should implement at least ObjectCreateInterface to setup user handlers';
+            throw new \ReflectionException($str);
+        }
+
+        $handler = parent::getMethod('__init')->getClosure();
+        $this->setCreateObjectHandler($handler);
+
+        if ($this->implementsInterface(ObjectCastInterface::class)) {
+            $handler = parent::getMethod('__cast')->getClosure();
+            $this->setCastObjectHandler($handler);
+        }
+
+        if ($this->implementsInterface(ObjectDoOperationInterface::class)) {
+            $handler = parent::getMethod('__doOperation')->getClosure();
+            $this->setDoOperationHandler($handler);
+        }
+
+        if ($this->implementsInterface(ObjectCompareValuesInterface::class)) {
+            $handler = parent::getMethod('__compare')->getClosure();
+            $this->setCompareValuesHandler($handler);
+        }
+
+        if ($this->implementsInterface(ObjectReadPropertyInterface::class)) {
+            $handler = parent::getMethod('__fieldRead')->getClosure();
+            $this->setReadPropertyHandler($handler);
+        }
+
+        if ($this->implementsInterface(ObjectWritePropertyInterface::class)) {
+            $handler = parent::getMethod('__fieldWrite')->getClosure();
+            $this->setWritePropertyHandler($handler);
+        }
+
+        if ($this->implementsInterface(ObjectGetPropertyPointerInterface::class)) {
+            $handler = parent::getMethod('__fieldPointer')->getClosure();
+            $this->setGetPropertyPointerHandler($handler);
+        }
+    }
+
     public function __debugInfo()
     {
         return [
             'name' => $this->getName(),
         ];
+    }
+
+    /**
+     * Installs the cast_object handler for current class
+     *
+     * @param Closure $handler Callback function (object $instance, int $typeTo): mixed;
+     *
+     * @see ObjectCastInterface
+     */
+    public function setCastObjectHandler(Closure $handler): void
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new CastObjectHook($handler, $handlers);
+        $hook->install();
+    }
+
+    /**
+     * Installs the compare handler for current class
+     *
+     * @param Closure $handler Callback function ($left, $right): int;
+     *
+     * @see ObjectCompareValuesInterface
+     */
+    public function setCompareValuesHandler(Closure $handler): void
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new CompareValuesHook($handler, $handlers);
+        $hook->install();
+    }
+
+    /**
+     * Installs the "read_property" handler for the current class
+     *
+     * @param Closure $handler Callback function (object $instance, string $fieldName, int $type): mixed;
+     *
+     * @see ObjectReadPropertyInterface
+     */
+    public function setReadPropertyHandler(Closure $handler): void
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new ReadPropertyHook($handler, $handlers);
+        $hook->install();
+    }
+
+    /**
+     * Installs the "write_property" handler for the current class
+     *
+     * @param Closure $handler Callback function (object $instance, string $fieldName, $value): mixed;
+     *
+     * @see ObjectWritePropertyInterface
+     */
+    public function setWritePropertyHandler(Closure $handler): void
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new WritePropertyHook($handler, $handlers);
+        $hook->install();
+    }
+
+    /**
+     * Installs the "unset_property" handler for the current class
+     *
+     * @param Closure $handler Callback function (object $instance, string $fieldName): void;
+     *
+     * @see ObjectUnsetPropertyInterface
+     */
+    public function setUnsetPropertyHandler(Closure $handler): void
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new UnsetPropertyHook($handler, $handlers);
+        $hook->install();
+    }
+
+    /**
+     * Installs the "has_property" handler for the current class
+     *
+     * @param Closure $handler Callback function (object $instance, string $fieldName, int $type): int;
+     *
+     * @see ObjectHasPropertyInterface
+     */
+    public function setHasPropertyHandler(Closure $handler): void
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new HasPropertyHook($handler, $handlers);
+        $hook->install();
+    }
+
+    /**
+     * Installs the "get_property_ptr_ptr" handler for the current class
+     *
+     * @param Closure $handler Callback function (object $instance, string $fieldName, int $type): mixed;
+     *
+     * @see ObjectGetPropertyPointerInterface
+     */
+    public function setGetPropertyPointerHandler(Closure $handler): void
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new GetPropertyPointerHook($handler, $handlers);
+        $hook->install();
+    }
+
+    /**
+     * Installs the "get_properties_for" handler for the current class
+     *
+     * @param Closure $handler Callback function (object $instance, int $reason): array;
+     *
+     * @see ObjectGetPropertiesForInterface
+     */
+    public function setGetPropertiesForHandler(Closure $handler): void
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new GetPropertiesForHook($handler, $handlers);
+        $hook->install();
+    }
+
+    /**
+     * Installs the do_operation handler for current class
+     *
+     * @param Closure $handler Callback function (object $instance, int $typeTo);
+     *
+     * @see ObjectDoOperationInterface
+     */
+    public function setDoOperationHandler(Closure $handler): void
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new DoOperationHook($handler, $handlers);
+        $hook->install();
+    }
+
+    /**
+     * Installs the create_object handler, this handler is required for all other handlers
+     *
+     * @param Closure $handler Callback function (CData $classType, Closure $initializer): CData
+     *
+     * @see ObjectCreateInterface
+     */
+    public function setCreateObjectHandler(Closure $handler): void
+    {
+        // User handlers are only allowed with std_object_handler (when create_object handler is empty)
+        if ($this->pointer->create_object !== null) {
+            throw new \LogicException("Create object handler is available for user-defined classes only");
+        }
+        self::allocateClassObjectHandlers($this->getName());
+
+        $hook = new CreateObjectHook($handler, $this->pointer);
+        $hook->install();
+    }
+
+    /**
+     * Installs the handler when another class implements current interface
+     *
+     * @param Closure $handler Callback function (ReflectionClass $reflectionClass)
+     */
+    public function setInterfaceGetsImplementedHandler(Closure $handler): void
+    {
+        if (!$this->isInterface()) {
+            throw new \LogicException("Interface implemented handler can be installed only for interfaces");
+        }
+
+        $hook = new InterfaceGetsImplementedHook($handler, $this->pointer);
+        $hook->install();
+    }
+
+    /**
+     * Creates a new instance of zend_object.
+     *
+     * This method is useful within create_object handler
+     *
+     * @param CData $classType zend_class_entry type to create
+     *
+     * @return CData Instance of zend_object *
+     * @see zend_objects.c:zend_objects_new
+     */
+    public static function newInstanceRaw(CData $classType): CData
+    {
+        $objectSize = Core::sizeof(Core::type('zend_object'));
+        $totalSize  = $objectSize + self::getObjectPropertiesSize($classType);
+        $memory     = Core::new("char[{$totalSize}]", false);
+        $object     = Core::cast('zend_object *', $memory);
+
+        Core::call('zend_object_std_init', $object, $classType);
+        $object->handlers = self::getObjectHandlers($classType);
+        Core::call('object_properties_init', $object, $classType);
+
+        return $object;
     }
 
     /**
@@ -698,5 +970,57 @@ class ReflectionClass extends NativeReflectionClass
         $refMethod = ReflectionMethod::fromCData($rawFunction);
 
         return $refMethod;
+    }
+
+    /**
+     * Returns the size of memory required for storing properties for a given class type
+     *
+     * @param CData $classType zend_class_entry type to get object property size
+     *
+     * @see zend_objects_API.h:zend_object_properties_size
+     */
+    private static function getObjectPropertiesSize(CData $classType): int
+    {
+        $zvalSize  = Core::sizeof(Core::type('zval'));
+        $useGuards = (bool) ($classType->ce_flags & Core::ZEND_ACC_USE_GUARDS);
+
+        $totalSize = $zvalSize * ($classType->default_properties_count - ($useGuards ? 0 : 1));
+
+        return $totalSize;
+    }
+
+    /**
+     * Returns a pointer to the zend_object_handlers for given zend_class_entry
+     *
+     * We always create our own object handlers structure to have an ability to adjust callbacks in runtime,
+     * otherwise it is impossible because object handlers field is declared as "const"
+     *
+     * @param CData $classType zend_class_entry type to get object handlers
+     */
+    private static function getObjectHandlers(CData $classType): CData
+    {
+        $className = (StringEntry::fromCData($classType->name)->getStringValue());
+        if (!isset(self::$objectHandlers[$className])) {
+            throw new \RuntimeException(
+                'Object handlers for class ' . $className . ' are not configured.' . PHP_EOL .
+                'Have you installed the create_object handler first?'
+            );
+        }
+
+        return self::$objectHandlers[$className];
+    }
+
+    /**
+     * Allocates a new zend_object_handlers structure for class as a copy of std_object_handlers
+     *
+     * @param string $className Class name to use
+     */
+    private static function allocateClassObjectHandlers(string $className): void
+    {
+        $handlers    = Core::new('zend_object_handlers', false, true);
+        $stdHandlers = Core::getStandardObjectHandlers();
+        Core::memcpy($handlers, $stdHandlers, Core::sizeof($stdHandlers));
+
+        self::$objectHandlers[$className] = Core::addr($handlers);
     }
 }
