@@ -107,6 +107,28 @@ final class ObjectStore implements Countable, ArrayAccess
     }
 
     /**
+     * Detaches existing object from the object store
+     *
+     * <span style="color:red; font-weight: bold">Warning!</span> This call doesn't invokes object destructors,
+     * only detaches an object from the store.
+     *
+     * @see zend_objects_API.h:SET_OBJ_INVALID macro
+     * @internal
+     */
+    public function detach(int $offset): void
+    {
+        if ($offset < 0 || $offset > $this->pointer->top - 1) {
+            // We use -2 because exception object also increments index by one
+            throw new \OutOfBoundsException("Index {$offset} is out of bounds 0.." . ($this->pointer->top - 2));
+        }
+        $rawPointer        = Core::cast('zend_uintptr_t', $this->pointer->object_buckets[$offset]);
+        $invalidPointer    = $rawPointer->cdata | self::OBJ_BUCKET_INVALID;
+        $rawPointer->cdata = $invalidPointer;
+
+        $this->pointer->object_buckets[$offset] = Core::cast('zend_object *', $rawPointer);
+    }
+
+    /**
      * Checks if the given object pointer is valid or not
      *
      * @see zend_objects_API.h:IS_OBJ_VALID macro
