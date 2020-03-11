@@ -1300,3 +1300,9 @@ ZEND_API zend_ast *zend_ast_create_decl(
     zend_ast_kind kind, uint32_t flags, uint32_t start_lineno, zend_string *doc_comment,
     zend_string *name, zend_ast *child0, zend_ast *child1, zend_ast *child2, zend_ast *child3
 );
+
+/**
+ * Modules API
+ */
+ZEND_API zend_module_entry* zend_register_module_ex(zend_module_entry *module);
+ZEND_API int zend_startup_module_ex(zend_module_entry *module);
