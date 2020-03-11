@@ -22,6 +22,7 @@ use ZEngine\Macro\DefinitionLoader;
 use ZEngine\System\Compiler;
 use ZEngine\System\Executor;
 use ZEngine\System\Hook\AstProcessHook;
+use ZEngine\Type\HashTable;
 
 /**
  * Class Core
@@ -210,6 +211,11 @@ class Core
     public static Compiler $compiler;
 
     /**
+     * Contains the list of loaded modules (extensions)
+     */
+    public static HashTable $modules;
+
+    /**
      * Stores an internal instance of low-level FFI binding
      */
     private static FFI $engine;
@@ -250,6 +256,7 @@ class Core
         assert(!$isThreadSafe, 'Following properties available only for non thread-safe version');
         self::$executor = new Executor($engine->executor_globals);
         self::$compiler = new Compiler($engine->compiler_globals);
+        self::$modules  = new HashTable(Core::addr($engine->module_registry));
 
         self::preloadFrameworkClasses();
     }

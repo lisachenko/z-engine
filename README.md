@@ -347,6 +347,170 @@ You can see that result of evaluation is changed from "Yes" to "No" because we h
 But be aware, that this is one of the most complicated hooks to use, because it requires perfect understanding of the
 AST possibilities. Creating an invalid AST here can cause weird behavior or crashes.
 
+Creating PHP extensions in runtime
+--------------
+The most interesting part of Z-Engine library is creating your own PHP extensions in PHP language itself.
+You do not have to spend a lot of time learning the C language; instead, you can use the ready-made API to create
+your own extension module from PHP itself!
+
+Of course, not everything is possible to implement as an extension in PHP, for example, changing the parser syntax
+or changing the logic of opcache - for this you will have to delve into the code of the engine itself.
+
+Let's make an example a module with global variables, an analog of apcu, so that these variables are not cleared
+after the request is completed. It is believed that PHP has the concept of share nothing and therefore can’t survive
+the boundary of the request, since at the time of completion of the request PHP will automatically free all allocated
+memory for objects. However, PHP itself can work with global variables, and they are stored inside loaded modules by
+the pointer `zend_module_entry.globals_ptr`.
+
+Therefore, if we can register the module in PHP and allocate global memory for it, PHP will not clear it, and our
+module will be able to survive the boundary of the request.
+
+Technically, every module is represented by following structure:
+
+```
+struct _zend_module_entry {
+    unsigned short size;
+    unsigned int zend_api;
+    unsigned char zend_debug;
+    unsigned char zts;
+    const struct _zend_ini_entry *ini_entry;
+    const struct _zend_module_dep *deps;
+    const char *name;
+    const struct _zend_function_entry *functions;
+    int (*module_startup_func)(int type, int module_number);
+    int (*module_shutdown_func)(int type, int module_number);
+    int (*request_startup_func)(int type, int module_number);
+    int (*request_shutdown_func)(int type, int module_number);
+    void (*info_func)(zend_module_entry *zend_module);
+    const char *version;
+    size_t globals_size;
+#ifdef ZTS
+    ts_rsrc_id* globals_id_ptr;
+#endif
+#ifndef ZTS
+    void* globals_ptr;
+#endif
+    void (*globals_ctor)(void *global);
+    void (*globals_dtor)(void *global);
+    int (*post_deactivate_func)(void);
+    int module_started;
+    unsigned char type;
+    void *handle;
+    int module_number;
+    const char *build_id;
+};
+```
+You can see that we can define several callbacks and there are several fields with meta-information about zts, debug,
+API version, etc that are used by PHP to check if this module can be loaded for current environment.
+
+From PHP side, you should extend your module class from the `AbstractModule` class that contains general logic of
+module registration and startup and implement all required method from the `ModuleInterface`.
+
+Let's have a look at our simple module:
+```php
+use ZEngine\EngineExtension\AbstractModule;
+
+class SimpleCountersModule extends AbstractModule
+{
+    /**
+     * Returns the target thread-safe mode for this module
+     *
+     * Use ZEND_THREAD_SAFE as default if your module does not depend on thread-safe mode.
+     */
+    public static function targetThreadSafe(): bool
+    {
+        return ZEND_THREAD_SAFE;
+    }
+
+    /**
+     * Returns the target debug mode for this module
+     *
+     * Use ZEND_DEBUG_BUILD as default if your module does not depend on debug mode.
+     */
+    public static function targetDebug(): bool
+    {
+        return ZEND_DEBUG_BUILD;
+    }
+
+    /**
+     * Returns the target API version for this module
+     *
+     * @see zend_modules.h:ZEND_MODULE_API_NO
+     */
+    public static function targetApiVersion(): int
+    {
+        return 20190902;
+    }
+
+    /**
+     * Returns true if this module should be persistent or false if temporary
+     */
+    public static function targetPersistent(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Returns globals type (if present) or null if module doesn't use global memory
+     */
+    public static function globalType(): ?string
+    {
+        return 'unsigned int[10]';
+    }
+}
+```
+Our `SimpleCountersModule` declares that it will use array of 10 unsigned ints. It also provides some information about
+required environment (debug/zts/API version). Important option is to mark our module persistent by returning true from
+`targetPersistent()` method. And now we are ready to register it and use it:
+
+```php
+$module = new SimpleCountersModule();
+if (!$module->isModuleRegistered()) {
+    $module->register();
+    $module->startup();
+}
+
+$data = $module->getGlobals();
+var_dump($data);
+```
+Note, that on subsequent requests module will be registered, this is why you should not call register twice.
+What is really cool is that any changes in module globals are **true globals**! They will be **preserved** between
+requests. Try to update each item to see that values in our array are increasing between requests:
+
+```php
+$index        = mt_rand(0, 9); // If you have several workers, you should use worker pid to avoid race conditions
+$data[$index] = $data[$index] + 1; // We are increasing global counter by one
+
+/* Example of var_dump after several requests...
+object(FFI\CData:uint32_t[10])#35 (10) {
+  [0]=>
+  int(1)
+  [1]=>
+  int(1)
+  [2]=>
+  int(1)
+  [3]=>
+  int(3)
+  [4]=>
+  int(1)
+  [5]=>
+  int(1)
+  [6]=>
+  int(1)
+  [7]=>
+  int(2)
+  [8]=>
+  int(2)
+  [9]=>
+  int(2)
+}*/
+```
+
+Of course, module can declare any complex structure for globals and use it as required. If module requires some
+initialization, then you can implement the `ControlModuleGlobalsInterface` in your module and this callback will be
+called during module startup procedure. This may be useful for registration of additional hooks, class extensions, etc
+or for global variable initialization (filling it with predefined values, restoring state from DB/filesystem/etc)
+
 Code of Conduct
 --------------
 

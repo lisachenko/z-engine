@@ -898,6 +898,50 @@ typedef struct _zend_objects_store {
     int free_list_head;
 } zend_objects_store;
 
+/* zend_modules.h */
+struct _zend_ini_entry;
+typedef struct _zend_module_entry zend_module_entry;
+typedef struct _zend_module_dep zend_module_dep;
+
+struct _zend_module_entry {
+    unsigned short size;
+    unsigned int zend_api;
+    unsigned char zend_debug;
+    unsigned char zts;
+    const struct _zend_ini_entry *ini_entry;
+    const struct _zend_module_dep *deps;
+    const char *name;
+    const struct _zend_function_entry *functions;
+    int (*module_startup_func)(int type, int module_number);
+    int (*module_shutdown_func)(int type, int module_number);
+    int (*request_startup_func)(int type, int module_number);
+    int (*request_shutdown_func)(int type, int module_number);
+    void (*info_func)(zend_module_entry *zend_module);
+    const char *version;
+    size_t globals_size;
+#ifdef ZTS
+    ts_rsrc_id* globals_id_ptr;
+#endif
+#ifndef ZTS
+    void* globals_ptr;
+#endif
+    void (*globals_ctor)(void *global);
+    void (*globals_dtor)(void *global);
+    int (*post_deactivate_func)(void);
+    int module_started;
+    unsigned char type;
+    void *handle;
+    int module_number;
+    const char *build_id;
+};
+
+struct _zend_module_dep {
+    const char *name;		/* module name */
+    const char *rel;		/* version relationship: NULL (exists), lt|le|eq|ge|gt (to given version) */
+    const char *version;	/* version */
+    unsigned char type;		/* dependency type */
+};
+
 /* zend_globals.h */
 struct _zend_compiler_globals {
     zend_stack loop_var_stack;
@@ -1202,9 +1246,10 @@ typedef struct _zend_heredoc_label {
 } zend_heredoc_label;
 
 /**
- * Global hooks
+ * Global hooks and variables
  */
 extern ZEND_API zend_ast_process_t zend_ast_process;
+extern ZEND_API HashTable module_registry;
 
 /**
  * Zend Hash API
@@ -1255,3 +1300,9 @@ ZEND_API zend_ast *zend_ast_create_decl(
     zend_ast_kind kind, uint32_t flags, uint32_t start_lineno, zend_string *doc_comment,
     zend_string *name, zend_ast *child0, zend_ast *child1, zend_ast *child2, zend_ast *child3
 );
+
+/**
+ * Modules API
+ */
+ZEND_API zend_module_entry* zend_register_module_ex(zend_module_entry *module);
+ZEND_API int zend_startup_module_ex(zend_module_entry *module);
