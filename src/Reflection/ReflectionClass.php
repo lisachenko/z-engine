@@ -852,15 +852,16 @@ class ReflectionClass extends NativeReflectionClass
      * This method is useful within create_object handler
      *
      * @param CData $classType zend_class_entry type to create
+     * @param bool $persistent Whether object should be allocated persistent or not. Low-level feature!
      *
      * @return CData Instance of zend_object *
      * @see zend_objects.c:zend_objects_new
      */
-    public static function newInstanceRaw(CData $classType): CData
+    public static function newInstanceRaw(CData $classType, bool $persistent = false): CData
     {
         $objectSize = Core::sizeof(Core::type('zend_object'));
         $totalSize  = $objectSize + self::getObjectPropertiesSize($classType);
-        $memory     = Core::new("char[{$totalSize}]", false);
+        $memory     = Core::new("char[{$totalSize}]", false, $persistent);
         $object     = Core::cast('zend_object *', $memory);
 
         Core::call('zend_object_std_init', $object, $classType);
@@ -939,10 +940,7 @@ class ReflectionClass extends NativeReflectionClass
     {
         $className = (StringEntry::fromCData($classType->name)->getStringValue());
         if (!isset(self::$objectHandlers[$className])) {
-            throw new \RuntimeException(
-                'Object handlers for class ' . $className . ' are not configured.' . PHP_EOL .
-                'Have you installed the create_object handler first?'
-            );
+            self::allocateClassObjectHandlers($className);
         }
 
         return self::$objectHandlers[$className];
