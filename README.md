@@ -1,13 +1,15 @@
 Z-Engine library
 -----------------
 
-Have you ever dreamed about mocking a final class or redefining final method? Or maybe have an ability to work with existing classes in runtime?
-`Z-Engine` is a PHP7.4 library that provides an API to PHP. Forget about all existing limitations and use this library to transform your existing code in runtime by declaring new methods, adding new interfaces to the classes and even installing your own system hooks, like opcode compilation, object initalization and much more.
-
 [![Build Status](https://img.shields.io/travis/com/lisachenko/z-engine/master)](https://travis-ci.org/lisachenko/z-engine)
 [![GitHub release](https://img.shields.io/github/release/lisachenko/z-engine.svg)](https://github.com/lisachenko/z-engine/releases/latest)
 [![Minimum PHP Version](http://img.shields.io/badge/php-%3E%3D%207.4-8892BF.svg)](https://php.net/)
 [![License](https://img.shields.io/packagist/l/lisachenko/z-engine.svg)](https://packagist.org/packages/lisachenko/z-engine)
+
+Have you ever dreamed about mocking a final class or redefining final method? Or maybe have an ability to work with existing classes in runtime?
+`Z-Engine` is a PHP7.4 library that provides an API to PHP. Forget about all existing limitations and use this library to transform your existing code in runtime by declaring new methods, adding new interfaces to the classes and even installing your own system hooks, like opcode compilation, object initalization and much more.
+
+**:warning: DO NOT USE IT IN PRODUCTION UNTIL 1.0.0!**
 
 How it works?
 ------------
@@ -15,8 +17,6 @@ How it works?
 As you know, PHP version 7.4 contains a new feature, called [FFI](https://www.php.net/manual/en/book.ffi.php). It allows the loading of shared libraries (.dll or .so), calling of C functions and accessing of C data structures in pure PHP, without having to have deep knowledge of the Zend extension API, and without having to learn a third "intermediate" language.
 
 `Z-Engine` uses FFI to access internal structures of... PHP itself. This idea was so crazy to try, but it works! `Z-Engine` loads definition of native PHP structures, like `zend_class_entry`, `zval`, etc and manipulates them in runtime. Of course, it is dangerous, since `FFI` allows to work with structures on a very low level. Thus, you should expect segmentation faults, memory leaks and other bad things.
-
-**DO NOT USE IT IN PRODUCTION UNTIL 1.0.0!**
 
 Pre-requisites and initialization
 --------------
