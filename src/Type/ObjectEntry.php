@@ -95,6 +95,7 @@ class ObjectEntry implements ReferenceCountedInterface
 
     /**
      * Changes object internal handle to another one
+     * @internal
      */
     public function setHandle(int $newHandle): void
     {

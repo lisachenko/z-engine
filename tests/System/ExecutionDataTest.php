@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace ZEngine\System;
 
-
 use FFI\CData;
 use PHPUnit\Framework\TestCase;
 use ZEngine\Core;
@@ -38,6 +37,9 @@ class ExecutionDataTest extends TestCase
         $this->assertSame($trace[1]['function'], $executionData->getFunction()->getName());
     }
 
+    /**
+     * @group internal
+     */
     public function testGetSymbolTable()
     {
         $symTable = Core::$executor->getExecutionState()->getSymbolTable();

@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace ZEngine\Reflection;
 
-
 use FFI\CData;
 use PHPUnit\Framework\TestCase;
 use ZEngine\Core;

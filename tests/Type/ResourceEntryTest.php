@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace ZEngine\Type;
 
-
 use FFI\CData;
 use PHPUnit\Framework\TestCase;
 
@@ -30,12 +29,23 @@ class ResourceEntryTest extends TestCase
         fclose($this->file);
     }
 
-    public function testGetSetHandle()
+    public function testGetHandle(): void
     {
         $refResource = new ResourceEntry($this->file);
 
         preg_match('/Resource id #(\d+)/', (string)$this->file, $matches);
         $this->assertSame((int)$matches[1], $refResource->getHandle());
+        $refResource->setHandle(1);
+        $this->assertSame(1, $refResource->getHandle());
+    }
+
+    /**
+     * @group internal
+     */
+    public function testSetHandle(): void
+    {
+        $refResource = new ResourceEntry($this->file);
+
         $refResource->setHandle(1);
         $this->assertSame(1, $refResource->getHandle());
     }
@@ -47,12 +57,20 @@ class ResourceEntryTest extends TestCase
         $this->assertInstanceOf(CData::class, $rawData);
     }
 
-    public function testGetSetType()
+    public function testGetType()
     {
         $refResource = new ResourceEntry($this->file);
 
         // stream resource type has an id=2
         $this->assertSame(2, $refResource->getType());
+    }
+
+    /**
+     * @group internal
+     */
+    public function testSetType()
+    {
+        $refResource = new ResourceEntry($this->file);
 
         // persistent_stream has type=3
         $refResource->setType(3);

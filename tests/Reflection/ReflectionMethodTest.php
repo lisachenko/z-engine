@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace ZEngine\Reflection;
 
-
 use Error;
 use PHPUnit\Framework\Error\Deprecated;
 use PHPUnit\Framework\TestCase;
@@ -75,7 +74,7 @@ class ReflectionMethodTest extends TestCase
         $this->assertFalse($this->refMethod->isProtected());
 
         $this->expectException(Error::class);
-        $this->expectExceptionMessageRegExp('/Call to private method .*?reflectedMethod()/');
+        $this->expectExceptionMessageMatches('/Call to private method .*?reflectedMethod()/');
         $test = new TestClass();
         $test->reflectedMethod();
     }
@@ -102,7 +101,7 @@ class ReflectionMethodTest extends TestCase
 
         // If we call our protected method, we should have an error here
         $this->expectException(Error::class);
-        $this->expectExceptionMessageRegExp('/Call to protected method .*?reflectedMethod()/');
+        $this->expectExceptionMessageMatches('/Call to protected method .*?reflectedMethod()/');
         $test = new TestClass();
         $test->reflectedMethod();
     }
@@ -152,7 +151,7 @@ class ReflectionMethodTest extends TestCase
             $this->assertTrue($this->refMethod->isDeprecated());
 
             $this->expectException(Deprecated::class);
-            $this->expectExceptionMessageRegExp('/Function .*?reflectedMethod\(\) is deprecated/');
+            $this->expectExceptionMessageMatches('/Function .*?reflectedMethod\(\) is deprecated/');
             $test = new TestClass();
             $test->reflectedMethod();
         } finally {
@@ -179,17 +178,23 @@ class ReflectionMethodTest extends TestCase
         }
     }
 
+    /**
+     * @group internal
+     */
     public function testRedefineThrowsAnExceptionForIncompatibleCallback(): void
     {
         $this->expectException(\ReflectionException::class);
         $expectedRegexp = '/"function \(\)" should be compatible with original "function \(\)\: \?string"/';
-        $this->expectExceptionMessageRegExp($expectedRegexp);
+        $this->expectExceptionMessageMatches($expectedRegexp);
 
         $this->refMethod->redefine(function () {
             echo 'Nope';
         });
     }
 
+    /**
+     * @group internal
+     */
     public function testRedefine(): void
     {
         $this->refMethod->redefine(function (): ?string {
@@ -213,6 +218,9 @@ class ReflectionMethodTest extends TestCase
         $this->assertSame(TestClass::class, $class->getName());
     }
 
+    /**
+     * @group internal
+     */
     public function testSetDeclaringClass(): void
     {
         try {

@@ -112,6 +112,7 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
      * Changes the declaring class name for this property
      *
      * @param string $className New class name for this property
+     * @internal
      */
     public function setDeclaringClass(string $className): void
     {
