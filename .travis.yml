@@ -3,7 +3,7 @@ services:
 matrix:
   include:
     - language: php
-      name: "7.4"
+      name: "8.0"
       after_script:
         - sh .travis.coverage.sh
       env:
