@@ -64,6 +64,13 @@ class ReflectionClass extends NativeReflectionClass
      */
     private HashTable $constantsTable;
 
+    /**
+     * Stores the list of attributes
+     *
+     * @var ?HashTable|ReflectionValue[]
+     */
+    private ?HashTable $attributesTable;
+
     private CData $pointer;
 
     /**
@@ -898,6 +905,9 @@ class ReflectionClass extends NativeReflectionClass
         $this->methodTable     = new HashTable(Core::addr($classEntry->function_table));
         $this->propertiesTable = new HashTable(Core::addr($classEntry->properties_info));
         $this->constantsTable  = new HashTable(Core::addr($classEntry->constants_table));
+        if ($classEntry->attributes !== null) {
+            $this->attributesTable = new HashTable(Core::addr($classEntry->attributes));
+        }
     }
 
     /**

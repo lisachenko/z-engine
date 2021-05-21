@@ -16,6 +16,7 @@ use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
+use ZEngine\Type\ObjectEntry;
 
 /**
  * Receiving hook for casting object to another type
@@ -40,7 +41,7 @@ class CastObjectHook extends AbstractHook
     protected int $type;
 
     /**
-     * typedef int (*zend_object_cast_t)(zval *readobj, zval *retval, int type);
+     * typedef int (*zend_object_cast_t)(zend_object *readobj, zval *retval, int type);
      *
      * @inheritDoc
      */
@@ -69,7 +70,7 @@ class CastObjectHook extends AbstractHook
      */
     public function getObject(): object
     {
-        ReflectionValue::fromValueEntry($this->object)->getNativeValue($objectInstance);
+        $objectInstance = ObjectEntry::fromCData($this->object)->getNativeValue();
 
         return $objectInstance;
     }

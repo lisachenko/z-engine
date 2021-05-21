@@ -74,32 +74,38 @@ class ReflectionValue implements ReferenceCountedInterface
     use ReferenceCountedTrait;
 
     /* regular data types */
-    public const IS_UNDEF     = 0;
-    public const IS_NULL      = 1;
-    public const IS_FALSE     = 2;
-    public const IS_TRUE      = 3;
-    public const IS_LONG      = 4;
-    public const IS_DOUBLE    = 5;
-    public const IS_STRING    = 6;
-    public const IS_ARRAY     = 7;
-    public const IS_OBJECT    = 8;
-    public const IS_RESOURCE  = 9;
-    public const IS_REFERENCE = 10;
+    public const IS_UNDEF        = 0;
+    public const IS_NULL         = 1;
+    public const IS_FALSE        = 2;
+    public const IS_TRUE         = 3;
+    public const IS_LONG         = 4;
+    public const IS_DOUBLE       = 5;
+    public const IS_STRING       = 6;
+    public const IS_ARRAY        = 7;
+    public const IS_OBJECT       = 8;
+    public const IS_RESOURCE     = 9;
+    public const IS_REFERENCE    = 10;
+    public const IS_CONSTANT_AST = 11; /* constant expressions */
 
-    /* constant expressions */
-    public const IS_CONSTANT_AST = 11;
+    /**
+     * Fake types used only for type hinting.
+     * These are allowed to overlap with the types below.
+     */
+    public const IS_CALLABLE       = 12;
+    public const IS_ITERABLE       = 13;
+    public const IS_VOID           = 14;
+    public const IS_STATIC         = 15;
+    public const IS_MIXED          = 16;
 
     /* internal types */
-    public const IS_INDIRECT = 13;
-    public const IS_PTR      = 14;
-    public const _IS_ERROR   = 15;
+    public const IS_INDIRECT  = 12;
+    public const IS_PTR       = 13;
+    public const IS_ALIAS_PTR = 14;
+    public const _IS_ERROR    = 15;
 
-    /* fake types used only for type hinting (Z_TYPE(zv) can not use them) */
-    public const _IS_BOOL          = 16;
-    public const IS_CALLABLE       = 17;
-    public const IS_ITERABLE       = 18;
-    public const IS_VOID           = 19;
-    public const _IS_NUMBER        = 20;
+    /* used for casts */
+    public const _IS_BOOL   = 17;
+    public const _IS_NUMBER = 18;
 
     private const Z_TYPE_FLAGS_MASK = 0xFF00;
 

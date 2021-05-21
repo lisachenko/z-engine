@@ -34,7 +34,7 @@ class ReadPropertyHook extends AbstractPropertyHook
     private ?CData $rv;
 
     /**
-     * typedef zval *(*zend_object_read_property_t)(zval *object, zval *member, int type, void **cache_slot, zval *rv);
+     * typedef zval *(*zend_object_read_property_t)(zend_object *object, zend_string *member, int type, void **cache_slot, zval *rv);
      *
      * @inheritDoc
      */
@@ -74,7 +74,7 @@ class ReadPropertyHook extends AbstractPropertyHook
         $cacheSlot = $this->cacheSlot;
         $rv        = $this->rv;
 
-        $previousScope = Core::$executor->setFakeScope($object->value->obj->ce);
+        $previousScope = Core::$executor->setFakeScope($object->ce);
         $result        = ($originalHandler)($object, $member, $type, $cacheSlot, $rv);
         Core::$executor->setFakeScope($previousScope);
 

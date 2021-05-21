@@ -40,9 +40,8 @@ class ObjectEntry implements ReferenceCountedInterface
 
     public function __construct(object $instance)
     {
-        // This code is used to extract a Zval for our $value argument and use its internal pointer
-        $valueArgument = Core::$executor->getExecutionState()->getArgument(0);
-        $pointer = $valueArgument->getRawObject();
+        $refValue = new ReflectionValue($instance);
+        $pointer  = $refValue->getRawObject();
         $this->initLowLevelStructures($pointer);
     }
 

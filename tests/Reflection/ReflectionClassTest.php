@@ -39,7 +39,7 @@ class ReflectionClassTest extends TestCase
 
     public function setUp(): void
     {
-        $this->refClass = new ReflectionClass(TestClass::class);
+        $this->refClass = new class(TestClass::class) extends ReflectionClass{};
     }
 
     /**
@@ -267,7 +267,7 @@ class ReflectionClassTest extends TestCase
         $this->assertInstanceOf(TestInterface::class, $anonymousInterfaceImplementation);
 
         // ... and log entry will contain a record about anonymous class that implements interface
-        $this->assertStringContainsString('class@anonymous', $log);
+        $this->assertStringContainsString('@anonymous', $log);
     }
 
     /**
@@ -395,6 +395,7 @@ class ReflectionClassTest extends TestCase
         $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
         $this->refClass->setCreateObjectHandler($handler);
         $this->refClass->setGetPropertiesForHandler(function (GetPropertiesForHook $hook) {
+            $this->assertIsObject($hook->getObject());
             return ['a' => 1, 'b' => true, 'c' => 42.0];
         });
         $instance = new TestClass();

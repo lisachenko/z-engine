@@ -14,7 +14,8 @@ namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
 use ZEngine\Hook\AbstractHook;
-use ZEngine\Reflection\ReflectionValue;
+use ZEngine\Type\ObjectEntry;
+use ZEngine\Type\StringEntry;
 
 /**
  * Abstract object property operational hook
@@ -41,7 +42,7 @@ abstract class AbstractPropertyHook extends AbstractHook
      */
     public function getObject(): object
     {
-        ReflectionValue::fromValueEntry($this->object)->getNativeValue($objectInstance);
+        $objectInstance = ObjectEntry::fromCData($this->object)->getNativeValue();
 
         return $objectInstance;
     }
@@ -51,7 +52,7 @@ abstract class AbstractPropertyHook extends AbstractHook
      */
     public function getMemberName(): string
     {
-        ReflectionValue::fromValueEntry($this->member)->getNativeValue($memberName);
+        $memberName = StringEntry::fromCData($this->member)->getStringValue();
 
         return $memberName;
     }

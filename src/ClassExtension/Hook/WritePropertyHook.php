@@ -29,7 +29,7 @@ class WritePropertyHook extends AbstractPropertyHook
     protected CData $value;
 
     /**
-     * typedef zval *(*zend_object_write_property_t)(zval *object, zval *member, zval *value, void **cache_slot);
+     * typedef zval *(*zend_object_write_property_t)(zend_object *object, zend_string *member, zval *value, void **cache_slot);
      *
      * @inheritDoc
      */
@@ -80,7 +80,7 @@ class WritePropertyHook extends AbstractPropertyHook
         $value     = $this->value;
         $cacheSlot = $this->cacheSlot;
 
-        $previousScope = Core::$executor->setFakeScope($object->value->obj->ce);
+        $previousScope = Core::$executor->setFakeScope($object->ce);
         $result        = ($originalHandler)($object, $member, $value, $cacheSlot);
         Core::$executor->setFakeScope($previousScope);
 

@@ -16,6 +16,7 @@ use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
+use ZEngine\Type\ObjectEntry;
 
 /**
  * Receiving hook for casting to array, debugging, etc
@@ -38,7 +39,7 @@ class GetPropertiesForHook extends AbstractHook
     protected int $purpose;
 
     /**
-     * zend_array *(*zend_object_get_properties_for_t)(zval *object, zend_prop_purpose purpose);
+     * zend_array *(*zend_object_get_properties_for_t)(zend_object *object, zend_prop_purpose purpose);
      *
      * @inheritDoc
      */
@@ -57,7 +58,7 @@ class GetPropertiesForHook extends AbstractHook
      */
     public function getObject(): object
     {
-        ReflectionValue::fromValueEntry($this->object)->getNativeValue($objectInstance);
+        $objectInstance = ObjectEntry::fromCData($this->object)->getNativeValue();
 
         return $objectInstance;
     }
@@ -85,7 +86,7 @@ class GetPropertiesForHook extends AbstractHook
         $object  = $this->object;
         $purpose = $this->purpose;
 
-        $previousScope = Core::$executor->setFakeScope($object->value->obj->ce);
+        $previousScope = Core::$executor->setFakeScope($object->ce);
         $result        = ($originalHandler)($object, $purpose);
         Core::$executor->setFakeScope($previousScope);
 

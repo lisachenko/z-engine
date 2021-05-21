@@ -246,7 +246,7 @@ class Core
 
             // For Windows platform we should load symbols from the shared php7.dll library
             if ($isWindowsPlatform) {
-                $arguments[] = 'php7.dll';
+                $arguments[] = 'php' . PHP_MAJOR_VERSION . '.dll';
             }
 
             $engine = FFI::cdef(...$arguments);

@@ -360,6 +360,7 @@ typedef struct _zend_property_info {
 typedef struct _zend_class_constant {
     zval value; /* access flags are stored in reserved: zval.u2.access_flags */
     zend_string *doc_comment;
+    HashTable *attributes;
     zend_class_entry *ce;
 } zend_class_constant;
 
@@ -397,6 +398,7 @@ struct _zend_op_array {
     uint32_t num_args;
     uint32_t required_num_args;
     zend_arg_info *arg_info;
+    HashTable *attributes;
     /* END of common elements */
 
     int cache_size;     /* number of run_time_cache_slots * sizeof(void*) */
@@ -442,6 +444,7 @@ typedef struct _zend_internal_function {
     uint32_t num_args;
     uint32_t required_num_args;
     zend_internal_arg_info *arg_info;
+    HashTable *attributes;
     /* END of common elements */
 
     zif_handler handler;
@@ -463,6 +466,7 @@ union _zend_function {
         uint32_t num_args;
         uint32_t required_num_args;
         zend_arg_info *arg_info;
+        HashTable *attributes;
     } common;
 
     zend_op_array op_array;
@@ -478,6 +482,7 @@ typedef struct _zend_execute_data {
     zend_execute_data   *prev_execute_data;
     zend_array          *symbol_table;
     void               **run_time_cache;   /* cache op_array->run_time_cache */
+    zend_array          *extra_named_params;
 };
 
 /* zend_closurec.c */
@@ -498,10 +503,10 @@ extern const ZEND_API zend_object_handlers std_object_handlers;
    symbol table, its reference count should be 0.
 */
 /* Used to fetch property from the object, read-only */
-typedef zval *(*zend_object_read_property_t)(zval *object, zval *member, int type, void **cache_slot, zval *rv);
+typedef zval *(*zend_object_read_property_t)(zend_object *object, zend_string *member, int type, void **cache_slot, zval *rv);
 
 /* Used to fetch dimension from the object, read-only */
-typedef zval *(*zend_object_read_dimension_t)(zval *object, zval *offset, int type, zval *rv);
+typedef zval *(*zend_object_read_dimension_t)(zend_object *object, zval *offset, int type, zval *rv);
 
 
 /* The following rule applies to write_property() and write_dimension() implementations:
@@ -511,23 +516,20 @@ typedef zval *(*zend_object_read_dimension_t)(zval *object, zval *offset, int ty
    You must return the final value of the assigned property.
 */
 /* Used to set property of the object */
-typedef zval *(*zend_object_write_property_t)(zval *object, zval *member, zval *value, void **cache_slot);
+typedef zval *(*zend_object_write_property_t)(zend_object *object, zend_string *member, zval *value, void **cache_slot);
 
 /* Used to set dimension of the object */
-typedef void (*zend_object_write_dimension_t)(zval *object, zval *offset, zval *value);
+typedef void (*zend_object_write_dimension_t)(zend_object *object, zval *offset, zval *value);
 
 
-/* Used to create pointer to the property of the object, for future direct r/w access */
-typedef zval *(*zend_object_get_property_ptr_ptr_t)(zval *object, zval *member, int type, void **cache_slot);
-
-/* Used to set object value. Can be used to override assignments and scalar
-   write ops (like ++, +=) on the object */
-typedef void (*zend_object_set_t)(zval *object, zval *value);
-
-/* Used to get object value. Can be used when converting object value to
- * one of the basic types and when using scalar ops (like ++, +=) on the object
+/* Used to create pointer to the property of the object, for future direct r/w access.
+ * May return one of:
+ *  * A zval pointer, without incrementing the reference count.
+ *  * &EG(error_zval), if an exception has been thrown.
+ *  * NULL, if acquiring a direct pointer is not possible.
+ *    In this case, the VM will fall back to using read_property and write_property.
  */
-typedef zval* (*zend_object_get_t)(zval *object, zval *rv);
+typedef zval *(*zend_object_get_property_ptr_ptr_t)(zend_object *object, zend_string *member, int type, void **cache_slot);
 
 /* Used to check if a property of the object exists */
 /* param has_set_exists:
@@ -535,21 +537,21 @@ typedef zval* (*zend_object_get_t)(zval *object, zval *rv);
  * 1 (set) whether property exists and is true
  * 2 (exists) whether property exists
  */
-typedef int (*zend_object_has_property_t)(zval *object, zval *member, int has_set_exists, void **cache_slot);
+typedef int (*zend_object_has_property_t)(zend_object *object, zend_string *member, int has_set_exists, void **cache_slot);
 
 /* Used to check if a dimension of the object exists */
-typedef int (*zend_object_has_dimension_t)(zval *object, zval *member, int check_empty);
+typedef int (*zend_object_has_dimension_t)(zend_object *object, zval *member, int check_empty);
 
 /* Used to remove a property of the object */
-typedef void (*zend_object_unset_property_t)(zval *object, zval *member, void **cache_slot);
+typedef void (*zend_object_unset_property_t)(zend_object *object, zend_string *member, void **cache_slot);
 
 /* Used to remove a dimension of the object */
-typedef void (*zend_object_unset_dimension_t)(zval *object, zval *offset);
+typedef void (*zend_object_unset_dimension_t)(zend_object *object, zval *offset);
 
 /* Used to get hash of the properties of the object, as hash of zval's */
-typedef HashTable *(*zend_object_get_properties_t)(zval *object);
+typedef HashTable *(*zend_object_get_properties_t)(zend_object *object);
 
-typedef HashTable *(*zend_object_get_debug_info_t)(zval *object, int *is_temp);
+typedef HashTable *(*zend_object_get_debug_info_t)(zend_object *object, int *is_temp);
 
 typedef enum _zend_prop_purpose {
     /* Used for debugging. Supersedes get_debug_info handler. */
@@ -564,47 +566,43 @@ typedef enum _zend_prop_purpose {
     ZEND_PROP_PURPOSE_VAR_EXPORT,
     /* Used for json_encode(). */
     ZEND_PROP_PURPOSE_JSON,
-    /* array_key_exists(). Not intended for general use! */
-    _ZEND_PROP_PURPOSE_ARRAY_KEY_EXISTS,
     /* Dummy member to ensure that "default" is specified. */
     _ZEND_PROP_PURPOSE_NON_EXHAUSTIVE_ENUM
 } zend_prop_purpose;
 
 /* The return value must be released using zend_release_properties(). */
-typedef zend_array *(*zend_object_get_properties_for_t)(zval *object, zend_prop_purpose purpose);
+typedef zend_array *(*zend_object_get_properties_for_t)(zend_object *object, zend_prop_purpose purpose);
 
 /* Used to call methods */
 /* args on stack! */
 /* Andi - EX(fbc) (function being called) needs to be initialized already in the INIT fcall opcode so that the parameters can be parsed the right way. We need to add another callback for this.
  */
-typedef int (*zend_object_call_method_t)(zend_string *method, zend_object *object, INTERNAL_FUNCTION_PARAMETERS);
 typedef zend_function *(*zend_object_get_method_t)(zend_object **object, zend_string *method, const zval *key);
 typedef zend_function *(*zend_object_get_constructor_t)(zend_object *object);
 
 /* Object maintenance/destruction */
 typedef void (*zend_object_dtor_obj_t)(zend_object *object);
 typedef void (*zend_object_free_obj_t)(zend_object *object);
-typedef zend_object* (*zend_object_clone_obj_t)(zval *object);
+typedef zend_object* (*zend_object_clone_obj_t)(zend_object *object);
 
 /* Get class name for display in var_dump and other debugging functions.
  * Must be defined and must return a non-NULL value. */
 typedef zend_string *(*zend_object_get_class_name_t)(const zend_object *object);
 
 typedef int (*zend_object_compare_t)(zval *object1, zval *object2);
-typedef int (*zend_object_compare_zvals_t)(zval *result, zval *op1, zval *op2);
 
 /* Cast an object to some other type.
  * readobj and retval must point to distinct zvals.
  */
-typedef int (*zend_object_cast_t)(zval *readobj, zval *retval, int type);
+typedef int (*zend_object_cast_t)(zend_object *readobj, zval *retval, int type);
 
 /* updates *count to hold the number of elements present and returns SUCCESS.
  * Returns FAILURE if the object does not have any sense of overloaded dimensions */
-typedef int (*zend_object_count_elements_t)(zval *object, zend_long *count);
+typedef int (*zend_object_count_elements_t)(zend_object *object, zend_long *count);
 
-typedef int (*zend_object_get_closure_t)(zval *obj, zend_class_entry **ce_ptr, zend_function **fptr_ptr, zend_object **obj_ptr);
+typedef int (*zend_object_get_closure_t)(zend_object *obj, zend_class_entry **ce_ptr, zend_function **fptr_ptr, zend_object **obj_ptr, zend_bool check_only);
 
-typedef HashTable *(*zend_object_get_gc_t)(zval *object, zval **table, int *n);
+typedef HashTable *(*zend_object_get_gc_t)(zend_object *object, zval **table, int *n);
 
 typedef int (*zend_object_do_operation_t)(zend_uchar opcode, zval *result, zval *op1, zval *op2);
 
@@ -620,25 +618,21 @@ struct _zend_object_handlers {
     zend_object_read_dimension_t            read_dimension;       /* required */
     zend_object_write_dimension_t           write_dimension;      /* required */
     zend_object_get_property_ptr_ptr_t      get_property_ptr_ptr; /* required */
-    zend_object_get_t                       get;                  /* optional */
-    zend_object_set_t                       set;                  /* optional */
     zend_object_has_property_t              has_property;         /* required */
     zend_object_unset_property_t            unset_property;       /* required */
     zend_object_has_dimension_t             has_dimension;        /* required */
     zend_object_unset_dimension_t           unset_dimension;      /* required */
     zend_object_get_properties_t            get_properties;       /* required */
     zend_object_get_method_t                get_method;           /* required */
-    zend_object_call_method_t               call_method;          /* optional */
     zend_object_get_constructor_t           get_constructor;      /* required */
     zend_object_get_class_name_t            get_class_name;       /* required */
-    zend_object_compare_t                   compare_objects;      /* optional */
     zend_object_cast_t                      cast_object;          /* optional */
     zend_object_count_elements_t            count_elements;       /* optional */
     zend_object_get_debug_info_t            get_debug_info;       /* optional */
     zend_object_get_closure_t               get_closure;          /* optional */
     zend_object_get_gc_t                    get_gc;               /* required */
     zend_object_do_operation_t              do_operation;         /* optional */
-    zend_object_compare_zvals_t             compare;              /* optional */
+    zend_object_compare_t                   compare;              /* optional */
     zend_object_get_properties_for_t        get_properties_for;   /* optional */
 };
 
@@ -834,8 +828,8 @@ struct _zend_class_entry {
     zend_function *__callstatic;
     zend_function *__tostring;
     zend_function *__debugInfo;
-    zend_function *serialize_func;
-    zend_function *unserialize_func;
+    zend_function *__serialize;
+    zend_function *__unserialize;
 
     /* allocated only if class implements Iterator or IteratorAggregate interface */
     zend_class_iterator_funcs *iterator_funcs_ptr;
@@ -864,6 +858,7 @@ struct _zend_class_entry {
     zend_class_name *trait_names;
     zend_trait_alias **trait_aliases;
     zend_trait_precedence **trait_precedences;
+    HashTable *attributes;
 
     union {
         struct {
@@ -942,6 +937,20 @@ struct _zend_module_dep {
     unsigned char type;		/* dependency type */
 };
 
+/* zend_gc.h */
+typedef struct _zend_gc_status {
+	uint32_t runs;
+	uint32_t collected;
+	uint32_t threshold;
+	uint32_t num_roots;
+} zend_gc_status;
+
+typedef struct {
+	zval *cur;
+	zval *end;
+	zval *start;
+} zend_get_gc_buffer;
+
 /* zend_globals.h */
 struct _zend_compiler_globals {
     zend_stack loop_var_stack;
@@ -1009,6 +1018,8 @@ struct _zend_compiler_globals {
     HashTable *delayed_autoloads;
 
     uint32_t rtd_key_counter;
+
+    zend_stack short_circuiting_opnums;
 };
 
 #ifdef ZEND_WIN32
@@ -1059,6 +1070,8 @@ struct _zend_executor_globals {
     struct _zend_execute_data *current_execute_data;
     zend_class_entry *fake_scope; /* used to avoid checks accessing properties */
 
+    uint32_t jit_trace_num; /* Used by tracing JIT to reference the currently running trace */
+
     zend_long precision;
 
     int ticks_count;
@@ -1068,7 +1081,6 @@ struct _zend_executor_globals {
     uint32_t persistent_classes_count;
 
     HashTable *in_autoload;
-    zend_function *autoload_func;
     zend_bool full_tables_cleanup;
 
     /* for extended information support */
@@ -1133,6 +1145,9 @@ struct _zend_executor_globals {
     HashTable weakrefs;
 
     zend_bool exception_ignore_args;
+    zend_long exception_string_param_max_len;
+
+    zend_get_gc_buffer get_gc_buffer;
 
     void *reserved[ZEND_MAX_RESERVED_RESOURCES];
 };

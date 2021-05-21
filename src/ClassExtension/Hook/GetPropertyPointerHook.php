@@ -21,7 +21,6 @@ use ZEngine\Reflection\ReflectionValue;
  */
 class GetPropertyPointerHook extends AbstractPropertyHook
 {
-
     protected const HOOK_FIELD = 'get_property_ptr_ptr';
 
     /**
@@ -30,7 +29,7 @@ class GetPropertyPointerHook extends AbstractPropertyHook
     protected int $type;
 
     /**
-     * typedef zval *(*zend_object_get_property_ptr_ptr_t)(zval *object, zval *member, int type, void **cache_slot)
+     * typedef zval *(*zend_object_get_property_ptr_ptr_t)(zend_object *object, zend_string *member, int type, void **cache_slot)
      *
      * @inheritDoc
      */
@@ -68,7 +67,7 @@ class GetPropertyPointerHook extends AbstractPropertyHook
         $type      = $this->type;
         $cacheSlot = $this->cacheSlot;
 
-        $previousScope = Core::$executor->setFakeScope($object->value->obj->ce);
+        $previousScope = Core::$executor->setFakeScope($object->ce);
         $result        = ($originalHandler)($object, $member, $type, $cacheSlot);
         Core::$executor->setFakeScope($previousScope);
 

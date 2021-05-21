@@ -24,6 +24,7 @@ use ZEngine\Type\StringEntry;
  * typedef struct _zend_class_constant {
  *     zval value; // access flags are stored in reserved: zval.u2.access_flags
  *     zend_string *doc_comment;
+ *     HashTable *attributes;
  *     zend_class_entry *ce;
  * } zend_class_constant;
  */

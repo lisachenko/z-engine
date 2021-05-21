@@ -33,7 +33,7 @@ class ReflectionClassConstantTest extends TestCase
         $this->assertFalse($this->refConstant->isProtected());
 
         $this->expectException(Error::class);
-        $this->expectExceptionMessageMatches('/Cannot access private const .*?SOME_CONST/');
+        $this->expectExceptionMessageMatches('/Cannot access private const\S* .*?SOME_CONST/');
         $this->assertSame(123, TestClass::SOME_CONST);
     }
 
@@ -60,7 +60,7 @@ class ReflectionClassConstantTest extends TestCase
 
         // If we try to access our protected constant, we should have an error here
         $this->expectException(Error::class);
-        $this->expectExceptionMessageMatches('/Cannot access protected const .*?SOME_CONST/');
+        $this->expectExceptionMessageMatches('/Cannot access protected const\S* .*?SOME_CONST/');
         $this->assertSame(123, TestClass::SOME_CONST);
     }
 

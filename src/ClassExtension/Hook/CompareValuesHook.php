@@ -13,7 +13,6 @@ declare(strict_types=1);
 namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
-use ZEngine\Core;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
 
@@ -40,18 +39,17 @@ class CompareValuesHook extends AbstractHook
     protected CData $op2;
 
     /**
-     * typedef int (*zend_object_compare_zvals_t)(zval *result, zval *op1, zval *op2);
+     * typedef int (*zend_object_compare_t)(zval *object1, zval *object2);
      *
      * @inheritDoc
      */
     public function handle(...$rawArguments): int
     {
-        [$this->returnValue, $this->op1, $this->op2] = $rawArguments;
+        [$this->op1, $this->op2] = $rawArguments;
 
         $result = ($this->userHandler)($this);
-        ReflectionValue::fromValueEntry($this->returnValue)->setNativeValue($result);
 
-        return Core::SUCCESS;
+        return $result;
     }
 
     /**
@@ -75,16 +73,6 @@ class CompareValuesHook extends AbstractHook
     }
 
     /**
-     * Returns result of casting (eg from call to proceed)
-     */
-    public function getResult()
-    {
-        ReflectionValue::fromValueEntry($this->returnValue)->getNativeValue($result);
-
-        return $result;
-    }
-
-    /**
      * Proceeds with object comparison
      */
     public function proceed()
@@ -92,7 +80,7 @@ class CompareValuesHook extends AbstractHook
         if (!$this->hasOriginalHandler()) {
             throw new \LogicException('Original handler is not available');
         }
-        $result = ($this->originalHandler)($this->returnValue, $this->op1, $this->op2);
+        $result = ($this->originalHandler)($this->op1, $this->op2);
 
         return $result;
     }

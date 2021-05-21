@@ -33,7 +33,7 @@ class HasPropertyHook extends AbstractPropertyHook
     protected int $type;
 
     /**
-     * typedef int (*zend_object_has_property_t)(zval *object, zval *member, int has_set_exists, void **cache_slot);
+     * typedef int (*zend_object_has_property_t)(zend_object *object, zend_string *member, int has_set_exists, void **cache_slot);
      *
      * @inheritDoc
      */
@@ -74,7 +74,7 @@ class HasPropertyHook extends AbstractPropertyHook
         $type      = $this->type;
         $cacheSlot = $this->cacheSlot;
 
-        $previousScope = Core::$executor->setFakeScope($object->value->obj->ce);
+        $previousScope = Core::$executor->setFakeScope($object->ce);
         $result        = ($originalHandler)($object, $member, $type, $cacheSlot);
         Core::$executor->setFakeScope($previousScope);
 
