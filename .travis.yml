@@ -10,6 +10,7 @@ matrix:
         - COVERAGE_FLAGS="--coverage-text --coverage-clover=build/clover.xml"
 
 before_script:
+  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
   - docker build --build-arg PHP_VERSION=${TRAVIS_JOB_NAME} -t z-engine .
 script:
   - docker run z-engine /usr/src/z-engine/vendor/bin/phpunit --verbose ${COVERAGE_FLAGS} --colors --exclude-group=internal
