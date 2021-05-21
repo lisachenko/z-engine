@@ -3,7 +3,7 @@ services:
 matrix:
   include:
     - language: php
-      name: "7.4-rc"
+      name: "7.4"
       after_script:
         - sh .travis.coverage.sh
       env:
@@ -12,4 +12,4 @@ matrix:
 before_script:
   - docker build --build-arg PHP_VERSION=${TRAVIS_JOB_NAME} -t z-engine .
 script:
-  - docker run z-engine /usr/src/z-engine/vendor/bin/phpunit --verbose ${COVERAGE_FLAGS} --colors
+  - docker run z-engine /usr/src/z-engine/vendor/bin/phpunit --verbose ${COVERAGE_FLAGS} --colors --exclude-group=internal

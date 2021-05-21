@@ -161,6 +161,7 @@ class ReflectionClass extends NativeReflectionClass
      * @param string ...$interfaceNames Name of interfaces to add
      *
      * @see zend_inheritance.c:zend_do_implement_interface() function implementation for details
+     * @internal
      */
     public function addInterfaces(string ...$interfaceNames): void
     {
@@ -207,6 +208,7 @@ class ReflectionClass extends NativeReflectionClass
      * Removes interfaces from the current class
      *
      * @param string ...$interfaceNames Name of interfaces to remove
+     * @internal
      */
     public function removeInterfaces(string ...$interfaceNames): void
     {
@@ -284,6 +286,7 @@ class ReflectionClass extends NativeReflectionClass
 
     /**
      * Adds a new method to the class in runtime
+     * @internal
      */
     public function addMethod(string $methodName, \Closure $method): ReflectionMethod
     {
@@ -315,6 +318,7 @@ class ReflectionClass extends NativeReflectionClass
      * Removes given methods from the class
      *
      * @param string ...$methodNames Name of methods to remove
+     * @internal
      */
     public function removeMethods(string ...$methodNames): void
     {
@@ -343,6 +347,7 @@ class ReflectionClass extends NativeReflectionClass
      * Adds traits to the current class
      *
      * @param string ...$traitNames Name of traits to add
+     * @internal
      */
     public function addTraits(string ...$traitNames): void
     {
@@ -384,6 +389,7 @@ class ReflectionClass extends NativeReflectionClass
      * Removes traits from the current class
      *
      * @param string ...$traitNames Name of traits to remove
+     * @internal
      */
     public function removeTraits(string ...$traitNames): void
     {
@@ -454,6 +460,7 @@ class ReflectionClass extends NativeReflectionClass
 
     /**
      * Removes the linked parent class from the existing class
+     * @internal
      */
     public function removeParentClass(): void
     {
@@ -491,6 +498,7 @@ class ReflectionClass extends NativeReflectionClass
      * Configures a new parent class for this one
      *
      * @param string $newParent New parent class name
+     * @internal
      */
     public function setParent(string $newParent)
     {

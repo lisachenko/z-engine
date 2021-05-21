@@ -101,25 +101,16 @@ class OpLine
         return $this->opline->handler;
     }
 
-    /**
-     * Returns the first operand type
-     */
     public function getOp1Type(): int
     {
         return $this->opline->op1_type;
     }
 
-    /**
-     * Returns the second operand type
-     */
     public function getOp2Type(): int
     {
         return $this->opline->op2_type;
     }
 
-    /**
-     *
-     */
     public function getOp1(): ?ReflectionValue
     {
         $value = $this->getValuePointer($this->opline->op1, $this->opline->op1_type);
@@ -127,9 +118,6 @@ class OpLine
         return $value;
     }
 
-    /**
-     * Returns the second operand
-     */
     public function getOp2(): ?ReflectionValue
     {
         $value = $this->getValuePointer($this->opline->op2, $this->opline->op2_type);
@@ -137,9 +125,6 @@ class OpLine
         return $value;
     }
 
-    /**
-     * Returns the "result" value
-     */
     public function getResult(): ?ReflectionValue
     {
         $value = $this->getValuePointer($this->opline->result, $this->opline->result_type);
@@ -161,6 +146,7 @@ class OpLine
      * <span style="color:red; font-weight:bold">DANGER!</span> This can corrupt memory/engine state.
      *
      * @param int $newCode
+     * @internal
      */
     public function setCode(int $newCode): void
     {
@@ -189,6 +175,7 @@ class OpLine
      * Sets a new line for this entry
      *
      * @param int $newLine New line in the file
+     * @internal
      */
     public function setLine(int $newLine): void
     {

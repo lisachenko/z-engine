@@ -12,11 +12,8 @@ declare(strict_types=1);
 
 namespace ZEngine\Reflection;
 
-
-use Error;
 use PHPUnit\Framework\Error\Deprecated;
 use PHPUnit\Framework\TestCase;
-use ZEngine\Stub\TestClass;
 
 /**
  * Test function to reflect
@@ -50,25 +47,31 @@ class ReflectionFunctionTest extends TestCase
             $this->assertTrue($refFunction->isDeprecated());
 
             $this->expectException(Deprecated::class);
-            $this->expectExceptionMessageRegExp('/Function var_dump\(\) is deprecated/');
-            $value = var_dump($currentReporting);
+            $this->expectExceptionMessageMatches('/Function var_dump\(\) is deprecated/');
+            var_dump($currentReporting);
         } finally {
             error_reporting($currentReporting);
             $refFunction->setDeprecated(false);
         }
     }
 
+    /**
+     * @group internal
+     */
     public function testRedefineThrowsAnExceptionForIncompatibleCallback(): void
     {
         $this->expectException(\ReflectionException::class);
         $expectedRegexp = '/"function \(\)" should be compatible with original "function \(\)\: \?string"/';
-        $this->expectExceptionMessageRegExp($expectedRegexp);
+        $this->expectExceptionMessageMatches($expectedRegexp);
 
         $this->refFunction->redefine(function () {
             echo 'Nope';
         });
     }
 
+    /**
+     * @group internal
+     */
     public function testRedefine(): void
     {
         $this->refFunction->redefine(function (): ?string {
@@ -84,6 +87,9 @@ class ReflectionFunctionTest extends TestCase
         $this->assertSame('Yes', $result);
     }
 
+    /**
+     * @group internal
+     */
     public function testRedefineInternalFunc(): void
     {
         $originalValue = zend_version();

@@ -64,6 +64,7 @@ trait FunctionLikeTrait
 
     /**
      * Redefines an existing method in the class with closure
+     * @internal
      */
     public function redefine(\Closure $newCode): void
     {

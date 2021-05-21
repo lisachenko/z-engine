@@ -105,6 +105,7 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
      * Deletes a value by key from the hashtable
      *
      * @param string $key Key in the hash to delete
+     * @internal
      */
     public function delete(string $key): void
     {
@@ -117,9 +118,6 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
 
     /**
      * Adds new value to the HashTable
-     *
-     * @param string $key Key to use
-     * @param CData  $value
      */
     public function add(string $key, ReflectionValue $value): void
     {

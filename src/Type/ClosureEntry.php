@@ -76,6 +76,7 @@ class ClosureEntry
 
     /**
      * Changes the scope of closure to another one
+     * @internal
      */
     public function setCalledScope(?string $newScope): void
     {
@@ -99,6 +100,8 @@ class ClosureEntry
      *
      * <span style="color:red; font-weight: bold">Warning!</span> Given object should live more than closure itself!
      * @param object $object New object
+     *
+     * @internal
      */
     public function setThis(object $object): void
     {

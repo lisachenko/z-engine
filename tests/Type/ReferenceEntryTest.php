@@ -12,13 +12,12 @@ declare(strict_types=1);
 
 namespace ZEngine\Type;
 
-
 use PHPUnit\Framework\TestCase;
 use ZEngine\Reflection\ReflectionValue;
 
 class ReferenceEntryTest extends TestCase
 {
-    public function testGetValue()
+    public function testGetValue(): void
     {
         $value     = 'some';
         $reference = new ReferenceEntry($value);

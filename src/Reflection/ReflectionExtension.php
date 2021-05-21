@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace ZEngine\Reflection;
 
-
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
 use ReflectionExtension as NativeReflectionExtension;
@@ -79,7 +78,7 @@ class ReflectionExtension extends NativeReflectionExtension
     public static function fromCData(CData $moduleEntry): self
     {
         /** @var self $extension */
-        $extension = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $extension = (new NativeReflectionClass(self::class))->newInstanceWithoutConstructor();
         $extension->moduleEntry = $moduleEntry;
 
         call_user_func([$extension, 'parent::__construct'], $moduleEntry->name);
@@ -166,7 +165,7 @@ class ReflectionExtension extends NativeReflectionExtension
             return [];
         }
         $result  = [];
-        $methods = (new NativeReflectionClass(static::class))->getMethods(ReflectionMethod::IS_PUBLIC);
+        $methods = (new NativeReflectionClass(self::class))->getMethods(ReflectionMethod::IS_PUBLIC);
         foreach ($methods as $method) {
             $methodName  = $method->getName();
             $hasZeroArgs = $method->getNumberOfRequiredParameters() === 0;

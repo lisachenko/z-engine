@@ -12,12 +12,11 @@ declare(strict_types=1);
 
 namespace ZEngine\Type;
 
-
 use PHPUnit\Framework\TestCase;
 
 class ObjectEntryTest extends TestCase
 {
-    private $instance;
+    private object $instance;
 
     protected function setUp(): void
     {
@@ -30,6 +29,9 @@ class ObjectEntryTest extends TestCase
         $this->assertSame(\RuntimeException::class, $class->getName());
     }
 
+    /**
+     * @group internal
+     */
     public function testSetClass(): void
     {
         $objectEntry = new ObjectEntry($this->instance);
@@ -50,6 +52,7 @@ class ObjectEntryTest extends TestCase
 
     /**
      * @depends testGetHandle
+     * @group internal
      */
     public function testSetHandle(): void
     {

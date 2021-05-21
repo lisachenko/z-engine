@@ -153,6 +153,7 @@ class ReflectionMethod extends NativeReflectionMethod
      * Changes the declaring class name for this method
      *
      * @param string $className New class name for this method
+     * @internal
      */
     public function setDeclaringClass(string $className): void
     {

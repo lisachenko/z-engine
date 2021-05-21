@@ -11,7 +11,6 @@ declare(strict_types=1);
 
 namespace ZEngine\System;
 
-
 use LogicException;
 use PHPUnit\Framework\TestCase;
 use ZEngine\Core;

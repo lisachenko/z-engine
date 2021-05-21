@@ -138,7 +138,7 @@ class ReflectionValue implements ReferenceCountedInterface
     public static function fromValueEntry(CData $valueEntry): ReflectionValue
     {
         /** @var ReflectionValue $reflectionValue */
-        $reflectionValue = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionValue = (new NativeReflectionClass(self::class))->newInstanceWithoutConstructor();
         $reflectionValue->pointer = $valueEntry;
 
         return $reflectionValue;

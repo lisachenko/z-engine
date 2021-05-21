@@ -42,6 +42,9 @@ class ReflectionClassTest extends TestCase
         $this->refClass = new ReflectionClass(TestClass::class);
     }
 
+    /**
+     * @group internal
+     */
     public function testRemoveMethods()
     {
         $this->refClass->removeMethods('methodToRemove');
@@ -49,6 +52,9 @@ class ReflectionClassTest extends TestCase
         $this->assertFalse($isMethodExists, 'Method should be removed');
     }
 
+    /**
+     * @group internal
+     */
     public function testAddMethod()
     {
         $methodName = 'newMethod';
@@ -113,6 +119,9 @@ class ReflectionClassTest extends TestCase
         $this->assertInstanceOf(ReflectionClassConstant::class, $refConstant);
     }
 
+    /**
+     * @group internal
+     */
     public function testAddTraits()
     {
         $this->refClass->addTraits(TestTrait::class);
@@ -124,6 +133,7 @@ class ReflectionClassTest extends TestCase
 
     /**
      * @depends testAddTraits
+     * @group internal
      */
     public function testRemoveTraits()
     {
@@ -135,6 +145,9 @@ class ReflectionClassTest extends TestCase
         // TODO: Check that methods were also removed to the TestClass class
     }
 
+    /**
+     * @group internal
+     */
     public function testAddInterfaces(): void
     {
         $object = new TestClass();
@@ -156,6 +169,7 @@ class ReflectionClassTest extends TestCase
 
     /**
      * @depends testAddInterfaces
+     * @group internal
      */
     public function testRemoveInterfaces(): void
     {
@@ -166,6 +180,9 @@ class ReflectionClassTest extends TestCase
         $this->assertNotContains(TestInterface::class, $this->refClass->getInterfaceNames());
     }
 
+    /**
+     * @group internal
+     */
     public function testAddRemoveInterfacesToInternalClass(): void
     {
         $refClosureClass = new ReflectionClass(\Closure::class);
