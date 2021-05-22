@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-
 <!--
   ~ Z-Engine framework
   ~
@@ -9,41 +8,31 @@
   ~ with this source code in the file LICENSE.
   ~
   -->
-
-<phpunit backupGlobals="false"
-         backupStaticAttributes="false"
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="./vendor/phpunit/phpunit/phpunit.xsd"
          colors="true"
-         convertErrorsToExceptions="true"
-         convertNoticesToExceptions="true"
-         convertWarningsToExceptions="true"
-         processIsolation="false"
-         stopOnFailure="false"
-         bootstrap="./tests/bootstrap.php"
->
+         bootstrap="./tests/bootstrap.php">
+    <coverage>
+        <include>
+            <directory>./src/</directory>
+        </include>
+        <report>
+            <clover outputFile="./build/logs/clover.xml"/>
+            <crap4j outputFile="./build/logs/crap4j.xml"/>
+            <xml outputDirectory="./build/coverage/xml"/>
+        </report>
+    </coverage>
     <testsuites>
         <testsuite name="Z-Engine Test Suite">
             <directory>./tests/</directory>
         </testsuite>
     </testsuites>
-
-    <filter>
-        <whitelist>
-            <directory>./src/</directory>
-        </whitelist>
-    </filter>
-
     <groups>
         <exclude>
             <group>performance</group>
         </exclude>
     </groups>
-
-
     <logging>
-        <log type="coverage-html" target="./build/coverage/html"/>
-        <log type="coverage-xml" target="./build/coverage/xml"/>
-        <log type="coverage-clover" target="./build/logs/clover.xml"/>
-        <log type="coverage-crap4j" target="./build/logs/crap4j.xml"/>
-        <log type="junit" target="./build/logs/junit.xml"/>
+        <junit outputFile="./build/logs/junit.xml"/>
     </logging>
 </phpunit>
