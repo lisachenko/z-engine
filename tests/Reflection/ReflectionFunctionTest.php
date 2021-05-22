@@ -95,7 +95,7 @@ class ReflectionFunctionTest extends TestCase
         $originalValue = zend_version();
         $refFunction   = new ReflectionFunction('zend_version');
 
-        $refFunction->redefine(function () {
+        $refFunction->redefine(function (): string {
             return 'Z-Engine';
         });
 
