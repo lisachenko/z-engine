@@ -22,8 +22,6 @@ interface ObjectHasPropertyInterface
     /**
      * Performs checking of object's field
      *
-     * @param HasPropertyHook $hook Instance of current hook
-     *
      * @return int Value to return
      */
     public static function __fieldIsset(HasPropertyHook $hook);

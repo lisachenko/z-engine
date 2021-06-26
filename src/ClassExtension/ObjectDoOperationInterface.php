@@ -22,8 +22,6 @@ interface ObjectDoOperationInterface
     /**
      * Performs an operation on given object
      *
-     * @param DoOperationHook $hook Instance of current hook
-     *
      * @return mixed Result of operation value
      */
     public static function __doOperation(DoOperationHook $hook);

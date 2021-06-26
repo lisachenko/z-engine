@@ -23,8 +23,6 @@ trait ObjectCreateTrait
     /**
      * Performs low-level initialization of object during new instances creation
      *
-     * @param CreateObjectHook $hook Hook instance that provides proceed() and setClassType() method
-     *
      * @return CData Pointer to the zend_object instance
      */
     public static function __init(CreateObjectHook $hook): CData

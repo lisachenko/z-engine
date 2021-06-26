@@ -22,8 +22,6 @@ interface ObjectGetPropertiesForInterface
     /**
      * Returns a hash-map (array) representation of object (for casting to array, json encoding, var dumping)
      *
-     * @param GetPropertiesForHook $hook Instance of current hook
-     *
      * @return array Key-value pair of fields
      */
     public static function __getFields(GetPropertiesForHook $hook): array;

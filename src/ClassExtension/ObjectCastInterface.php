@@ -22,8 +22,6 @@ interface ObjectCastInterface
     /**
      * Performs casting of given object to another value
      *
-     * @param CastObjectHook $hook Instance of current hook
-     *
      * @return mixed Casted value
      */
     public static function __cast(CastObjectHook $hook);

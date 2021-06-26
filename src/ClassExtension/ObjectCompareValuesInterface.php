@@ -22,8 +22,6 @@ interface ObjectCompareValuesInterface
     /**
      * Performs comparison of given object with another value
      *
-     * @param CompareValuesHook $hook Instance of current hook
-     *
      * @return int Result of comparison: 1 is greater, -1 is less, 0 is equal
      */
     public static function __compare(CompareValuesHook $hook): int;

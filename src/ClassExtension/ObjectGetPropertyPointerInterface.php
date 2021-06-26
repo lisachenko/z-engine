@@ -22,8 +22,6 @@ interface ObjectGetPropertyPointerInterface
     /**
      * Returns a pointer to an object's field
      *
-     * @param GetPropertyPointerHook $hook Instance of current hook
-     *
      * @return mixed Value to return
      */
     public static function __fieldPointer(GetPropertyPointerHook $hook);

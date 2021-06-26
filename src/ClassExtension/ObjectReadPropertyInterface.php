@@ -22,8 +22,6 @@ interface ObjectReadPropertyInterface
     /**
      * Performs reading of object's field
      *
-     * @param ReadPropertyHook $hook Instance of current hook
-     *
      * @return mixed Value to return
      */
     public static function __fieldRead(ReadPropertyHook $hook);

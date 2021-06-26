@@ -217,6 +217,11 @@ final class OpCode
     public const GET_CALLED_CLASS           = 192;
     public const GET_TYPE                   = 193;
     public const ARRAY_KEY_EXIST            = 194;
+    public const MATCH                      = 195;
+    public const CASE_STRICT                = 196;
+    public const MATCH_ERROR                = 197;
+    public const JMP_NULL                   = 198;
+    public const CHECK_UNDEF_ARGS           = 199;
 
     /**
      * Reversed class constants, containing names by number

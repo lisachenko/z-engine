@@ -21,8 +21,6 @@ interface ObjectUnsetPropertyInterface
 {
     /**
      * Performs reading of object's field
-     *
-     * @param UnsetPropertyHook $hook Instance of current hook
      */
     public static function __fieldUnset(UnsetPropertyHook $hook): void;
 }
