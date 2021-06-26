@@ -182,6 +182,9 @@ class Core
     public const ZEND_USER_FUNCTION =       2;
     public const ZEND_EVAL_CODE =           4;
 
+    public const ZEND_INTERNAL_CLASS = 1;
+    public const ZEND_USER_CLASS     = 2;
+
     /**
      * User opcode handler return values
      */

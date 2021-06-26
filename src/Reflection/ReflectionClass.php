@@ -321,6 +321,16 @@ class ReflectionClass extends NativeReflectionClass
         return $refMethod;
     }
 
+    public function isInternal()
+    {
+        return ord($this->pointer->type) === Core::ZEND_INTERNAL_CLASS;
+    }
+
+    public function isUserDefined()
+    {
+        return ord($this->pointer->type) === Core::ZEND_USER_CLASS;
+    }
+
     /**
      * Removes given methods from the class
      *
@@ -837,8 +847,8 @@ class ReflectionClass extends NativeReflectionClass
     public function setCreateObjectHandler(Closure $handler): void
     {
         // User handlers are only allowed with std_object_handler (when create_object handler is empty)
-        if ($this->pointer->create_object !== null) {
-            throw new \LogicException("Create object handler is available for user-defined classes only");
+        if ($this->isInternal()) {
+            trigger_error("Create object handler is available for user-defined classes only", E_USER_ERROR);
         }
         self::allocateClassObjectHandlers($this->getName());
 
