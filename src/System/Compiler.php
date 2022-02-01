@@ -118,7 +118,7 @@ class Compiler
         $this->pointer        = $pointer;
         $this->classTable     = new HashTable($pointer->class_table);
         $this->functionTable  = new HashTable($pointer->function_table);
-        $this->filenamesTable = new HashTable($pointer->filenames_table);
+//        $this->filenamesTable = new HashTable($pointer->filenames_table);
     }
 
     /**

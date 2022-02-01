@@ -244,7 +244,8 @@ class Core
                 throw new \RuntimeException('Preload mode requires that you call Core::preload before');
             }
             // If not, then load definitions by hand
-            $definition = file_get_contents(DefinitionLoader::wrap(__DIR__.'/../include/engine_x64_nts.h'));
+            $fname = "engine_".PHP_MAJOR_VERSION."_" . PHP_MINOR_VERSION . "_" . (PHP_INT_SIZE === 8 ? "x64" : "x32") . "_" . (ZEND_THREAD_SAFE ? "zts" : "nts") . ".h";
+            $definition = file_get_contents(DefinitionLoader::wrap(__DIR__.'/../include/'.$fname));
             $arguments  = [$definition];
 
             // For Windows platform we should load symbols from the shared php7.dll library
@@ -269,7 +270,8 @@ class Core
      */
     public static function preload()
     {
-        $definition = file_get_contents(DefinitionLoader::wrap(__DIR__.'/../include/engine_x64_nts.h'));
+        $fname = "engine_".PHP_MAJOR_VERSION."_" . PHP_MINOR_VERSION . "_" . (PHP_INT_SIZE === 8 ? "x64" : "x32") . "_" . (ZEND_THREAD_SAFE ? "zts" : "nts") . ".h";
+        $definition = file_get_contents(DefinitionLoader::wrap(__DIR__.'/../include/'.$fname));
         try {
             $tempFile = tempnam(sys_get_temp_dir(), 'php_ffi');
             file_put_contents($tempFile, $definition);
