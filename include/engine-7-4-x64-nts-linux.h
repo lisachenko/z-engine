@@ -1,5 +1,5 @@
 #define FFI_SCOPE "ZEngine"
-#define FFI_LIB "ZEND_LIBRARY_NAME"
+#define FFI_LIB ""
 typedef int64_t zend_long;
 typedef uint64_t zend_ulong;
 typedef int64_t zend_off_t;
@@ -650,7 +650,6 @@ struct _zend_ini_entry {
 };
 typedef struct _zend_module_entry zend_module_entry;
 typedef struct _zend_module_dep zend_module_dep;
-typedef int ts_rsrc_id;
 struct _zend_module_entry {
  unsigned short size;
  unsigned int zend_api;
@@ -667,7 +666,7 @@ struct _zend_module_entry {
  void (*info_func)(zend_module_entry *zend_module);
  const char *version;
  size_t globals_size;
- ts_rsrc_id* globals_id_ptr;
+ void* globals_ptr;
  void (*globals_ctor)(void *global);
  void (*globals_dtor)(void *global);
  int (*post_deactivate_func)(void);
@@ -731,6 +730,7 @@ struct _zend_compiler_globals {
  HashTable *delayed_variance_obligations;
  HashTable *delayed_autoloads;
 };
+typedef struct _zend_compiler_globals zend_compiler_globals;
 typedef void jmp_buf;
 typedef unsigned int fpu_control_t ;
 struct _zend_executor_globals {
@@ -802,6 +802,8 @@ struct _zend_executor_globals {
  void *reserved[6];
 };
 typedef struct _zend_executor_globals zend_executor_globals;
+extern zend_executor_globals executor_globals;
+extern struct _zend_compiler_globals compiler_globals;
 typedef struct _IO_FILE FILE;
 typedef size_t (*zend_stream_fsizer_t)(void* handle);
 typedef ssize_t (*zend_stream_reader_t)(void* handle, char *buf, size_t len);

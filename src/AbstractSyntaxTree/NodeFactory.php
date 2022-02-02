@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace ZEngine\AbstractSyntaxTree;
 
 use FFI\CData;
+use ZEngine\Constants\_zend_ast_kind;
 use ZEngine\Core;
 
 /**
@@ -32,7 +33,8 @@ class NodeFactory
         $kind = $node->kind;
         switch (true) {
             // There are special node types ZVAL, CONSTANT, ZNODE
-            case $kind === NodeKind::AST_ZVAL:
+//            case $kind === NodeKind::AST_ZVAL:
+            case $kind === _zend_ast_kind::ZEND_AST_ZVAL()->value :
                 $node = Core::cast('zend_ast_zval *', $node);
                 return ValueNode::fromCData($node);
             case $kind === NodeKind::AST_CONSTANT:

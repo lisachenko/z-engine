@@ -11,7 +11,9 @@
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:noNamespaceSchemaLocation="./vendor/phpunit/phpunit/phpunit.xsd"
          colors="true"
-         bootstrap="./tests/bootstrap.php">
+         bootstrap="./tests/bootstrap.php"
+         convertDeprecationsToExceptions="true"
+        >
     <coverage>
         <include>
             <directory>./src/</directory>

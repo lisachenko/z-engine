@@ -15,6 +15,7 @@ namespace ZEngine\System;
 use FFI\CData;
 use ZEngine\AbstractSyntaxTree\NodeFactory;
 use ZEngine\AbstractSyntaxTree\NodeInterface;
+use ZEngine\Constants\Defines;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\HashTable;
@@ -27,65 +28,65 @@ class Compiler
      */
 
     /* generate extended debug information */
-    public const COMPILE_EXTENDED_STMT  = (1 << 0);
-    public const COMPILE_EXTENDED_FCALL = (1 << 1);
-    public const COMPILE_EXTENDED_INFO  = (self::COMPILE_EXTENDED_STMT | self::COMPILE_EXTENDED_FCALL);
+    public const COMPILE_EXTENDED_STMT  = Defines::ZEND_COMPILE_EXTENDED_STMT;
+    public const COMPILE_EXTENDED_FCALL = Defines::ZEND_COMPILE_EXTENDED_FCALL;
+    public const COMPILE_EXTENDED_INFO  = Defines::ZEND_COMPILE_EXTENDED_INFO;
 
     /* call op_array handler of extendions */
-    public const COMPILE_HANDLE_OP_ARRAY = (1 << 2);
+    public const COMPILE_HANDLE_OP_ARRAY = Defines::ZEND_COMPILE_HANDLE_OP_ARRAY;
 
     /* generate INIT_FCALL_BY_NAME for internal functions instead of INIT_FCALL */
-    public const COMPILE_IGNORE_INTERNAL_FUNCTIONS = (1 << 3);
+    public const COMPILE_IGNORE_INTERNAL_FUNCTIONS = Defines::ZEND_COMPILE_IGNORE_INTERNAL_FUNCTIONS;
 
     /* don't perform early binding for classes inherited form internal ones;
      * in namespaces assume that internal class that doesn't exist at compile-time
      * may apper in run-time */
-    public const COMPILE_IGNORE_INTERNAL_CLASSES = (1 << 4);
+    public const COMPILE_IGNORE_INTERNAL_CLASSES = Defines::ZEND_COMPILE_IGNORE_INTERNAL_CLASSES;
 
     /* generate DECLARE_CLASS_DELAYED opcode to delay early binding */
-    public const COMPILE_DELAYED_BINDING = (1 << 5);
+    public const COMPILE_DELAYED_BINDING = Defines::ZEND_COMPILE_DELAYED_BINDING;
 
     /* disable constant substitution at compile-time */
-    public const COMPILE_NO_CONSTANT_SUBSTITUTION = (1 << 6);
+    public const COMPILE_NO_CONSTANT_SUBSTITUTION = Defines::ZEND_COMPILE_NO_CONSTANT_SUBSTITUTION;
 
     /* disable usage of builtin instruction for strlen() */
-    public const COMPILE_NO_BUILTIN_STRLEN = (1 << 7);
+//    public const COMPILE_NO_BUILTIN_STRLEN = Defines::ZEND_COMPILE_NO_BUILTIN_STRLEN;
 
     /* disable substitution of persistent constants at compile-time */
-    public const COMPILE_NO_PERSISTENT_CONSTANT_SUBSTITUTION = (1 << 8);
+    public const COMPILE_NO_PERSISTENT_CONSTANT_SUBSTITUTION = Defines::ZEND_COMPILE_NO_PERSISTENT_CONSTANT_SUBSTITUTION;
 
     /* generate INIT_FCALL_BY_NAME for userland functions instead of INIT_FCALL */
-    public const COMPILE_IGNORE_USER_FUNCTIONS = (1 << 9);
+    public const COMPILE_IGNORE_USER_FUNCTIONS = Defines::ZEND_COMPILE_IGNORE_USER_FUNCTIONS;
 
     /* force ACC_USE_GUARDS for all classes */
-    public const COMPILE_GUARDS = (1 << 10);
+    public const COMPILE_GUARDS = Defines::ZEND_COMPILE_GUARDS;
 
     /* disable builtin special case function calls */
-    public const COMPILE_NO_BUILTINS = (1 << 11);
+    public const COMPILE_NO_BUILTINS = Defines::ZEND_COMPILE_NO_BUILTINS;
 
     /* result of compilation may be stored in file cache */
-    public const COMPILE_WITH_FILE_CACHE = (1 << 12);
+    public const COMPILE_WITH_FILE_CACHE = Defines::ZEND_COMPILE_WITH_FILE_CACHE;
 
     /* ignore functions and classes declared in other files */
-    public const COMPILE_IGNORE_OTHER_FILES = (1 << 13);
+    public const COMPILE_IGNORE_OTHER_FILES = Defines::ZEND_COMPILE_IGNORE_OTHER_FILES;
 
     /* this flag is set when compiler invoked by opcache_compile_file() */
-    public const COMPILE_WITHOUT_EXECUTION = (1 << 14);
+    public const COMPILE_WITHOUT_EXECUTION = Defines::ZEND_COMPILE_WITHOUT_EXECUTION;
 
     /* this flag is set when compiler invoked during preloading */
-    public const COMPILE_PRELOAD = (1 << 15);
+    public const COMPILE_PRELOAD = Defines::ZEND_COMPILE_PRELOAD;
 
     /* disable jumptable optimization for switch statements */
-    public const COMPILE_NO_JUMPTABLES = (1 << 16);
+    public const COMPILE_NO_JUMPTABLES = Defines::ZEND_COMPILE_NO_JUMPTABLES;
 
     /* this flag is set when compiler invoked during preloading in separate process */
-    public const COMPILE_PRELOAD_IN_CHILD = (1 << 17);
+    public const COMPILE_PRELOAD_IN_CHILD = Defines::ZEND_COMPILE_PRELOAD_IN_CHILD;
 
     /* The default value for CG(compiler_options) */
-    public const COMPILE_DEFAULT = self::COMPILE_HANDLE_OP_ARRAY;
+    public const COMPILE_DEFAULT = Defines::ZEND_COMPILE_DEFAULT;
 
     /* The default value for CG(compiler_options) during eval() */
-    public const COMPILE_DEFAULT_FOR_EVAL = 0;
+    public const COMPILE_DEFAULT_FOR_EVAL = Defines::ZEND_COMPILE_DEFAULT_FOR_EVAL;
 
     /**
      * Contains a hashtable with all registered classes

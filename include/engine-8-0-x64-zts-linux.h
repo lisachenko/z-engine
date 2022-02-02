@@ -1,5 +1,5 @@
 #define FFI_SCOPE "ZEngine"
-#define FFI_LIB "ZEND_LIBRARY_NAME"
+#define FFI_LIB ""
 typedef int64_t zend_long;
 typedef uint64_t zend_ulong;
 typedef int64_t zend_off_t;
@@ -741,6 +741,7 @@ struct _zend_compiler_globals {
  uint32_t rtd_key_counter;
  zend_stack short_circuiting_opnums;
 };
+typedef struct _zend_compiler_globals zend_compiler_globals;
 typedef void jmp_buf;
 struct _zend_executor_globals {
  zval uninitialized_zval;
@@ -811,6 +812,9 @@ struct _zend_executor_globals {
  void *reserved[6];
 };
 typedef struct _zend_executor_globals zend_executor_globals;
+void *tsrm_get_ls_cache(void);
+extern size_t compiler_globals_offset;
+extern size_t executor_globals_offset;
 typedef struct _IO_FILE FILE;
 typedef size_t (*zend_stream_fsizer_t)(void* handle);
 typedef ssize_t (*zend_stream_reader_t)(void* handle, char *buf, size_t len);

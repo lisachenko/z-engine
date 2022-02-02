@@ -15,6 +15,7 @@ namespace ZEngine\Type;
 use FFI\CData;
 use IteratorAggregate;
 use Traversable;
+use ZEngine\Constants\Defines;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionValue;
 
@@ -46,11 +47,11 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
 {
     use ReferenceCountedTrait;
 
-    private const HASH_UPDATE          = (1 << 0);
-    private const HASH_ADD             = (1 << 1);
-    private const HASH_UPDATE_INDIRECT = (1 << 2);
-    private const HASH_ADD_NEW         = (1 << 3);
-    private const HASH_ADD_NEXT        = (1 << 4);
+    private const HASH_UPDATE          = Defines::HASH_UPDATE;
+    private const HASH_ADD             = Defines::HASH_ADD;
+    private const HASH_UPDATE_INDIRECT = Defines::HASH_UPDATE_INDIRECT;
+    private const HASH_ADD_NEW         = Defines::HASH_ADD_NEW;
+    private const HASH_ADD_NEXT        = Defines::HASH_ADD_NEXT;
 
     private CData $pointer;
 
@@ -64,7 +65,7 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
      *
      * @return Traversable An instance of an object implementing <b>Iterator</b> or <b>Traversable</b>
      */
-    public function getIterator()
+    public function getIterator(): Traversable
     {
         $iterator = function () {
             $index = 0;

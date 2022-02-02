@@ -1,2 +1,0 @@
-To regenerate headers, run: docker buildx build . -o .
-To generate headers without checking (useful for getting a copy of the header file to identify any errors), comment out the last line of process.php

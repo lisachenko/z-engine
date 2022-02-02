@@ -109,7 +109,11 @@ class ReflectionExtension extends NativeReflectionExtension
      */
     public function getGlobals(): ?CData
     {
-        return $this->moduleEntry->globals_ptr;
+        if(ZEND_THREAD_SAFE) {
+            throw new \LogicException("TODO");
+        } else {
+            return $this->moduleEntry->globals_ptr;
+        }
     }
 
     /**

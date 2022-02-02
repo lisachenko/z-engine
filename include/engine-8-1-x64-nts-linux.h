@@ -1,5 +1,5 @@
 #define FFI_SCOPE "ZEngine"
-#define FFI_LIB "ZEND_LIBRARY_NAME"
+#define FFI_LIB ""
 typedef int64_t zend_long;
 typedef uint64_t zend_ulong;
 typedef int64_t zend_off_t;
@@ -66,7 +66,6 @@ struct _zval_struct {
   uint32_t num_args; 
   uint32_t fe_pos; 
   uint32_t fe_iter_idx; 
-  uint32_t access_flags; 
   uint32_t property_guard; 
   uint32_t constant_flags; 
   uint32_t extra; 
@@ -125,7 +124,7 @@ struct _zend_object {
 };
 struct _zend_resource {
  zend_refcounted_h gc;
- int handle; 
+ zend_long handle; 
  int type;
  void *ptr;
 };
@@ -215,23 +214,19 @@ typedef struct _zend_declarables {
 typedef struct _zend_file_context {
  zend_declarables declarables;
  zend_string *current_namespace;
- zend_bool in_namespace;
- zend_bool has_bracketed_namespaces;
+ _Bool in_namespace;
+ _Bool has_bracketed_namespaces;
  HashTable *imports;
  HashTable *imports_function;
  HashTable *imports_const;
  HashTable seen_symbols;
 } zend_file_context;
-typedef struct {
- uint32_t offset;
- uint32_t len;
-} zend_lexer_ident_ref;
 typedef union _zend_parser_stack_elem {
  zend_ast *ast;
  zend_string *str;
  zend_ulong num;
  unsigned char *ptr;
- zend_lexer_ident_ref ident;
+ unsigned char *ident;
 } zend_parser_stack_elem;
 typedef int (*user_opcode_handler_t) (zend_execute_data *execute_data);
 struct _zend_op {
@@ -251,7 +246,7 @@ typedef struct _zend_brk_cont_element {
  int cont;
  int brk;
  int parent;
- zend_bool is_switch;
+ _Bool is_switch;
 } zend_brk_cont_element;
 typedef struct _zend_label {
  int brk_cont;
@@ -339,7 +334,9 @@ struct _zend_op_array {
  uint32_t line_end;
  zend_string *doc_comment;
  int last_literal;
+ uint32_t num_dynamic_func_defs;
  zval *literals;
+ zend_op_array **dynamic_func_defs;
  void *reserved[6];
 };
 typedef void ( *zif_handler)(zend_execute_data *execute_data, zval *return_value);
@@ -424,7 +421,7 @@ typedef zend_string *(*zend_object_get_class_name_t)(const zend_object *object);
 typedef int (*zend_object_compare_t)(zval *object1, zval *object2);
 typedef int (*zend_object_cast_t)(zend_object *readobj, zval *retval, int type);
 typedef int (*zend_object_count_elements_t)(zend_object *object, zend_long *count);
-typedef int (*zend_object_get_closure_t)(zend_object *obj, zend_class_entry **ce_ptr, zend_function **fptr_ptr, zend_object **obj_ptr, zend_bool check_only);
+typedef int (*zend_object_get_closure_t)(zend_object *obj, zend_class_entry **ce_ptr, zend_function **fptr_ptr, zend_object **obj_ptr, _Bool check_only);
 typedef HashTable *(*zend_object_get_gc_t)(zend_object *object, zval **table, int *n);
 typedef int (*zend_object_do_operation_t)(zend_uchar opcode, zval *result, zval *op1, zval *op2);
 struct _zend_object_handlers {
@@ -560,6 +557,12 @@ typedef struct _zend_trait_alias {
  zend_string *alias;
  uint32_t modifiers;
 } zend_trait_alias;
+typedef struct _zend_class_mutable_data {
+ zval *default_properties_table;
+ HashTable *constants_table;
+ uint32_t ce_flags;
+} zend_class_mutable_data;
+typedef struct _zend_inheritance_cache_entry zend_inheritance_cache_entry;
 struct _zend_class_entry {
  char type;
  zend_string *name;
@@ -577,6 +580,8 @@ struct _zend_class_entry {
  HashTable function_table;
  HashTable properties_info;
  HashTable constants_table;
+ zend_class_mutable_data* * mutable_data__ptr;
+ zend_inheritance_cache_entry *inheritance_cache;
  struct _zend_property_info **properties_info_table;
  zend_function *constructor;
  zend_function *destructor;
@@ -610,6 +615,8 @@ struct _zend_class_entry {
  zend_trait_alias **trait_aliases;
  zend_trait_precedence **trait_precedences;
  HashTable *attributes;
+ uint32_t enum_backing_type;
+ HashTable *backed_enum_table;
  union {
   struct {
    zend_string *filename;
@@ -707,14 +714,16 @@ struct _zend_compiler_globals {
  HashTable *class_table; 
  HashTable *auto_globals;
  zend_uchar parse_error;
- zend_bool in_compilation;
- zend_bool short_tags;
- zend_bool unclean_shutdown;
- zend_bool ini_parser_unbuffered_errors;
+ _Bool in_compilation;
+ _Bool short_tags;
+ _Bool unclean_shutdown;
+ _Bool ini_parser_unbuffered_errors;
  zend_llist open_files;
  struct _zend_ini_parser_param *ini_parser_param;
- zend_bool skip_shebang;
- zend_bool increment_lineno;
+ _Bool skip_shebang;
+ _Bool increment_lineno;
+ _Bool variable_width_locale; 
+ _Bool ascii_compatible_locale; 
  zend_string *doc_comment;
  uint32_t extra_fn_flags;
  uint32_t compiler_options; 
@@ -724,23 +733,35 @@ struct _zend_compiler_globals {
  HashTable interned_strings;
  const zend_encoding **script_encoding_list;
  size_t script_encoding_list_size;
- zend_bool multibyte;
- zend_bool detect_unicode;
- zend_bool encoding_declared;
+ _Bool multibyte;
+ _Bool detect_unicode;
+ _Bool encoding_declared;
  zend_ast *ast;
  zend_arena *ast_arena;
  zend_stack delayed_oplines_stack;
  HashTable *memoized_exprs;
  int memoize_mode;
+ void *map_ptr_real_base;
  void *map_ptr_base;
  size_t map_ptr_size;
  size_t map_ptr_last;
  HashTable *delayed_variance_obligations;
  HashTable *delayed_autoloads;
+ HashTable *unlinked_uses;
+ zend_class_entry *current_linking_class;
  uint32_t rtd_key_counter;
  zend_stack short_circuiting_opnums;
 };
+typedef struct _zend_compiler_globals zend_compiler_globals;
 typedef void jmp_buf;
+typedef struct _zend_fiber zend_fiber;
+typedef struct _zend_fiber_context zend_fiber_context;
+typedef struct _zend_error_info {
+ int type;
+ uint32_t lineno;
+ zend_string *filename;
+ zend_string *message;
+} zend_error_info;
 struct _zend_executor_globals {
  zval uninitialized_zval;
  zval error_zval;
@@ -768,10 +789,10 @@ struct _zend_executor_globals {
  uint32_t persistent_functions_count;
  uint32_t persistent_classes_count;
  HashTable *in_autoload;
- zend_bool full_tables_cleanup;
- zend_bool no_extensions;
- zend_bool vm_interrupt;
- zend_bool timed_out;
+ _Bool full_tables_cleanup;
+ _Bool no_extensions;
+ _Bool vm_interrupt;
+ _Bool timed_out;
  zend_long hard_timeout;
  HashTable regular_list;
  HashTable persistent_list;
@@ -784,7 +805,7 @@ struct _zend_executor_globals {
  zend_error_handling_t error_handling;
  zend_class_entry *exception_class;
  zend_long timeout_seconds;
- int lambda_count;
+ int capture_warnings_during_sccp;
  HashTable *ini_directives;
  HashTable *modified_ini_directives;
  zend_ini_entry *error_reporting_ini_entry;
@@ -793,7 +814,7 @@ struct _zend_executor_globals {
  const zend_op *opline_before_exception;
  zend_op exception_op[3];
  struct _zend_module_entry *current_module;
- zend_bool active;
+ _Bool active;
  zend_uchar flags;
  zend_long assertions;
  uint32_t ht_iterators_count; 
@@ -804,9 +825,16 @@ struct _zend_executor_globals {
  zend_function trampoline;
  zend_op call_trampoline_op;
  HashTable weakrefs;
- zend_bool exception_ignore_args;
+ _Bool exception_ignore_args;
  zend_long exception_string_param_max_len;
  zend_get_gc_buffer get_gc_buffer;
+ zend_fiber_context *main_fiber_context;
+ zend_fiber_context *current_fiber_context;
+ zend_fiber *active_fiber;
+ zend_long fiber_stack_size;
+ _Bool record_errors;
+ uint32_t num_errors;
+ zend_error_info **errors;
  void *reserved[6];
 };
 typedef struct _zend_executor_globals zend_executor_globals;
@@ -833,10 +861,11 @@ typedef struct _zend_file_handle {
   FILE *fp;
   zend_stream stream;
  } handle;
- const char *filename;
+ zend_string *filename;
  zend_string *opened_path;
- zend_stream_type type;
- zend_bool free_filename;
+ zend_uchar type; 
+ _Bool primary_script;
+ _Bool in_list; 
  char *buf;
  size_t len;
 } zend_file_handle;
@@ -844,7 +873,7 @@ typedef struct _zend_ptr_stack {
  int top, max;
  void **elements;
  void **top_element;
- zend_bool persistent;
+ _Bool persistent;
 } zend_ptr_stack;
 typedef size_t (*zend_encoding_filter)(unsigned char **str, size_t *str_length, const unsigned char *buf, size_t length);
 typedef struct _zend_lex_state {
@@ -879,7 +908,7 @@ typedef struct _zend_heredoc_label {
  char *label;
  int length;
  int indentation;
- zend_bool indentation_uses_spaces;
+ _Bool indentation_uses_spaces;
 } zend_heredoc_label;
 extern zend_ast_process_t zend_ast_process;
 extern HashTable module_registry;
@@ -888,14 +917,14 @@ zval* zend_hash_find(const HashTable *ht, zend_string *key);
 zval* zend_hash_add_or_update(HashTable *ht, zend_string *key, zval *pData, uint32_t flag);
 int zend_set_user_opcode_handler(zend_uchar opcode, user_opcode_handler_t handler);
 user_opcode_handler_t zend_get_user_opcode_handler(zend_uchar opcode);
-void zend_do_inheritance_ex(zend_class_entry *ce, zend_class_entry *parent_ce, zend_bool checked);
+void zend_do_inheritance_ex(zend_class_entry *ce, zend_class_entry *parent_ce, _Bool checked);
 zend_object* zend_objects_new(zend_class_entry *ce);
 void zend_object_std_init(zend_object *object, zend_class_entry *ce);
 void object_properties_init(zend_object *object, zend_class_entry *class_type);
 void zend_save_lexical_state(zend_lex_state *lex_state);
 void zend_restore_lexical_state(zend_lex_state *lex_state);
-void zend_prepare_string_for_scanning(zval *str, const char *filename);
-zend_result zend_lex_tstring(zval *zv, zend_lexer_ident_ref ident_ref);
+void zend_prepare_string_for_scanning(zval *str, zend_string *filename);
+zend_result zend_lex_tstring(zval *zv, unsigned char *ident);
 int zendparse(void);
 void zend_ast_destroy(zend_ast *ast);
 zend_ast * zend_ast_create_list_0(zend_ast_kind kind);

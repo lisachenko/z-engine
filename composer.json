@@ -18,7 +18,10 @@
     "autoload": {
         "psr-4" : {
             "ZEngine\\" : "src/"
-        }
+        },
+        "files": [
+            "include/constants.php"
+        ]
     },
     "autoload-dev": {
         "psr-4" : {

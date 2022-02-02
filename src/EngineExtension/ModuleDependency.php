@@ -14,6 +14,7 @@ namespace ZEngine\EngineExtension;
 
 
 use FFI\CData;
+use ZEngine\Constants\Defines;
 
 /**
  * Class ModuleDependency
@@ -27,9 +28,9 @@ use FFI\CData;
  */
 class ModuleDependency
 {
-    public const MODULE_REQUIRED  = 1;
-    public const MODULE_CONFLICTS = 2;
-    public const MODULE_OPTIONAL  = 3;
+    public const MODULE_REQUIRED  = Defines::MODULE_DEP_REQUIRED;
+    public const MODULE_CONFLICTS = Defines::MODULE_DEP_CONFLICTS;
+    public const MODULE_OPTIONAL  = Defines::MODULE_DEP_OPTIONAL;
 
     /**
      * Holds a _zend_module_dep structure

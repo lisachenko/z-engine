@@ -167,12 +167,12 @@ class ReflectionMethod extends NativeReflectionMethod
     }
 
     /**
-     * Returns the method prototype or null if no prototype for this method
+     * Returns the method prototype for this method
      */
-    public function getPrototype(): ?ReflectionMethod
+    public function getPrototype(): ReflectionMethod
     {
         if ($this->getCommonPointer()->prototype === null) {
-            return null;
+            throw new \ReflectionException();
         }
 
         return static::fromCData($this->getCommonPointer()->prototype);

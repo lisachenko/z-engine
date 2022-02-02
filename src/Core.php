@@ -18,7 +18,7 @@ use FFI\CData;
 use FFI\CType;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
-use ZEngine\Macro\DefinitionLoader;
+use ZEngine\Constants\Defines;
 use ZEngine\System\Compiler;
 use ZEngine\System\Executor;
 use ZEngine\System\Hook\AstProcessHook;
@@ -36,172 +36,172 @@ class Core
     /* ============                                                  |     |     |     |     */
     /*                                                               |     |     |     |     */
     /* Visibility flags (public < protected < private);              |     |     |     |     */
-    public const ZEND_ACC_PUBLIC =                  (1 <<  0); /*    |     |  X  |  X  |  X  */
-    public const ZEND_ACC_PROTECTED =               (1 <<  1); /*    |     |  X  |  X  |  X  */
-    public const ZEND_ACC_PRIVATE =                 (1 <<  2); /*    |     |  X  |  X  |  X  */
+    public const ZEND_ACC_PUBLIC = Defines::ZEND_ACC_PUBLIC; /*    |     |  X  |  X  |  X  */
+    public const ZEND_ACC_PROTECTED = Defines::ZEND_ACC_PROTECTED; /*    |     |  X  |  X  |  X  */
+    public const ZEND_ACC_PRIVATE = Defines::ZEND_ACC_PRIVATE; /*    |     |  X  |  X  |  X  */
     /*                                                               |     |     |     |     */
     /* Property or method overrides private one                      |     |     |     |     */
-    public const ZEND_ACC_CHANGED =                 (1 <<  3); /*    |     |  X  |  X  |     */
+    public const ZEND_ACC_CHANGED = Defines::ZEND_ACC_CHANGED; /*    |     |  X  |  X  |     */
     /*                                                               |     |     |     |     */
     /* Static method or property                                     |     |     |     |     */
-    public const ZEND_ACC_STATIC =                  (1 <<  4); /*    |     |  X  |  X  |     */
+    public const ZEND_ACC_STATIC = Defines::ZEND_ACC_STATIC; /*    |     |  X  |  X  |     */
     /*                                                               |     |     |     |     */
     /* Final class or method                                         |     |     |     |     */
-    public const ZEND_ACC_FINAL =                   (1 <<  5); /*    |  X  |  X  |     |     */
+    public const ZEND_ACC_FINAL = Defines::ZEND_ACC_FINAL; /*    |  X  |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* Abstract method                                               |     |     |     |     */
-    public const ZEND_ACC_ABSTRACT =                (1 <<  6); /*    |  X  |  X  |     |     */
-    public const ZEND_ACC_EXPLICIT_ABSTRACT_CLASS = (1 <<  6); /*    |  X  |     |     |     */
+    public const ZEND_ACC_ABSTRACT = Defines::ZEND_ACC_ABSTRACT; /*    |  X  |  X  |     |     */
+    public const ZEND_ACC_EXPLICIT_ABSTRACT_CLASS = Defines::ZEND_ACC_EXPLICIT_ABSTRACT_CLASS; /*    |  X  |     |     |     */
     /*                                                               |     |     |     |     */
     /* Immutable op_array and class_entries                          |     |     |     |     */
     /* (implemented only for lazy loading of op_arrays);             |     |     |     |     */
-    public const ZEND_ACC_IMMUTABLE =               (1 <<  7); /*    |  X  |  X  |     |     */
+    public const ZEND_ACC_IMMUTABLE = Defines::ZEND_ACC_IMMUTABLE; /*    |  X  |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* Function has typed arguments / class has typed props          |     |     |     |     */
-    public const ZEND_ACC_HAS_TYPE_HINTS =          (1 <<  8); /*    |  X  |  X  |     |     */
+    public const ZEND_ACC_HAS_TYPE_HINTS = Defines::ZEND_ACC_HAS_TYPE_HINTS; /*    |  X  |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* Top-level class or function declaration                       |     |     |     |     */
-    public const ZEND_ACC_TOP_LEVEL =               (1 <<  9); /*    |  X  |  X  |     |     */
+    public const ZEND_ACC_TOP_LEVEL = Defines::ZEND_ACC_TOP_LEVEL; /*    |  X  |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* op_array or class is preloaded                                |     |     |     |     */
-    public const ZEND_ACC_PRELOADED =               (1 << 10); /*    |  X  |  X  |     |     */
+    public const ZEND_ACC_PRELOADED = Defines::ZEND_ACC_PRELOADED; /*    |  X  |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* Class Flags (unused: 16...);                                  |     |     |     |     */
     /* ===========                                                   |     |     |     |     */
     /*                                                               |     |     |     |     */
     /* Special class types                                           |     |     |     |     */
-    public const ZEND_ACC_INTERFACE =               (1 <<  0); /*    |  X  |     |     |     */
-    public const ZEND_ACC_TRAIT =                   (1 <<  1); /*    |  X  |     |     |     */
-    public const ZEND_ACC_ANON_CLASS =              (1 <<  2); /*    |  X  |     |     |     */
+    public const ZEND_ACC_INTERFACE = Defines::ZEND_ACC_INTERFACE; /*    |  X  |     |     |     */
+    public const ZEND_ACC_TRAIT = Defines::ZEND_ACC_TRAIT; /*    |  X  |     |     |     */
+    public const ZEND_ACC_ANON_CLASS = Defines::ZEND_ACC_ANON_CLASS; /*    |  X  |     |     |     */
     /*                                                               |     |     |     |     */
     /* Class linked with parent, interfaces and traits               |     |     |     |     */
-    public const ZEND_ACC_LINKED =                  (1 <<  3); /*    |  X  |     |     |     */
+    public const ZEND_ACC_LINKED = Defines::ZEND_ACC_LINKED; /*    |  X  |     |     |     */
     /*                                                               |     |     |     |     */
     /* Class is abstract, since it is set by any                     |     |     |     |     */
     /* abstract method                                               |     |     |     |     */
-    public const ZEND_ACC_IMPLICIT_ABSTRACT_CLASS = (1 <<  4); /*    |  X  |     |     |     */
+    public const ZEND_ACC_IMPLICIT_ABSTRACT_CLASS = Defines::ZEND_ACC_IMPLICIT_ABSTRACT_CLASS; /*    |  X  |     |     |     */
     /*                                                               |     |     |     |     */
     /* Class has magic methods __get/__set/__unset/                  |     |     |     |     */
     /* __isset that use guards                                       |     |     |     |     */
-    public const ZEND_ACC_USE_GUARDS =              (1 << 11); /*    |  X  |     |     |     */
+    public const ZEND_ACC_USE_GUARDS = Defines::ZEND_ACC_USE_GUARDS; /*    |  X  |     |     |     */
     /*                                                               |     |     |     |     */
     /* Class constants updated                                       |     |     |     |     */
-    public const ZEND_ACC_CONSTANTS_UPDATED =       (1 << 12); /*    |  X  |     |     |     */
+    public const ZEND_ACC_CONSTANTS_UPDATED = Defines::ZEND_ACC_CONSTANTS_UPDATED; /*    |  X  |     |     |     */
     /*                                                               |     |     |     |     */
     /* Class extends another class                                   |     |     |     |     */
-    public const ZEND_ACC_INHERITED =               (1 << 13); /*    |  X  |     |     |     */
+//    public const ZEND_ACC_INHERITED = Defines::ZEND_ACC_INHERITED; /*    |  X  |     |     |     */
     /*                                                               |     |     |     |     */
     /* Class implements interface(s);                                |     |     |     |     */
-    public const ZEND_ACC_IMPLEMENT_INTERFACES =    (1 << 14); /*    |  X  |     |     |     */
+//    public const ZEND_ACC_IMPLEMENT_INTERFACES = Defines::ZEND_ACC_IMPLEMENT_INTERFACES; /*    |  X  |     |     |     */
     /*                                                               |     |     |     |     */
     /* Class uses trait(s);                                          |     |     |     |     */
-    public const ZEND_ACC_IMPLEMENT_TRAITS =        (1 << 15); /*    |  X  |     |     |     */
+//    public const ZEND_ACC_IMPLEMENT_TRAITS = Defines::ZEND_ACC_IMPLEMENT_TRAITS; /*    |  X  |     |     |     */
     /*                                                               |     |     |     |     */
     /* User class has methods with static variables                  |     |     |     |     */
-    public const ZEND_HAS_STATIC_IN_METHODS =       (1 << 16); /*    |  X  |     |     |     */
+    public const ZEND_HAS_STATIC_IN_METHODS = Defines::ZEND_HAS_STATIC_IN_METHODS; /*    |  X  |     |     |     */
     /*                                                               |     |     |     |     */
     /* Whether all property types are resolved to CEs                |     |     |     |     */
-    public const ZEND_ACC_PROPERTY_TYPES_RESOLVED = (1 << 17); /*    |  X  |     |     |     */
+//    public const ZEND_ACC_PROPERTY_TYPES_RESOLVED = Defines::ZEND_ACC_PROPERTY_TYPES_RESOLVED; /*    |  X  |     |     |     */
     /*                                                               |     |     |     |     */
     /* Children must reuse parent get_iterator();                    |     |     |     |     */
-    public const ZEND_ACC_REUSE_GET_ITERATOR =      (1 << 18); /*    |  X  |     |     |     */
+    public const ZEND_ACC_REUSE_GET_ITERATOR = Defines::ZEND_ACC_REUSE_GET_ITERATOR; /*    |  X  |     |     |     */
     /*                                                               |     |     |     |     */
     /* Parent class is resolved (CE);.                               |     |     |     |     */
-    public const ZEND_ACC_RESOLVED_PARENT =         (1 << 19); /*    |  X  |     |     |     */
+    public const ZEND_ACC_RESOLVED_PARENT = Defines::ZEND_ACC_RESOLVED_PARENT; /*    |  X  |     |     |     */
     /*                                                               |     |     |     |     */
     /* Interfaces are resolved (CEs);.                               |     |     |     |     */
-    public const ZEND_ACC_RESOLVED_INTERFACES =     (1 << 20); /*    |  X  |     |     |     */
+    public const ZEND_ACC_RESOLVED_INTERFACES = Defines::ZEND_ACC_RESOLVED_INTERFACES; /*    |  X  |     |     |     */
     /*                                                               |     |     |     |     */
     /* Class has unresolved variance obligations.                    |     |     |     |     */
-    public const ZEND_ACC_UNRESOLVED_VARIANCE =     (1 << 21); /*    |  X  |     |     |     */
+    public const ZEND_ACC_UNRESOLVED_VARIANCE = Defines::ZEND_ACC_UNRESOLVED_VARIANCE; /*    |  X  |     |     |     */
     /*                                                               |     |     |     |     */
     /* Function Flags (unused: 28...30);                             |     |     |     |     */
     /* ==============                                                |     |     |     |     */
     /*                                                               |     |     |     |     */
     /* deprecation flag                                              |     |     |     |     */
-    public const ZEND_ACC_DEPRECATED =              (1 << 11); /*    |     |  X  |     |     */
+    public const ZEND_ACC_DEPRECATED = Defines::ZEND_ACC_DEPRECATED; /*    |     |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* Function returning by reference                               |     |     |     |     */
-    public const ZEND_ACC_RETURN_REFERENCE =        (1 << 12); /*    |     |  X  |     |     */
+    public const ZEND_ACC_RETURN_REFERENCE = Defines::ZEND_ACC_RETURN_REFERENCE; /*    |     |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* Function has a return type                                    |     |     |     |     */
-    public const ZEND_ACC_HAS_RETURN_TYPE =         (1 << 13); /*    |     |  X  |     |     */
+    public const ZEND_ACC_HAS_RETURN_TYPE = Defines::ZEND_ACC_HAS_RETURN_TYPE; /*    |     |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* Function with variable number of arguments                    |     |     |     |     */
-    public const ZEND_ACC_VARIADIC =                (1 << 14); /*    |     |  X  |     |     */
+    public const ZEND_ACC_VARIADIC = Defines::ZEND_ACC_VARIADIC; /*    |     |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* op_array has finally blocks (user only);                      |     |     |     |     */
-    public const ZEND_ACC_HAS_FINALLY_BLOCK =       (1 << 15); /*    |     |  X  |     |     */
+    public const ZEND_ACC_HAS_FINALLY_BLOCK = Defines::ZEND_ACC_HAS_FINALLY_BLOCK; /*    |     |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* "main" op_array with                                          |     |     |     |     */
     /* ZEND_DECLARE_CLASS_DELAYED opcodes                            |     |     |     |     */
-    public const ZEND_ACC_EARLY_BINDING =           (1 << 16); /*    |     |  X  |     |     */
+    public const ZEND_ACC_EARLY_BINDING = Defines::ZEND_ACC_EARLY_BINDING; /*    |     |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* call through user function trampoline. e.g.                   |     |     |     |     */
     /* __call, __callstatic                                          |     |     |     |     */
-    public const ZEND_ACC_CALL_VIA_TRAMPOLINE =     (1 << 18); /*    |     |  X  |     |     */
+    public const ZEND_ACC_CALL_VIA_TRAMPOLINE = Defines::ZEND_ACC_CALL_VIA_TRAMPOLINE; /*    |     |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* disable inline caching                                        |     |     |     |     */
-    public const ZEND_ACC_NEVER_CACHE =             (1 << 19); /*    |     |  X  |     |     */
+    public const ZEND_ACC_NEVER_CACHE = Defines::ZEND_ACC_NEVER_CACHE; /*    |     |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* Closure related                                               |     |     |     |     */
-    public const ZEND_ACC_CLOSURE =                 (1 << 20); /*    |     |  X  |     |     */
-    public const ZEND_ACC_FAKE_CLOSURE =            (1 << 21); /*    |     |  X  |     |     */
+    public const ZEND_ACC_CLOSURE = Defines::ZEND_ACC_CLOSURE; /*    |     |  X  |     |     */
+    public const ZEND_ACC_FAKE_CLOSURE = Defines::ZEND_ACC_FAKE_CLOSURE; /*    |     |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* run_time_cache allocated on heap (user only);                 |     |     |     |     */
-    public const ZEND_ACC_HEAP_RT_CACHE =           (1 << 22); /*    |     |  X  |     |     */
+    public const ZEND_ACC_HEAP_RT_CACHE = Defines::ZEND_ACC_HEAP_RT_CACHE; /*    |     |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* method flag used by Closure::__invoke();                      |     |     |     |     */
-    public const ZEND_ACC_USER_ARG_INFO =           (1 << 23); /*    |     |  X  |     |     */
+    public const ZEND_ACC_USER_ARG_INFO = Defines::ZEND_ACC_USER_ARG_INFO; /*    |     |  X  |     |     */
     /*                                                               |     |     |     |     */
-    public const ZEND_ACC_GENERATOR =               (1 << 24); /*    |     |  X  |     |     */
+    public const ZEND_ACC_GENERATOR = Defines::ZEND_ACC_GENERATOR; /*    |     |  X  |     |     */
     /*                                                               |     |     |     |     */
-    public const ZEND_ACC_DONE_PASS_TWO =           (1 << 25); /*    |     |  X  |     |     */
+    public const ZEND_ACC_DONE_PASS_TWO = Defines::ZEND_ACC_DONE_PASS_TWO; /*    |     |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* internal function is allocated at arena (int only);           |     |     |     |     */
-    public const ZEND_ACC_ARENA_ALLOCATED =         (1 << 26); /*    |     |  X  |     |     */
+    public const ZEND_ACC_ARENA_ALLOCATED = Defines::ZEND_ACC_ARENA_ALLOCATED; /*    |     |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* op_array is a clone of trait method                           |     |     |     |     */
-    public const ZEND_ACC_TRAIT_CLONE =             (1 << 27); /*    |     |  X  |     |     */
+    public const ZEND_ACC_TRAIT_CLONE = Defines::ZEND_ACC_TRAIT_CLONE; /*    |     |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* functions is a constructor                                    |     |     |     |     */
-    public const ZEND_ACC_CTOR =                    (1 << 28); /*    |     |  X  |     |     */
+    public const ZEND_ACC_CTOR = Defines::ZEND_ACC_CTOR; /*    |     |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* function is a destructor                                      |     |     |     |     */
-    public const ZEND_ACC_DTOR =                    (1 << 29); /*    |     |  X  |     |     */
+//    public const ZEND_ACC_DTOR = Defines::ZEND_ACC_DTOR; /*    |     |  X  |     |     */
     /*                                                               |     |     |     |     */
     /* op_array uses strict mode types                               |     |     |     |     */
-    public const ZEND_ACC_STRICT_TYPES =            (1 << 31); /*    |     |  X  |     |     */
+    public const ZEND_ACC_STRICT_TYPES = Defines::ZEND_ACC_STRICT_TYPES; /*    |     |  X  |     |     */
 
-    public const ZEND_ACC_PPP_MASK = self::ZEND_ACC_PUBLIC | self::ZEND_ACC_PROTECTED | self::ZEND_ACC_PRIVATE;
+    public const ZEND_ACC_PPP_MASK = Defines::ZEND_ACC_PPP_MASK;
 
     /**
      * Type of zend_function.type
      */
-    public const ZEND_INTERNAL_FUNCTION =   1;
-    public const ZEND_USER_FUNCTION =       2;
-    public const ZEND_EVAL_CODE =           4;
+    public const ZEND_INTERNAL_FUNCTION = Defines::ZEND_INTERNAL_FUNCTION;
+    public const ZEND_USER_FUNCTION = Defines::ZEND_USER_FUNCTION;
+    public const ZEND_EVAL_CODE = Defines::ZEND_EVAL_CODE;
 
-    public const ZEND_INTERNAL_CLASS = 1;
-    public const ZEND_USER_CLASS     = 2;
+    public const ZEND_INTERNAL_CLASS = Defines::ZEND_INTERNAL_CLASS;
+    public const ZEND_USER_CLASS     = Defines::ZEND_USER_CLASS;
 
     /**
      * User opcode handler return values
      */
-    public const ZEND_USER_OPCODE_CONTINUE    = 0; /* execute next opcode */
-    public const ZEND_USER_OPCODE_RETURN      = 1; /* exit from executor (return from function) */
-    public const ZEND_USER_OPCODE_DISPATCH    = 2; /* call original opcode handler */
-    public const ZEND_USER_OPCODE_ENTER       = 3; /* enter into new op_array without recursion */
-    public const ZEND_USER_OPCODE_LEAVE       = 4; /* return to calling op_array within the same executor */
-    public const ZEND_USER_OPCODE_DISPATCH_TO = 0x100; /* call original handler of returned opcode */
-
+    public const ZEND_USER_OPCODE_CONTINUE    = Defines::ZEND_USER_OPCODE_CONTINUE; /* execute next opcode */
+    public const ZEND_USER_OPCODE_RETURN      = Defines::ZEND_USER_OPCODE_RETURN; /* exit from executor (return from function) */
+    public const ZEND_USER_OPCODE_DISPATCH    = Defines::ZEND_USER_OPCODE_DISPATCH; /* call original opcode handler */
+    public const ZEND_USER_OPCODE_ENTER       = Defines::ZEND_USER_OPCODE_ENTER; /* enter into new op_array without recursion */
+    public const ZEND_USER_OPCODE_LEAVE       = Defines::ZEND_USER_OPCODE_LEAVE; /* return to calling op_array within the same executor */
+    public const ZEND_USER_OPCODE_DISPATCH_TO = Defines::ZEND_USER_OPCODE_DISPATCH_TO; /* call original handler of returned opcode */
+    // TODO figure out the tyepdef enum
     public const SUCCESS = 0;
     public const FAILURE = -1;
 
     /**
      * This should be equal to ZEND_MM_ALIGNMENT
      */
-    public const MM_ALIGNMENT = 8;
+    public const MM_ALIGNMENT = Defines::ZEND_MM_ALIGNMENT;
 
     /**
      * Provides an access to the executor global state
@@ -228,14 +228,7 @@ class Core
      */
     public static function init()
     {
-        $isThreadSafe      = ZEND_THREAD_SAFE;
         $isWindowsPlatform = stripos(PHP_OS, 'WIN') === 0;
-        $is64BitPlatform   = PHP_INT_SIZE === 8;
-
-        // TODO: support ts/nts x86/x64 combination
-        if ($isThreadSafe || !$is64BitPlatform) {
-            throw new \RuntimeException('Only x64 non thread-safe versions of PHP are supported');
-        }
 
         try {
             $engine = FFI::scope('ZEngine');
@@ -244,8 +237,7 @@ class Core
                 throw new \RuntimeException('Preload mode requires that you call Core::preload before');
             }
             // If not, then load definitions by hand
-            $fname = "engine_".PHP_MAJOR_VERSION."_" . PHP_MINOR_VERSION . "_" . (PHP_INT_SIZE === 8 ? "x64" : "x32") . "_" . (ZEND_THREAD_SAFE ? "zts" : "nts") . ".h";
-            $definition = file_get_contents(DefinitionLoader::wrap(__DIR__.'/../include/'.$fname));
+            $definition = require_once __DIR__ . "/../include/engine.php";
             $arguments  = [$definition];
 
             // For Windows platform we should load symbols from the shared php7.dll library
@@ -257,9 +249,21 @@ class Core
         }
         self::$engine = $engine;
 
-        assert(!$isThreadSafe, 'Following properties available only for non thread-safe version');
-        self::$executor = new Executor($engine->executor_globals);
-        self::$compiler = new Compiler($engine->compiler_globals);
+        if(ZEND_THREAD_SAFE) {
+            // #define CG(v) ZEND_TSRMG_FAST(compiler_globals_offset, zend_compiler_globals *, v)
+            // #define ZEND_TSRMG_FAST TSRMG_FAST
+            // #define TSRMG_FAST(offset, type, element)	(TSRMG_FAST_BULK(offset, type)->element)
+            // #define TSRMG_FAST_BULK(offset, type)	((type) (((char*) tsrm_get_ls_cache())+(offset)))
+            // (zend_compiler_globals *) ((char*) tsrm_get_ls_cache()+compiler_globals_offset)
+            $executorGlobals = FFI::cast($engine->type("zend_executor_globals*"), FFI::cast("char*", $engine->tsrm_get_ls_cache()) + $engine->executor_globals_offset);
+            $compilerGlobals = FFI::cast($engine->type("zend_compiler_globals*"), FFI::cast("char*", $engine->tsrm_get_ls_cache()) + $engine->compiler_globals_offset);
+            self::$executor = new Executor($executorGlobals);
+            self::$compiler = new Compiler($compilerGlobals);
+        } else {
+            // # define CG(v) (compiler_globals.v)
+            self::$executor = new Executor($engine->executor_globals);
+            self::$compiler = new Compiler($engine->compiler_globals);
+        }
         self::$modules  = new HashTable(Core::addr($engine->module_registry));
 
         self::preloadFrameworkClasses();
@@ -270,8 +274,7 @@ class Core
      */
     public static function preload()
     {
-        $fname = "engine_".PHP_MAJOR_VERSION."_" . PHP_MINOR_VERSION . "_" . (PHP_INT_SIZE === 8 ? "x64" : "x32") . "_" . (ZEND_THREAD_SAFE ? "zts" : "nts") . ".h";
-        $definition = file_get_contents(DefinitionLoader::wrap(__DIR__.'/../include/'.$fname));
+        $definition = require_once __DIR__ . "/../include/engine.php";
         try {
             $tempFile = tempnam(sys_get_temp_dir(), 'php_ffi');
             file_put_contents($tempFile, $definition);
