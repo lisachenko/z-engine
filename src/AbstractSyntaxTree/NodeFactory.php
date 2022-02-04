@@ -33,8 +33,7 @@ class NodeFactory
         $kind = $node->kind;
         switch (true) {
             // There are special node types ZVAL, CONSTANT, ZNODE
-//            case $kind === NodeKind::AST_ZVAL:
-            case $kind === _zend_ast_kind::ZEND_AST_ZVAL()->value :
+            case $kind === NodeKind::AST_ZVAL:
                 $node = Core::cast('zend_ast_zval *', $node);
                 return ValueNode::fromCData($node);
             case $kind === NodeKind::AST_CONSTANT:
