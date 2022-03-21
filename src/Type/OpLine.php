@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace ZEngine\Type;
 
 use FFI\CData;
+use ZEngine\Constants\Defines;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\System\ExecutionData;
@@ -39,14 +40,14 @@ class OpLine
     /**
      * Unused operand
      */
-    public const IS_UNUSED = 0;
+    public const IS_UNUSED = Defines::IS_UNUSED;
 
     /**
      * This opcode node type is used for literal values in PHP code.
      *
      * For example, the integer literal 1 or string literal 'Hello, World!' will both be of this type.
      */
-    public const IS_CONST = (1<<0);
+    public const IS_CONST = Defines::IS_CONST;
 
     /**
      * This opcode node type is used for temporary variables.
@@ -57,7 +58,7 @@ class OpLine
      *
      * For example, the return value of $a++ will be of this type.
      */
-    public const IS_TMP_VAR = (1<<1);
+    public const IS_TMP_VAR = Defines::IS_TMP_VAR;
 
     /**
      * This opcode node type is used for complex variables in PHP code.
@@ -65,7 +66,7 @@ class OpLine
      * For example, the variable $obj->a is considered to be a complex variable, however the variable $a is not
      * (it is instead an IS_CV type).
      */
-    public const IS_VAR = (1<<2);
+    public const IS_VAR = Defines::IS_VAR;
 
     /**
      * This opcode node type is used for simple variables in PHP code.
@@ -73,7 +74,7 @@ class OpLine
      * For example, the variable $a is considered to be a simple variable,
      * however the variable $obj->a is not (it is instead an IS_VAR type).
      */
-    public const IS_CV = (1<<3);
+    public const IS_CV = Defines::IS_CV;
 
     /**
      * Execution context (if present).

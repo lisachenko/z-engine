@@ -12,16 +12,18 @@ declare(strict_types=1);
 
 namespace ZEngine\Type;
 
+use ZEngine\Constants\Defines;
+
 /**
  * Interface for all refcounted entries
  */
 interface ReferenceCountedInterface
 {
-    public const GC_COLLECTABLE      = (1 << 4);
-    public const GC_PROTECTED        = (1 << 5); // used for recursion detection
-    public const GC_IMMUTABLE        = (1 << 6); // can't be canged in place
-    public const GC_PERSISTENT       = (1 << 7); // allocated using malloc
-    public const GC_PERSISTENT_LOCAL = (1 << 8); // persistent, but thread-local
+//    public const GC_NOT_COLLECTABLE  = Defines::GC_NOT_COLLECTABLE;
+    public const GC_PROTECTED        = Defines::GC_PROTECTED; // used for recursion detection
+    public const GC_IMMUTABLE        = Defines::GC_IMMUTABLE; // can't be canged in place
+    public const GC_PERSISTENT       = Defines::GC_PERSISTENT; // allocated using malloc
+    public const GC_PERSISTENT_LOCAL = Defines::GC_PERSISTENT_LOCAL; // persistent, but thread-local
 
     /**
      * Returns an internal reference counter value

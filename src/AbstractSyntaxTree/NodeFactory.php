@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace ZEngine\AbstractSyntaxTree;
 
 use FFI\CData;
+use ZEngine\Constants\_zend_ast_kind;
 use ZEngine\Core;
 
 /**

@@ -15,6 +15,7 @@ namespace ZEngine\System;
 use ArrayAccess;
 use Countable;
 use FFI\CData;
+use ZEngine\Constants\Defines;
 use ZEngine\Core;
 use ZEngine\Type\ObjectEntry;
 
@@ -23,7 +24,7 @@ final class ObjectStore implements Countable, ArrayAccess
     /**
      * @see zend_objects_API.h:OBJ_BUCKET_INVALID macro
      */
-    private const OBJ_BUCKET_INVALID = 1<<0;
+    private const OBJ_BUCKET_INVALID = Defines::OBJ_BUCKET_INVALID;
 
     /**
      * Holds an internal pointer to the EG(objects_store)

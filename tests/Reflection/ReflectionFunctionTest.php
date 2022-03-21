@@ -45,9 +45,9 @@ class ReflectionFunctionTest extends TestCase
             $refFunction = new ReflectionFunction('var_dump');
             $refFunction->setDeprecated();
             $this->assertTrue($refFunction->isDeprecated());
-
-            $this->expectException(Deprecated::class);
-            $this->expectExceptionMessageMatches('/Function var_dump\(\) is deprecated/');
+            $this->expectDeprecation();
+//            $this->expectException(Deprecated::class);
+//            $this->expectExceptionMessageMatches('/Function var_dump\(\) is deprecated/');
             var_dump($currentReporting);
         } finally {
             error_reporting($currentReporting);

@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace ZEngine\EngineExtension;
 
 use FFI\CData;
+use ZEngine\Constants\Defines;
 use ZEngine\Core;
 use ZEngine\EngineExtension\Hook\ExtensionConstructorHook;
 use ZEngine\Reflection\ReflectionExtension;
@@ -22,12 +23,12 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
     /**
      * @see zend_modules.h:MODULE_PERSISTENT
      */
-    private const MODULE_PERSISTENT = 1;
+    private const MODULE_PERSISTENT = Defines::MODULE_PERSISTENT;
 
     /**
      * @see zend_modules.h:MODULE_TEMPORARY
      */
-    private const MODULE_TEMPORARY = 2;
+    private const MODULE_TEMPORARY = Defines::MODULE_TEMPORARY;
 
     /**
      * Unique name of this module
@@ -93,7 +94,11 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
         if ($globalType !== null) {
             $module->globals_size = Core::sizeof(Core::type($globalType));
             $memoryStructure      = Core::new($globalType, false, static::targetPersistent());
-            $module->globals_ptr  = Core::addr($memoryStructure);
+            if(ZEND_THREAD_SAFE) {
+                throw new \LogicException("TODO");
+            } else {
+                $module->globals_ptr  = Core::addr($memoryStructure);
+            }
         }
 
         // $module pointer will be updated, as registration method returns a copy of memory

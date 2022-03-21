@@ -14,6 +14,7 @@ namespace ZEngine\Reflection;
 
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
+use ZEngine\Constants\Defines;
 use ZEngine\Core;
 use ZEngine\Type\ReferenceCountedInterface;
 use ZEngine\Type\ReferenceCountedTrait;
@@ -74,40 +75,40 @@ class ReflectionValue implements ReferenceCountedInterface
     use ReferenceCountedTrait;
 
     /* regular data types */
-    public const IS_UNDEF        = 0;
-    public const IS_NULL         = 1;
-    public const IS_FALSE        = 2;
-    public const IS_TRUE         = 3;
-    public const IS_LONG         = 4;
-    public const IS_DOUBLE       = 5;
-    public const IS_STRING       = 6;
-    public const IS_ARRAY        = 7;
-    public const IS_OBJECT       = 8;
-    public const IS_RESOURCE     = 9;
-    public const IS_REFERENCE    = 10;
-    public const IS_CONSTANT_AST = 11; /* constant expressions */
+    public const IS_UNDEF        = Defines::IS_UNDEF;
+    public const IS_NULL         = Defines::IS_NULL;
+    public const IS_FALSE        = Defines::IS_FALSE;
+    public const IS_TRUE         = Defines::IS_TRUE;
+    public const IS_LONG         = Defines::IS_LONG;
+    public const IS_DOUBLE       = Defines::IS_DOUBLE;
+    public const IS_STRING       = Defines::IS_STRING;
+    public const IS_ARRAY        = Defines::IS_ARRAY;
+    public const IS_OBJECT       = Defines::IS_OBJECT;
+    public const IS_RESOURCE     = Defines::IS_RESOURCE;
+    public const IS_REFERENCE    = Defines::IS_REFERENCE;
+    public const IS_CONSTANT_AST = Defines::IS_CONSTANT_AST;
 
     /**
      * Fake types used only for type hinting.
      * These are allowed to overlap with the types below.
      */
-    public const IS_CALLABLE       = 12;
-    public const IS_ITERABLE       = 13;
-    public const IS_VOID           = 14;
-    public const IS_STATIC         = 15;
-    public const IS_MIXED          = 16;
+    public const IS_CALLABLE       = Defines::IS_CALLABLE;
+    public const IS_ITERABLE       = Defines::IS_ITERABLE;
+    public const IS_VOID           = Defines::IS_VOID;
+//    public const IS_STATIC         = Defines::IS_STATIC;
+//    public const IS_MIXED          = Defines::IS_MIXED;
 
     /* internal types */
-    public const IS_INDIRECT  = 12;
-    public const IS_PTR       = 13;
-    public const IS_ALIAS_PTR = 14;
-    public const _IS_ERROR    = 15;
+    public const IS_INDIRECT  = Defines::IS_INDIRECT;
+    public const IS_PTR       = Defines::IS_PTR;
+//    public const IS_ALIAS_PTR = Defines::IS_ALIAS_PTR;
+    public const _IS_ERROR    = Defines::_IS_ERROR;
 
     /* used for casts */
-    public const _IS_BOOL   = 17;
-    public const _IS_NUMBER = 18;
+    public const _IS_BOOL   = Defines::_IS_BOOL;
+    public const _IS_NUMBER = Defines::_IS_NUMBER;
 
-    private const Z_TYPE_FLAGS_MASK = 0xFF00;
+    private const Z_TYPE_FLAGS_MASK = Defines::Z_TYPE_FLAGS_MASK;
 
     /**
      * Stores the pointer to zval structure, associated with this variable

@@ -74,13 +74,23 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
         return $reflectionConstant;
     }
 
+    private function setPermission(int $level): void
+    {
+        if(version_compare(PHP_VERSION, "8.1.0", "<")) {
+            $this->pointer->value->u2->access_flags &= (~Core::ZEND_ACC_PPP_MASK);
+            $this->pointer->value->u2->access_flags |= $level;
+        } else {
+            $this->pointer->value->u2->constant_flags &= (~Core::ZEND_ACC_PPP_MASK);
+            $this->pointer->value->u2->constant_flags |= $level;
+        }
+    }
+
     /**
      * Declares constant as public
      */
     public function setPublic(): void
     {
-        $this->pointer->value->u2->access_flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->pointer->value->u2->access_flags |= Core::ZEND_ACC_PUBLIC;
+        $this->setPermission(Core::ZEND_ACC_PUBLIC);
     }
 
     /**
@@ -88,8 +98,7 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
      */
     public function setProtected(): void
     {
-        $this->pointer->value->u2->access_flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->pointer->value->u2->access_flags |= Core::ZEND_ACC_PROTECTED;
+        $this->setPermission(Core::ZEND_ACC_PROTECTED);
     }
 
     /**
@@ -97,8 +106,7 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
      */
     public function setPrivate(): void
     {
-        $this->pointer->value->u2->access_flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->pointer->value->u2->access_flags |= Core::ZEND_ACC_PRIVATE;
+        $this->setPermission(Core::ZEND_ACC_PRIVATE);
     }
 
     /**

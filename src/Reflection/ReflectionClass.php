@@ -121,7 +121,7 @@ class ReflectionClass extends NativeReflectionClass
     /**
      * @inheritDoc
      */
-    public function getName()
+    public function getName(): string
     {
         return StringEntry::fromCData($this->pointer->name)->getStringValue();
     }
@@ -264,7 +264,7 @@ class ReflectionClass extends NativeReflectionClass
     /**
      * @inheritDoc
      */
-    public function getMethod($name)
+    public function getMethod($name): ReflectionMethod
     {
         $functionEntry = $this->methodTable->find(strtolower($name));
         if ($functionEntry === null) {
@@ -278,7 +278,7 @@ class ReflectionClass extends NativeReflectionClass
      * @inheritDoc
      * @return ReflectionMethod[]
      */
-    public function getMethods($filter = null)
+    public function getMethods($filter = null): array
     {
         $methods = [];
         foreach ($this->methodTable as $methodEntryValue) {
@@ -321,12 +321,12 @@ class ReflectionClass extends NativeReflectionClass
         return $refMethod;
     }
 
-    public function isInternal()
+    public function isInternal(): bool
     {
         return ord($this->pointer->type) === Core::ZEND_INTERNAL_CLASS;
     }
 
-    public function isUserDefined()
+    public function isUserDefined(): bool
     {
         return ord($this->pointer->type) === Core::ZEND_USER_CLASS;
     }
@@ -453,13 +453,14 @@ class ReflectionClass extends NativeReflectionClass
         $this->pointer->num_traits = $numResultTraits;
     }
 
+    #[\ReturnTypeWillChange]
     /**
      * @inheritDoc
      */
-    public function getParentClass(): ?ReflectionClass
+    public function getParentClass()// : ReflectionClass|False
     {
         if (!$this->hasParentClass()) {
-            return null;
+            return false;
         }
 
         // For linked class we should look at parent name directly
@@ -603,7 +604,7 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @return iterable|ReflectionValue[]
      */
-    public function getDefaultProperties(): iterable
+    public function getDefaultProperties(): array
     {
         $iterator = function () {
             $propertyIndex = 0;
@@ -640,7 +641,7 @@ class ReflectionClass extends NativeReflectionClass
      * @inheritDoc
      * @return ReflectionClassConstant
      */
-    public function getReflectionConstant($name)
+    public function getReflectionConstant($name): ReflectionClassConstant
     {
         $constantEntry = $this->constantsTable->find($name);
         if ($constantEntry === null) {
@@ -887,7 +888,7 @@ class ReflectionClass extends NativeReflectionClass
         $objectSize = Core::sizeof(Core::type('zend_object'));
         $totalSize  = $objectSize + self::getObjectPropertiesSize($classType);
         $memory     = Core::new("char[{$totalSize}]", false, $persistent);
-        $object     = Core::cast('zend_object *', $memory);
+        $object     = Core::cast('zend_object *', Core::addr($memory));
 
         Core::call('zend_object_std_init', $object, $classType);
         $object->handlers = self::getObjectHandlers($classType);
@@ -915,7 +916,7 @@ class ReflectionClass extends NativeReflectionClass
         $this->methodTable     = new HashTable(Core::addr($classEntry->function_table));
         $this->propertiesTable = new HashTable(Core::addr($classEntry->properties_info));
         $this->constantsTable  = new HashTable(Core::addr($classEntry->constants_table));
-        if ($classEntry->attributes !== null) {
+        if (version_compare(PHP_VERSION, "8.0.0", ">=") && $classEntry->attributes !== null) {
             $this->attributesTable = new HashTable(Core::addr($classEntry->attributes));
         }
     }
