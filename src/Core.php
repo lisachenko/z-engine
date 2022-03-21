@@ -237,7 +237,7 @@ class Core
                 throw new \RuntimeException('Preload mode requires that you call Core::preload before');
             }
             // If not, then load definitions by hand
-            $definition = require_once __DIR__ . "/../include/engine.php";
+            $definition = require __DIR__ . "/../include/engine.php";
             $arguments  = [$definition];
 
             // For Windows platform we should load symbols from the shared php7.dll library
