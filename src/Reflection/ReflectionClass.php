@@ -888,7 +888,7 @@ class ReflectionClass extends NativeReflectionClass
         $objectSize = Core::sizeof(Core::type('zend_object'));
         $totalSize  = $objectSize + self::getObjectPropertiesSize($classType);
         $memory     = Core::new("char[{$totalSize}]", false, $persistent);
-        $object     = Core::cast('zend_object *', $memory);
+        $object     = Core::cast('zend_object *', Core::addr($memory));
 
         Core::call('zend_object_std_init', $object, $classType);
         $object->handlers = self::getObjectHandlers($classType);
