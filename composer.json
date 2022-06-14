@@ -3,7 +3,7 @@
     "description": "Library that provides direct access to native PHP structures",
     "type": "library",
     "require": {
-        "php": "8.0.*",
+        "php": ">=8.0",
         "ext-ffi": "*"
     },
     "license": [
