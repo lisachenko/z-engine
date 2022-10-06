@@ -875,6 +875,7 @@ class ReflectionClass extends NativeReflectionClass
     public static function newInstanceRaw(CData $classType, bool $persistent = false): CData
     {
         $object = Core::call('zend_objects_new', $classType);
+        $object->handlers = self::getObjectHandlers($classType);
         Core::call('object_properties_init', $object, $classType);
 
         return $object;
