@@ -126,7 +126,7 @@ class ReflectionValue implements ReferenceCountedInterface
      *
      * @param mixed $value Any value to be reflected
      */
-    public function __construct($value)
+    public function __construct(mixed $value)
     {
         // Trick here is to look at internal structures and steal pointer to our value from current frame
         $selfExecutionState = Core::$executor->getExecutionState();
