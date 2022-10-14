@@ -251,8 +251,8 @@ class ReflectionValue implements ReferenceCountedInterface
      */
     public function getRawFunction(): CData
     {
-        if ($this->pointer->u1->v->type !== self::IS_PTR) {
-            throw new \UnexpectedValueException('Function entry available only for the type IS_PTR');
+        if ($this->pointer->u1->v->type !== self::IS_PTR && $this->pointer->u1->v->type !== self::IS_INDIRECT) {
+            throw new \UnexpectedValueException('Function entry available only for the type IS_PTR or IS_INDIRECT');
         }
 
         $function = $this->pointer->value->func;
