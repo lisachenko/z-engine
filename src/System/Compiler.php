@@ -106,7 +106,7 @@ class Compiler
      *
      * @var HashTable
      */
-    private HashTable $filenamesTable;
+    private HashTable $autoGlobals;
 
     /**
      * Holds an internal pointer to the compiler_globals structure
@@ -118,7 +118,7 @@ class Compiler
         $this->pointer        = $pointer;
         $this->classTable     = new HashTable($pointer->class_table);
         $this->functionTable  = new HashTable($pointer->function_table);
-        $this->filenamesTable = new HashTable($pointer->filenames_table);
+        $this->autoGlobals = new HashTable($pointer->auto_globals);
     }
 
     /**
