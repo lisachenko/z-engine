@@ -439,6 +439,24 @@ class ReflectionValue implements ReferenceCountedInterface
     }
 
     /**
+     * Takes an own reference on the payload, making this wrapper responsible for one release
+     *
+     * Required when the zval is handed to an engine function with ownership semantics (one
+     * that may release or replace the value inside, eg zend_prepare_string_for_scanning):
+     * a bare aliasing container would make the engine release a reference nobody gave it.
+     */
+    public function acquireReference(): self
+    {
+        $this->assertNotReleased();
+        if (!$this->ownsReference && $this->isTypeInfoRefCounted($this->getType())) {
+            Core::call('zval_add_ref', $this->pointer);
+            $this->ownsReference = true;
+        }
+
+        return $this;
+    }
+
+    /**
      * @inheritDoc
      */
     protected function doRelease(bool $ownsReference, bool $ownsContainer): void

@@ -171,8 +171,12 @@ class Compiler
      */
     public function parseString(string $source, string $fileName = ''): NodeInterface
     {
-        $sourceValue  = new StringEntry($source);
-        $sourceEntry  = ReflectionValue::newEntry(ReflectionValue::IS_STRING, $sourceValue->getRawValue()[0]);
+        // The scanner takes ownership semantics on this zval: it may release the string
+        // inside and replace it with a padded copy, so the container must hold its own
+        // reference - release() then drops whichever string ends up inside
+        $sourceValue = new StringEntry($source);
+        $sourceEntry = ReflectionValue::newEntry(ReflectionValue::IS_STRING, $sourceValue->getRawValue()[0])
+            ->acquireReference();
         $rawSourceVal = $sourceEntry->getRawValue();
 
         // Since PHP 8.1 the filename is passed as a zend_string* (kept alive
