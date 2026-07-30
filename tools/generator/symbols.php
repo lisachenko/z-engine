@@ -173,6 +173,17 @@ return [
         '_zend_ast_kind',
     ],
 
+    // System/libc types that z-engine only ever uses behind a pointer. Their
+    // full definitions must NOT be emitted: their layout is libc-version
+    // specific (e.g. glibc's struct _IO_FILE differs between releases), which
+    // would make the generated header non-reproducible across build hosts.
+    // Emitting only a forward declaration keeps the header stable and is all
+    // FFI needs for pointer usage.
+    'opaque' => [
+        'FILE',
+        '_IO_FILE',
+    ],
+
     'opcode_header' => 'Zend/zend_vm_opcodes.h',
 
     'layout_structs' => [
