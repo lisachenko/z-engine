@@ -327,6 +327,14 @@ class Core
      */
     public static function cast(string $type, CData $pointer): CData
     {
+        // Since PHP 8.3 FFI::cast() reinterprets the *contents* of an array
+        // instead of decaying it to a pointer to its data. Restore the decay
+        // semantics explicitly, otherwise every buffer cast becomes a wild
+        // pointer made of the buffer's leading bytes.
+        if (FFI::typeof($pointer)->getKind() === CType::TYPE_ARRAY) {
+            $pointer = FFI::addr($pointer[0]);
+        }
+
         return self::$engine->cast($type, $pointer);
     }
 

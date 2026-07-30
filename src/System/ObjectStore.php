@@ -121,7 +121,7 @@ final class ObjectStore implements Countable, ArrayAccess
             // We use -2 because exception object also increments index by one
             throw new \OutOfBoundsException("Index {$offset} is out of bounds 0.." . ($this->pointer->top - 2));
         }
-        $rawPointer        = Core::cast('zend_uintptr_t', $this->pointer->object_buckets[$offset]);
+        $rawPointer        = Core::cast('uintptr_t', $this->pointer->object_buckets[$offset]);
         $invalidPointer    = $rawPointer->cdata | self::OBJ_BUCKET_INVALID;
         $rawPointer->cdata = $invalidPointer;
 
@@ -139,7 +139,7 @@ final class ObjectStore implements Countable, ArrayAccess
             return false;
         }
 
-        $rawPointer = Core::cast('zend_uintptr_t', $objectPointer);
+        $rawPointer = Core::cast('uintptr_t', $objectPointer);
         $isValid    = ($rawPointer->cdata & self::OBJ_BUCKET_INVALID) === 0;
 
         return $isValid;

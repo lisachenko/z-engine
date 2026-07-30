@@ -79,8 +79,8 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
      */
     public function setPublic(): void
     {
-        $this->pointer->value->u2->access_flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->pointer->value->u2->access_flags |= Core::ZEND_ACC_PUBLIC;
+        $this->pointer->value->u2->constant_flags &= (~Core::ZEND_ACC_PPP_MASK);
+        $this->pointer->value->u2->constant_flags |= Core::ZEND_ACC_PUBLIC;
     }
 
     /**
@@ -88,8 +88,8 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
      */
     public function setProtected(): void
     {
-        $this->pointer->value->u2->access_flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->pointer->value->u2->access_flags |= Core::ZEND_ACC_PROTECTED;
+        $this->pointer->value->u2->constant_flags &= (~Core::ZEND_ACC_PPP_MASK);
+        $this->pointer->value->u2->constant_flags |= Core::ZEND_ACC_PROTECTED;
     }
 
     /**
@@ -97,8 +97,8 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
      */
     public function setPrivate(): void
     {
-        $this->pointer->value->u2->access_flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->pointer->value->u2->access_flags |= Core::ZEND_ACC_PRIVATE;
+        $this->pointer->value->u2->constant_flags &= (~Core::ZEND_ACC_PPP_MASK);
+        $this->pointer->value->u2->constant_flags |= Core::ZEND_ACC_PRIVATE;
     }
 
     /**
