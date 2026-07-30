@@ -14,10 +14,12 @@
 ARG PHP_VERSION=8.4
 FROM php:${PHP_VERSION}-cli AS build
 
-# Build dependencies for the extensions we rebuild: FFI, libxml-based
-# extensions (dom/xml/xmlwriter/simplexml, on by default) and mbstring.
+# Build dependencies for the default-enabled extensions (which the official
+# image's runtime layer strips the -dev libs for): FFI, libxml-based extensions
+# (dom/xml/xmlwriter/simplexml), mbstring (oniguruma) and sqlite3/pdo_sqlite.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libffi-dev libxml2-dev libonig-dev \
+    && apt-get install -y --no-install-recommends \
+        libffi-dev libxml2-dev libonig-dev libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Rebuild PHP from the bundled source with debug + a curated extension set.
