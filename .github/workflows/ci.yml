@@ -63,29 +63,30 @@ jobs:
     name: Internal group (debug build)
     runs-on: ubuntu-latest
     # The segfault-prone destructive tests run only against a --enable-debug
-    # PHP build, where corruption surfaces as assertion failures. The image is
-    # published by publish-php-images.yml. Until it has been published once,
-    # this job reports success with a notice instead of a red X - it is an
-    # optional bootstrap dependency, not a gate.
+    # PHP build, where corruption surfaces as assertion failures. There is no
+    # official debug PHP image, so we build one here from the official image's
+    # own source and run the tests in it. Docker layer caching (type=gha) keeps
+    # the ~one-off PHP rebuild out of every run - no registry, no publishing.
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check whether the debug image is available
-        id: image
-        run: |
-          IMAGE=ghcr.io/${{ github.repository_owner }}/z-engine-php:8.4-nts-debug
-          echo "ref=$IMAGE" >> "$GITHUB_OUTPUT"
-          if docker pull "$IMAGE" >/dev/null 2>&1; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Debug PHP image not published yet - run the 'Publish PHP debug images' workflow once to enable the internal test group. Skipping."
-          fi
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build the debug PHP image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: tools/docker/php-debug.Dockerfile
+          build-args: PHP_VERSION=${{ env.PHP_MINOR }}
+          tags: z-engine-php:debug
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Run internal group with process isolation
-        if: steps.image.outputs.available == 'true'
         run: |
-          docker run --rm -v "$PWD:/app" -w /app "${{ steps.image.outputs.ref }}" sh -c '
+          docker run --rm -v "$PWD:/app" -w /app z-engine-php:debug sh -c '
             curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer &&
             composer install --no-interaction --no-progress &&
             composer test:internal

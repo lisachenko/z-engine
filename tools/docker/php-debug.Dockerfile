@@ -5,9 +5,9 @@
 # poking at engine internals. Built from the official image's own php source so
 # it matches the ABI of the generated headers for this branch's PHP minor.
 #
-# Published to ghcr by .github/workflows/publish-php-images.yml and consumed by
-# the tests-internal-debug CI job. Build locally with:
-#   docker build -f tools/docker/php-debug.Dockerfile -t z-engine-php:8.4-nts-debug .
+# Built inline (with layer caching) by the tests-internal-debug CI job and run
+# in place - no registry involved. Build locally with:
+#   docker build -f tools/docker/php-debug.Dockerfile -t z-engine-php:debug .
 ARG PHP_VERSION=8.4
 FROM php:${PHP_VERSION}-cli AS build
 
