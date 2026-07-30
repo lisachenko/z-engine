@@ -318,8 +318,7 @@ class ReflectionClass extends NativeReflectionClass
         // Clean closure flag
         $rawFunction->common->fn_flags &= (~Core::ZEND_ACC_CLOSURE);
 
-        $isPersistent = $this->isInternal() || PHP_SAPI !== 'cli';
-        $refMethod    = $this->addRawMethod($methodName, $rawFunction, $isPersistent);
+        $refMethod = $this->addRawMethod($methodName, $rawFunction);
         $refMethod->setPublic();
 
         return $refMethod;
@@ -934,14 +933,16 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @param string $methodName Method name to use
      * @param CData  $rawFunction zend_function instance
-     * @param bool   $isPersistent Whether this method is persistent or not
      *
      * @return ReflectionMethod
      */
-    private function addRawMethod(string $methodName, CData $rawFunction, bool $isPersistent = true): ReflectionMethod
+    private function addRawMethod(string $methodName, CData $rawFunction): ReflectionMethod
     {
-        $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawFunction, $isPersistent);
+        // The engine hashtable copies the zval into its own bucket, so the temporary
+        // container exists only for the duration of this call and must be freed here
+        $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawFunction);
         $this->methodTable->add(strtolower($methodName), $valueEntry);
+        Core::free($valueEntry->getRawValue());
 
         $refMethod = ReflectionMethod::fromCData($rawFunction);
 

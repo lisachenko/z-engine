@@ -172,7 +172,8 @@ class Compiler
     {
         $sourceValue  = new StringEntry($source);
         $sourceRaw    = $sourceValue->getRawValue();
-        $rawSourceVal = ReflectionValue::newEntry(ReflectionValue::IS_STRING, $sourceRaw)->getRawValue();
+        $sourceEntry  = ReflectionValue::newEntry(ReflectionValue::IS_STRING, $sourceRaw);
+        $rawSourceVal = $sourceEntry->getRawValue();
 
         // Since PHP 8.1 the filename is passed as a zend_string* (kept alive
         // in a local for the whole parse)
@@ -204,6 +205,9 @@ class Compiler
 
         Core::call('zend_restore_lexical_state', Core::addr($originalLexState));
         $this->setCompilationMode($originalCompilationMode);
+
+        // The scanner made its own copy of the source, the temporary zval container is ours to free
+        Core::free($rawSourceVal);
 
         return $node;
     }
