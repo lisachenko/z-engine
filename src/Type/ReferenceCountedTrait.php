@@ -38,7 +38,7 @@ trait ReferenceCountedTrait
         if ($this->isImmutable()) {
             throw new \LogicException(
                 'Cannot increment the reference counter of an immutable engine value '
-                . '(interned string, immutable array or shared-memory data)'
+                . '(interned string, immutable array or shared-memory data)',
             );
         }
 
@@ -55,7 +55,7 @@ trait ReferenceCountedTrait
         if ($this->isImmutable()) {
             throw new \LogicException(
                 'Cannot decrement the reference counter of an immutable engine value '
-                . '(interned string, immutable array or shared-memory data)'
+                . '(interned string, immutable array or shared-memory data)',
             );
         }
         if ($this->getGC()->refcount <= 0) {

@@ -449,7 +449,7 @@ class ReflectionValue implements ReferenceCountedInterface
         if (!$this->isTypeInfoRefCounted($this->getType())) {
             throw new \LogicException(
                 'Cannot access the reference counter of a non-refcounted value of type '
-                . self::name($this->pointer->u1->v->type)
+                . self::name($this->pointer->u1->v->type),
             );
         }
 

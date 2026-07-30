@@ -75,7 +75,13 @@ class ReflectionClass extends NativeReflectionClass
     private CData $pointer;
 
     /**
-     * Stores all allocated zend_object_handler pointers per class
+     * Stores all allocated zend_object_handler pointers, keyed by zend_class_entry address
+     *
+     * Keying by address (and not by class name) keeps the cache bounded: anonymous classes
+     * reuse name patterns while their class entries are distinct, and a name-keyed cache both
+     * grew without limit and could alias a stale handlers block to an unrelated class.
+     *
+     * @var array<int, CData>
      */
     private static array $objectHandlers = [];
 
@@ -858,7 +864,7 @@ class ReflectionClass extends NativeReflectionClass
         if ($this->isInternal()) {
             trigger_error('Create object handler is available for user-defined classes only', E_USER_ERROR);
         }
-        self::allocateClassObjectHandlers($this->getName());
+        self::getObjectHandlers($this->pointer);
 
         $hook = new CreateObjectHook($handler, $this->pointer);
         $hook->install();
@@ -976,25 +982,23 @@ class ReflectionClass extends NativeReflectionClass
      */
     private static function getObjectHandlers(CData $classType): CData
     {
-        $className = (StringEntry::fromCData($classType->name)->getStringValue());
-        if (!isset(self::$objectHandlers[$className])) {
-            self::allocateClassObjectHandlers($className);
+        $classEntryAddress = Core::addressOf($classType);
+        if (!isset(self::$objectHandlers[$classEntryAddress])) {
+            self::$objectHandlers[$classEntryAddress] = self::allocateClassObjectHandlers();
         }
 
-        return self::$objectHandlers[$className];
+        return self::$objectHandlers[$classEntryAddress];
     }
 
     /**
-     * Allocates a new zend_object_handlers structure for class as a copy of std_object_handlers
-     *
-     * @param string $className Class name to use
+     * Allocates a new zend_object_handlers structure for a class as a copy of std_object_handlers
      */
-    private static function allocateClassObjectHandlers(string $className): void
+    private static function allocateClassObjectHandlers(): CData
     {
         $handlers    = Core::new('zend_object_handlers', false, true);
         $stdHandlers = Core::getStandardObjectHandlers();
         Core::memcpy($handlers, $stdHandlers, Core::sizeof($stdHandlers));
 
-        self::$objectHandlers[$className] = Core::addr($handlers);
+        return Core::addr($handlers);
     }
 }

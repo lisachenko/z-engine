@@ -667,6 +667,12 @@ parameters:
 			path: src/Core.php
 
 		-
+			message: '#^Cannot cast mixed to int\.$#'
+			identifier: cast.int
+			count: 1
+			path: src/Core.php
+
+		-
 			message: '#^Method ZEngine\\Core\:\:availablePlatforms\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
@@ -1063,12 +1069,6 @@ parameters:
 			path: src/Reflection/ReflectionClass.php
 
 		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionClass\:\:getObjectHandlers\(\) should return FFI\\CData but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Reflection/ReflectionClass.php
-
-		-
 			message: '#^Method ZEngine\\Reflection\\ReflectionClass\:\:setParent\(\) has no return type specified\.$#'
 			identifier: missingType.return
 			count: 1
@@ -1107,7 +1107,7 @@ parameters:
 		-
 			message: '#^Parameter \#1 \$stringPointer of static method ZEngine\\Type\\StringEntry\:\:fromCData\(\) expects FFI\\CData, mixed given\.$#'
 			identifier: argument.type
-			count: 7
+			count: 6
 			path: src/Reflection/ReflectionClass.php
 
 		-
@@ -1142,12 +1142,6 @@ parameters:
 
 		-
 			message: '#^Property ZEngine\\Reflection\\ReflectionClass\:\:\$attributesTable type has no value type specified in iterable type ZEngine\\Type\\HashTable\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Property ZEngine\\Reflection\\ReflectionClass\:\:\$objectHandlers type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
 			path: src/Reflection/ReflectionClass.php
@@ -1689,7 +1683,7 @@ parameters:
 		-
 			message: '#^Binary operation "&" between mixed and 64 results in an error\.$#'
 			identifier: binaryOp.invalid
-			count: 1
+			count: 2
 			path: src/Reflection/ReflectionValue.php
 
 		-
@@ -1707,7 +1701,7 @@ parameters:
 		-
 			message: '#^Cannot access property \$counted on mixed\.$#'
 			identifier: property.nonObject
-			count: 4
+			count: 5
 			path: src/Reflection/ReflectionValue.php
 
 		-
@@ -1725,7 +1719,7 @@ parameters:
 		-
 			message: '#^Cannot access property \$gc on mixed\.$#'
 			identifier: property.nonObject
-			count: 1
+			count: 2
 			path: src/Reflection/ReflectionValue.php
 
 		-
@@ -1761,19 +1755,25 @@ parameters:
 		-
 			message: '#^Cannot access property \$type on mixed\.$#'
 			identifier: property.nonObject
-			count: 11
+			count: 12
 			path: src/Reflection/ReflectionValue.php
 
 		-
 			message: '#^Cannot access property \$type_info on mixed\.$#'
 			identifier: property.nonObject
-			count: 7
+			count: 8
+			path: src/Reflection/ReflectionValue.php
+
+		-
+			message: '#^Cannot access property \$u on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
 			path: src/Reflection/ReflectionValue.php
 
 		-
 			message: '#^Cannot access property \$v on mixed\.$#'
 			identifier: property.nonObject
-			count: 10
+			count: 11
 			path: src/Reflection/ReflectionValue.php
 
 		-
@@ -1893,7 +1893,7 @@ parameters:
 		-
 			message: '#^Parameter \#1 \$valueCode of static method ZEngine\\Reflection\\ReflectionValue\:\:name\(\) expects int, mixed given\.$#'
 			identifier: argument.type
-			count: 1
+			count: 2
 			path: src/Reflection/ReflectionValue.php
 
 		-
@@ -1935,7 +1935,7 @@ parameters:
 		-
 			message: '#^Parameter \#1 \$node of static method ZEngine\\AbstractSyntaxTree\\NodeFactory\:\:fromCData\(\) expects FFI\\CData, mixed given\.$#'
 			identifier: argument.type
-			count: 2
+			count: 1
 			path: src/System/Compiler.php
 
 		-
@@ -1947,6 +1947,18 @@ parameters:
 		-
 			message: '#^Parameter \#2 \$value of static method ZEngine\\Reflection\\ReflectionValue\:\:newEntry\(\) expects FFI\\CData, FFI\\CData\|null given\.$#'
 			identifier: argument.type
+			count: 1
+			path: src/System/Compiler.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between null and null will always evaluate to true\.$#'
+			identifier: identical.alwaysTrue
+			count: 1
+			path: src/System/Compiler.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
 			count: 1
 			path: src/System/Compiler.php
 

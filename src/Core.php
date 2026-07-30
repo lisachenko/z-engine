@@ -355,6 +355,16 @@ class Core
     }
 
     /**
+     * Returns the numeric address of a pointer for use as a stable identity key
+     *
+     * @param CData $pointer Pointer CData (eg zend_class_entry *)
+     */
+    public static function addressOf(CData $pointer): int
+    {
+        return (int) self::cast('uintptr_t', $pointer)->cdata;
+    }
+
+    /**
      * Copies $size bytes from memory area $source to memory area $target.
      * $source may be any native data structure (FFI\CData) or PHP string.
      *
