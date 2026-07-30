@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -12,6 +13,8 @@ declare(strict_types=1);
 
 namespace ZEngine\Type;
 
+use PHPUnit\Framework\Attributes\Depends;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 class ObjectEntryTest extends TestCase
@@ -29,9 +32,7 @@ class ObjectEntryTest extends TestCase
         $this->assertSame(\RuntimeException::class, $class->getName());
     }
 
-    /**
-     * @group internal
-     */
+    #[Group('internal')]
     public function testSetClass(): void
     {
         $objectEntry = new ObjectEntry($this->instance);
@@ -50,10 +51,8 @@ class ObjectEntryTest extends TestCase
         $this->assertSame($objectHandle, $objectEntry->getHandle());
     }
 
-    /**
-     * @depends testGetHandle
-     * @group internal
-     */
+    #[Group('internal')]
+    #[Depends('testGetHandle')]
     public function testSetHandle(): void
     {
         $objectEntry    = new ObjectEntry($this->instance);

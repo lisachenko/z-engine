@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -78,10 +79,10 @@ class ReflectionExtension extends NativeReflectionExtension
     public static function fromCData(CData $moduleEntry): self
     {
         /** @var self $extension */
-        $extension = (new NativeReflectionClass(self::class))->newInstanceWithoutConstructor();
+        $extension              = (new NativeReflectionClass(self::class))->newInstanceWithoutConstructor();
         $extension->moduleEntry = $moduleEntry;
 
-        call_user_func([$extension, 'parent::__construct'], $moduleEntry->name);
+        Core::callParentConstructor($extension, static::class, $moduleEntry->name);
 
         return $extension;
     }

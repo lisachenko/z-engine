@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -13,6 +14,8 @@ declare(strict_types=1);
 namespace ZEngine\Reflection;
 
 use Error;
+use PHPUnit\Framework\Attributes\Depends;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Error\Deprecated;
 use PHPUnit\Framework\TestCase;
 use ZEngine\Stub\TestClass;
@@ -34,9 +37,7 @@ class ReflectionMethodTest extends TestCase
         // If we try to override this method now in child class, then E_COMPILE_ERROR will be raised
     }
 
-    /**
-     * @depends testSetFinal
-     */
+    #[Depends('testSetFinal')]
     public function testSetNonFinal(): void
     {
         $this->refMethod->setFinal(false);
@@ -54,9 +55,7 @@ class ReflectionMethodTest extends TestCase
         $test->reflectedMethod();
     }
 
-    /**
-     * @depends testSetAbstract
-     */
+    #[Depends('testSetAbstract')]
     public function testSetNonAbstract(): void
     {
         $this->refMethod->setAbstract(false);
@@ -79,9 +78,7 @@ class ReflectionMethodTest extends TestCase
         $test->reflectedMethod();
     }
 
-    /**
-     * @depends testSetPrivate
-     */
+    #[Depends('testSetPrivate')]
     public function testSetProtected(): void
     {
         $this->refMethod->setProtected();
@@ -106,9 +103,7 @@ class ReflectionMethodTest extends TestCase
         $test->reflectedMethod();
     }
 
-    /**
-     * @depends testSetProtected
-     */
+    #[Depends('testSetProtected')]
     public function testSetPublic(): void
     {
         $this->refMethod->setPublic();
@@ -133,9 +128,7 @@ class ReflectionMethodTest extends TestCase
         $this->assertNull($result);
     }
 
-    /**
-     * @depends testSetStatic
-     */
+    #[Depends('testSetStatic')]
     public function testSetNonStatic(): void
     {
         $this->refMethod->setStatic(false);
@@ -147,16 +140,26 @@ class ReflectionMethodTest extends TestCase
         $this->refMethod->setDeprecated();
         $this->assertTrue($this->refMethod->isDeprecated());
 
-//        $this->expectDeprecation();
-//        $this->expectDeprecationMessageMatches('/Function .*?reflectedMethod\(\) is deprecated/');
-        $test = new TestClass();
-        $test->reflectedMethod();
-        $this->markTestSkipped('User method does not trigger deprecation error');
+        // Marking a user method deprecated makes a call to it emit an
+        // E_DEPRECATED - capture it directly instead of leaking it as a suite
+        // deprecation.
+        $captured = null;
+        set_error_handler(static function (int $level, string $message) use (&$captured): bool {
+            $captured = $message;
+
+            return true;
+        }, E_DEPRECATED | E_USER_DEPRECATED);
+        try {
+            (new TestClass())->reflectedMethod();
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertNotNull($captured, 'Expected an E_DEPRECATED notice for the deprecated method');
+        $this->assertMatchesRegularExpression('/reflectedMethod\(\) is deprecated/', $captured);
     }
 
-    /**
-     * @depends testSetDeprecated
-     */
+    #[Depends('testSetDeprecated')]
     public function testSetNonDeprecated(): void
     {
         try {
@@ -173,9 +176,7 @@ class ReflectionMethodTest extends TestCase
         }
     }
 
-    /**
-     * @group internal
-     */
+    #[Group('internal')]
     public function testRedefineThrowsAnExceptionForIncompatibleCallback(): void
     {
         $this->expectException(\ReflectionException::class);
@@ -187,9 +188,7 @@ class ReflectionMethodTest extends TestCase
         });
     }
 
-    /**
-     * @group internal
-     */
+    #[Group('internal')]
     public function testRedefine(): void
     {
         $this->refMethod->redefine(function (): ?string {
@@ -213,9 +212,7 @@ class ReflectionMethodTest extends TestCase
         $this->assertSame(TestClass::class, $class->getName());
     }
 
-    /**
-     * @group internal
-     */
+    #[Group('internal')]
     public function testSetDeclaringClass(): void
     {
         try {

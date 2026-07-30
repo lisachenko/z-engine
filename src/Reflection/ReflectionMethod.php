@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -62,10 +63,11 @@ class ReflectionMethod extends NativeReflectionMethod
 
         $scopeName    = StringEntry::fromCData($scopeNamePtr);
         $functionName = StringEntry::fromCData($functionNamePtr);
-        call_user_func(
-            [$reflectionMethod, 'parent::__construct'],
+        Core::callParentConstructor(
+            $reflectionMethod,
+            static::class,
             $scopeName->getStringValue(),
-            $functionName->getStringValue()
+            $functionName->getStringValue(),
         );
         $reflectionMethod->pointer = $functionEntry;
 
@@ -169,6 +171,7 @@ class ReflectionMethod extends NativeReflectionMethod
     /**
      * Returns the method prototype or null if no prototype for this method
      */
+    #[\ReturnTypeWillChange]
     public function getPrototype(): ?ReflectionMethod
     {
         if ($this->getCommonPointer()->prototype === null) {
@@ -185,7 +188,7 @@ class ReflectionMethod extends NativeReflectionMethod
     {
         return [
             'name'  => $this->getName(),
-            'class' => $this->getDeclaringClass()->getName()
+            'class' => $this->getDeclaringClass()->getName(),
         ];
     }
 

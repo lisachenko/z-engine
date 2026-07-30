@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -13,6 +14,7 @@ declare(strict_types=1);
 namespace ZEngine\Type;
 
 use FFI\CData;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 class ResourceEntryTest extends TestCase
@@ -33,15 +35,13 @@ class ResourceEntryTest extends TestCase
     {
         $refResource = new ResourceEntry($this->file);
 
-        preg_match('/Resource id #(\d+)/', (string)$this->file, $matches);
-        $this->assertSame((int)$matches[1], $refResource->getHandle());
+        preg_match('/Resource id #(\d+)/', (string) $this->file, $matches);
+        $this->assertSame((int) $matches[1], $refResource->getHandle());
         $refResource->setHandle(1);
         $this->assertSame(1, $refResource->getHandle());
     }
 
-    /**
-     * @group internal
-     */
+    #[Group('internal')]
     public function testSetHandle(): void
     {
         $refResource = new ResourceEntry($this->file);
@@ -65,9 +65,7 @@ class ResourceEntryTest extends TestCase
         $this->assertSame(2, $refResource->getType());
     }
 
-    /**
-     * @group internal
-     */
+    #[Group('internal')]
     public function testSetType()
     {
         $refResource = new ResourceEntry($this->file);

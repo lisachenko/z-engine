@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -13,6 +14,8 @@ declare(strict_types=1);
 namespace ZEngine\System;
 
 use FFI\CData;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionValue;
@@ -37,9 +40,7 @@ class ExecutionDataTest extends TestCase
         $this->assertSame($trace[1]['function'], $executionData->getFunction()->getName());
     }
 
-    /**
-     * @group internal
-     */
+    #[Group('internal')]
     public function testGetSymbolTable()
     {
         $symTable = Core::$executor->getExecutionState()->getSymbolTable();
@@ -66,9 +67,7 @@ class ExecutionDataTest extends TestCase
         $this->assertSame($expected, $return);
     }
 
-    /**
-     * @dataProvider argumentProvider
-     */
+    #[DataProvider('argumentProvider')]
     public function testGetArguments($arg1 = null, $arg2 = null, $arg3 = null)
     {
         $engineArguments   = Core::$executor->getExecutionState()->getArguments();
@@ -82,20 +81,16 @@ class ExecutionDataTest extends TestCase
         $this->assertEquals(func_get_args(), $receivedArguments);
     }
 
-    /**
-     * @dataProvider argumentProvider
-     */
-    public function testGetNumberOfArguments()
+    #[DataProvider('argumentProvider')]
+    public function testGetNumberOfArguments(...$args)
     {
         $engineArguments = Core::$executor->getExecutionState()->getNumberOfArguments();
         $expectedNumber  = func_num_args();
         $this->assertSame($expectedNumber, $engineArguments);
     }
 
-    /**
-     * @dataProvider argumentProvider
-     */
-    public function testGetArgument($firstPhpArgument)
+    #[DataProvider('argumentProvider')]
+    public function testGetArgument($firstPhpArgument, ...$rest)
     {
         // Be aware, that getArgument() can return only declared arguments, not extra one!
         $firstArgument = Core::$executor->getExecutionState()->getArgument(0);
@@ -105,12 +100,12 @@ class ExecutionDataTest extends TestCase
         $this->assertSame($firstPhpArgument, $firstEngineValue);
     }
 
-    public function argumentProvider(): array
+    public static function argumentProvider(): array
     {
         return [
             [1],
             ['a', false],
-            [null, new \stdClass, 42.0]
+            [null, new \stdClass(), 42.0],
         ];
     }
 
@@ -130,7 +125,7 @@ class ExecutionDataTest extends TestCase
 
         // Just for fun: we can do crazy things like changing $this in current stack frame
         $self = $this; // Save current $this to call method on it later
-        $thisValue->setNativeValue(new \stdClass);
+        $thisValue->setNativeValue(new \stdClass());
         $self->assertInstanceOf(\stdClass::class, $this);
     }
 

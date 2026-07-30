@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -52,6 +53,11 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
     private const HASH_ADD_NEW         = (1 << 3);
     private const HASH_ADD_NEXT        = (1 << 4);
 
+    /**
+     * Corresponds to the HASH_FLAG_PACKED flag in zend_types.h
+     */
+    private const HASH_FLAG_PACKED = (1 << 2);
+
     private CData $pointer;
 
     public function __construct(CData $hashInstance)
@@ -64,18 +70,28 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
      *
      * @return Traversable An instance of an object implementing <b>Iterator</b> or <b>Traversable</b>
      */
-    public function getIterator()
+    public function getIterator(): Traversable
     {
         $iterator = function () {
-            $index = 0;
-            while ($index < $this->pointer->nNumOfElements) {
-                $item = $this->pointer->arData[$index];
-                $index++;
-                if ($item->val->u1->v->type === ReflectionValue::IS_UNDEF) {
-                    continue;
+            $isPacked = (bool) ($this->pointer->u->flags & self::HASH_FLAG_PACKED);
+            $numUsed  = $this->pointer->nNumUsed;
+            for ($index = 0; $index < $numUsed; $index++) {
+                if ($isPacked) {
+                    // Since PHP 8.2 packed arrays store plain zvals with
+                    // implicit integer keys instead of Bucket structures
+                    $value = $this->pointer->arPacked[$index];
+                    if ($value->u1->v->type === ReflectionValue::IS_UNDEF) {
+                        continue;
+                    }
+                    yield $index => ReflectionValue::fromValueEntry($value);
+                } else {
+                    $item = $this->pointer->arData[$index];
+                    if ($item->val->u1->v->type === ReflectionValue::IS_UNDEF) {
+                        continue;
+                    }
+                    $key = $item->key !== null ? StringEntry::fromCData($item->key)->getStringValue() : null;
+                    yield $key => ReflectionValue::fromValueEntry($item->val);
                 }
-                $key = $item->key !== null ? StringEntry::fromCData($item->key)->getStringValue() : null;
-                yield $key => ReflectionValue::fromValueEntry($item->val);
             }
         };
 
@@ -127,7 +143,7 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
             $this->pointer,
             Core::addr($stringEntry->getRawValue()),
             $value->getRawValue(),
-            self::HASH_ADD_NEW
+            self::HASH_ADD_NEW,
         );
         if ($result === Core::FAILURE) {
             throw new \RuntimeException("Can not add an item with key {$key}");

@@ -1,0 +1,219 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Manifest of engine symbols exported into the generated FFI header.
+ *
+ * Keys:
+ *   - types:      typedef/struct/enum names whose full definitions (and their
+ *                 transitive dependencies) are emitted into engine.h
+ *   - functions:  function symbols emitted as extern declarations
+ *   - variables:  global variables emitted as extern declarations
+ *   - defines:    C macro constants exported into constants.php (guarded by
+ *                 #ifdef in the probe, so absent macros are skipped silently)
+ *   - enums:      enum tag names whose members are exported into constants.php
+ *   - opcode_header: header parsed textually for ZEND_<OPCODE> defines
+ *   - layout_structs: typedef names measured by the C probe into layouts.json
+ *                 (size + offset of every non-bitfield field). Every struct the
+ *                 PHP code dereferences MUST be listed here - this is the
+ *                 anti-segfault ground truth checked at Core::init().
+ */
+return [
+    'types' => [
+        // Fundamental value types
+        'zval',
+        'zend_refcounted',
+        'zend_string',
+        'zend_array',
+        'HashTable',
+        'Bucket',
+        'zend_object',
+        'zend_resource',
+        'zend_reference',
+        'zend_ast_ref',
+        // Classes, functions, properties
+        'zend_class_entry',
+        'zend_class_constant',
+        'zend_class_name',
+        'zend_property_info',
+        'zend_function',
+        'zend_op_array',
+        'zend_internal_function',
+        'zend_arg_info',
+        'zend_internal_arg_info',
+        // VM
+        'zend_op',
+        'zend_execute_data',
+        'zend_objects_store',
+        'user_opcode_handler_t',
+        // Globals
+        'zend_executor_globals',
+        'zend_compiler_globals',
+        // Modules
+        'zend_module_entry',
+        'zend_module_dep',
+        // AST & compilation
+        'zend_ast',
+        'zend_ast_decl',
+        'zend_ast_list',
+        'zend_ast_zval',
+        'zend_ast_process_t',
+        'zend_lex_state',
+        'zend_arena',
+        // Object handlers
+        'zend_object_handlers',
+        // Private engine structs injected via supplement.h (see Dockerfile)
+        'zend_closure',
+    ],
+
+    'functions' => [
+        // Hash API
+        'zend_hash_del',
+        'zend_hash_find',
+        'zend_hash_add_or_update',
+        // Opcode API
+        'zend_set_user_opcode_handler',
+        'zend_get_user_opcode_handler',
+        // Inheritance / object API
+        'zend_do_inheritance_ex',
+        'zend_objects_new',
+        'zend_object_std_init',
+        'object_properties_init',
+        // Language scanner API
+        'zend_save_lexical_state',
+        'zend_restore_lexical_state',
+        'zend_prepare_string_for_scanning',
+        'zend_lex_tstring',
+        // AST API
+        'zendparse',
+        'zend_ast_destroy',
+        'zend_ast_create_list_0',
+        'zend_ast_list_add',
+        'zend_ast_create_zval_ex',
+        'zend_ast_create_0',
+        'zend_ast_create_1',
+        'zend_ast_create_2',
+        'zend_ast_create_3',
+        'zend_ast_create_4',
+        'zend_ast_create_5',
+        'zend_ast_create_decl',
+        // Module API
+        'zend_register_module_ex',
+        'zend_startup_module_ex',
+    ],
+
+    'variables' => [
+        'executor_globals',
+        'compiler_globals',
+        'module_registry',
+        'std_object_handlers',
+        'zend_ast_process',
+    ],
+
+    'defines' => [
+        // Class/function/property flags (zend_compile.h)
+        'ZEND_ACC_PUBLIC', 'ZEND_ACC_PROTECTED', 'ZEND_ACC_PRIVATE', 'ZEND_ACC_CHANGED',
+        'ZEND_ACC_STATIC', 'ZEND_ACC_ABSTRACT', 'ZEND_ACC_FINAL', 'ZEND_ACC_DEPRECATED',
+        'ZEND_ACC_INTERFACE', 'ZEND_ACC_TRAIT', 'ZEND_ACC_ANON_CLASS', 'ZEND_ACC_ENUM',
+        'ZEND_ACC_IMPLICIT_ABSTRACT_CLASS', 'ZEND_ACC_LINKED', 'ZEND_ACC_IMMUTABLE',
+        'ZEND_ACC_USE_GUARDS', 'ZEND_ACC_CONSTANTS_UPDATED', 'ZEND_ACC_NO_DYNAMIC_PROPERTIES',
+        'ZEND_ACC_HAS_STATIC_IN_METHODS', 'ZEND_ACC_TOP_LEVEL', 'ZEND_ACC_PRELOADED',
+        'ZEND_ACC_NOT_SERIALIZABLE', 'ZEND_ACC_READONLY_CLASS', 'ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES',
+        'ZEND_ACC_UNRESOLVED_VARIANCE', 'ZEND_ACC_NEARLY_LINKED', 'ZEND_ACC_RESOLVED_PARENT',
+        'ZEND_ACC_RESOLVED_INTERFACES', 'ZEND_ACC_HAS_UNLINKED_USES', 'ZEND_ACC_PROPERTY_TYPES_RESOLVED',
+        'ZEND_ACC_REUSE_GET_ITERATOR', 'ZEND_ACC_EXPLICIT_ABSTRACT_CLASS',
+        'ZEND_ACC_READONLY', 'ZEND_ACC_ABSTRACT_METHOD', 'ZEND_ACC_VIRTUAL',
+        'ZEND_ACC_FAKE_CLOSURE', 'ZEND_ACC_UNINSTANTIABLE',
+        'ZEND_ACC_CALL_VIA_TRAMPOLINE', 'ZEND_ACC_NEVER_CACHE', 'ZEND_ACC_TRAIT_CLONE',
+        'ZEND_ACC_RETURN_REFERENCE', 'ZEND_ACC_DONE_PASS_TWO', 'ZEND_ACC_HEAP_RT_CACHE',
+        'ZEND_ACC_STRICT_TYPES', 'ZEND_ACC_CLOSURE', 'ZEND_ACC_GENERATOR',
+        'ZEND_ACC_HAS_FINALLY_BLOCK', 'ZEND_ACC_EARLY_BINDING', 'ZEND_ACC_USES_THIS',
+        'ZEND_ACC_CTOR', 'ZEND_ACC_HAS_TYPE_HINTS', 'ZEND_ACC_HAS_RETURN_TYPE',
+        'ZEND_ACC_VARIADIC', 'ZEND_ACC_HAS_UNRESOLVED_INITIALIZERS',
+        // zval types (zend_types.h)
+        'IS_UNDEF', 'IS_NULL', 'IS_FALSE', 'IS_TRUE', 'IS_LONG', 'IS_DOUBLE', 'IS_STRING',
+        'IS_ARRAY', 'IS_OBJECT', 'IS_RESOURCE', 'IS_REFERENCE', 'IS_CONSTANT_AST',
+        'IS_CALLABLE', 'IS_ITERABLE', 'IS_VOID', 'IS_STATIC', 'IS_MIXED', 'IS_NEVER',
+        'IS_INDIRECT', 'IS_PTR', 'IS_ALIAS_PTR', '_IS_ERROR', '_IS_BOOL', '_IS_NUMBER',
+        'IS_TYPE_REFCOUNTED', 'IS_TYPE_COLLECTABLE', 'Z_TYPE_MASK', 'Z_TYPE_FLAGS_MASK',
+        'Z_TYPE_FLAGS_SHIFT',
+        // GC (zend_types.h)
+        'GC_TYPE_MASK', 'GC_FLAGS_MASK', 'GC_INFO_MASK', 'GC_FLAGS_SHIFT', 'GC_INFO_SHIFT',
+        'GC_NULL', 'GC_STRING', 'GC_ARRAY', 'GC_OBJECT', 'GC_RESOURCE', 'GC_REFERENCE',
+        'GC_CONSTANT_AST', 'GC_NOT_COLLECTABLE', 'GC_PROTECTED', 'GC_IMMUTABLE',
+        'GC_PERSISTENT', 'GC_PERSISTENT_LOCAL',
+        'IS_STR_CLASS_NAME_MAP_PTR', 'IS_STR_INTERNED', 'IS_STR_PERSISTENT',
+        'IS_STR_PERMANENT', 'IS_STR_VALID_UTF8',
+        'IS_ARRAY_IMMUTABLE', 'IS_ARRAY_PERSISTENT',
+        'IS_OBJ_WEAKLY_REFERENCED', 'IS_OBJ_DESTRUCTOR_CALLED', 'IS_OBJ_FREE_CALLED',
+        // HashTable flags (zend_hash.h / zend_types.h)
+        'HASH_FLAG_CONSISTENCY', 'HASH_FLAG_PACKED', 'HASH_FLAG_UNINITIALIZED',
+        'HASH_FLAG_STATIC_KEYS', 'HASH_FLAG_HAS_EMPTY_IND', 'HASH_FLAG_ALLOW_COW_VIOLATION',
+        'HASH_UPDATE', 'HASH_ADD', 'HASH_UPDATE_INDIRECT', 'HASH_ADD_NEW', 'HASH_ADD_NEXT',
+        // Module API (zend_modules.h)
+        'ZEND_MODULE_API_NO', 'MODULE_PERSISTENT', 'MODULE_TEMPORARY',
+        // Engine build info
+        'ZEND_DEBUG', 'ZEND_MM_ALIGNMENT', 'ZEND_MAX_RESERVED_RESOURCES',
+        // Function kinds (zend_compile.h)
+        'ZEND_INTERNAL_FUNCTION', 'ZEND_USER_FUNCTION', 'ZEND_EVAL_CODE',
+        // Compiler options (zend_compile.h)
+        'ZEND_COMPILE_EXTENDED_STMT', 'ZEND_COMPILE_EXTENDED_FCALL', 'ZEND_COMPILE_EXTENDED_INFO',
+        'ZEND_COMPILE_HANDLE_OP_ARRAY', 'ZEND_COMPILE_IGNORE_INTERNAL_FUNCTIONS',
+        'ZEND_COMPILE_DELAYED_BINDING', 'ZEND_COMPILE_NO_CONSTANT_SUBSTITUTION',
+        'ZEND_COMPILE_IGNORE_INTERNAL_CLASSES', 'ZEND_COMPILE_IGNORE_USER_FUNCTIONS',
+        'ZEND_COMPILE_GUARDS', 'ZEND_COMPILE_NO_BUILTINS', 'ZEND_COMPILE_NO_JUMPTABLES',
+        'ZEND_COMPILE_PRELOAD', 'ZEND_COMPILE_PRELOAD_IN_CHILD', 'ZEND_COMPILE_WITHOUT_EXECUTION',
+        // Call frame (zend_compile.h)
+        'ZEND_CALL_FUNCTION', 'ZEND_CALL_CODE', 'ZEND_CALL_NESTED', 'ZEND_CALL_TOP',
+        'ZEND_CALL_HAS_THIS', 'ZEND_CALL_FAKE_CLOSURE', 'ZEND_CALL_CLOSURE',
+    ],
+
+    'enums' => [
+        '_zend_ast_kind',
+    ],
+
+    // System/libc types that z-engine only ever uses behind a pointer. Their
+    // full definitions must NOT be emitted: their layout is libc-version
+    // specific (e.g. glibc's struct _IO_FILE differs between releases), which
+    // would make the generated header non-reproducible across build hosts.
+    // Emitting only a forward declaration keeps the header stable and is all
+    // FFI needs for pointer usage.
+    'opaque' => [
+        'FILE',
+        '_IO_FILE',
+    ],
+
+    'opcode_header' => 'Zend/zend_vm_opcodes.h',
+
+    'layout_structs' => [
+        'zval',
+        'zend_refcounted',
+        'zend_string',
+        'zend_array',
+        'Bucket',
+        'zend_object',
+        'zend_resource',
+        'zend_reference',
+        'zend_class_entry',
+        'zend_class_constant',
+        'zend_class_name',
+        'zend_property_info',
+        'zend_op_array',
+        'zend_internal_function',
+        'zend_op',
+        'zend_execute_data',
+        'zend_objects_store',
+        'zend_executor_globals',
+        'zend_compiler_globals',
+        'zend_module_entry',
+        'zend_module_dep',
+        'zend_object_handlers',
+        'zend_ast',
+        'zend_ast_decl',
+        'zend_ast_list',
+        'zend_ast_zval',
+        'zend_lex_state',
+        'zend_closure',
+    ],
+];

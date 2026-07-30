@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -64,9 +65,10 @@ class ReflectionProperty extends NativeReflectionProperty
         /** @var ReflectionProperty $reflectionProperty */
         $reflectionProperty = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
         $propertyName       = StringEntry::fromCData($propertyEntry->name);
-        call_user_func(
-            [$reflectionProperty, 'parent::__construct'],
-            $propertyName->getStringValue()
+        Core::callParentConstructor(
+            $reflectionProperty,
+            static::class,
+            $propertyName->getStringValue(),
         );
         $reflectionProperty->pointer = $propertyEntry;
 
@@ -154,7 +156,7 @@ class ReflectionProperty extends NativeReflectionProperty
             'name'   => $this->getName(),
             'offset' => $this->getOffset(),
             'type'   => $this->getType(),
-            'class'  => $this->getDeclaringClass()->getName()
+            'class'  => $this->getDeclaringClass()->getName(),
         ];
     }
 }

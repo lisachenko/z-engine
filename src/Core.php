@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -18,7 +19,7 @@ use FFI\CData;
 use FFI\CType;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
-use ZEngine\Macro\DefinitionLoader;
+use RuntimeException;
 use ZEngine\System\Compiler;
 use ZEngine\System\Executor;
 use ZEngine\System\Hook\AstProcessHook;
@@ -29,158 +30,80 @@ use ZEngine\Type\HashTable;
  */
 class Core
 {
+    /**
+     * Class, method, property and constant flags (ZEND_ACC_*) for PHP 8.4.
+     *
+     * Ground truth lives in the generated include/<version>/<platform>/constants.php;
+     * EngineConstantsTest asserts these values match it exactly, so any drift
+     * in a future engine version fails CI instead of corrupting memory.
+     */
 
-    /* Class, property and method flags                               class|meth.|prop.|const*/
-    /*                                                               |     |     |     |     */
-    /* Common flags                                                  |     |     |     |     */
-    /* ============                                                  |     |     |     |     */
-    /*                                                               |     |     |     |     */
-    /* Visibility flags (public < protected < private);              |     |     |     |     */
-    public const ZEND_ACC_PUBLIC =                  (1 <<  0); /*    |     |  X  |  X  |  X  */
-    public const ZEND_ACC_PROTECTED =               (1 <<  1); /*    |     |  X  |  X  |  X  */
-    public const ZEND_ACC_PRIVATE =                 (1 <<  2); /*    |     |  X  |  X  |  X  */
-    /*                                                               |     |     |     |     */
-    /* Property or method overrides private one                      |     |     |     |     */
-    public const ZEND_ACC_CHANGED =                 (1 <<  3); /*    |     |  X  |  X  |     */
-    /*                                                               |     |     |     |     */
-    /* Static method or property                                     |     |     |     |     */
-    public const ZEND_ACC_STATIC =                  (1 <<  4); /*    |     |  X  |  X  |     */
-    /*                                                               |     |     |     |     */
-    /* Final class or method                                         |     |     |     |     */
-    public const ZEND_ACC_FINAL =                   (1 <<  5); /*    |  X  |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* Abstract method                                               |     |     |     |     */
-    public const ZEND_ACC_ABSTRACT =                (1 <<  6); /*    |  X  |  X  |     |     */
-    public const ZEND_ACC_EXPLICIT_ABSTRACT_CLASS = (1 <<  6); /*    |  X  |     |     |     */
-    /*                                                               |     |     |     |     */
-    /* Immutable op_array and class_entries                          |     |     |     |     */
-    /* (implemented only for lazy loading of op_arrays);             |     |     |     |     */
-    public const ZEND_ACC_IMMUTABLE =               (1 <<  7); /*    |  X  |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* Function has typed arguments / class has typed props          |     |     |     |     */
-    public const ZEND_ACC_HAS_TYPE_HINTS =          (1 <<  8); /*    |  X  |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* Top-level class or function declaration                       |     |     |     |     */
-    public const ZEND_ACC_TOP_LEVEL =               (1 <<  9); /*    |  X  |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* op_array or class is preloaded                                |     |     |     |     */
-    public const ZEND_ACC_PRELOADED =               (1 << 10); /*    |  X  |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* Class Flags (unused: 16...);                                  |     |     |     |     */
-    /* ===========                                                   |     |     |     |     */
-    /*                                                               |     |     |     |     */
-    /* Special class types                                           |     |     |     |     */
-    public const ZEND_ACC_INTERFACE =               (1 <<  0); /*    |  X  |     |     |     */
-    public const ZEND_ACC_TRAIT =                   (1 <<  1); /*    |  X  |     |     |     */
-    public const ZEND_ACC_ANON_CLASS =              (1 <<  2); /*    |  X  |     |     |     */
-    /*                                                               |     |     |     |     */
-    /* Class linked with parent, interfaces and traits               |     |     |     |     */
-    public const ZEND_ACC_LINKED =                  (1 <<  3); /*    |  X  |     |     |     */
-    /*                                                               |     |     |     |     */
-    /* Class is abstract, since it is set by any                     |     |     |     |     */
-    /* abstract method                                               |     |     |     |     */
-    public const ZEND_ACC_IMPLICIT_ABSTRACT_CLASS = (1 <<  4); /*    |  X  |     |     |     */
-    /*                                                               |     |     |     |     */
-    /* Class has magic methods __get/__set/__unset/                  |     |     |     |     */
-    /* __isset that use guards                                       |     |     |     |     */
-    public const ZEND_ACC_USE_GUARDS =              (1 << 11); /*    |  X  |     |     |     */
-    /*                                                               |     |     |     |     */
-    /* Class constants updated                                       |     |     |     |     */
-    public const ZEND_ACC_CONSTANTS_UPDATED =       (1 << 12); /*    |  X  |     |     |     */
-    /*                                                               |     |     |     |     */
-    /* Class extends another class                                   |     |     |     |     */
-    public const ZEND_ACC_INHERITED =               (1 << 13); /*    |  X  |     |     |     */
-    /*                                                               |     |     |     |     */
-    /* Class implements interface(s);                                |     |     |     |     */
-    public const ZEND_ACC_IMPLEMENT_INTERFACES =    (1 << 14); /*    |  X  |     |     |     */
-    /*                                                               |     |     |     |     */
-    /* Class uses trait(s);                                          |     |     |     |     */
-    public const ZEND_ACC_IMPLEMENT_TRAITS =        (1 << 15); /*    |  X  |     |     |     */
-    /*                                                               |     |     |     |     */
-    /* User class has methods with static variables                  |     |     |     |     */
-    public const ZEND_HAS_STATIC_IN_METHODS =       (1 << 16); /*    |  X  |     |     |     */
-    /*                                                               |     |     |     |     */
-    /* Whether all property types are resolved to CEs                |     |     |     |     */
-    public const ZEND_ACC_PROPERTY_TYPES_RESOLVED = (1 << 17); /*    |  X  |     |     |     */
-    /*                                                               |     |     |     |     */
-    /* Children must reuse parent get_iterator();                    |     |     |     |     */
-    public const ZEND_ACC_REUSE_GET_ITERATOR =      (1 << 18); /*    |  X  |     |     |     */
-    /*                                                               |     |     |     |     */
-    /* Parent class is resolved (CE);.                               |     |     |     |     */
-    public const ZEND_ACC_RESOLVED_PARENT =         (1 << 19); /*    |  X  |     |     |     */
-    /*                                                               |     |     |     |     */
-    /* Interfaces are resolved (CEs);.                               |     |     |     |     */
-    public const ZEND_ACC_RESOLVED_INTERFACES =     (1 << 20); /*    |  X  |     |     |     */
-    /*                                                               |     |     |     |     */
-    /* Class has unresolved variance obligations.                    |     |     |     |     */
-    public const ZEND_ACC_UNRESOLVED_VARIANCE =     (1 << 21); /*    |  X  |     |     |     */
-    /*                                                               |     |     |     |     */
-    /* Function Flags (unused: 28...30);                             |     |     |     |     */
-    /* ==============                                                |     |     |     |     */
-    /*                                                               |     |     |     |     */
-    /* deprecation flag                                              |     |     |     |     */
-    public const ZEND_ACC_DEPRECATED =              (1 << 11); /*    |     |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* Function returning by reference                               |     |     |     |     */
-    public const ZEND_ACC_RETURN_REFERENCE =        (1 << 12); /*    |     |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* Function has a return type                                    |     |     |     |     */
-    public const ZEND_ACC_HAS_RETURN_TYPE =         (1 << 13); /*    |     |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* Function with variable number of arguments                    |     |     |     |     */
-    public const ZEND_ACC_VARIADIC =                (1 << 14); /*    |     |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* op_array has finally blocks (user only);                      |     |     |     |     */
-    public const ZEND_ACC_HAS_FINALLY_BLOCK =       (1 << 15); /*    |     |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* "main" op_array with                                          |     |     |     |     */
-    /* ZEND_DECLARE_CLASS_DELAYED opcodes                            |     |     |     |     */
-    public const ZEND_ACC_EARLY_BINDING =           (1 << 16); /*    |     |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* call through user function trampoline. e.g.                   |     |     |     |     */
-    /* __call, __callstatic                                          |     |     |     |     */
-    public const ZEND_ACC_CALL_VIA_TRAMPOLINE =     (1 << 18); /*    |     |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* disable inline caching                                        |     |     |     |     */
-    public const ZEND_ACC_NEVER_CACHE =             (1 << 19); /*    |     |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* Closure related                                               |     |     |     |     */
-    public const ZEND_ACC_CLOSURE =                 (1 << 20); /*    |     |  X  |     |     */
-    public const ZEND_ACC_FAKE_CLOSURE =            (1 << 21); /*    |     |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* run_time_cache allocated on heap (user only);                 |     |     |     |     */
-    public const ZEND_ACC_HEAP_RT_CACHE =           (1 << 22); /*    |     |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* method flag used by Closure::__invoke();                      |     |     |     |     */
-    public const ZEND_ACC_USER_ARG_INFO =           (1 << 23); /*    |     |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    public const ZEND_ACC_GENERATOR =               (1 << 24); /*    |     |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    public const ZEND_ACC_DONE_PASS_TWO =           (1 << 25); /*    |     |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* internal function is allocated at arena (int only);           |     |     |     |     */
-    public const ZEND_ACC_ARENA_ALLOCATED =         (1 << 26); /*    |     |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* op_array is a clone of trait method                           |     |     |     |     */
-    public const ZEND_ACC_TRAIT_CLONE =             (1 << 27); /*    |     |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* functions is a constructor                                    |     |     |     |     */
-    public const ZEND_ACC_CTOR =                    (1 << 28); /*    |     |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* function is a destructor                                      |     |     |     |     */
-    public const ZEND_ACC_DTOR =                    (1 << 29); /*    |     |  X  |     |     */
-    /*                                                               |     |     |     |     */
-    /* op_array uses strict mode types                               |     |     |     |     */
-    public const ZEND_ACC_STRICT_TYPES =            (1 << 31); /*    |     |  X  |     |     */
+    /* Visibility flags (methods, properties, constants) */
+    public const ZEND_ACC_PUBLIC    = 0x1;
+    public const ZEND_ACC_PROTECTED = 0x2;
+    public const ZEND_ACC_PRIVATE   = 0x4;
+
+    /* Common flags */
+    public const ZEND_ACC_CHANGED        = 0x8;
+    public const ZEND_ACC_STATIC         = 0x10;
+    public const ZEND_ACC_FINAL          = 0x20;
+    public const ZEND_ACC_ABSTRACT       = 0x40;
+    public const ZEND_ACC_IMMUTABLE      = 0x80;
+    public const ZEND_ACC_HAS_TYPE_HINTS = 0x100;
+    public const ZEND_ACC_TOP_LEVEL      = 0x200;
+    public const ZEND_ACC_PRELOADED      = 0x400;
+
+    /* Class flags */
+    public const ZEND_ACC_INTERFACE                = 0x1;
+    public const ZEND_ACC_TRAIT                    = 0x2;
+    public const ZEND_ACC_ANON_CLASS               = 0x4;
+    public const ZEND_ACC_LINKED                   = 0x8;
+    public const ZEND_ACC_IMPLICIT_ABSTRACT_CLASS  = 0x10;
+    public const ZEND_ACC_EXPLICIT_ABSTRACT_CLASS  = 0x40;
+    public const ZEND_ACC_USE_GUARDS               = 0x800;
+    public const ZEND_ACC_CONSTANTS_UPDATED        = 0x1000;
+    public const ZEND_ACC_NO_DYNAMIC_PROPERTIES    = 0x2000;
+    public const ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES = 0x8000;
+    public const ZEND_ACC_READONLY_CLASS           = 0x10000;
+    public const ZEND_ACC_RESOLVED_PARENT          = 0x20000;
+    public const ZEND_ACC_RESOLVED_INTERFACES      = 0x40000;
+    public const ZEND_ACC_UNRESOLVED_VARIANCE      = 0x80000;
+    public const ZEND_ACC_NEARLY_LINKED            = 0x100000;
+    public const ZEND_ACC_ENUM                     = 0x10000000;
+    public const ZEND_ACC_NOT_SERIALIZABLE         = 0x20000000;
+    public const ZEND_ACC_UNINSTANTIABLE           = 0x10000053;
+
+    /* Property flags */
+    public const ZEND_ACC_READONLY = 0x80;
+    public const ZEND_ACC_VIRTUAL  = 0x200;
+
+    /* Function flags */
+    public const ZEND_ACC_DEPRECATED          = 0x800;
+    public const ZEND_ACC_RETURN_REFERENCE    = 0x1000;
+    public const ZEND_ACC_HAS_RETURN_TYPE     = 0x2000;
+    public const ZEND_ACC_VARIADIC            = 0x4000;
+    public const ZEND_ACC_HAS_FINALLY_BLOCK   = 0x8000;
+    public const ZEND_ACC_EARLY_BINDING       = 0x10000;
+    public const ZEND_ACC_USES_THIS           = 0x20000;
+    public const ZEND_ACC_CALL_VIA_TRAMPOLINE = 0x40000;
+    public const ZEND_ACC_NEVER_CACHE         = 0x80000;
+    public const ZEND_ACC_TRAIT_CLONE         = 0x100000;
+    public const ZEND_ACC_CTOR                = 0x200000;
+    public const ZEND_ACC_CLOSURE             = 0x400000;
+    public const ZEND_ACC_FAKE_CLOSURE        = 0x800000;
+    public const ZEND_ACC_GENERATOR           = 0x1000000;
+    public const ZEND_ACC_DONE_PASS_TWO       = 0x2000000;
+    public const ZEND_ACC_HEAP_RT_CACHE       = 0x4000000;
+    public const ZEND_ACC_STRICT_TYPES        = 0x80000000;
 
     public const ZEND_ACC_PPP_MASK = self::ZEND_ACC_PUBLIC | self::ZEND_ACC_PROTECTED | self::ZEND_ACC_PRIVATE;
 
     /**
      * Type of zend_function.type
      */
-    public const ZEND_INTERNAL_FUNCTION =   1;
-    public const ZEND_USER_FUNCTION =       2;
-    public const ZEND_EVAL_CODE =           4;
+    public const ZEND_INTERNAL_FUNCTION = 1;
+    public const ZEND_USER_FUNCTION     = 2;
+    public const ZEND_EVAL_CODE         = 4;
 
     public const ZEND_INTERNAL_CLASS = 1;
     public const ZEND_USER_CLASS     = 2;
@@ -219,44 +142,53 @@ class Core
     public static HashTable $modules;
 
     /**
+     * PHP version range supported by this branch: [min, max).
+     *
+     * Engine memory structures differ between minor PHP versions, therefore a
+     * branch of z-engine works with exactly one minor version. Running against
+     * anything else is memory corruption, not a degraded mode - hence the hard
+     * boot guard. See AGENTS.md ("Version matching is non-negotiable").
+     */
+    private const SUPPORTED_PHP_VERSION_ID = [80400, 80500];
+
+    /**
      * Stores an internal instance of low-level FFI binding
      */
     private static FFI $engine;
 
     /**
+     * Cache of the generated per-version engine constants (constants.php)
+     *
+     * @var array<string, int>|null
+     */
+    private static ?array $engineConstants = null;
+
+    /**
      * Performs Z-engine core initialization
      */
-    public static function init()
+    public static function init(): void
     {
-        $isThreadSafe      = ZEND_THREAD_SAFE;
-        $isWindowsPlatform = stripos(PHP_OS, 'WIN') === 0;
-        $is64BitPlatform   = PHP_INT_SIZE === 8;
-
-        // TODO: support ts/nts x86/x64 combination
-        if ($isThreadSafe || !$is64BitPlatform) {
-            throw new \RuntimeException('Only x64 non thread-safe versions of PHP are supported');
-        }
+        self::assertSupportedEnvironment();
 
         try {
             $engine = FFI::scope('ZEngine');
         } catch (FFI\Exception $e) {
             if (ini_get('ffi.enable') === 'preload' && PHP_SAPI !== 'cli') {
-                throw new \RuntimeException('Preload mode requires that you call Core::preload before');
+                throw new RuntimeException('Preload mode requires that you call Core::preload before');
             }
             // If not, then load definitions by hand
-            $definition = file_get_contents(DefinitionLoader::wrap(__DIR__.'/../include/engine_x64_nts.h'));
-            $arguments  = [$definition];
-
-            // For Windows platform we should load symbols from the shared php7.dll library
-            if ($isWindowsPlatform) {
-                $arguments[] = 'php' . PHP_MAJOR_VERSION . '.dll';
+            $definition = file_get_contents(self::resolveArtifact('engine.h'));
+            if ($definition === false) {
+                throw new RuntimeException('Unable to read the engine definition file');
             }
-
-            $engine = FFI::cdef(...$arguments);
+            $engine = FFI::cdef($definition);
         }
         self::$engine = $engine;
 
-        assert(!$isThreadSafe, 'Following properties available only for non thread-safe version');
+        if (getenv('ZENGINE_STRICT_LAYOUT_CHECK') === '1') {
+            self::verifyEngineLayouts($engine);
+        }
+
         self::$executor = new Executor($engine->executor_globals);
         self::$compiler = new Compiler($engine->compiler_globals);
         self::$modules  = new HashTable(Core::addr($engine->module_registry));
@@ -267,19 +199,127 @@ class Core
     /**
      * Preloads definition and Core for ffi.preload mode, should be called during preload stage for better performance
      */
-    public static function preload()
+    public static function preload(): void
     {
-        $definition = file_get_contents(DefinitionLoader::wrap(__DIR__.'/../include/engine_x64_nts.h'));
-        try {
-            $tempFile = tempnam(sys_get_temp_dir(), 'php_ffi');
-            file_put_contents($tempFile, $definition);
-            FFI::load($tempFile);
-        } finally {
-            unlink($tempFile);
-        }
+        self::assertSupportedEnvironment();
+        // The generated header is fully preprocessed and carries FFI_SCOPE, so
+        // it can be loaded as-is
+        FFI::load(self::resolveArtifact('engine.h'));
 
         // Performs initialization of properties, otherwise we will get an error about uninitialized properties
         Core::init();
+    }
+
+    /**
+     * Refuses to boot on any PHP build this branch has no verified structure definitions for.
+     */
+    private static function assertSupportedEnvironment(): void
+    {
+        [$minVersionId, $maxVersionId] = self::SUPPORTED_PHP_VERSION_ID;
+        if (PHP_VERSION_ID < $minVersionId || PHP_VERSION_ID >= $maxVersionId) {
+            $supported = sprintf('%d.%d', intdiv($minVersionId, 10000), intdiv($minVersionId % 10000, 100));
+            throw new RuntimeException(sprintf(
+                'z-engine (branch %1$s) supports PHP %1$s only, but you are running PHP %2$s. ' .
+                'Engine memory structures differ between minor versions: running a mismatched version ' .
+                'would corrupt memory and crash PHP. Install the z-engine release matching your PHP minor ' .
+                'version (e.g. the "%1$s" branch for PHP %1$s, "8.0" for legacy PHP 8.0).',
+                $supported,
+                PHP_VERSION,
+            ));
+        }
+
+        $header = self::resolveArtifact('engine.h', false);
+        if (!is_file($header)) {
+            throw new RuntimeException(sprintf(
+                'z-engine has no generated engine definitions for your platform "%s" (expected %s). ' .
+                'Currently bundled platforms: %s. Platform support is tracked in the repository issues; ' .
+                'definitions for a new platform can be generated with `composer gen-headers`.',
+                self::platformKey(),
+                $header,
+                implode(', ', self::availablePlatforms()),
+            ));
+        }
+    }
+
+    /**
+     * Platform selector for the generated per-ABI artifacts, e.g. "8.4/linux-x64-nts"
+     */
+    private static function platformKey(): string
+    {
+        $arch = php_uname('m');
+
+        return sprintf(
+            '%d.%d/%s-%s-%s',
+            PHP_MAJOR_VERSION,
+            PHP_MINOR_VERSION,
+            strtolower(PHP_OS_FAMILY),
+            match ($arch) {
+                'x86_64', 'amd64'  => 'x64',
+                'aarch64', 'arm64' => 'arm64',
+                default            => $arch,
+            },
+            ZEND_THREAD_SAFE ? 'zts' : 'nts',
+        );
+    }
+
+    /**
+     * Resolves the path of a generated engine artifact for the current platform
+     */
+    private static function resolveArtifact(string $name, bool $verify = true): string
+    {
+        $path = __DIR__ . '/../include/' . self::platformKey() . '/' . $name;
+        if ($verify && !is_file($path)) {
+            throw new RuntimeException("Missing generated engine artifact {$path}");
+        }
+
+        return $path;
+    }
+
+    /**
+     * List of platform keys with bundled definitions, for error reporting
+     */
+    private static function availablePlatforms(): array
+    {
+        $platforms = [];
+        foreach (glob(__DIR__ . '/../include/*/*/engine.h') ?: [] as $header) {
+            $directory   = dirname($header);
+            $platforms[] = basename(dirname($directory)) . '/' . basename($directory);
+        }
+
+        return $platforms;
+    }
+
+    /**
+     * Asserts that FFI's view of every engine struct matches the C compiler's
+     * ground truth recorded by the generator (layouts.json). This is the
+     * anti-segfault airbag: any silent ABI drift aborts the boot instead of
+     * corrupting engine memory later.
+     */
+    private static function verifyEngineLayouts(FFI $engine): void
+    {
+        $layoutsFile = self::resolveArtifact('layouts.json');
+        $layouts     = json_decode((string) file_get_contents($layoutsFile), true, 16, JSON_THROW_ON_ERROR);
+        assert(is_array($layouts) && is_array($layouts['structs']));
+
+        $mismatches = [];
+        foreach ($layouts['structs'] as $struct => $layout) {
+            $type = $engine->type($struct);
+            if ($type->getSize() !== $layout['size']) {
+                $mismatches[] = sprintf('sizeof(%s): FFI=%d C=%d', $struct, $type->getSize(), $layout['size']);
+            }
+            foreach ($layout['fields'] as $field => $expectedOffset) {
+                $actualOffset = $type->getStructFieldOffset($field);
+                if ($actualOffset !== $expectedOffset) {
+                    $mismatches[] = sprintf('offsetof(%s, %s): FFI=%d C=%d', $struct, $field, $actualOffset, $expectedOffset);
+                }
+            }
+        }
+        if ($mismatches !== []) {
+            throw new RuntimeException(
+                "Engine structure layouts do not match the generated ground truth - aborting before memory corruption:\n"
+                . implode("\n", $mismatches),
+            );
+        }
     }
 
     /**
@@ -287,6 +327,14 @@ class Core
      */
     public static function cast(string $type, CData $pointer): CData
     {
+        // Since PHP 8.3 FFI::cast() reinterprets the *contents* of an array
+        // instead of decaying it to a pointer to its data. Restore the decay
+        // semantics explicitly, otherwise every buffer cast becomes a wild
+        // pointer made of the buffer's leading bytes.
+        if (FFI::typeof($pointer)->getKind() === CType::TYPE_ARRAY) {
+            $pointer = FFI::addr($pointer[0]);
+        }
+
         return self::$engine->cast($type, $pointer);
     }
 
@@ -361,14 +409,36 @@ class Core
     }
 
     /**
+     * Invokes the native (grand)parent constructor on an object that was
+     * created without a constructor call.
+     *
+     * Replaces the ['obj', 'parent::__construct'] callable form, which is
+     * deprecated since PHP 8.4. The parent is resolved relative to $scope (the
+     * z-engine reflection class), so the native Reflection* constructor is
+     * always the one invoked.
+     *
+     * @param object $object Instance to initialize
+     * @param string $scope  z-engine class whose parent constructor to call (pass static::class)
+     * @param mixed  ...$arguments Constructor arguments
+     */
+    public static function callParentConstructor(object $object, string $scope, ...$arguments): void
+    {
+        $parentClass = get_parent_class($scope);
+        if ($parentClass === false) {
+            throw new \LogicException("Class {$scope} has no parent constructor to call");
+        }
+        (new \ReflectionMethod($parentClass, '__construct'))->invokeArgs($object, $arguments);
+    }
+
+    /**
      * Returns an aligned size
      *
      * @see ZEND_MM_ALIGNED_SIZE(size) macro implementation
      */
     public static function getAlignedSize(int $size): int
     {
-        $mask = ~ (self::MM_ALIGNMENT -1);
-        $size = (($size + self::MM_ALIGNMENT -1) & $mask);
+        $mask = ~ (self::MM_ALIGNMENT - 1);
+        $size = (($size + self::MM_ALIGNMENT - 1) & $mask);
 
         return $size;
     }
@@ -379,6 +449,24 @@ class Core
     public static function getStandardObjectHandlers(): CData
     {
         return self::$engine->std_object_handlers;
+    }
+
+    /**
+     * Returns the value of an engine C constant (macro, enum member or opcode)
+     * extracted by the generator for the currently running PHP version.
+     *
+     * @param string $name Constant name as spelled in the engine sources, e.g. 'ZEND_MODULE_API_NO'
+     */
+    public static function engineConstant(string $name): int
+    {
+        self::$engineConstants ??= require self::resolveArtifact('constants.php');
+        if (!array_key_exists($name, self::$engineConstants)) {
+            throw new \InvalidArgumentException(
+                "Unknown engine constant {$name}: it is not exported by tools/generator/symbols.php",
+            );
+        }
+
+        return self::$engineConstants[$name];
     }
 
     /**

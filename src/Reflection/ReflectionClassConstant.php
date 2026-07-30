@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -41,8 +42,8 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
         if ($classEntryValue === null) {
             throw new \ReflectionException("Class {$className} should be in the engine.");
         }
-        $classEntry      = $classEntryValue->getRawClass();
-        $constantsTable  = new HashTable(Core::addr($classEntry->constants_table));
+        $classEntry     = $classEntryValue->getRawClass();
+        $constantsTable = new HashTable(Core::addr($classEntry->constants_table));
 
         $constantEntry = $constantsTable->find($constantName);
         if ($constantEntry === null) {
@@ -64,10 +65,11 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
         /** @var ReflectionClassConstant $reflectionConstant */
         $reflectionConstant = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
         $className          = StringEntry::fromCData($constantEntry->ce->name);
-        call_user_func(
-            [$reflectionConstant, 'parent::__construct'],
+        Core::callParentConstructor(
+            $reflectionConstant,
+            static::class,
             $className->getStringValue(),
-            $constantName
+            $constantName,
         );
         $reflectionConstant->pointer = $constantEntry;
 
@@ -79,8 +81,8 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
      */
     public function setPublic(): void
     {
-        $this->pointer->value->u2->access_flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->pointer->value->u2->access_flags |= Core::ZEND_ACC_PUBLIC;
+        $this->pointer->value->u2->constant_flags &= (~Core::ZEND_ACC_PPP_MASK);
+        $this->pointer->value->u2->constant_flags |= Core::ZEND_ACC_PUBLIC;
     }
 
     /**
@@ -88,8 +90,8 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
      */
     public function setProtected(): void
     {
-        $this->pointer->value->u2->access_flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->pointer->value->u2->access_flags |= Core::ZEND_ACC_PROTECTED;
+        $this->pointer->value->u2->constant_flags &= (~Core::ZEND_ACC_PPP_MASK);
+        $this->pointer->value->u2->constant_flags |= Core::ZEND_ACC_PROTECTED;
     }
 
     /**
@@ -97,8 +99,8 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
      */
     public function setPrivate(): void
     {
-        $this->pointer->value->u2->access_flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->pointer->value->u2->access_flags |= Core::ZEND_ACC_PRIVATE;
+        $this->pointer->value->u2->constant_flags &= (~Core::ZEND_ACC_PPP_MASK);
+        $this->pointer->value->u2->constant_flags |= Core::ZEND_ACC_PRIVATE;
     }
 
     /**
@@ -140,8 +142,8 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
     public function __debugInfo(): array
     {
         return [
-            'name'   => $this->getName(),
-            'class'  => $this->getDeclaringClass()->getName(),
+            'name'  => $this->getName(),
+            'class' => $this->getDeclaringClass()->getName(),
         ];
     }
 }

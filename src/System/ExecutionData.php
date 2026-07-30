@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -148,7 +149,7 @@ class ExecutionData
     public function getArgument(int $argumentIndex): ReflectionValue
     {
         if ($argumentIndex >= $this->pointer->This->u2->num_args) {
-            throw new \OutOfBoundsException("Argument index is greater than available arguments");
+            throw new \OutOfBoundsException('Argument index is greater than available arguments');
         }
         // In PHP it is ZEND_CALL_VAR_NUM(call, ((int)(n)) - 1) but we start numeration from 0 in Z-Engine, so no "-1"
         $valuePointer = $this->getCallVariableByNumber($argumentIndex);
@@ -221,8 +222,8 @@ class ExecutionData
     public function getCallVariable(int $variableOffset): CData
     {
         // ((zval*)(((char*)(call)) + ((int)(n))))
-        $pointer  = Core::cast('char *', $this->pointer) + $variableOffset;
-        $value    = Core::cast('zval *', $pointer);
+        $pointer = Core::cast('char *', $this->pointer) + $variableOffset;
+        $value   = Core::cast('zval *', $pointer);
 
         return $value;
     }

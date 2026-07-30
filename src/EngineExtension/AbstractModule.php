@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -58,6 +59,19 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
     }
 
     /**
+     * Returns the engine API version this module targets.
+     *
+     * By default the version of the currently running engine is used (from the
+     * generated per-version constants), so modules are portable across the PHP
+     * versions supported by their z-engine release. Override only when a module
+     * intentionally pins a specific engine API.
+     */
+    public static function targetApiVersion(): int
+    {
+        return Core::engineConstant('ZEND_MODULE_API_NO');
+    }
+
+    /**
      * Checks if this module loaded or not
      */
     final public function isModuleRegistered(): bool
@@ -77,8 +91,9 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
         // We don't need persistent memory here, as PHP copies structures into persistent memory itself
         $module     = Core::new('zend_module_entry');
         $moduleName = $this->moduleName;
-        $nameLength = strlen($moduleName) + 1; /* extra zero-byte */;
-        $rawName    = Core::new("char[$nameLength]", false, static::targetPersistent());
+        $nameLength = strlen($moduleName) + 1;
+        /* extra zero-byte */;
+        $rawName = Core::new("char[$nameLength]", false, static::targetPersistent());
         Core::memcpy($rawName, $moduleName, $nameLength - 1);
         $rawName[$nameLength - 1] = "\0";
 
@@ -86,8 +101,8 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
         $module->type       = static::targetPersistent() ? self::MODULE_PERSISTENT : self::MODULE_TEMPORARY;
         $module->name       = $rawName;
         $module->zend_api   = static::targetApiVersion();
-        $module->zend_debug = (int)static::targetDebug();
-        $module->zts        = (int)static::targetThreadSafe();
+        $module->zend_debug = (int) static::targetDebug();
+        $module->zts        = (int) static::targetThreadSafe();
 
         $globalType = static::globalType();
         if ($globalType !== null) {
@@ -96,8 +111,9 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
             $module->globals_ptr  = Core::addr($memoryStructure);
         }
 
-        // $module pointer will be updated, as registration method returns a copy of memory
-        $realModulePointer = Core::call('zend_register_module_ex', Core::addr($module));
+        // $module pointer will be updated, as registration method returns a copy of memory.
+        // Since PHP 8.3 the module type is passed explicitly instead of being read from the entry.
+        $realModulePointer = Core::call('zend_register_module_ex', Core::addr($module), (int) $module->type);
 
         $this->moduleEntry = $realModulePointer;
 

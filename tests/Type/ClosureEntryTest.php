@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -13,6 +14,7 @@ declare(strict_types=1);
 namespace ZEngine\Type;
 
 use Closure;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 class ClosureEntryTest extends TestCase
@@ -26,7 +28,7 @@ class ClosureEntryTest extends TestCase
 
             return [
                 'class' => $self ? get_class($self) : null,
-                'scope' => get_called_class()
+                'scope' => get_called_class(),
             ];
         };
     }
@@ -39,9 +41,7 @@ class ClosureEntryTest extends TestCase
         $this->assertSame(get_class($this), $result['scope']);
     }
 
-    /**
-     * @group internal
-     */
+    #[Group('internal')]
     public function testSetCalledScope(): void
     {
         $closureEntry = new ClosureEntry($this->closure);
@@ -54,9 +54,7 @@ class ClosureEntryTest extends TestCase
         $this->markTestIncomplete('This test does not update internal scope variable, or it is cached');
     }
 
-    /**
-     * @group internal
-     */
+    #[Group('internal')]
     public function testSetThis(): void
     {
         $closureEntry = new ClosureEntry($this->closure);

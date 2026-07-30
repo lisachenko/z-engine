@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -35,7 +36,7 @@ class ObjectStoreTest extends TestCase
     public function testOffsetSetThrowsAnException(): void
     {
         $this->expectException(LogicException::class);
-        $id = spl_object_id($this);
+        $id                     = spl_object_id($this);
         $this->objectStore[$id] = new ObjectEntry($this);
     }
 

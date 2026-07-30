@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -96,7 +97,7 @@ class NativeNumber implements
                 $result = $left / $right;
                 break;
             default:
-                throw new \UnexpectedValueException("Opcode " . OpCode::name($opCode) . " wasn't held.");
+                throw new \UnexpectedValueException('Opcode ' . OpCode::name($opCode) . " wasn't held.");
         }
 
         return new static($result);

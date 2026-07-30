@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -48,12 +49,6 @@ class Compiler
     /* disable constant substitution at compile-time */
     public const COMPILE_NO_CONSTANT_SUBSTITUTION = (1 << 6);
 
-    /* disable usage of builtin instruction for strlen() */
-    public const COMPILE_NO_BUILTIN_STRLEN = (1 << 7);
-
-    /* disable substitution of persistent constants at compile-time */
-    public const COMPILE_NO_PERSISTENT_CONSTANT_SUBSTITUTION = (1 << 8);
-
     /* generate INIT_FCALL_BY_NAME for userland functions instead of INIT_FCALL */
     public const COMPILE_IGNORE_USER_FUNCTIONS = (1 << 9);
 
@@ -62,12 +57,6 @@ class Compiler
 
     /* disable builtin special case function calls */
     public const COMPILE_NO_BUILTINS = (1 << 11);
-
-    /* result of compilation may be stored in file cache */
-    public const COMPILE_WITH_FILE_CACHE = (1 << 12);
-
-    /* ignore functions and classes declared in other files */
-    public const COMPILE_IGNORE_OTHER_FILES = (1 << 13);
 
     /* this flag is set when compiler invoked by opcache_compile_file() */
     public const COMPILE_WITHOUT_EXECUTION = (1 << 14);
@@ -102,23 +91,15 @@ class Compiler
     public HashTable $functionTable;
 
     /**
-     * Contains a hashtable with all loaded files
-     *
-     * @var HashTable
-     */
-    private HashTable $filenamesTable;
-
-    /**
      * Holds an internal pointer to the compiler_globals structure
      */
     private CData $pointer;
 
     public function __construct(CData $pointer)
     {
-        $this->pointer        = $pointer;
-        $this->classTable     = new HashTable($pointer->class_table);
-        $this->functionTable  = new HashTable($pointer->function_table);
-        $this->filenamesTable = new HashTable($pointer->filenames_table);
+        $this->pointer       = $pointer;
+        $this->classTable    = new HashTable($pointer->class_table);
+        $this->functionTable = new HashTable($pointer->function_table);
     }
 
     /**
@@ -193,18 +174,22 @@ class Compiler
         $sourceRaw    = $sourceValue->getRawValue();
         $rawSourceVal = ReflectionValue::newEntry(ReflectionValue::IS_STRING, $sourceRaw)->getRawValue();
 
+        // Since PHP 8.1 the filename is passed as a zend_string* (kept alive
+        // in a local for the whole parse)
+        $fileNameValue = new StringEntry($fileName !== '' ? $fileName : 'z-engine parsed code');
+
         $originalLexState        = Core::new('zend_lex_state');
         $originalCompilationMode = $this->isInCompilation();
         $this->setCompilationMode(true);
 
         Core::call('zend_save_lexical_state', Core::addr($originalLexState));
 
-        $result = Core::call('zend_prepare_string_for_scanning', $rawSourceVal, $fileName);
+        $result = Core::call('zend_prepare_string_for_scanning', $rawSourceVal, $fileNameValue->getRawValue());
 
         if ($result === Core::SUCCESS) {
             $this->pointer->ast       = null;
             $this->pointer->ast_arena = $this->createArena(1024 * 32);
-            $result = Core::call('zendparse');
+            $result                   = Core::call('zendparse');
             if ($result !== Core::SUCCESS) {
                 Core::call('zend_ast_destroy', $this->pointer->ast);
                 $this->pointer->ast = null;

@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - '[0-9].[0-9]'
+  pull_request:
+
+# This branch targets PHP 8.4 only - engine structures are version-specific.
+env:
+  PHP_MINOR: '8.4'
+
+jobs:
+  tests:
+    name: Tests (release, NTS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_MINOR }}
+          extensions: ffi
+          ini-values: ffi.enable=1, zend.assertions=1, opcache.jit=off
+          coverage: none
+
+      - name: Install dependencies
+        uses: ramsey/composer-install@v3
+
+      - name: Run test suite
+        run: composer test
+
+  static-analysis:
+    name: PHPStan (level max)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_MINOR }}
+          extensions: ffi
+          ini-values: ffi.enable=1
+          coverage: none
+      - uses: ramsey/composer-install@v3
+      - run: composer phpstan
+
+  coding-standards:
+    name: Coding standards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_MINOR }}
+          extensions: ffi
+          coverage: none
+      - uses: ramsey/composer-install@v3
+      - run: composer cs:check
+
+  tests-internal-debug:
+    name: Internal group (debug build)
+    runs-on: ubuntu-latest
+    # The segfault-prone destructive tests run only against a --enable-debug
+    # PHP build, where corruption surfaces as assertion failures. There is no
+    # official debug PHP image, so we build one here from the official image's
+    # own source with a plain `docker build` (the daemon's built-in BuildKit -
+    # no buildx setup, no moby/buildkit pull, fewer flaky Docker Hub round trips)
+    # and run the tests in it.
+    steps:
+      - uses: actions/checkout@v4
+
+      # Composer runs on a release PHP on the host; the debug container only
+      # needs to run the already-installed PHPUnit (vendor/ is plain PHP).
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_MINOR }}
+          extensions: ffi
+          coverage: none
+
+      - name: Install dependencies
+        uses: ramsey/composer-install@v3
+
+      - name: Build the debug PHP image
+        run: |
+          docker build \
+            -f tools/docker/php-debug.Dockerfile \
+            --build-arg "PHP_VERSION=${PHP_MINOR}" \
+            -t z-engine-php:debug .
+
+      - name: Run internal group with process isolation
+        run: |
+          docker run --rm -v "$PWD:/app" -w /app z-engine-php:debug \
+            vendor/bin/phpunit --group internal --process-isolation
+
+  header-drift:
+    name: Generated headers up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Regenerate engine definitions
+        run: composer gen-headers
+      - name: Fail if the committed artifacts are stale
+        run: |
+          if ! git diff --exit-code -- include/; then
+            echo "::error::Generated engine definitions are out of date. Run 'composer gen-headers' and commit the result."
+            exit 1
+          fi

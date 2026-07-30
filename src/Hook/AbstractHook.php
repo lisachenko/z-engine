@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -87,7 +88,7 @@ abstract class AbstractHook implements HookInterface
     final public function __debugInfo(): array
     {
         return [
-            'userHandler' => $this->userHandler
+            'userHandler' => $this->userHandler,
         ];
     }
 }

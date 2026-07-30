@@ -1,11 +1,8 @@
 {
     "name": "lisachenko/z-engine",
-    "description": "Library that provides direct access to native PHP structures",
+    "description": "Write PHP extensions in pure PHP: direct FFI access to the Zend Engine internals",
     "type": "library",
-    "require": {
-        "php": ">=8.0",
-        "ext-ffi": "*"
-    },
+    "keywords": ["ffi", "zend", "engine", "internals", "extension", "operator-overloading"],
     "license": [
         "MIT"
     ],
@@ -15,18 +12,43 @@
             "email": "lisachenko.it@gmail.com"
         }
     ],
+    "require": {
+        "php": "~8.4.0",
+        "ext-ffi": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^12.2",
+        "phpstan/phpstan": "^2.1",
+        "friendsofphp/php-cs-fixer": "^3.75"
+    },
     "autoload": {
-        "psr-4" : {
-            "ZEngine\\" : "src/"
+        "psr-4": {
+            "ZEngine\\": "src/"
         }
     },
     "autoload-dev": {
-        "psr-4" : {
-            "ZEngine\\" : "tests/"
+        "psr-4": {
+            "ZEngine\\": "tests/"
         }
     },
     "minimum-stability": "stable",
-    "require-dev": {
-        "phpunit/phpunit": "^8.5.15 || ^9.0.0"
+    "scripts": {
+        "test": "phpunit",
+        "test:internal": "phpunit --group internal --process-isolation",
+        "phpstan": "phpstan analyse",
+        "cs:check": "php-cs-fixer fix --dry-run --diff",
+        "cs:fix": "php-cs-fixer fix",
+        "gen-headers": "php tools/generator/generate.php"
+    },
+    "scripts-descriptions": {
+        "test": "Run the test suite (segfault-prone internal group excluded)",
+        "test:internal": "Run the segfault-prone internal test group with process isolation (use a debug PHP build)",
+        "phpstan": "Run static analysis at the maximum level",
+        "cs:check": "Check coding standards without fixing",
+        "cs:fix": "Fix coding standards",
+        "gen-headers": "Regenerate FFI engine definitions from the PHP source (requires docker)"
+    },
+    "config": {
+        "sort-packages": true
     }
 }

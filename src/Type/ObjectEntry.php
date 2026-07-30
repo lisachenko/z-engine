@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -123,7 +124,7 @@ class ObjectEntry implements ReferenceCountedInterface
         $info = [
             'class'    => $this->getClass()->getName(),
             'handle'   => $this->getHandle(),
-            'refcount' => $this->getReferenceCount()
+            'refcount' => $this->getReferenceCount(),
         ];
         if (isset($this->properties)) {
             $info['properties'] = $this->properties;

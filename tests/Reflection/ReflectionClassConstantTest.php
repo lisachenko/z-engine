@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -13,6 +14,8 @@ declare(strict_types=1);
 namespace ZEngine\Reflection;
 
 use Error;
+use PHPUnit\Framework\Attributes\Depends;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ZEngine\Stub\TestClass;
 
@@ -37,9 +40,7 @@ class ReflectionClassConstantTest extends TestCase
         $this->assertSame(123, TestClass::SOME_CONST);
     }
 
-    /**
-     * @depends testSetPrivate
-     */
+    #[Depends('testSetPrivate')]
     public function testSetProtected(): void
     {
         $this->refConstant->setProtected();
@@ -64,9 +65,7 @@ class ReflectionClassConstantTest extends TestCase
         $this->assertSame(123, TestClass::SOME_CONST);
     }
 
-    /**
-     * @depends testSetProtected
-     */
+    #[Depends('testSetProtected')]
     public function testSetPublic(): void
     {
         $this->refConstant->setPublic();
@@ -84,9 +83,7 @@ class ReflectionClassConstantTest extends TestCase
         $this->assertSame(TestClass::class, $class->getName());
     }
 
-    /**
-     * @group internal
-     */
+    #[Group('internal')]
     public function testSetDeclaringClass(): void
     {
         try {

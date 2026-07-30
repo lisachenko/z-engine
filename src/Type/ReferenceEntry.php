@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -48,7 +49,7 @@ class ReferenceEntry implements ReferenceCountedInterface
     public static function fromCData(CData $pointer): ReferenceEntry
     {
         /** @var ReferenceEntry $referenceEntry */
-        $referenceEntry = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $referenceEntry          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
         $referenceEntry->pointer = $pointer;
 
         return $referenceEntry;
@@ -69,7 +70,7 @@ class ReferenceEntry implements ReferenceCountedInterface
     {
         $info = [
             'refcount' => $this->getReferenceCount(),
-            'value'    => $this->getValue()
+            'value'    => $this->getValue(),
         ];
 
         return $info;
