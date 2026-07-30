@@ -43,11 +43,17 @@ RUN set -eux; \
 # .so files that a debug PHP refuses to load (and ffi is now built in).
 RUN rm -f /usr/local/etc/php/conf.d/docker-php-ext-*.ini
 
-# Enable FFI and assertions and disable the JIT (it rewrites the executor
-# internals z-engine hooks into).
+# Enable FFI and Zend assertions (the corruption airbag - the whole point of a
+# debug build) and disable the JIT (it rewrites the executor internals z-engine
+# hooks into). report_memleaks is turned OFF: z-engine deliberately holds FFI
+# resources for the engine's lifetime (see ClassExtension\Hook\AbstractHook -
+# "leaks resources by the end of request"), so the debug build's shutdown leak
+# report is expected noise, not a corruption signal. Assertions still fire on
+# any real memory corruption.
 RUN { \
       echo 'ffi.enable=1'; \
       echo 'zend.assertions=1'; \
+      echo 'report_memleaks=0'; \
       echo 'opcache.jit=off'; \
     } > /usr/local/etc/php/conf.d/z-engine.ini
 
