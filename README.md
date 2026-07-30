@@ -51,6 +51,28 @@ Engine memory layouts change between every PHP minor version, so each PHP minor 
 
 > **Version matching is not optional.** Running Z-Engine against a PHP minor it was not built for corrupts memory. `Core::init()` enforces the match and aborts with a clear message rather than letting you crash.
 
+## Memory safety & long-running PHP
+
+Every value wrapper follows an explicit ownership model: owning constructors take their own
+engine reference and release it deterministically (`release()`/destruction), `fromCData()`
+factories stay borrowed, and all releases go through the engine's own primitives
+(`zval_ptr_dtor`/`rc_dtor_func`) — never through the FFI allocator. Engine hooks have a full
+lifecycle (`install()`/`uninstall()`/`reinstall()`) backed by a registry, and `Core::shutdown()`
+(registered automatically) restores every hooked engine pointer before the engine could ever
+call a freed trampoline — which is what makes worker loops and FPM + opcache preload viable.
+
+Notable behaviour changes compared to older releases:
+
+- `new StringEntry()` / `new ObjectEntry()` / `new ResourceEntry()` addref and keep their
+  target alive for the wrapper lifetime; `ClosureEntry::setThis()` releases the old bound
+  `$this` and references the new one (no more "object must outlive the closure").
+- `Compiler::parseString()` trees free themselves when the last node wrapper is collected.
+- `AbstractHook::__destruct()` no longer force-restores pointers at arbitrary GC moments.
+
+See [docs/long-running.md](docs/long-running.md) for the ownership tables, the hook
+lifecycle, runtime models (worker vs FPM), and the short list of immortal-by-design
+allocations.
+
 ## Installation
 
 ```bash
