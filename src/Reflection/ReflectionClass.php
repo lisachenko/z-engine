@@ -757,12 +757,14 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectCastInterface
      */
-    public function setCastObjectHandler(Closure $handler): void
+    public function setCastObjectHandler(Closure $handler): CastObjectHook
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new CastObjectHook($handler, $handlers);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -772,12 +774,14 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectCompareValuesInterface
      */
-    public function setCompareValuesHandler(Closure $handler): void
+    public function setCompareValuesHandler(Closure $handler): CompareValuesHook
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new CompareValuesHook($handler, $handlers);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -787,12 +791,14 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectReadPropertyInterface
      */
-    public function setReadPropertyHandler(Closure $handler): void
+    public function setReadPropertyHandler(Closure $handler): ReadPropertyHook
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new ReadPropertyHook($handler, $handlers);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -802,12 +808,14 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectWritePropertyInterface
      */
-    public function setWritePropertyHandler(Closure $handler): void
+    public function setWritePropertyHandler(Closure $handler): WritePropertyHook
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new WritePropertyHook($handler, $handlers);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -817,12 +825,14 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectUnsetPropertyInterface
      */
-    public function setUnsetPropertyHandler(Closure $handler): void
+    public function setUnsetPropertyHandler(Closure $handler): UnsetPropertyHook
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new UnsetPropertyHook($handler, $handlers);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -832,12 +842,14 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectHasPropertyInterface
      */
-    public function setHasPropertyHandler(Closure $handler): void
+    public function setHasPropertyHandler(Closure $handler): HasPropertyHook
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new HasPropertyHook($handler, $handlers);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -847,12 +859,14 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectGetPropertyPointerInterface
      */
-    public function setGetPropertyPointerHandler(Closure $handler): void
+    public function setGetPropertyPointerHandler(Closure $handler): GetPropertyPointerHook
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new GetPropertyPointerHook($handler, $handlers);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -862,12 +876,14 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectGetPropertiesForInterface
      */
-    public function setGetPropertiesForHandler(Closure $handler): void
+    public function setGetPropertiesForHandler(Closure $handler): GetPropertiesForHook
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new GetPropertiesForHook($handler, $handlers);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -877,12 +893,14 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectDoOperationInterface
      */
-    public function setDoOperationHandler(Closure $handler): void
+    public function setDoOperationHandler(Closure $handler): DoOperationHook
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new DoOperationHook($handler, $handlers);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -892,7 +910,7 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectCreateInterface
      */
-    public function setCreateObjectHandler(Closure $handler): void
+    public function setCreateObjectHandler(Closure $handler): CreateObjectHook
     {
         // User handlers are only allowed with std_object_handler (when create_object handler is empty)
         if ($this->isInternal()) {
@@ -902,6 +920,8 @@ class ReflectionClass extends NativeReflectionClass
 
         $hook = new CreateObjectHook($handler, $this->pointer);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -909,7 +929,7 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @param Closure $handler Callback function (ReflectionClass $reflectionClass)
      */
-    public function setInterfaceGetsImplementedHandler(Closure $handler): void
+    public function setInterfaceGetsImplementedHandler(Closure $handler): InterfaceGetsImplementedHook
     {
         if (!$this->isInterface()) {
             throw new \LogicException('Interface implemented handler can be installed only for interfaces');
@@ -917,6 +937,8 @@ class ReflectionClass extends NativeReflectionClass
 
         $hook = new InterfaceGetsImplementedHook($handler, $this->pointer);
         $hook->install();
+
+        return $hook;
     }
 
     /**

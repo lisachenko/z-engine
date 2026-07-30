@@ -29,7 +29,8 @@ final class MemoryLeakScenarioTest extends TestCase
 {
     protected function setUp(): void
     {
-        if (PHP_DEBUG === 0) {
+        // PHP_DEBUG is int(1) on debug builds; release builds report int(0) or bool(false)
+        if (!PHP_DEBUG) {
             self::markTestSkipped('Memory leak reports require a debug PHP build');
         }
     }

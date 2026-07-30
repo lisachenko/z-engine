@@ -669,10 +669,12 @@ class Core
      *
      * @param Closure $handler function(NodeInterface $node): void callback
      */
-    public static function setASTProcessHandler(Closure $handler): void
+    public static function setASTProcessHandler(Closure $handler): AstProcessHook
     {
         $hook = new AstProcessHook($handler, self::$engine);
         $hook->install();
+
+        return $hook;
     }
 
     /**
