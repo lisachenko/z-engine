@@ -282,8 +282,10 @@ class ReflectionValue implements ReferenceCountedInterface
      */
     private static function copyAndReleasePrevious(ReflectionValue $source, CData $dstZval): void
     {
-        // The destination may arrive as an embedded zval struct or as a zval pointer
-        if (\FFI::typeof($dstZval)->getKind() !== \FFI\CType::TYPE_POINTER) {
+        // The destination may arrive as an embedded zval struct (16 bytes) or as a zval
+        // pointer (8 bytes). FFI::typeof is avoided on purpose: probing a CData's kind and
+        // then referencing it again leaks the FFI type structure, see Core::cast
+        if (\FFI::sizeof($dstZval) === Core::sizeof(Core::type('zval'))) {
             $dstZval = Core::addr($dstZval);
         }
 

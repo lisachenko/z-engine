@@ -373,8 +373,16 @@ class Core
         // instead of decaying it to a pointer to its data. Restore the decay
         // semantics explicitly, otherwise every buffer cast becomes a wild
         // pointer made of the buffer's leading bytes.
-        if (FFI::typeof($pointer)->getKind() === CType::TYPE_ARRAY) {
+        //
+        // The decay deliberately avoids FFI::typeof(): probing the kind of a CData and then
+        // taking another reference to it leaks the owned FFI type structure (~116 bytes per
+        // call), which made every buffer cast a slow leak in long-running processes.
+        try {
+            // Only C arrays are countable; pointers, structs and scalars throw here
+            \count($pointer);
             $pointer = FFI::addr($pointer[0]);
+        } catch (FFI\Exception) {
+            // Not an array: cast directly
         }
 
         return self::$engine->cast($type, $pointer);

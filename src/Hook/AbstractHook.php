@@ -155,8 +155,12 @@ abstract class AbstractHook implements HookInterface
         if ($this->rawStructure instanceof FFI) {
             $containerKey = 'ffi-globals';
         } else {
+            // Normalize struct containers to a pointer: pointers are 8 bytes, every raw
+            // container struct is larger. FFI::typeof is avoided on purpose: probing a
+            // CData's kind and then referencing it again leaks the FFI type structure,
+            // see Core::cast
             $container = $this->rawStructure;
-            if (FFI::typeof($container)->getKind() !== FFI\CType::TYPE_POINTER) {
+            if (FFI::sizeof($container) !== PHP_INT_SIZE) {
                 $container = FFI::addr($container);
             }
             $containerKey = (string) Core::addressOf($container);
