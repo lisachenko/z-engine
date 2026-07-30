@@ -35,6 +35,13 @@ trait ReferenceCountedTrait
      */
     public function incrementReferenceCount(): int
     {
+        if ($this->isImmutable()) {
+            throw new \LogicException(
+                'Cannot increment the reference counter of an immutable engine value '
+                . '(interned string, immutable array or shared-memory data)'
+            );
+        }
+
         return ++$this->getGC()->refcount;
     }
 
@@ -45,7 +52,15 @@ trait ReferenceCountedTrait
      */
     public function decrementReferenceCount(): int
     {
-        assert($this->getGC()->refcount > 0);
+        if ($this->isImmutable()) {
+            throw new \LogicException(
+                'Cannot decrement the reference counter of an immutable engine value '
+                . '(interned string, immutable array or shared-memory data)'
+            );
+        }
+        if ($this->getGC()->refcount <= 0) {
+            throw new \RuntimeException('Reference counter underflow: the value has already been released');
+        }
 
         return --$this->getGC()->refcount;
     }
