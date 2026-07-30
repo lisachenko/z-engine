@@ -1939,6 +1939,12 @@ parameters:
 			path: src/System/Compiler.php
 
 		-
+			message: '#^Offset 0 might not exist on FFI\\CData\|null\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: src/System/Compiler.php
+
+		-
 			message: '#^Parameter \#1 \$hashInstance of class ZEngine\\Type\\HashTable constructor expects FFI\\CData, mixed given\.$#'
 			identifier: argument.type
 			count: 2
@@ -1957,7 +1963,7 @@ parameters:
 			path: src/System/Compiler.php
 
 		-
-			message: '#^Parameter \#2 \$value of static method ZEngine\\Reflection\\ReflectionValue\:\:newEntry\(\) expects FFI\\CData, FFI\\CData\|null given\.$#'
+			message: '#^Parameter \#2 \$value of static method ZEngine\\Reflection\\ReflectionValue\:\:newEntry\(\) expects FFI\\CData, mixed given\.$#'
 			identifier: argument.type
 			count: 1
 			path: src/System/Compiler.php
@@ -1965,7 +1971,7 @@ parameters:
 		-
 			message: '#^Strict comparison using \=\=\= between null and null will always evaluate to true\.$#'
 			identifier: identical.alwaysTrue
-			count: 1
+			count: 2
 			path: src/System/Compiler.php
 
 		-
@@ -2443,12 +2449,6 @@ parameters:
 			path: src/Type/HashTable.php
 
 		-
-			message: '#^Parameter \#1 \$variable of static method ZEngine\\Core\:\:addr\(\) expects FFI\\CData, FFI\\CData\|null given\.$#'
-			identifier: argument.type
-			count: 3
-			path: src/Type/HashTable.php
-
-		-
 			message: '#^Binary operation "&" between mixed and 128 results in an error\.$#'
 			identifier: binaryOp.invalid
 			count: 1
@@ -2887,12 +2887,6 @@ parameters:
 			path: src/Type/StringEntry.php
 
 		-
-			message: '#^Property ZEngine\\Type\\StringEntry\:\:\$pointer \(FFI\\CData\) does not accept mixed\.$#'
-			identifier: assign.propertyType
-			count: 1
-			path: src/Type/StringEntry.php
-
-		-
 			message: '#^Method ZEngine\\EngineConstantsTest\:\:loadGeneratedConstants\(\) should return array\<string, int\> but returns mixed\.$#'
 			identifier: return.type
 			count: 1
@@ -2915,6 +2909,36 @@ parameters:
 			identifier: return.type
 			count: 1
 			path: tests/EngineLayoutTest.php
+
+		-
+			message: '#^Parameter \#1 \$object of function get_class expects object, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Memory/scenarios/closure-set-this.php
+
+		-
+			message: '#^Undefined variable\: \$this$#'
+			identifier: variable.undefined
+			count: 1
+			path: tests/Memory/scenarios/closure-set-this.php
+
+		-
+			message: '#^Binary operation "\+" between mixed and 1 results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: tests/Memory/scenarios/hook-install-uninstall.php
+
+		-
+			message: '#^Binary operation "\*" between mixed and 2 results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: tests/Memory/scenarios/property-read-hook.php
+
+		-
+			message: '#^Parameter \#2 \$value of static method ZEngine\\Reflection\\ReflectionValue\:\:newEntry\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Memory/scenarios/reflection-value-churn.php
 
 		-
 			message: '#^Method ZEngine\\Stub\\TestClass@anonymous/tests/Reflection/ReflectionClassConstantTest\.php\:52\:\:getConstant\(\) has no return type specified\.$#'

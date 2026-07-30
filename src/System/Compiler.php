@@ -172,8 +172,7 @@ class Compiler
     public function parseString(string $source, string $fileName = ''): NodeInterface
     {
         $sourceValue  = new StringEntry($source);
-        $sourceRaw    = $sourceValue->getRawValue();
-        $sourceEntry  = ReflectionValue::newEntry(ReflectionValue::IS_STRING, $sourceRaw);
+        $sourceEntry  = ReflectionValue::newEntry(ReflectionValue::IS_STRING, $sourceValue->getRawValue()[0]);
         $rawSourceVal = $sourceEntry->getRawValue();
 
         // Since PHP 8.1 the filename is passed as a zend_string* (kept alive
@@ -186,31 +185,38 @@ class Compiler
 
         Core::call('zend_save_lexical_state', Core::addr($originalLexState));
 
-        $result = Core::call('zend_prepare_string_for_scanning', $rawSourceVal, $fileNameValue->getRawValue());
+        // Returns void since PHP 8.0, scanning problems surface via zendparse instead
+        Core::call('zend_prepare_string_for_scanning', $rawSourceVal, $fileNameValue->getRawValue());
 
-        $ast         = null;
-        $arenaBuffer = null;
-        if ($result === Core::SUCCESS) {
-            [$arena, $arenaBuffer] = $this->createArena(1024 * 32);
+        [$arena, $arenaBuffer] = $this->createArena(1024 * 32);
 
-            $this->pointer->ast       = null;
-            $this->pointer->ast_arena = $arena;
-            $result                   = Core::call('zendparse');
+        $this->pointer->ast       = null;
+        $this->pointer->ast_arena = $arena;
+
+        $ast = null;
+        try {
+            $result = Core::call('zendparse');
             // restore_lexical_state changes CG(ast) and CG(ast_arena), grab the tree before it
             $ast = $this->pointer->ast;
             if ($result !== Core::SUCCESS) {
                 (new AstOwnership($ast, $arenaBuffer))->release();
-                $ast                      = null;
+                $ast = null;
+            }
+        } catch (\Throwable $error) {
+            // A ParseError raised by the engine mid-parse: destroy the partial tree and rethrow
+            (new AstOwnership($this->pointer->ast, $arenaBuffer))->release();
+            throw $error;
+        } finally {
+            if ($ast === null) {
                 $this->pointer->ast       = null;
                 $this->pointer->ast_arena = null;
             }
+            Core::call('zend_restore_lexical_state', Core::addr($originalLexState));
+            $this->setCompilationMode($originalCompilationMode);
+
+            // The scanner made its own copy of the source, the temporary zval container is ours to free
+            $sourceEntry->release();
         }
-
-        Core::call('zend_restore_lexical_state', Core::addr($originalLexState));
-        $this->setCompilationMode($originalCompilationMode);
-
-        // The scanner made its own copy of the source, the temporary zval container is ours to free
-        $sourceEntry->release();
 
         if ($ast === null) {
             throw new \RuntimeException('Unable to parse the given source code');

@@ -182,7 +182,7 @@ $entry    = Core::$executor->objectStore[spl_object_id($instance)];
 Parse PHP source to the engine's own AST and walk it:
 
 ```php
-$ast = Core::$compiler->parseString('<?php echo 2 + 2;');
+$ast = Core::$compiler->parseString('echo 2 + 2;');
 echo $ast->dump();
 ```
 

@@ -43,9 +43,12 @@ class StringEntry implements ReferenceCountedInterface
      */
     public function __construct(string $value)
     {
-        // This code is used to extract a Zval for our $value argument and use its internal pointer
+        // This code is used to extract a Zval for our $value argument and use its internal pointer.
+        // The pointer is stored as zend_string* (not as a dereferenced struct), matching every
+        // other construction path - the old struct form broke getStringValue() on constructed
+        // entries and could not be passed to engine functions expecting zend_string*
         $valueArgument = Core::$executor->getExecutionState()->getArgument(0);
-        $this->pointer = $valueArgument->getRawString()[0];
+        $this->pointer = $valueArgument->getRawString();
         if (!$this->isInterned()) {
             $this->incrementReferenceCount();
             $this->ownsReference = true;
