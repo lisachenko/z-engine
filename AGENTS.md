@@ -1,0 +1,124 @@
+# Working on z-engine
+
+z-engine reaches into the Zend Engine's own memory through PHP FFI. That makes
+it uniquely powerful and uniquely fragile: a wrong struct offset or a call
+against the wrong PHP version does not throw — it corrupts memory and segfaults
+the interpreter. These rules exist to keep that from happening. They apply to
+human contributors and automated agents alike.
+
+## The one rule that is non-negotiable: version matching
+
+**Never run z-engine code or tests against a PHP minor version other than the
+one the current branch targets.** The engine's C structures change between
+every minor version (`zend_class_entry` alone changed size in 8.1, 8.3 and
+8.4). z-engine reads those structures by offset. Run it on a mismatched
+version and you are reading and writing the wrong memory — the result is a
+crash, or worse, silent corruption.
+
+- `master` targets the newest supported PHP minor (currently **8.5**).
+- Branch `8.4` targets **PHP 8.4**.
+- Branch `8.0` is the frozen legacy line for PHP 8.0.
+
+`Core::init()` enforces this at runtime and refuses to boot on the wrong minor.
+Do not try to defeat that guard.
+
+## Branch model
+
+Fixes land on the **minimum affected version branch** and are merged *upward*,
+never cherry-picked downward. The succession is declared in
+`.github/branch-flow.json` and automated by `.github/workflows/merge-up.yml`,
+which opens a merge-up PR when a version branch is pushed.
+
+```
+8.0 (frozen)      8.4  ──►  master (8.5)
+```
+
+So a bug that exists in both 8.4 and 8.5 is fixed on `8.4`, and the cascade
+carries it into `master`. A bug that only exists on 8.5 is fixed on `master`
+directly. When resolving a merge-up conflict inside `include/`, do **not**
+merge the generated headers textually — regenerate them on the target branch
+(`composer gen-headers`) instead.
+
+## Generated engine definitions — never hand-edit
+
+Everything under `include/<minor>/<os>-<arch>-<ts>/` is generated:
+
+| File | What it is |
+|------|-----------|
+| `engine.h` | FFI header (structs, functions, globals) sliced from the PHP source |
+| `constants.php` | `#define`/enum/opcode values, the ground truth for the PHP class constants |
+| `layouts.json` | `sizeof`/`offsetof` of every dereferenced struct, from the C compiler |
+| `probe.c` | the generated C probe (kept so a probe-only run can reuse it) |
+
+Regenerate them with:
+
+```bash
+composer gen-headers          # all targets for this branch (needs Docker)
+```
+
+The generator (`tools/generator/`) runs inside the official `php:<minor>` Docker
+image so the artifacts always match a real build. Regenerate whenever you:
+
+- bump the branch to a new PHP minor,
+- add or remove an engine symbol in `tools/generator/symbols.php`,
+- or CI's `header-drift` job goes red.
+
+If you touch a struct the PHP code dereferences, add it to `layout_structs` in
+`symbols.php` so its layout is verified. The generator's own validation stage
+FFI-loads the header and asserts every offset against the C compiler, so a
+wrong header cannot be produced.
+
+## Running tests safely
+
+```bash
+composer test            # default suite — safe on a release PHP build
+composer test:internal   # destructive/segfault-prone group, process-isolated
+```
+
+- The `internal` group mutates engine state and can crash a release build; it
+  is excluded from `composer test` and should be run against a **debug PHP
+  build** (`tools/docker/php-debug.Dockerfile`, published to ghcr and used by
+  CI). Process isolation keeps one crash from taking down the whole run.
+- FFI must be enabled (`ffi.enable=1`) and the JIT disabled (`opcache.jit=off`)
+  — the JIT rewrites the executor internals z-engine hooks into. The PHPUnit
+  config sets what it can; `ffi.enable` and `zend.assertions` must come from
+  `php.ini` or `php -d` because they cannot be changed at runtime.
+- `ZENGINE_STRICT_LAYOUT_CHECK=1` (set in the test bootstrap) makes
+  `Core::init()` verify every struct layout against `layouts.json` before
+  touching engine memory — the anti-segfault airbag. Keep it on in development.
+
+## Quality gates (all enforced in CI)
+
+```bash
+composer phpstan     # PHPStan at level max
+composer cs:check    # php-cs-fixer (@PER-CS2.0); composer cs:fix to apply
+```
+
+FFI `CData` access is dynamically typed and cannot be statically resolved;
+those violations are captured in `phpstan-baseline.neon`. New code must be
+clean at level max — do not add to the baseline without good reason.
+
+## Conventional commits
+
+Use [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+feat(core): resolve engine header by platform key
+fix: pass zend_string filename to the scanner on 8.4+
+chore(gen): regenerate 8.4 headers after adding zend_reference
+test: cover packed-array iteration
+docs: rewrite the README support matrix
+```
+
+Common scopes: `core`, `gen` (generator), `reflection`, `ast`, `ci`, `docs`.
+
+## Repository map
+
+```
+src/                 the library (Core, Reflection\*, Type\*, System\*, ClassExtension\*, EngineExtension\*, AbstractSyntaxTree\*)
+include/<key>/       generated FFI definitions per platform (do not edit)
+tools/generator/     the header generator (symbols.php is the manifest)
+tools/docker/        debug PHP image used by CI
+tests/               PHPUnit 12 suite; EngineLayoutTest/EngineConstantsTest guard against ABI drift
+.github/             CI, merge-up automation, branch-flow.json, issue templates
+```
