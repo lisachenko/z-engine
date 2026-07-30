@@ -17,12 +17,11 @@ use PHPUnit\Framework\TestCase;
 use ZEngine\Core;
 use ZEngine\Type\ObjectEntry;
 use ZEngine\Type\StringEntry;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 class ReflectionValueTest extends TestCase
 {
-    /**
-     * @dataProvider valueTypeProvider
-     */
+    #[DataProvider('valueTypeProvider')]
     public function testConstructorWorks($value, int $expectedType)
     {
         $refValue = new ReflectionValue($value);
@@ -31,9 +30,7 @@ class ReflectionValueTest extends TestCase
         $this->assertSame($expectedType, $type);
     }
 
-    /**
-     * @dataProvider valueProvider
-     */
+    #[DataProvider('valueProvider')]
     public function testGetNativeValue($value): void
     {
         // This prevents optimization of opcodes and $value variable GC
@@ -44,7 +41,7 @@ class ReflectionValueTest extends TestCase
         $this->assertSame($currentValue, $returnedValue);
     }
 
-    public function valueProvider(): array
+    public static function valueProvider(): array
     {
         return [
             [1],
@@ -55,9 +52,7 @@ class ReflectionValueTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider valueTypeProvider
-     */
+    #[DataProvider('valueTypeProvider')]
     public function testGetType($value, int $expectedType): void
     {
         $argument         = Core::$executor->getExecutionState()->getArgument(0);
@@ -71,9 +66,12 @@ class ReflectionValueTest extends TestCase
         );
     }
 
-    public function valueTypeProvider(): array
+    public static function valueTypeProvider(): array
     {
-        $valueByRef = new \stdClass();
+        // Note: live resources are intentionally NOT yielded here - a data
+        // provider is evaluated once up front and PHPUnit cannot carry an open
+        // resource through to the test intact. Resources are covered by the
+        // dedicated tests below, which open them inline.
         return [
             [1, ReflectionValue::IS_LONG],
             [1.0, ReflectionValue::IS_DOUBLE],
@@ -83,8 +81,37 @@ class ReflectionValueTest extends TestCase
             [null, ReflectionValue::IS_NULL],
             [false, ReflectionValue::IS_FALSE],
             [true, ReflectionValue::IS_TRUE],
-            [fopen(__FILE__, 'r'), ReflectionValue::IS_RESOURCE]
         ];
+    }
+
+    public function testConstructorDetectsResourceType(): void
+    {
+        $resource = fopen(__FILE__, 'r');
+        try {
+            $refValue = new ReflectionValue($resource);
+            $this->assertSame(ReflectionValue::IS_RESOURCE, $refValue->getType() & 0xFF);
+        } finally {
+            fclose($resource);
+        }
+    }
+
+    public function testGetTypeDetectsResourceArgument(): void
+    {
+        $resource = fopen(__FILE__, 'r');
+        try {
+            $this->assertResourceArgumentType($resource);
+        } finally {
+            fclose($resource);
+        }
+    }
+
+    /**
+     * The frame argument inspection needs the value passed as a real argument
+     */
+    private function assertResourceArgumentType($value): void
+    {
+        $argument = Core::$executor->getExecutionState()->getArgument(0);
+        $this->assertSame(ReflectionValue::IS_RESOURCE, $argument->getType() & 0xFF);
     }
 
     public function testGetRawClass()

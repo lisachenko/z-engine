@@ -51,8 +51,9 @@ class ReflectionFunction extends NativeReflectionFunction
         }
         if ($functionNamePtr !== null) {
             $functionName = StringEntry::fromCData($functionNamePtr);
-            call_user_func(
-                [$reflectionFunction, 'parent::__construct'],
+            Core::callParentConstructor(
+                $reflectionFunction,
+                static::class,
                 $functionName->getStringValue()
             );
         }

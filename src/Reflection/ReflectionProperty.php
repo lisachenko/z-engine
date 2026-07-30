@@ -64,8 +64,9 @@ class ReflectionProperty extends NativeReflectionProperty
         /** @var ReflectionProperty $reflectionProperty */
         $reflectionProperty = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
         $propertyName       = StringEntry::fromCData($propertyEntry->name);
-        call_user_func(
-            [$reflectionProperty, 'parent::__construct'],
+        Core::callParentConstructor(
+            $reflectionProperty,
+            static::class,
             $propertyName->getStringValue()
         );
         $reflectionProperty->pointer = $propertyEntry;

@@ -81,7 +81,7 @@ class ReflectionExtension extends NativeReflectionExtension
         $extension = (new NativeReflectionClass(self::class))->newInstanceWithoutConstructor();
         $extension->moduleEntry = $moduleEntry;
 
-        call_user_func([$extension, 'parent::__construct'], $moduleEntry->name);
+        Core::callParentConstructor($extension, static::class, $moduleEntry->name);
 
         return $extension;
     }

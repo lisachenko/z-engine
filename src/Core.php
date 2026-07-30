@@ -409,6 +409,28 @@ class Core
     }
 
     /**
+     * Invokes the native (grand)parent constructor on an object that was
+     * created without a constructor call.
+     *
+     * Replaces the ['obj', 'parent::__construct'] callable form, which is
+     * deprecated since PHP 8.4. The parent is resolved relative to $scope (the
+     * z-engine reflection class), so the native Reflection* constructor is
+     * always the one invoked.
+     *
+     * @param object $object Instance to initialize
+     * @param string $scope  z-engine class whose parent constructor to call (pass static::class)
+     * @param mixed  ...$arguments Constructor arguments
+     */
+    public static function callParentConstructor(object $object, string $scope, ...$arguments): void
+    {
+        $parentClass = get_parent_class($scope);
+        if ($parentClass === false) {
+            throw new \LogicException("Class {$scope} has no parent constructor to call");
+        }
+        (new \ReflectionMethod($parentClass, '__construct'))->invokeArgs($object, $arguments);
+    }
+
+    /**
      * Returns an aligned size
      *
      * @see ZEND_MM_ALIGNED_SIZE(size) macro implementation

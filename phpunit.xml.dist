@@ -9,30 +9,40 @@
   ~
   -->
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:noNamespaceSchemaLocation="./vendor/phpunit/phpunit/phpunit.xsd"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/12.5/phpunit.xsd"
          colors="true"
-         bootstrap="./tests/bootstrap.php">
-    <coverage>
-        <include>
-            <directory>./src/</directory>
-        </include>
-        <report>
-            <clover outputFile="./build/logs/clover.xml"/>
-            <crap4j outputFile="./build/logs/crap4j.xml"/>
-            <xml outputDirectory="./build/coverage/xml"/>
-        </report>
-    </coverage>
+         bootstrap="./tests/bootstrap.php"
+         failOnWarning="true"
+         displayDetailsOnTestsThatTriggerWarnings="true"
+         displayDetailsOnTestsThatTriggerNotices="true"
+         displayDetailsOnTestsThatTriggerDeprecations="true">
     <testsuites>
         <testsuite name="Z-Engine Test Suite">
             <directory>./tests/</directory>
         </testsuite>
     </testsuites>
+    <!--
+      The `internal` group mutates engine state destructively and can segfault
+      a release PHP build: it is excluded by default and runs separately via
+      `composer test:internal` (ideally inside the debug PHP container).
+      See AGENTS.md.
+    -->
     <groups>
         <exclude>
             <group>performance</group>
+            <group>internal</group>
         </exclude>
     </groups>
-    <logging>
-        <junit outputFile="./build/logs/junit.xml"/>
-    </logging>
+    <php>
+        <!-- Verify FFI struct layouts against the C ground truth on every boot -->
+        <env name="ZENGINE_STRICT_LAYOUT_CHECK" value="1"/>
+        <!-- ffi.enable=preload|1 and zend.assertions=1 must be set in php.ini
+             (or via `php -d` on the CLI) - they cannot be changed at runtime.
+             See AGENTS.md and the CI workflow. -->
+    </php>
+    <source>
+        <include>
+            <directory>./src/</directory>
+        </include>
+    </source>
 </phpunit>

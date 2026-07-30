@@ -17,6 +17,8 @@ use PHPUnit\Framework\TestCase;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\OpLine;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 
 class ExecutionDataTest extends TestCase
 {
@@ -37,9 +39,7 @@ class ExecutionDataTest extends TestCase
         $this->assertSame($trace[1]['function'], $executionData->getFunction()->getName());
     }
 
-    /**
-     * @group internal
-     */
+    #[Group('internal')]
     public function testGetSymbolTable()
     {
         $symTable = Core::$executor->getExecutionState()->getSymbolTable();
@@ -66,9 +66,7 @@ class ExecutionDataTest extends TestCase
         $this->assertSame($expected, $return);
     }
 
-    /**
-     * @dataProvider argumentProvider
-     */
+    #[DataProvider('argumentProvider')]
     public function testGetArguments($arg1 = null, $arg2 = null, $arg3 = null)
     {
         $engineArguments   = Core::$executor->getExecutionState()->getArguments();
@@ -82,20 +80,16 @@ class ExecutionDataTest extends TestCase
         $this->assertEquals(func_get_args(), $receivedArguments);
     }
 
-    /**
-     * @dataProvider argumentProvider
-     */
-    public function testGetNumberOfArguments()
+    #[DataProvider('argumentProvider')]
+    public function testGetNumberOfArguments(...$args)
     {
         $engineArguments = Core::$executor->getExecutionState()->getNumberOfArguments();
         $expectedNumber  = func_num_args();
         $this->assertSame($expectedNumber, $engineArguments);
     }
 
-    /**
-     * @dataProvider argumentProvider
-     */
-    public function testGetArgument($firstPhpArgument)
+    #[DataProvider('argumentProvider')]
+    public function testGetArgument($firstPhpArgument, ...$rest)
     {
         // Be aware, that getArgument() can return only declared arguments, not extra one!
         $firstArgument = Core::$executor->getExecutionState()->getArgument(0);
@@ -105,7 +99,7 @@ class ExecutionDataTest extends TestCase
         $this->assertSame($firstPhpArgument, $firstEngineValue);
     }
 
-    public function argumentProvider(): array
+    public static function argumentProvider(): array
     {
         return [
             [1],
