@@ -70,6 +70,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Composer runs on a release PHP on the host; the debug container only
+      # needs to run the already-installed PHPUnit (vendor/ is plain PHP).
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_MINOR }}
+          extensions: ffi
+          coverage: none
+
+      - name: Install dependencies
+        uses: ramsey/composer-install@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -86,11 +98,8 @@ jobs:
 
       - name: Run internal group with process isolation
         run: |
-          docker run --rm -v "$PWD:/app" -w /app z-engine-php:debug sh -c '
-            curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer &&
-            composer install --no-interaction --no-progress &&
-            composer test:internal
-          '
+          docker run --rm -v "$PWD:/app" -w /app z-engine-php:debug \
+            vendor/bin/phpunit --group internal --process-isolation
 
   header-drift:
     name: Generated headers up to date

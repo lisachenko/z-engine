@@ -6,29 +6,33 @@
 # it matches the ABI of the generated headers for this branch's PHP minor.
 #
 # Built inline (with layer caching) by the tests-internal-debug CI job and run
-# in place - no registry involved. Build locally with:
+# in place - no registry involved. Composer runs on the host; this image only
+# needs to *run* PHPUnit, so it carries FFI (built in - a debug PHP cannot load
+# the base image's release-ABI ffi.so) plus the extensions PHPUnit needs at
+# runtime (dom/xml/xmlwriter from libxml, mbstring). Build locally with:
 #   docker build -f tools/docker/php-debug.Dockerfile -t z-engine-php:debug .
-#
-# Note: a debug PHP cannot load the release-compiled shared extensions the base
-# image ships (ABI differs), so FFI is compiled statically here and the stale
-# docker-php-ext ini files are removed.
 ARG PHP_VERSION=8.4
 FROM php:${PHP_VERSION}-cli AS build
 
+# Build dependencies for the extensions we rebuild: FFI, libxml-based
+# extensions (dom/xml/xmlwriter/simplexml, on by default) and mbstring.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libffi-dev \
+    && apt-get install -y --no-install-recommends libffi-dev libxml2-dev libonig-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Rebuild PHP from the bundled source with debug + built-in FFI, replaying the
-# image's own configure options (minus the cosmetic PHP_UNAME assignment, whose
-# unquoted space-separated value would otherwise be parsed as a bogus option).
+# Rebuild PHP from the bundled source with debug + a curated extension set.
+# Replaying the base image's full configure options is not possible: their
+# build-time -dev libraries were stripped from the runtime image. The default
+# extension set (dom, xml, xmlwriter, simplexml, ctype, tokenizer, phar, json,
+# filter) builds automatically once libxml is present.
 RUN set -eux; \
     docker-php-source extract; \
     cd /usr/src/php; \
-    configureOptions="$(php-config --configure-options | sed 's/ PHP_UNAME=[^=]*Docker//')"; \
-    # shellcheck disable=SC2086
-    ./configure --enable-debug --with-ffi $configureOptions > /tmp/configure.log 2>&1 \
-        || (cat /tmp/configure.log && false); \
+    ./configure \
+        --enable-debug \
+        --with-ffi \
+        --enable-mbstring \
+        > /tmp/configure.log 2>&1 || (cat /tmp/configure.log && false); \
     make -j"$(nproc)" > /tmp/make.log 2>&1 || (tail -80 /tmp/make.log && false); \
     make install; \
     docker-php-source delete
@@ -43,7 +47,6 @@ RUN { \
       echo 'ffi.enable=1'; \
       echo 'zend.assertions=1'; \
       echo 'opcache.jit=off'; \
-      echo 'opcache.jit_buffer_size=0'; \
     } > /usr/local/etc/php/conf.d/z-engine.ini
 
 RUN php -v && php -m | grep -qi '^FFI$' && php -r 'assert(PHP_DEBUG === 1); echo "debug FFI build OK\n";'
