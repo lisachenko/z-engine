@@ -186,11 +186,11 @@ class ReflectionClass extends NativeReflectionClass
         $totalInterfaces     = count($availableInterfaces);
         $numResultInterfaces = $totalInterfaces + $numInterfacesToAdd;
 
-        // Memory should be non-owned to keep it live more that $memory variable in this method.
-        // If this class is internal then we should use persistent memory
-        // If this class is user-defined and we are not in CLI, then use persistent memory, otherwise non-persistent
-        $isPersistent = $this->isInternal() || PHP_SAPI !== 'cli';
-        $memory       = Core::new("zend_class_entry *[$numResultInterfaces]", false, $isPersistent);
+        // Tracked non-owned memory outlives this method; persistent (malloc) only for internal
+        // classes - user classes must get request memory, because destroy_zend_class() frees
+        // these buffers with the request allocator when the class dies
+        $isPersistent = $this->isPersistentAllocation();
+        $memory       = Core::trackedNew("zend_class_entry *[$numResultInterfaces]", $isPersistent);
 
         $itemsSize = Core::sizeof(Core::type('zend_class_entry *'));
         if ($totalInterfaces > 0) {
@@ -206,9 +206,9 @@ class ReflectionClass extends NativeReflectionClass
             $memory[$position] = $interfaceClass;
         }
 
-        // As we don't have realloc methods in PHP, we can free non-persistent memory to prevent leaks
-        if ($totalInterfaces > 0 && !$isPersistent) {
-            Core::free($this->pointer->interfaces);
+        // Free the previous buffer if z-engine allocated it; engine-original arrays are left alone
+        if ($totalInterfaces > 0) {
+            Core::untrackAndFree($this->pointer->interfaces);
         }
         $this->pointer->interfaces = Core::cast('zend_class_entry **', Core::addr($memory));
 
@@ -239,29 +239,29 @@ class ReflectionClass extends NativeReflectionClass
         $totalInterfaces     = count($availableInterfaces);
         $numResultInterfaces = $totalInterfaces - count($indexesToRemove);
 
-        // Memory should be non-owned to keep it live more that $memory variable in this method.
-        // If this class is internal then we should use persistent memory
-        // If this class is user-defined and we are not in CLI, then use persistent memory, otherwise non-persistent
-        $isPersistent = $this->isInternal() || PHP_SAPI !== 'cli';
+        // Tracked non-owned memory outlives this method; persistent (malloc) only for internal
+        // classes - user classes must get request memory, because destroy_zend_class() frees
+        // these buffers with the request allocator when the class dies
+        $isPersistent = $this->isPersistentAllocation();
 
         // If we remove all interfaces then just clear $this->pointer->interfaces field
         if ($numResultInterfaces === 0) {
-            if ($totalInterfaces > 0 && !$isPersistent) {
-                Core::free($this->pointer->interfaces);
+            if ($totalInterfaces > 0) {
+                Core::untrackAndFree($this->pointer->interfaces);
             }
             // We should also clean ZEND_ACC_RESOLVED_INTERFACES
             $this->pointer->interfaces = null;
             $this->pointer->ce_flags &= (~ Core::ZEND_ACC_RESOLVED_INTERFACES);
         } else {
-            // Allocate non-owned memory, either persistent (for internal classes) or not (for user-defined)
-            $memory = Core::new("zend_class_entry *[$numResultInterfaces]", false, $isPersistent);
+            // Allocate tracked memory, either persistent (for internal classes) or not (for user-defined)
+            $memory = Core::trackedNew("zend_class_entry *[$numResultInterfaces]", $isPersistent);
             for ($index = 0, $destIndex = 0; $index < $this->pointer->num_interfaces; $index++) {
                 if (!isset($indexesToRemove[$index])) {
                     $memory[$destIndex++] = $this->pointer->interfaces[$index];
                 }
             }
-            if ($totalInterfaces > 0 && !$isPersistent) {
-                Core::free($this->pointer->interfaces);
+            if ($totalInterfaces > 0) {
+                Core::untrackAndFree($this->pointer->interfaces);
             }
             $this->pointer->interfaces = Core::cast('zend_class_entry **', Core::addr($memory));
         }
@@ -342,6 +342,18 @@ class ReflectionClass extends NativeReflectionClass
         return ord($this->pointer->type) === Core::ZEND_INTERNAL_CLASS;
     }
 
+    /**
+     * Selects the allocation class for buffers stored inside this class entry
+     *
+     * Internal classes are persistent engine structures (malloc), while user classes are
+     * destroyed with the request allocator: destroy_zend_class() frees their interface and
+     * trait buffers with efree(), so storing malloc memory there corrupts the heap.
+     */
+    private function isPersistentAllocation(): bool
+    {
+        return (bool) $this->isInternal();
+    }
+
     #[\ReturnTypeWillChange]
     public function isUserDefined()
     {
@@ -391,11 +403,11 @@ class ReflectionClass extends NativeReflectionClass
         $totalTraits     = count($availableTraits);
         $numResultTraits = $totalTraits + $numTraitsToAdd;
 
-        // Memory should be non-owned to keep it live more that $memory variable in this method.
-        // If this class is internal then we should use persistent memory
-        // If this class is user-defined and we are not in CLI, then use persistent memory, otherwise non-persistent
-        $isPersistent = $this->isInternal() || PHP_SAPI !== 'cli';
-        $memory       = Core::new("zend_class_name [$numResultTraits]", false, $isPersistent);
+        // Tracked non-owned memory outlives this method; persistent (malloc) only for internal
+        // classes - user classes must get request memory, because destroy_zend_class() frees
+        // these buffers with the request allocator when the class dies
+        $isPersistent = $this->isPersistentAllocation();
+        $memory       = Core::trackedNew("zend_class_name [$numResultTraits]", $isPersistent);
 
         $itemsSize = Core::sizeof(Core::type('zend_class_name'));
         if ($totalTraits > 0) {
@@ -417,9 +429,9 @@ class ReflectionClass extends NativeReflectionClass
             $memory[$position]->name    = $name->transferReferenceOwnership()->getRawValue();
             $memory[$position]->lc_name = $lcName->transferReferenceOwnership()->getRawValue();
         }
-        // As we don't have realloc methods in PHP, we can free non-persistent memory to prevent leaks
-        if ($totalTraits > 0 && !$isPersistent) {
-            Core::free($this->pointer->trait_names);
+        // Free the previous buffer if z-engine allocated it; engine-original arrays are left alone
+        if ($totalTraits > 0) {
+            Core::untrackAndFree($this->pointer->trait_names);
         }
 
         $this->pointer->trait_names = Core::cast('zend_class_name *', Core::addr($memory));
@@ -446,13 +458,13 @@ class ReflectionClass extends NativeReflectionClass
         $totalTraits     = count($availableTraits);
         $numResultTraits = $totalTraits - count($indexesToRemove);
 
-        // Memory should be non-owned to keep it live more that $memory variable in this method.
-        // If this class is internal then we should use persistent memory
-        // If this class is user-defined and we are not in CLI, then use persistent memory, otherwise non-persistent
-        $isPersistent = $this->isInternal() || PHP_SAPI !== 'cli';
+        // Tracked non-owned memory outlives this method; persistent (malloc) only for internal
+        // classes - user classes must get request memory, because destroy_zend_class() frees
+        // these buffers with the request allocator when the class dies
+        $isPersistent = $this->isPersistentAllocation();
 
         if ($numResultTraits > 0) {
-            $memory = Core::new("zend_class_name[$numResultTraits]", false, $isPersistent);
+            $memory = Core::trackedNew("zend_class_name[$numResultTraits]", $isPersistent);
         } else {
             $memory = null;
         }
@@ -468,8 +480,8 @@ class ReflectionClass extends NativeReflectionClass
                 StringEntry::fromCData($traitNameStruct->lc_name)->releaseReference();
             }
         }
-        if ($totalTraits > 0 && !$isPersistent) {
-            Core::free($this->pointer->trait_names);
+        if ($totalTraits > 0) {
+            Core::untrackAndFree($this->pointer->trait_names);
         }
         if ($numResultTraits > 0) {
             $this->pointer->trait_names = Core::cast('zend_class_name *', Core::addr($memory));
@@ -1017,7 +1029,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     private static function allocateClassObjectHandlers(): CData
     {
-        $handlers    = Core::new('zend_object_handlers', false, true);
+        $handlers    = Core::trackedNew('zend_object_handlers', true);
         $stdHandlers = Core::getStandardObjectHandlers();
         Core::memcpy($handlers, $stdHandlers, Core::sizeof($stdHandlers));
 

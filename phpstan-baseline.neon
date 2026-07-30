@@ -1111,6 +1111,12 @@ parameters:
 			path: src/Reflection/ReflectionClass.php
 
 		-
+			message: '#^Parameter \#1 \$pointer of static method ZEngine\\Core\:\:untrackAndFree\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 5
+			path: src/Reflection/ReflectionClass.php
+
+		-
 			message: '#^Parameter \#1 \$string of function strtolower expects string, string\|false given\.$#'
 			identifier: argument.type
 			count: 1
@@ -1138,12 +1144,6 @@ parameters:
 			message: '#^Parameter \#1 \$variable of static method ZEngine\\Core\:\:addr\(\) expects FFI\\CData, mixed given\.$#'
 			identifier: argument.type
 			count: 6
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Parameter \#1 \$variable of static method ZEngine\\Core\:\:free\(\) expects FFI\\CData, mixed given\.$#'
-			identifier: argument.type
-			count: 5
 			path: src/Reflection/ReflectionClass.php
 
 		-

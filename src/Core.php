@@ -164,6 +164,16 @@ class Core
     private static ?array $engineConstants = null;
 
     /**
+     * Registry of engine-visible buffers allocated by z-engine, keyed by numeric address
+     *
+     * Keeping the original CData here both marks the block as "ours to free" and prevents
+     * ext/ffi from considering the memory unreachable while an engine structure points to it.
+     *
+     * @var array<int, CData>
+     */
+    private static array $trackedBlocks = [];
+
+    /**
      * Performs Z-engine core initialization
      */
     public static function init(): void
@@ -385,6 +395,57 @@ class Core
     public static function new(string $type, bool $owned = true, bool $persistent = false): CData
     {
         return self::$engine->new($type, $owned, $persistent);
+    }
+
+    /**
+     * Allocates a buffer that will be stored inside an engine structure and records it in the
+     * z-engine block registry
+     *
+     * The registry makes replacement of such buffers safe in every branch: untrackAndFree()
+     * frees a block if and only if z-engine allocated it, so engine-original arrays (including
+     * shared-memory data of immutable classes) are never freed through the FFI allocator.
+     *
+     * @param string $type Name of the type (eg "zend_class_entry *[4]")
+     */
+    public static function trackedNew(string $type, bool $persistent = false): CData
+    {
+        $memory                                                    = self::new($type, false, $persistent);
+        self::$trackedBlocks[self::addressOf(self::addr($memory))] = $memory;
+
+        return $memory;
+    }
+
+    /**
+     * Checks if the given pointer refers to a block allocated by z-engine via trackedNew()
+     */
+    public static function isTrackedBlock(CData $pointer): bool
+    {
+        return isset(self::$trackedBlocks[self::addressOf($pointer)]);
+    }
+
+    /**
+     * Frees the pointed block if and only if z-engine allocated it (no-op otherwise)
+     *
+     * Engine-original buffers are deliberately left alone: freeing memory that z-engine did
+     * not allocate is exactly the wrong-allocator corruption this registry exists to prevent.
+     */
+    public static function untrackAndFree(CData $pointer): void
+    {
+        $address = self::addressOf($pointer);
+        if (!isset(self::$trackedBlocks[$address])) {
+            return;
+        }
+        // Free through the original CData so ext/ffi picks the right (persistent) allocator
+        FFI::free(self::$trackedBlocks[$address]);
+        unset(self::$trackedBlocks[$address]);
+    }
+
+    /**
+     * Removes a block from the registry without freeing it (ownership handed to the engine)
+     */
+    public static function untrack(CData $pointer): void
+    {
+        unset(self::$trackedBlocks[self::addressOf($pointer)]);
     }
 
     /**
