@@ -51,6 +51,9 @@ RUN { \
       echo 'opcache.jit=off'; \
     } > /usr/local/etc/php/conf.d/z-engine.ini
 
-RUN php -v && php -m | grep -qi '^FFI$' && php -r 'assert(PHP_DEBUG === 1); echo "debug FFI build OK\n";'
+# Sanity check: the interpreter's own banner must report a DEBUG build and FFI
+# must be present (built in). (PHP_DEBUG's constant type is not worth asserting
+# strictly - the banner is the ground truth PHP prints for itself.)
+RUN php -v && php -v | grep -q 'DEBUG' && php -m | grep -qi '^FFI$' && echo "debug FFI build OK"
 
 WORKDIR /app
