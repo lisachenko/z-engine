@@ -32,6 +32,9 @@ jobs:
       - name: Run test suite
         run: composer test
 
+      - name: Worker-loop soak (flat memory after warm-up)
+        run: php -d ffi.enable=1 -d zend.assertions=1 -d opcache.jit=off tools/examples/worker-loop.php
+
   static-analysis:
     name: PHPStan (level max)
     runs-on: ubuntu-latest
