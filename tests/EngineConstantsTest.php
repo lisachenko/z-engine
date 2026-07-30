@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -30,8 +31,8 @@ final class EngineConstantsTest extends TestCase
     public static function constantOwnerProvider(): array
     {
         return [
-            'ZEND_ACC_* on Core' => [Core::class, 'ZEND_ACC_'],
-            'opcodes on OpCode'  => [OpCode::class, ''],
+            'ZEND_ACC_* on Core'    => [Core::class, 'ZEND_ACC_'],
+            'opcodes on OpCode'     => [OpCode::class, ''],
             'AST kinds on NodeKind' => [NodeKind::class, 'AST_'],
         ];
     }
@@ -39,7 +40,7 @@ final class EngineConstantsTest extends TestCase
     #[DataProvider('constantOwnerProvider')]
     public function testDeclaredConstantsMatchGeneratedGroundTruth(string $class, string $phpPrefix): void
     {
-        $generated = self::loadGeneratedConstants();
+        $generated  = self::loadGeneratedConstants();
         $reflection = new \ReflectionClass($class);
 
         $checked = 0;
@@ -59,7 +60,7 @@ final class EngineConstantsTest extends TestCase
             $this->assertSame(
                 $generated[$engineName],
                 $value,
-                "{$class}::{$name} ({$value}) does not match engine {$engineName} ({$generated[$engineName]})"
+                "{$class}::{$name} ({$value}) does not match engine {$engineName} ({$generated[$engineName]})",
             );
             $checked++;
         }
@@ -71,7 +72,7 @@ final class EngineConstantsTest extends TestCase
     {
         $this->assertSame(
             self::loadGeneratedConstants()['ZEND_MODULE_API_NO'],
-            Core::engineConstant('ZEND_MODULE_API_NO')
+            Core::engineConstant('ZEND_MODULE_API_NO'),
         );
     }
 
@@ -87,11 +88,11 @@ final class EngineConstantsTest extends TestCase
             PHP_MINOR_VERSION,
             strtolower(PHP_OS_FAMILY),
             match ($arch) {
-                'x86_64', 'amd64' => 'x64',
+                'x86_64', 'amd64'  => 'x64',
                 'aarch64', 'arm64' => 'arm64',
-                default => $arch,
+                default            => $arch,
             },
-            ZEND_THREAD_SAFE ? 'zts' : 'nts'
+            ZEND_THREAD_SAFE ? 'zts' : 'nts',
         );
 
         return require __DIR__ . '/../include/' . $platformKey . '/constants.php';

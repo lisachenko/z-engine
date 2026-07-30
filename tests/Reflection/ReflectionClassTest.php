@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -12,8 +13,10 @@ declare(strict_types=1);
 
 namespace ZEngine\Reflection;
 
-
 use Closure;
+use PHPUnit\Framework\Attributes\Depends;
+use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use ZEngine\ClassExtension\Hook\CastObjectHook;
 use ZEngine\ClassExtension\Hook\CompareValuesHook;
@@ -32,9 +35,6 @@ use ZEngine\Stub\TestClass;
 use ZEngine\Stub\TestInterface;
 use ZEngine\Stub\TestTrait;
 use ZEngine\System\OpCode;
-use PHPUnit\Framework\Attributes\Depends;
-use PHPUnit\Framework\Attributes\Group;
-use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 
 class ReflectionClassTest extends TestCase
 {
@@ -42,7 +42,7 @@ class ReflectionClassTest extends TestCase
 
     public function setUp(): void
     {
-        $this->refClass = new class(TestClass::class) extends ReflectionClass{};
+        $this->refClass = new class (TestClass::class) extends ReflectionClass {};
     }
 
     #[Group('internal')]
@@ -63,7 +63,7 @@ class ReflectionClassTest extends TestCase
         $isMethodExists = method_exists(TestClass::class, $methodName);
         $this->assertTrue($isMethodExists);
         $instance = new TestClass();
-        $result = $instance->$methodName('Test');
+        $result   = $instance->$methodName('Test');
         $this->assertSame('Test', $result);
     }
 
@@ -155,7 +155,7 @@ class ReflectionClassTest extends TestCase
             return $e;
         };
 
-        $value  = $checkTypehint($object);
+        $value = $checkTypehint($object);
         $this->assertSame($object, $value);
 
         // Also, interface should be in the list of interface names for this class
@@ -194,7 +194,7 @@ class ReflectionClassTest extends TestCase
 
     public function testSetStartLine(): void
     {
-        $this->assertSame(15, $this->refClass->getStartLine());
+        $this->assertSame(16, $this->refClass->getStartLine());
         $this->refClass->setStartLine(1);
         $this->assertSame(1, $this->refClass->getStartLine(), 'Start line number should be changed');
     }
@@ -222,9 +222,9 @@ class ReflectionClassTest extends TestCase
     {
         $log = '';
         $this->refClass->setCreateObjectHandler(function (CreateObjectHook $hook) use (&$log) {
-            $log    .= 'Before initialization.' . PHP_EOL;
+            $log .= 'Before initialization.' . PHP_EOL;
             $object = $hook->proceed();
-            $log    .= 'After initialization.';
+            $log .= 'After initialization.';
 
             return $object;
         });
@@ -240,7 +240,7 @@ class ReflectionClassTest extends TestCase
 
     public function testInstallInterfaceGetsImplementedHandler(): void
     {
-        $log = '';
+        $log          = '';
         $refInterface = new ReflectionClass(TestInterface::class);
         $refInterface->setInterfaceGetsImplementedHandler(function (InterfaceGetsImplementedHook $hook) use (&$log) {
             $log = 'Class ' . $hook->getClass()->getName() . ' implements interface';
@@ -279,17 +279,17 @@ class ReflectionClassTest extends TestCase
                 case ReflectionValue::_IS_BOOL:
                     return false;
             }
-            throw new \UnexpectedValueException("Unknown type " . ReflectionValue::name($castType));
+            throw new \UnexpectedValueException('Unknown type ' . ReflectionValue::name($castType));
         });
 
         $testClass = new TestClass();
-        $long      = (int)$testClass;
+        $long      = (int) $testClass;
         $this->assertSame(1, $long);
-        $double = (float)$testClass;
+        $double = (float) $testClass;
         $this->assertSame(2.0, $double);
-        $string = (string)$testClass;
+        $string = (string) $testClass;
         $this->assertSame('test', $string);
-        $bool = (bool)$testClass;
+        $bool = (bool) $testClass;
         $this->assertSame(false, $bool);
         $this->markTestIncomplete('Initialization object handler brings segfaults thus run it separately');
     }
@@ -322,7 +322,7 @@ class ReflectionClassTest extends TestCase
             // We can change value, for example by multiply it
             return $hook->getValue() * 2;
         });
-        $instance = new TestClass();
+        $instance           = new TestClass();
         $instance->property = 10;
         $this->assertNotSame(42, $instance->property);
         $this->assertSame(20, $instance->property);
@@ -358,7 +358,7 @@ class ReflectionClassTest extends TestCase
         $this->refClass->setHasPropertyHandler(function (HasPropertyHook $hook) use (&$logEntry) {
             $logEntry = $hook->getMemberName();
             // Let's inverse presence of field :)
-            return (int)(!$hook->proceed());
+            return (int) (!$hook->proceed());
         });
 
         $instance = new TestClass();
@@ -377,9 +377,9 @@ class ReflectionClassTest extends TestCase
             $this->assertIsObject($hook->getObject());
             return ['a' => 1, 'b' => true, 'c' => 42.0];
         });
-        $instance = new TestClass();
+        $instance           = new TestClass();
         $instance->property = 10;
-        $castValue = (array) $instance;
+        $castValue          = (array) $instance;
 
         // We expect that our handler is called, thus no existing public fields will be returned
         $this->assertArrayNotHasKey('property', $castValue);
@@ -449,7 +449,7 @@ class ReflectionClassTest extends TestCase
                 case OpCode::DIV:
                     return $left / $right;
             }
-            throw new \UnexpectedValueException("Opcode " . OpCode::name($opCode) . " wasn't held.");
+            throw new \UnexpectedValueException('Opcode ' . OpCode::name($opCode) . " wasn't held.");
         });
 
         $first    = new TestClass();

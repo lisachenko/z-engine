@@ -37,9 +37,9 @@ if (isset($options['php']) || isset($options['ts'])) {
 $repositoryRoot = dirname(__DIR__, 2);
 $machine        = php_uname('m');
 $arch           = match ($machine) {
-    'x86_64', 'amd64' => 'x64',
+    'x86_64', 'amd64'  => 'x64',
     'aarch64', 'arm64' => 'arm64',
-    default => $machine,
+    default            => $machine,
 };
 
 // Forward proxy settings into the build when the host uses them. Proxied

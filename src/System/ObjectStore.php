@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -23,7 +24,7 @@ final class ObjectStore implements Countable, ArrayAccess
     /**
      * @see zend_objects_API.h:OBJ_BUCKET_INVALID macro
      */
-    private const OBJ_BUCKET_INVALID = 1<<0;
+    private const OBJ_BUCKET_INVALID = 1 << 0;
 
     /**
      * Holds an internal pointer to the EG(objects_store)

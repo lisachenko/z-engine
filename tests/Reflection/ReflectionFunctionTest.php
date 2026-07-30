@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -12,8 +13,8 @@ declare(strict_types=1);
 
 namespace ZEngine\Reflection;
 
-use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\TestCase;
 
 /**
  * Test function to reflect

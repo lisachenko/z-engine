@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -85,8 +86,8 @@ class ReflectionClass extends NativeReflectionClass
         } catch (\ReflectionException $e) {
             // This can happen during the class-loading. But we still can work with it.
         }
-        $className       = is_string($classNameOrObject) ? $classNameOrObject : get_class($classNameOrObject);
-        $normalizedName  = strtolower($className);
+        $className      = is_string($classNameOrObject) ? $classNameOrObject : get_class($classNameOrObject);
+        $normalizedName = strtolower($className);
 
         $classEntryValue = Core::$executor->classTable->find($normalizedName);
         if ($classEntryValue === null) {
@@ -121,6 +122,7 @@ class ReflectionClass extends NativeReflectionClass
     /**
      * @inheritDoc
      */
+    #[\ReturnTypeWillChange]
     public function getName()
     {
         return StringEntry::fromCData($this->pointer->name)->getStringValue();
@@ -264,6 +266,7 @@ class ReflectionClass extends NativeReflectionClass
     /**
      * @inheritDoc
      */
+    #[\ReturnTypeWillChange]
     public function getMethod($name)
     {
         $functionEntry = $this->methodTable->find(strtolower($name));
@@ -278,6 +281,7 @@ class ReflectionClass extends NativeReflectionClass
      * @inheritDoc
      * @return ReflectionMethod[]
      */
+    #[\ReturnTypeWillChange]
     public function getMethods($filter = null)
     {
         $methods = [];
@@ -303,12 +307,12 @@ class ReflectionClass extends NativeReflectionClass
         $closureEntry->setCalledScope($this->name);
 
         // TODO: replace with ReflectionFunction instead of low-level structures
-        $rawFunction  = $closureEntry->getRawFunction();
-        $funcName     = (new StringEntry($methodName))->getRawValue();
+        $rawFunction                        = $closureEntry->getRawFunction();
+        $funcName                           = (new StringEntry($methodName))->getRawValue();
         $rawFunction->common->function_name = $funcName;
 
         // Adjust the scope of our function to our class
-        $classScopeValue = Core::$executor->classTable->find(strtolower($this->name));
+        $classScopeValue            = Core::$executor->classTable->find(strtolower($this->name));
         $rawFunction->common->scope = $classScopeValue->getRawClass();
 
         // Clean closure flag
@@ -321,11 +325,13 @@ class ReflectionClass extends NativeReflectionClass
         return $refMethod;
     }
 
+    #[\ReturnTypeWillChange]
     public function isInternal()
     {
         return ord($this->pointer->type) === Core::ZEND_INTERNAL_CLASS;
     }
 
+    #[\ReturnTypeWillChange]
     public function isUserDefined()
     {
         return ord($this->pointer->type) === Core::ZEND_USER_CLASS;
@@ -456,6 +462,7 @@ class ReflectionClass extends NativeReflectionClass
     /**
      * @inheritDoc
      */
+    #[\ReturnTypeWillChange]
     public function getParentClass(): ?ReflectionClass
     {
         if (!$this->hasParentClass()) {
@@ -594,7 +601,7 @@ class ReflectionClass extends NativeReflectionClass
         if (!$this->isUserDefined()) {
             throw new \ReflectionException('File can be configured only for user-defined class');
         }
-        $stringEntry = new StringEntry($newFileName);
+        $stringEntry                         = new StringEntry($newFileName);
         $this->pointer->info->user->filename = $stringEntry->getRawValue();
     }
 
@@ -603,6 +610,7 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @return iterable|ReflectionValue[]
      */
+    #[\ReturnTypeWillChange]
     public function getDefaultProperties(): iterable
     {
         $iterator = function () {
@@ -640,6 +648,7 @@ class ReflectionClass extends NativeReflectionClass
      * @inheritDoc
      * @return ReflectionClassConstant
      */
+    #[\ReturnTypeWillChange]
     public function getReflectionConstant($name)
     {
         $constantEntry = $this->constantsTable->find($name);
@@ -848,7 +857,7 @@ class ReflectionClass extends NativeReflectionClass
     {
         // User handlers are only allowed with std_object_handler (when create_object handler is empty)
         if ($this->isInternal()) {
-            trigger_error("Create object handler is available for user-defined classes only", E_USER_ERROR);
+            trigger_error('Create object handler is available for user-defined classes only', E_USER_ERROR);
         }
         self::allocateClassObjectHandlers($this->getName());
 
@@ -864,7 +873,7 @@ class ReflectionClass extends NativeReflectionClass
     public function setInterfaceGetsImplementedHandler(Closure $handler): void
     {
         if (!$this->isInterface()) {
-            throw new \LogicException("Interface implemented handler can be installed only for interfaces");
+            throw new \LogicException('Interface implemented handler can be installed only for interfaces');
         }
 
         $hook = new InterfaceGetsImplementedHook($handler, $this->pointer);

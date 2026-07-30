@@ -29,8 +29,7 @@ final class ProbeGenerator
         private readonly array $opcodes,
         private readonly array $layoutFields,
         private readonly array $layoutIsUnion,
-    ) {
-    }
+    ) {}
 
     public function generateProbeSource(string $supplementFile): string
     {
@@ -56,7 +55,7 @@ final class ProbeGenerator
         foreach ($this->defines as $define) {
             $lines[] = "#ifdef {$define}";
             $lines[] = "    fprintf(constants, \"    '{$define}' => %lld,\\n\", (long long)({$define}));";
-            $lines[] = "#endif";
+            $lines[] = '#endif';
         }
         foreach ($this->enumMembers as $members) {
             foreach ($members as $member) {
@@ -74,8 +73,8 @@ final class ProbeGenerator
         // Only the minor version is recorded: ABI is stable within a minor and
         // recording the patch level would make the CI drift check fail on
         // every patch release.
-        $lines[] = '    fprintf(layouts, "    \"meta\": {\"php\": \"%d.%d\", \"api\": %d, \"zts\": %d, \"debug\": %d},\n", PHP_MAJOR_VERSION, PHP_MINOR_VERSION, ZEND_MODULE_API_NO, (int)USING_ZTS, (int)ZEND_DEBUG);';
-        $lines[] = '    fputs("    \"structs\": {\n", layouts);';
+        $lines[]     = '    fprintf(layouts, "    \"meta\": {\"php\": \"%d.%d\", \"api\": %d, \"zts\": %d, \"debug\": %d},\n", PHP_MAJOR_VERSION, PHP_MINOR_VERSION, ZEND_MODULE_API_NO, (int)USING_ZTS, (int)ZEND_DEBUG);';
+        $lines[]     = '    fputs("    \"structs\": {\n", layouts);';
         $structNames = array_keys($this->layoutFields);
         $lastStruct  = end($structNames);
         foreach ($this->layoutFields as $struct => $fields) {
@@ -115,8 +114,9 @@ final class ProbeGenerator
         preg_match_all('/^#\s*define\s+(ZEND_[A-Z0-9_]+)\s+(\d+)\s*$/m', $contents, $matches, PREG_SET_ORDER);
         $opcodes = [];
         foreach ($matches as $match) {
-            // Skip non-opcode helper defines like ZEND_VM_KIND_*
-            if (str_starts_with($match[1], 'ZEND_VM_KIND')) {
+            // Skip VM metadata defines (ZEND_VM_KIND_*, ZEND_VM_SPEC, ...);
+            // only ZEND_VM_LAST_OPCODE is kept as it delimits the opcode range
+            if (str_starts_with($match[1], 'ZEND_VM_') && $match[1] !== 'ZEND_VM_LAST_OPCODE') {
                 continue;
             }
             $opcodes[$match[1]] = $match[2];

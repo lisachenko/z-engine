@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -46,7 +47,7 @@ class OpLine
      *
      * For example, the integer literal 1 or string literal 'Hello, World!' will both be of this type.
      */
-    public const IS_CONST = (1<<0);
+    public const IS_CONST = (1 << 0);
 
     /**
      * This opcode node type is used for temporary variables.
@@ -57,7 +58,7 @@ class OpLine
      *
      * For example, the return value of $a++ will be of this type.
      */
-    public const IS_TMP_VAR = (1<<1);
+    public const IS_TMP_VAR = (1 << 1);
 
     /**
      * This opcode node type is used for complex variables in PHP code.
@@ -65,7 +66,7 @@ class OpLine
      * For example, the variable $obj->a is considered to be a complex variable, however the variable $a is not
      * (it is instead an IS_CV type).
      */
-    public const IS_VAR = (1<<2);
+    public const IS_VAR = (1 << 2);
 
     /**
      * This opcode node type is used for simple variables in PHP code.
@@ -73,7 +74,7 @@ class OpLine
      * For example, the variable $a is considered to be a simple variable,
      * however the variable $obj->a is not (it is instead an IS_VAR type).
      */
-    public const IS_CV = (1<<3);
+    public const IS_CV = (1 << 3);
 
     /**
      * Execution context (if present).
@@ -212,8 +213,8 @@ class OpLine
                 'op1'    => [$op1TypeName => $this->getOp1()],
                 'op2'    => [$op2TypeName => $this->getOp2()],
                 'result' => [$resTypeName => $this->getResult()],
-                'line'   => $this->getLine()
-            ]
+                'line'   => $this->getLine(),
+            ],
         ];
     }
 
@@ -245,7 +246,7 @@ class OpLine
                 }
                 break;
             default:
-               throw new \InvalidArgumentException('Received invalid opcode type: ' . $opType);
+                throw new \InvalidArgumentException('Received invalid opcode type: ' . $opType);
         }
         $value = isset($pointer) ? ReflectionValue::fromValueEntry($pointer) : null;
 
@@ -262,8 +263,8 @@ class OpLine
     private static function getRuntimeConstant(CData $opline, CData $node): CData
     {
         // ((zval*)(((char*)(opline)) + (int32_t)(node).constant))
-        $pointer  = Core::cast('char *', $opline) + $node->constant;
-        $value    = Core::cast('zval *', $pointer);
+        $pointer = Core::cast('char *', $opline) + $node->constant;
+        $value   = Core::cast('zval *', $pointer);
 
         return $value;
     }

@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -13,12 +14,12 @@ declare(strict_types=1);
 namespace ZEngine\System;
 
 use FFI\CData;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\OpLine;
-use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\Attributes\Group;
 
 class ExecutionDataTest extends TestCase
 {
@@ -104,7 +105,7 @@ class ExecutionDataTest extends TestCase
         return [
             [1],
             ['a', false],
-            [null, new \stdClass, 42.0]
+            [null, new \stdClass(), 42.0],
         ];
     }
 
@@ -124,7 +125,7 @@ class ExecutionDataTest extends TestCase
 
         // Just for fun: we can do crazy things like changing $this in current stack frame
         $self = $this; // Save current $this to call method on it later
-        $thisValue->setNativeValue(new \stdClass);
+        $thisValue->setNativeValue(new \stdClass());
         $self->assertInstanceOf(\stdClass::class, $this);
     }
 

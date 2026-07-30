@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -11,7 +12,6 @@
 declare(strict_types=1);
 
 namespace ZEngine\AbstractSyntaxTree;
-
 
 /**
  * General AST node interface

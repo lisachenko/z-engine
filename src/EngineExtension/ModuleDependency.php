@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -11,7 +12,6 @@
 declare(strict_types=1);
 
 namespace ZEngine\EngineExtension;
-
 
 use FFI\CData;
 
@@ -40,7 +40,7 @@ class ModuleDependency
         string $name,
         int $relationType,
         string $version,
-        int $dependencyType = self::MODULE_REQUIRED
+        int $dependencyType = self::MODULE_REQUIRED,
     ) {
 
         $this->name           = $name;

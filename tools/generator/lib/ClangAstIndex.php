@@ -33,9 +33,7 @@ final class ClangAstIndex
     /** @var array<string, DeclNode> variable name => declaration node */
     private array $variables = [];
 
-    private function __construct(private readonly string $source)
-    {
-    }
+    private function __construct(private readonly string $source) {}
 
     public static function fromFiles(string $preprocessedFile, string $astJsonFile): self
     {

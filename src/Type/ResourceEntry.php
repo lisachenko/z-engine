@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -13,7 +14,6 @@ declare(strict_types=1);
 namespace ZEngine\Type;
 
 use FFI\CData;
-use ZEngine\Core;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionValue;
 
@@ -50,7 +50,7 @@ class ResourceEntry implements ReferenceCountedInterface
     public static function fromCData(CData $pointer): ResourceEntry
     {
         /** @var ResourceEntry $resourceEntry */
-        $resourceEntry = (new ReflectionClass(self::class))->newInstanceWithoutConstructor();
+        $resourceEntry          = (new ReflectionClass(self::class))->newInstanceWithoutConstructor();
         $resourceEntry->pointer = $pointer;
 
         return $resourceEntry;
@@ -109,7 +109,7 @@ class ResourceEntry implements ReferenceCountedInterface
             'type'     => $this->getType(),
             'handle'   => $this->getHandle(),
             'refcount' => $this->getReferenceCount(),
-            'data'     => $this->getRawData()
+            'data'     => $this->getRawData(),
         ];
 
         return $info;

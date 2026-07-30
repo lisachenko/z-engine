@@ -1,0 +1,33 @@
+includes:
+    - phpstan-baseline.neon
+
+parameters:
+    level: max
+    phpVersion: 80400
+    paths:
+        - src
+        - tests
+        - tools/generator/lib
+        - tools/generator/emit.php
+        - tools/generator/generate.php
+        - tools/generator/validate.php
+    # FFI\CData is dynamically typed - the engine structs it wraps are only
+    # known at runtime from the loaded header, so field/method access on CData
+    # cannot be statically resolved. Scope the unavoidable ignores tightly to
+    # CData/FFI so all non-FFI code is still held to level max.
+    ignoreErrors:
+        -
+            identifier: property.notFound
+            message: '#Access to an undefined property FFI\\CData::#'
+        -
+            identifier: method.nonObject
+            message: '#Cannot call method \w+\(\) on FFI\\CData#'
+        -
+            identifier: property.nonObject
+            message: '#Cannot access property \S+ on FFI\\CData#'
+        # Core::call()/Core::new() proxy arbitrary engine functions via __call
+        -
+            identifier: method.notFound
+            message: '#Call to an undefined method FFI::#'
+    reportUnmatchedIgnoredErrors: false
+    treatPhpDocTypesAsCertain: false

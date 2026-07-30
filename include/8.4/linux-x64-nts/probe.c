@@ -591,9 +591,6 @@ int main(void) {
     fprintf(constants, "    'ZEND_AST_ENUM_CASE' => %lld,\n", (long long)(ZEND_AST_ENUM_CASE));
     fprintf(constants, "    'ZEND_AST_PROP_ELEM' => %lld,\n", (long long)(ZEND_AST_PROP_ELEM));
     fprintf(constants, "    'ZEND_AST_PARAM' => %lld,\n", (long long)(ZEND_AST_PARAM));
-    fprintf(constants, "    'ZEND_VM_SPEC' => 1,\n");
-    fprintf(constants, "    'ZEND_VM_LINES' => 0,\n");
-    fprintf(constants, "    'ZEND_VM_HYBRID_JIT_RED_ZONE_SIZE' => 48,\n");
     fprintf(constants, "    'ZEND_NOP' => 0,\n");
     fprintf(constants, "    'ZEND_ADD' => 1,\n");
     fprintf(constants, "    'ZEND_SUB' => 2,\n");

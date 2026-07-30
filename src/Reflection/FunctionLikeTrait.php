@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -20,9 +21,9 @@ trait FunctionLikeTrait
 {
     private CData $pointer;
 
-     /**
-     * Declares method as deprecated/non-deprecated
-     */
+    /**
+    * Declares method as deprecated/non-deprecated
+    */
     public function setDeprecated(bool $isDeprecated = true): void
     {
         if ($isDeprecated) {
@@ -114,7 +115,7 @@ trait FunctionLikeTrait
         $totalOpcodes = $this->pointer->op_array->last;
         while ($opcodeIndex < $totalOpcodes) {
             $opCode = new OpLine(
-                Core::addr($this->pointer->op_array->opcodes[$opcodeIndex++])
+                Core::addr($this->pointer->op_array->opcodes[$opcodeIndex++]),
             );
             $opCodes[] = $opCode;
         }
@@ -224,7 +225,7 @@ trait FunctionLikeTrait
             $signature .= ')';
             if ($reflectionFunction->hasReturnType()) {
                 $signature .= ': ';
-                $type       = $reflectionFunction->getReturnType();
+                $type = $reflectionFunction->getReturnType();
                 if ($type->allowsNull()) {
                     $signature .= '?';
                 }
@@ -236,7 +237,7 @@ trait FunctionLikeTrait
         if ($signatures[0] !== $signatures[1]) {
             throw new \ReflectionException(
                 'Given function signature: "' . $signatures[1] . '"' .
-                ' should be compatible with original "' . $signatures[0] . '"'
+                ' should be compatible with original "' . $signatures[0] . '"',
             );
         }
     }

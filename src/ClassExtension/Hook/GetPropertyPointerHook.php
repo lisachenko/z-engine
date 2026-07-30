@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -12,9 +13,7 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension\Hook;
 
-use FFI\CData;
 use ZEngine\Core;
-use ZEngine\Reflection\ReflectionValue;
 
 /**
  * Receiving hook for indirect property access (by reference or via $this->field++)

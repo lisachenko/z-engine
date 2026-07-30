@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -12,9 +13,9 @@ declare(strict_types=1);
 
 namespace ZEngine\Type;
 
-use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\Attributes\Depends;
 use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\TestCase;
 
 class ObjectEntryTest extends TestCase
 {

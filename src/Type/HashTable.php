@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -142,7 +143,7 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
             $this->pointer,
             Core::addr($stringEntry->getRawValue()),
             $value->getRawValue(),
-            self::HASH_ADD_NEW
+            self::HASH_ADD_NEW,
         );
         if ($result === Core::FAILURE) {
             throw new \RuntimeException("Can not add an item with key {$key}");

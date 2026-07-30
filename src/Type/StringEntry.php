@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -51,7 +52,7 @@ class StringEntry implements ReferenceCountedInterface
     public static function fromCData(CData $stringPointer): StringEntry
     {
         /** @var StringEntry $stringEntry */
-        $stringEntry = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $stringEntry          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
         $stringEntry->pointer = $stringPointer;
 
         return $stringEntry;

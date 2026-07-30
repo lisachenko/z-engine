@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -21,7 +22,7 @@ use ZEngine\Core;
  */
 final class OpCode
 {
-public const NOP                            = 0;
+    public const NOP                            = 0;
     public const ADD                            = 1;
     public const SUB                            = 2;
     public const MUL                            = 3;

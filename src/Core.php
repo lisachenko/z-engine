@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -29,7 +30,6 @@ use ZEngine\Type\HashTable;
  */
 class Core
 {
-
     /**
      * Class, method, property and constant flags (ZEND_ACC_*) for PHP 8.4.
      *
@@ -44,14 +44,14 @@ class Core
     public const ZEND_ACC_PRIVATE   = 0x4;
 
     /* Common flags */
-    public const ZEND_ACC_CHANGED    = 0x8;
-    public const ZEND_ACC_STATIC     = 0x10;
-    public const ZEND_ACC_FINAL      = 0x20;
-    public const ZEND_ACC_ABSTRACT   = 0x40;
-    public const ZEND_ACC_IMMUTABLE  = 0x80;
+    public const ZEND_ACC_CHANGED        = 0x8;
+    public const ZEND_ACC_STATIC         = 0x10;
+    public const ZEND_ACC_FINAL          = 0x20;
+    public const ZEND_ACC_ABSTRACT       = 0x40;
+    public const ZEND_ACC_IMMUTABLE      = 0x80;
     public const ZEND_ACC_HAS_TYPE_HINTS = 0x100;
-    public const ZEND_ACC_TOP_LEVEL  = 0x200;
-    public const ZEND_ACC_PRELOADED  = 0x400;
+    public const ZEND_ACC_TOP_LEVEL      = 0x200;
+    public const ZEND_ACC_PRELOADED      = 0x400;
 
     /* Class flags */
     public const ZEND_ACC_INTERFACE                = 0x1;
@@ -101,9 +101,9 @@ class Core
     /**
      * Type of zend_function.type
      */
-    public const ZEND_INTERNAL_FUNCTION =   1;
-    public const ZEND_USER_FUNCTION =       2;
-    public const ZEND_EVAL_CODE =           4;
+    public const ZEND_INTERNAL_FUNCTION = 1;
+    public const ZEND_USER_FUNCTION     = 2;
+    public const ZEND_EVAL_CODE         = 4;
 
     public const ZEND_INTERNAL_CLASS = 1;
     public const ZEND_USER_CLASS     = 2;
@@ -224,7 +224,7 @@ class Core
                 'would corrupt memory and crash PHP. Install the z-engine release matching your PHP minor ' .
                 'version (e.g. the "%1$s" branch for PHP %1$s, "8.0" for legacy PHP 8.0).',
                 $supported,
-                PHP_VERSION
+                PHP_VERSION,
             ));
         }
 
@@ -236,7 +236,7 @@ class Core
                 'definitions for a new platform can be generated with `composer gen-headers`.',
                 self::platformKey(),
                 $header,
-                implode(', ', self::availablePlatforms())
+                implode(', ', self::availablePlatforms()),
             ));
         }
     }
@@ -254,11 +254,11 @@ class Core
             PHP_MINOR_VERSION,
             strtolower(PHP_OS_FAMILY),
             match ($arch) {
-                'x86_64', 'amd64' => 'x64',
+                'x86_64', 'amd64'  => 'x64',
                 'aarch64', 'arm64' => 'arm64',
-                default => $arch,
+                default            => $arch,
             },
-            ZEND_THREAD_SAFE ? 'zts' : 'nts'
+            ZEND_THREAD_SAFE ? 'zts' : 'nts',
         );
     }
 
@@ -317,7 +317,7 @@ class Core
         if ($mismatches !== []) {
             throw new RuntimeException(
                 "Engine structure layouts do not match the generated ground truth - aborting before memory corruption:\n"
-                . implode("\n", $mismatches)
+                . implode("\n", $mismatches),
             );
         }
     }
@@ -437,8 +437,8 @@ class Core
      */
     public static function getAlignedSize(int $size): int
     {
-        $mask = ~ (self::MM_ALIGNMENT -1);
-        $size = (($size + self::MM_ALIGNMENT -1) & $mask);
+        $mask = ~ (self::MM_ALIGNMENT - 1);
+        $size = (($size + self::MM_ALIGNMENT - 1) & $mask);
 
         return $size;
     }
@@ -462,7 +462,7 @@ class Core
         self::$engineConstants ??= require self::resolveArtifact('constants.php');
         if (!array_key_exists($name, self::$engineConstants)) {
             throw new \InvalidArgumentException(
-                "Unknown engine constant {$name}: it is not exported by tools/generator/symbols.php"
+                "Unknown engine constant {$name}: it is not exported by tools/generator/symbols.php",
             );
         }
 

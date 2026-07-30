@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -13,11 +14,11 @@ declare(strict_types=1);
 namespace ZEngine\Reflection;
 
 use FFI\CData;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ZEngine\Core;
 use ZEngine\Type\ObjectEntry;
 use ZEngine\Type\StringEntry;
-use PHPUnit\Framework\Attributes\DataProvider;
 
 class ReflectionValueTest extends TestCase
 {
@@ -48,7 +49,7 @@ class ReflectionValueTest extends TestCase
             [1.0],
             ['Test'],
             [new \stdClass()],
-            [[1, 2, 3]]
+            [[1, 2, 3]],
         ];
     }
 
@@ -62,7 +63,7 @@ class ReflectionValueTest extends TestCase
         $this->assertSame(
             $expectedType,
             $argType,
-            "Expect type to be ". $expectedTypeName . ', but ' . $argTypeName . ' given.'
+            'Expect type to be ' . $expectedTypeName . ', but ' . $argTypeName . ' given.',
         );
     }
 

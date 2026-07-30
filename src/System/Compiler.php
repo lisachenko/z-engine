@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -188,7 +189,7 @@ class Compiler
         if ($result === Core::SUCCESS) {
             $this->pointer->ast       = null;
             $this->pointer->ast_arena = $this->createArena(1024 * 32);
-            $result = Core::call('zendparse');
+            $result                   = Core::call('zendparse');
             if ($result !== Core::SUCCESS) {
                 Core::call('zend_ast_destroy', $this->pointer->ast);
                 $this->pointer->ast = null;

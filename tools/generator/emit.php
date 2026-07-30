@@ -25,8 +25,6 @@ declare(strict_types=1);
 
 namespace ZEngine\Generator;
 
-use RuntimeException;
-
 require __DIR__ . '/lib/ClangAstIndex.php';
 require __DIR__ . '/lib/HeaderEmitter.php';
 require __DIR__ . '/lib/ProbeGenerator.php';
@@ -45,8 +43,8 @@ function fail(string $message): void
 
 function run(string $command): string
 {
-    $output    = [];
-    $exitCode  = 0;
+    $output   = [];
+    $exitCode = 0;
     exec($command . ' 2>&1', $output, $exitCode);
     $text = implode("\n", $output);
     if ($exitCode !== 0) {
@@ -85,18 +83,18 @@ if (!in_array($only, ['', 'probe', 'header'], true)) {
 $emitHeader = $only !== 'probe';
 $runProbe   = $only !== 'header';
 
-$minor       = PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
-$os          = strtolower(PHP_OS_FAMILY);
-$machine     = php_uname('m');
-$arch        = match ($machine) {
-    'x86_64', 'amd64' => 'x64',
+$minor   = PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
+$os      = strtolower(PHP_OS_FAMILY);
+$machine = php_uname('m');
+$arch    = match ($machine) {
+    'x86_64', 'amd64'  => 'x64',
     'aarch64', 'arm64' => 'arm64',
-    default => $machine,
+    default            => $machine,
 };
 $ts          = ZEND_THREAD_SAFE ? 'zts' : 'nts';
 $platformKey = "{$minor}/{$os}-{$arch}-{$ts}";
 
-$out      = $options['out'] ?? (dirname(__DIR__, 2) . '/include/' . $platformKey);
+$out      = $options['out']       ?? (dirname(__DIR__, 2) . '/include/' . $platformKey);
 $buildDir = $options['build-dir'] ?? (sys_get_temp_dir() . '/z-engine-generator-' . str_replace('/', '-', $platformKey));
 assert(is_string($out) && is_string($buildDir));
 foreach ([$out, $buildDir] as $directory) {
@@ -105,7 +103,7 @@ foreach ([$out, $buildDir] as $directory) {
     }
 }
 
-echo "[generator] Target: PHP " . PHP_VERSION . " ({$platformKey}), debug=" . (PHP_DEBUG ? 'yes' : 'no') . "\n";
+echo '[generator] Target: PHP ' . PHP_VERSION . " ({$platformKey}), debug=" . (PHP_DEBUG ? 'yes' : 'no') . "\n";
 
 /** @var array{types: list<string>, functions: list<string>, variables: list<string>, defines: list<string>, enums: list<string>, opcode_header: string, layout_structs: list<string>, opaque?: list<string>} $manifest */
 $manifest = require __DIR__ . '/symbols.php';
@@ -188,7 +186,7 @@ if ($emitHeader) {
     }
     $probe = new ProbeGenerator($manifest['defines'], $enumMembers, $opcodes, $layoutFields, $layoutIsUnion);
     file_put_contents($buildDir . '/probe.c', $probe->generateProbeSource($buildDir . '/supplement.h'));
-    echo "[generator] Emitted engine.h (" . strlen($header) . " bytes) and probe.c\n";
+    echo '[generator] Emitted engine.h (' . strlen($header) . " bytes) and probe.c\n";
 }
 
 // --- 4. Compile and run the probe: constants.php + layouts.json ------------
@@ -205,7 +203,7 @@ if ($runProbe) {
     $layouts = json_decode($layoutsRaw, true, 16, JSON_THROW_ON_ERROR);
     file_put_contents(
         $buildDir . '/layouts.json',
-        json_encode($layouts, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n"
+        json_encode($layouts, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n",
     );
     echo "[generator] Probe extracted constants and layouts\n";
 } elseif (is_file($out . '/layouts.json')) {
@@ -221,7 +219,7 @@ if ($emitHeader) {
         echo "[generator] WARNING: ext-ffi not available, skipping FFI validation\n";
     } else {
         $validation = run(
-            PHP_BINARY . ' -d ffi.enable=1 ' . escapeshellarg(__DIR__ . '/validate.php') . ' ' . escapeshellarg($buildDir)
+            PHP_BINARY . ' -d ffi.enable=1 ' . escapeshellarg(__DIR__ . '/validate.php') . ' ' . escapeshellarg($buildDir),
         );
         echo $validation . "\n";
     }
@@ -242,4 +240,4 @@ foreach ($artifacts as $artifact) {
         fail("Cannot copy {$artifact} to {$out}");
     }
 }
-echo "[generator] Published " . implode(', ', $artifacts) . " to {$out}\n";
+echo '[generator] Published ' . implode(', ', $artifacts) . " to {$out}\n";

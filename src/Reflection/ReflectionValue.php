@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -91,11 +92,11 @@ class ReflectionValue implements ReferenceCountedInterface
      * Fake types used only for type hinting.
      * These are allowed to overlap with the types below.
      */
-    public const IS_CALLABLE       = 12;
-    public const IS_ITERABLE       = 13;
-    public const IS_VOID           = 14;
-    public const IS_STATIC         = 15;
-    public const IS_MIXED          = 16;
+    public const IS_CALLABLE = 12;
+    public const IS_ITERABLE = 13;
+    public const IS_VOID     = 14;
+    public const IS_STATIC   = 15;
+    public const IS_MIXED    = 16;
 
     /* internal types */
     public const IS_INDIRECT  = 12;
@@ -144,7 +145,7 @@ class ReflectionValue implements ReferenceCountedInterface
     public static function fromValueEntry(CData $valueEntry): ReflectionValue
     {
         /** @var ReflectionValue $reflectionValue */
-        $reflectionValue = (new NativeReflectionClass(self::class))->newInstanceWithoutConstructor();
+        $reflectionValue          = (new NativeReflectionClass(self::class))->newInstanceWithoutConstructor();
         $reflectionValue->pointer = $valueEntry;
 
         return $reflectionValue;
@@ -358,7 +359,7 @@ class ReflectionValue implements ReferenceCountedInterface
 
         // Content of ZVAL_COPY_VALUE_EX
         if (PHP_INT_SIZE === 4) {                       // if SIZEOF_SIZE_T == 4
-            $w2 = $this->pointer->value->ww->w2;        // uint32_t _w2 = v->value.ww.w2;
+            $w2                      = $this->pointer->value->ww->w2;        // uint32_t _w2 = v->value.ww.w2;
             $dstZval->value->counted = $gc;             // Z_COUNTED_P(z) = gc;
             $dstZval->value->ww->w2  = $w2;             // z->value.ww.w2 = _w2;
             $dstZval->u1->type_info  = $typeInfo;       // Z_TYPE_INFO_P(z) = t;
@@ -404,7 +405,7 @@ class ReflectionValue implements ReferenceCountedInterface
 
         return [
             'type'  => self::name($this->pointer->u1->v->type),
-            'value' => $nativeValue
+            'value' => $nativeValue,
         ];
     }
 

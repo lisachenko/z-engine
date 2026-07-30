@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -23,7 +24,6 @@ use ZEngine\Type\ObjectEntry;
  */
 class GetPropertiesForHook extends AbstractHook
 {
-
     protected const HOOK_FIELD = 'get_properties_for';
 
     /**

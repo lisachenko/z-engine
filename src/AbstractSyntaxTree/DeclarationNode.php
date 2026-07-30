@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -42,7 +43,7 @@ class DeclarationNode extends Node
         int $endLine,
         string $docComment,
         string $name,
-        ?NodeInterface ...$childrenNodes
+        ?NodeInterface ...$childrenNodes,
     ) {
         if (!NodeKind::isSpecial($kind)) {
             $kindName = NodeKind::name($kind);
@@ -61,8 +62,14 @@ class DeclarationNode extends Node
         //    zend_string *name, zend_ast *child0, zend_ast *child1, zend_ast *child2, zend_ast *child3
         //);
         $ast = Core::call(
-            'zend_ast_create_decl', $kind, $flags, $startLine, $endLine, $docComment,
-            $name, ...$childrenNodes
+            'zend_ast_create_decl',
+            $kind,
+            $flags,
+            $startLine,
+            $endLine,
+            $docComment,
+            $name,
+            ...$childrenNodes,
         );
 
         $declaration = Core::cast('zend_ast_decl *', $ast);
@@ -194,7 +201,7 @@ class DeclarationNode extends Node
 
         $flags = $this->getFlags();
         if ($flags !== 0) {
-            $line .= sprintf(" flags(%04x)", $flags);
+            $line .= sprintf(' flags(%04x)', $flags);
         }
 
         return $line;

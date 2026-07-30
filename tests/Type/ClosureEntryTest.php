@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -13,8 +14,8 @@ declare(strict_types=1);
 namespace ZEngine\Type;
 
 use Closure;
-use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\TestCase;
 
 class ClosureEntryTest extends TestCase
 {
@@ -27,7 +28,7 @@ class ClosureEntryTest extends TestCase
 
             return [
                 'class' => $self ? get_class($self) : null,
-                'scope' => get_called_class()
+                'scope' => get_called_class(),
             ];
         };
     }

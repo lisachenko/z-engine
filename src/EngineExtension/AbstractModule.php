@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -90,8 +91,9 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
         // We don't need persistent memory here, as PHP copies structures into persistent memory itself
         $module     = Core::new('zend_module_entry');
         $moduleName = $this->moduleName;
-        $nameLength = strlen($moduleName) + 1; /* extra zero-byte */;
-        $rawName    = Core::new("char[$nameLength]", false, static::targetPersistent());
+        $nameLength = strlen($moduleName) + 1;
+        /* extra zero-byte */;
+        $rawName = Core::new("char[$nameLength]", false, static::targetPersistent());
         Core::memcpy($rawName, $moduleName, $nameLength - 1);
         $rawName[$nameLength - 1] = "\0";
 
@@ -99,8 +101,8 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
         $module->type       = static::targetPersistent() ? self::MODULE_PERSISTENT : self::MODULE_TEMPORARY;
         $module->name       = $rawName;
         $module->zend_api   = static::targetApiVersion();
-        $module->zend_debug = (int)static::targetDebug();
-        $module->zts        = (int)static::targetThreadSafe();
+        $module->zend_debug = (int) static::targetDebug();
+        $module->zts        = (int) static::targetThreadSafe();
 
         $globalType = static::globalType();
         if ($globalType !== null) {

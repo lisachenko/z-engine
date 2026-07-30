@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -41,8 +42,8 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
         if ($classEntryValue === null) {
             throw new \ReflectionException("Class {$className} should be in the engine.");
         }
-        $classEntry      = $classEntryValue->getRawClass();
-        $constantsTable  = new HashTable(Core::addr($classEntry->constants_table));
+        $classEntry     = $classEntryValue->getRawClass();
+        $constantsTable = new HashTable(Core::addr($classEntry->constants_table));
 
         $constantEntry = $constantsTable->find($constantName);
         if ($constantEntry === null) {
@@ -68,7 +69,7 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
             $reflectionConstant,
             static::class,
             $className->getStringValue(),
-            $constantName
+            $constantName,
         );
         $reflectionConstant->pointer = $constantEntry;
 
@@ -141,8 +142,8 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
     public function __debugInfo(): array
     {
         return [
-            'name'   => $this->getName(),
-            'class'  => $this->getDeclaringClass()->getName(),
+            'name'  => $this->getName(),
+            'class' => $this->getDeclaringClass()->getName(),
         ];
     }
 }

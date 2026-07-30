@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -13,11 +14,11 @@ declare(strict_types=1);
 namespace ZEngine\Reflection;
 
 use Error;
+use PHPUnit\Framework\Attributes\Depends;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Error\Deprecated;
 use PHPUnit\Framework\TestCase;
 use ZEngine\Stub\TestClass;
-use PHPUnit\Framework\Attributes\Depends;
-use PHPUnit\Framework\Attributes\Group;
 
 class ReflectionMethodTest extends TestCase
 {

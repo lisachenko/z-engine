@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -51,14 +52,14 @@ final class EngineLayoutTest extends TestCase
         $this->assertSame(
             $layout['size'],
             $type->getSize(),
-            "sizeof({$struct}) reported by FFI differs from the C compiler ground truth"
+            "sizeof({$struct}) reported by FFI differs from the C compiler ground truth",
         );
 
         foreach ($layout['fields'] as $field => $expectedOffset) {
             $this->assertSame(
                 $expectedOffset,
                 $type->getStructFieldOffset($field),
-                "offsetof({$struct}, {$field}) reported by FFI differs from the C compiler ground truth"
+                "offsetof({$struct}, {$field}) reported by FFI differs from the C compiler ground truth",
             );
         }
     }
@@ -84,11 +85,11 @@ final class EngineLayoutTest extends TestCase
             PHP_MINOR_VERSION,
             strtolower(PHP_OS_FAMILY),
             match ($arch) {
-                'x86_64', 'amd64' => 'x64',
+                'x86_64', 'amd64'  => 'x64',
                 'aarch64', 'arm64' => 'arm64',
-                default => $arch,
+                default            => $arch,
             },
-            ZEND_THREAD_SAFE ? 'zts' : 'nts'
+            ZEND_THREAD_SAFE ? 'zts' : 'nts',
         );
         $file = __DIR__ . '/../include/' . $platformKey . '/layouts.json';
 

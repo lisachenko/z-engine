@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -46,7 +47,7 @@ class ClosureEntry
     public static function fromCData(CData $pointer): ClosureEntry
     {
         /** @var ClosureEntry $closureEntry */
-        $closureEntry = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $closureEntry          = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
         $closureEntry->pointer = $pointer;
 
         return $closureEntry;

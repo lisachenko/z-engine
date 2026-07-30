@@ -17,7 +17,7 @@ if (!is_dir($buildDir)) {
     exit(1);
 }
 
-$header = file_get_contents($buildDir . '/engine.h');
+$header     = file_get_contents($buildDir . '/engine.h');
 $layoutsRaw = file_get_contents($buildDir . '/layouts.json');
 if ($header === false || $layoutsRaw === false) {
     fwrite(STDERR, "validate.php: missing engine.h or layouts.json\n");
@@ -32,7 +32,7 @@ if ($probedMinor !== $runningMinor) {
     fwrite(STDERR, sprintf(
         "validate.php: layouts were probed on PHP %s but validation runs on PHP %s (minor mismatch)\n",
         $layouts['meta']['php'],
-        PHP_VERSION
+        PHP_VERSION,
     ));
     exit(1);
 }

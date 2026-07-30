@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -71,7 +72,7 @@ class Executor
      */
     public function setFakeScope(?CData $newScope): ?CData
     {
-        $oldScope = $this->pointer->fake_scope;
+        $oldScope                  = $this->pointer->fake_scope;
         $this->pointer->fake_scope = $newScope;
 
         return $oldScope;

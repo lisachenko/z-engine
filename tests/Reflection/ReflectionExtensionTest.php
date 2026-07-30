@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -43,7 +44,7 @@ class ReflectionExtensionTest extends TestCase
     public function testReturnsModuleNumber(): void
     {
         // each module has it's own unique module number greater than zero
-        $this->assertGreaterThan(0,$this->refExtension->getModuleNumber());
+        $this->assertGreaterThan(0, $this->refExtension->getModuleNumber());
     }
 
     public function testGetGlobals(): void

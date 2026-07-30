@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -54,7 +55,7 @@ class ReflectionFunction extends NativeReflectionFunction
             Core::callParentConstructor(
                 $reflectionFunction,
                 static::class,
-                $functionName->getStringValue()
+                $functionName->getStringValue(),
             );
         }
         $reflectionFunction->pointer = $functionEntry;

@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -12,12 +13,15 @@ declare(strict_types=1);
 
 namespace ZEngine\AbstractSyntaxTree;
 
+use function count;
+
 use FFI\CData;
 use ReflectionClass;
+
+use function strpos;
+
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionMethod;
-use function count;
-use function strpos;
 
 /**
  * General node class that can contain several children nodes
@@ -58,7 +62,7 @@ class Node implements NodeInterface
                 $arguments[$index] = Core::cast('zend_ast *', $node->node);
             }
         }
-        $node = Core::call($funcName, $kind, ...$arguments);
+        $node       = Core::call($funcName, $kind, ...$arguments);
         $this->node = $node;
         $this->setAttributes($attributes);
     }
@@ -182,7 +186,7 @@ class Node implements NodeInterface
         if ($index >= $totalChildren) {
             throw new \OutOfBoundsException('Child index is out of range, there are ' . $totalChildren . ' children.');
         }
-        $castChildren = Core::cast('zend_ast **', $this->node->child);
+        $castChildren         = Core::cast('zend_ast **', $this->node->child);
         $castChildren[$index] = Core::cast('zend_ast *', $node->node);
     }
 
@@ -215,7 +219,7 @@ class Node implements NodeInterface
         foreach ($methods as $method) {
             $methodName = $method->getName();
             if ((strpos($methodName, 'get') === 0) && $method->getNumberOfRequiredParameters() === 0) {
-                $name = lcfirst(substr($methodName, 3));
+                $name          = lcfirst(substr($methodName, 3));
                 $result[$name] = $this->$methodName();
             }
         }
@@ -252,7 +256,7 @@ class Node implements NodeInterface
 
         $attributes = $this->getAttributes();
         if ($attributes !== 0) {
-            $line .= sprintf(" attrs(%04x)", $attributes);
+            $line .= sprintf(' attrs(%04x)', $attributes);
         }
 
         return $line;

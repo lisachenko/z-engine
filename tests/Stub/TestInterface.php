@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -12,7 +13,4 @@ declare(strict_types=1);
 
 namespace ZEngine\Stub;
 
-interface TestInterface
-{
-
-}
+interface TestInterface {}

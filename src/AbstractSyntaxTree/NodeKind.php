@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -163,7 +164,7 @@ class NodeKind
      */
     public static function isSpecial(int $astKind): bool
     {
-        return (bool)(($astKind >> self::AST_SPECIAL_SHIFT) & 1);
+        return (bool) (($astKind >> self::AST_SPECIAL_SHIFT) & 1);
     }
 
     /**
@@ -175,7 +176,7 @@ class NodeKind
      */
     public static function isList(int $astKind): bool
     {
-        return (bool)(($astKind >> self::AST_IS_LIST_SHIFT) & 1);
+        return (bool) (($astKind >> self::AST_IS_LIST_SHIFT) & 1);
     }
 
     /**

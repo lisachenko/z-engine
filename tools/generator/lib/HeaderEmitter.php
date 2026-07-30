@@ -51,8 +51,7 @@ final class HeaderEmitter
         private readonly array $functions,
         private readonly array $variables,
         private readonly array $opaque = [],
-    ) {
-    }
+    ) {}
 
     public function emit(): string
     {
@@ -93,7 +92,7 @@ final class HeaderEmitter
                 ];
             }
         }
-        usort($declarations, static fn (array $a, array $b): int => $a['offset'] <=> $b['offset']);
+        usort($declarations, static fn(array $a, array $b): int => $a['offset'] <=> $b['offset']);
 
         // Drop declarations textually contained in another one (e.g. the
         // record body of "typedef union _zend_value {...} zend_value;" must
@@ -112,7 +111,7 @@ final class HeaderEmitter
             $kept[] = $declaration;
         }
 
-        $body = implode("\n", array_map(static fn (array $declaration): string => $declaration['text'], $kept));
+        $body = implode("\n", array_map(static fn(array $declaration): string => $declaration['text'], $kept));
 
         return self::cleanForFfi($body)
             . "\n\n/* Imported functions */\n" . implode("\n", $functionDeclarations)
@@ -136,7 +135,7 @@ final class HeaderEmitter
             // underlying record is declared as an incomplete forward type.
             if ($this->index->hasTypedef($name)) {
                 $this->neededTypedefs[$name] = true;
-                $tag = $this->index->typedefUnderlyingTag($name);
+                $tag                         = $this->index->typedefUnderlyingTag($name);
                 if ($tag !== null) {
                     $this->neededRecords[$tag] = true;
                 }
@@ -150,14 +149,14 @@ final class HeaderEmitter
         $found = false;
         if ($this->index->hasTypedef($name)) {
             $this->neededTypedefs[$name] = true;
-            $typedef = $this->index->typedef($name);
+            $typedef                     = $this->index->typedef($name);
             assert($typedef !== null);
             $this->requireIdentifiersOf($this->index->sliceText($typedef));
             $found = true;
         }
         if ($this->index->hasRecord($name)) {
             $this->neededRecords[$name] = true;
-            $full = $this->index->fullRecordDefinition($name);
+            $full                       = $this->index->fullRecordDefinition($name);
             if ($full !== null) {
                 $this->requireIdentifiersOf($this->index->sliceText($full));
             }
@@ -165,7 +164,7 @@ final class HeaderEmitter
         }
         if ($this->index->hasEnum($name)) {
             $this->neededEnums[$name] = true;
-            $found = true;
+            $found                    = true;
         }
         if (!$found && in_array($name, $this->types, true)) {
             throw new RuntimeException("Manifest type '{$name}' was not found in the engine headers");
@@ -220,9 +219,9 @@ final class HeaderEmitter
             || ($this->typedefNameOf($tag) !== null && in_array($this->typedefNameOf($tag), $this->opaque, true));
 
         if ($all !== []) {
-            $first    = $all[0];
-            $keyword  = ($first['tagUsed'] ?? 'struct') === 'union' ? 'union' : 'struct';
-            $position = $this->index->startOffset($first);
+            $first          = $all[0];
+            $keyword        = ($first['tagUsed'] ?? 'struct') === 'union' ? 'union' : 'struct';
+            $position       = $this->index->startOffset($first);
             $declarations[] = [
                 'offset' => $position,
                 'end'    => $position,
