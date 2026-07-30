@@ -1,0 +1,53 @@
+name: Bug report
+description: Report a crash or incorrect behaviour
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        z-engine reads and writes raw Zend Engine memory, so the exact build
+        matters. Please run `php -v` and paste the full first line.
+  - type: input
+    id: php-version
+    attributes:
+      label: PHP version (full `php -v` first line)
+      placeholder: 'PHP 8.4.3 (cli) (built: ...) (NTS)'
+    validations:
+      required: true
+  - type: dropdown
+    id: thread-safety
+    attributes:
+      label: Thread safety
+      options:
+        - NTS (non-thread-safe)
+        - ZTS (thread-safe)
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS and architecture
+      placeholder: 'Linux x86_64'
+    validations:
+      required: true
+  - type: input
+    id: z-engine-version
+    attributes:
+      label: z-engine version / branch
+      placeholder: 'dev-master, or the 8.4 branch'
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead (include any segfault output)?
+    validations:
+      required: true
+  - type: textarea
+    id: reproducer
+    attributes:
+      label: Minimal reproducer
+      render: php
+    validations:
+      required: false

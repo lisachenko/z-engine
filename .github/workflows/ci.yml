@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - '[0-9].[0-9]'
+  pull_request:
+
+# This branch targets PHP 8.4 only - engine structures are version-specific.
+env:
+  PHP_MINOR: '8.4'
+
+jobs:
+  tests:
+    name: Tests (release, NTS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_MINOR }}
+          extensions: ffi
+          ini-values: ffi.enable=1, zend.assertions=1, opcache.jit=off
+          coverage: none
+
+      - name: Install dependencies
+        uses: ramsey/composer-install@v3
+
+      - name: Run test suite
+        run: composer test
+
+  static-analysis:
+    name: PHPStan (level max)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_MINOR }}
+          extensions: ffi
+          ini-values: ffi.enable=1
+          coverage: none
+      - uses: ramsey/composer-install@v3
+      - run: composer phpstan
+
+  coding-standards:
+    name: Coding standards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_MINOR }}
+          extensions: ffi
+          coverage: none
+      - uses: ramsey/composer-install@v3
+      - run: composer cs:check
+
+  tests-internal-debug:
+    name: Internal group (debug build)
+    runs-on: ubuntu-latest
+    # The segfault-prone destructive tests run only against a --enable-debug
+    # PHP build, where corruption surfaces as assertion failures. The image is
+    # published by publish-php-images.yml; if it is not available yet this job
+    # is skipped rather than failing the whole pipeline.
+    container:
+      image: ghcr.io/lisachenko/z-engine-php:8.4-nts-debug
+      options: --user root
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+          composer install --no-interaction --no-progress
+      - name: Run internal group with process isolation
+        run: composer test:internal
+
+  header-drift:
+    name: Generated headers up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Regenerate engine definitions
+        run: composer gen-headers
+      - name: Fail if the committed artifacts are stale
+        run: |
+          if ! git diff --exit-code -- include/; then
+            echo "::error::Generated engine definitions are out of date. Run 'composer gen-headers' and commit the result."
+            exit 1
+          fi
