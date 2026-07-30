@@ -2287,6 +2287,12 @@ parameters:
 			path: src/Type/ClosureEntry.php
 
 		-
+			message: '#^Parameter \#1 \$variable of static method ZEngine\\Core\:\:addr\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Type/ClosureEntry.php
+
+		-
 			message: '#^Binary operation "&" between mixed and 128 results in an error\.$#'
 			identifier: binaryOp.invalid
 			count: 1
@@ -2517,6 +2523,12 @@ parameters:
 		-
 			message: '#^Property ZEngine\\Type\\ObjectEntry\:\:\$properties type has no value type specified in iterable type ZEngine\\Type\\HashTable\.$#'
 			identifier: missingType.iterableValue
+			count: 1
+			path: src/Type/ObjectEntry.php
+
+		-
+			message: '#^Property ZEngine\\Type\\ObjectEntry\:\:\$weakSource with generic class WeakReference does not specify its types\: T$#'
+			identifier: missingType.generics
 			count: 1
 			path: src/Type/ObjectEntry.php
 
@@ -2779,9 +2791,27 @@ parameters:
 			path: src/Type/StringEntry.php
 
 		-
+			message: '#^Binary operation "\+" between FFI\\CData and int\<0, max\> results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: src/Type/StringEntry.php
+
+		-
+			message: '#^Cannot access property \$refcount on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: src/Type/StringEntry.php
+
+		-
 			message: '#^Cannot access property \$type_info on mixed\.$#'
 			identifier: property.nonObject
-			count: 3
+			count: 4
+			path: src/Type/StringEntry.php
+
+		-
+			message: '#^Cannot access property \$u on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
 			path: src/Type/StringEntry.php
 
 		-
@@ -2829,6 +2859,18 @@ parameters:
 		-
 			message: '#^Method ZEngine\\Type\\StringEntry\:\:getStringValue\(\) should return string but returns mixed\.$#'
 			identifier: return.type
+			count: 1
+			path: src/Type/StringEntry.php
+
+		-
+			message: '#^Parameter \#1 \$stringPointer of static method ZEngine\\Type\\StringEntry\:\:fromCData\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Type/StringEntry.php
+
+		-
+			message: '#^Parameter \#1 \$target of static method ZEngine\\Core\:\:memcpy\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
 			count: 1
 			path: src/Type/StringEntry.php
 

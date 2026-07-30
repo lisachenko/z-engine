@@ -449,8 +449,10 @@ class ReflectionClass extends NativeReflectionClass
                 $memory[$destIndex++] = $traitNameStruct;
             } else {
                 // Clean strings to prevent memory leaks
-                StringEntry::fromCData($traitNameStruct->name)->release();
-                StringEntry::fromCData($traitNameStruct->lc_name)->release();
+                // Drop the class entry's own reference on the removed trait names with
+                // engine semantics (previously this was a wrong-allocator FFI free)
+                StringEntry::fromCData($traitNameStruct->name)->releaseReference();
+                StringEntry::fromCData($traitNameStruct->lc_name)->releaseReference();
             }
         }
         if ($totalTraits > 0 && !$isPersistent) {

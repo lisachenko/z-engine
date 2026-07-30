@@ -30,19 +30,35 @@ use ZEngine\Reflection\ReflectionValue;
 class ReferenceEntry implements ReferenceCountedInterface
 {
     use ReferenceCountedTrait;
+    use ReleasableTrait;
 
     private CData $pointer;
 
+    /**
+     * Creates an owning entry: holds one reference on the zend_reference for the wrapper lifetime
+     */
     public function __construct(&$reference)
     {
         // This code is used to extract a Zval for our $value argument and use its internal pointer
         $valueArgument = Core::$executor->getExecutionState()->getArgument(0);
         $pointer       = $valueArgument->getRawReference();
         $this->pointer = $pointer;
+        $this->incrementReferenceCount();
+        $this->ownsReference = true;
     }
 
     /**
-     * Creates a resource entry from the zend_resource structure
+     * @inheritDoc
+     */
+    protected function doRelease(bool $ownsReference, bool $ownsContainer): void
+    {
+        if ($ownsReference) {
+            $this->releaseReference();
+        }
+    }
+
+    /**
+     * Creates a reference entry from the zend_reference structure (borrowed, does not addref)
      *
      * @param CData $pointer Pointer to the structure
      */

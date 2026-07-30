@@ -14,6 +14,7 @@ declare(strict_types=1);
 namespace ZEngine\Type;
 
 use FFI\CData;
+use ZEngine\Core;
 
 /**
  * Trait RefcountedTrait
@@ -63,6 +64,30 @@ trait ReferenceCountedTrait
         }
 
         return --$this->getGC()->refcount;
+    }
+
+    /**
+     * Releases exactly one engine reference on the payload with full engine semantics
+     *
+     * Interned/immutable payloads are not refcounted and stay untouched. When the last
+     * reference is dropped, the payload is destroyed through the engine's rc_dtor_func
+     * (never through the FFI allocator). Persistent payloads at refcount zero are left
+     * allocated: z-engine never frees engine-visible malloc memory that an engine
+     * structure may still reach - such blocks are bounded and reclaimed at process end.
+     *
+     * @see zend_types.h:GC_DTOR/rc_dtor_func
+     */
+    public function releaseReference(): void
+    {
+        if ($this->isImmutable()) {
+            return;
+        }
+        if ($this->decrementReferenceCount() === 0) {
+            if ($this->isPersistent()) {
+                return;
+            }
+            Core::call('rc_dtor_func', Core::cast('zend_refcounted *', Core::addr($this->getGC())));
+        }
     }
 
     /**

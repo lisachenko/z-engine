@@ -32,9 +32,13 @@ use ZEngine\Reflection\ReflectionValue;
 class ResourceEntry implements ReferenceCountedInterface
 {
     use ReferenceCountedTrait;
+    use ReleasableTrait;
 
     private CData $pointer;
 
+    /**
+     * Creates an owning entry: holds one reference on the resource for the wrapper lifetime
+     */
     public function __construct($resource)
     {
         if (!is_resource($resource)) {
@@ -42,18 +46,32 @@ class ResourceEntry implements ReferenceCountedInterface
         }
         $reflectionValue = new ReflectionValue($resource);
         $this->pointer   = $reflectionValue->getRawResource();
+        // Take our own reference while the temporary reflection value still holds one
+        $this->incrementReferenceCount();
+        $this->ownsReference = true;
+        $reflectionValue->release();
     }
 
     /**
-     * Creates a resource entry from the zend_resource structure
+     * Creates a resource entry from the zend_resource structure (borrowed, does not addref)
      */
     public static function fromCData(CData $pointer): ResourceEntry
     {
         /** @var ResourceEntry $resourceEntry */
-        $resourceEntry          = (new ReflectionClass(self::class))->newInstanceWithoutConstructor();
+        $resourceEntry          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
         $resourceEntry->pointer = $pointer;
 
         return $resourceEntry;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    protected function doRelease(bool $ownsReference, bool $ownsContainer): void
+    {
+        if ($ownsReference) {
+            $this->releaseReference();
+        }
     }
 
     /**

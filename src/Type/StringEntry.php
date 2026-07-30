@@ -31,21 +31,29 @@ use ZEngine\Reflection\ReflectionValue;
 class StringEntry implements ReferenceCountedInterface
 {
     use ReferenceCountedTrait;
+    use ReleasableTrait;
 
     private CData $pointer;
 
     /**
      * Creates a string entry from the PHP string
+     *
+     * The entry holds its own reference on the engine string (unless it is interned), so the
+     * wrapped pointer stays valid for the whole wrapper lifetime; release()/__destruct drops it.
      */
     public function __construct(string $value)
     {
         // This code is used to extract a Zval for our $value argument and use its internal pointer
         $valueArgument = Core::$executor->getExecutionState()->getArgument(0);
         $this->pointer = $valueArgument->getRawString()[0];
+        if (!$this->isInterned()) {
+            $this->incrementReferenceCount();
+            $this->ownsReference = true;
+        }
     }
 
     /**
-     * Creates a string entry from the zend_string structure
+     * Creates a string entry from the zend_string structure (borrowed, does not addref)
      *
      * @param CData $stringPointer Pointer to the structure
      */
@@ -54,6 +62,52 @@ class StringEntry implements ReferenceCountedInterface
         /** @var StringEntry $stringEntry */
         $stringEntry          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
         $stringEntry->pointer = $stringPointer;
+
+        return $stringEntry;
+    }
+
+    /**
+     * Mints a fresh, owned request-lifetime zend_string with refcount 1
+     *
+     * Unlike the constructor (which references the string of the argument zval), the result
+     * never aliases caller memory, which makes it safe to hand over to engine sinks via
+     * transferReferenceOwnership(). zend_string_concat2 is used because the whole
+     * zend_string_init/alloc family is inline-only and not exported by the engine.
+     */
+    public static function fromString(string $value): StringEntry
+    {
+        $rawString = Core::call('zend_string_concat2', $value, strlen($value), '', 0);
+
+        $stringEntry                = static::fromCData($rawString);
+        $stringEntry->ownsReference = true;
+
+        return $stringEntry;
+    }
+
+    /**
+     * Mints an owned persistent (malloc-backed) zend_string with refcount 1
+     *
+     * Persistent strings are required for sinks inside persistent engine structures
+     * (internal classes and their members), which the engine releases with the persistent
+     * allocator. The struct is built manually because no persistent string constructor is
+     * exported; the layout is verified at boot by the engine layout checks.
+     */
+    public static function persistent(string $value): StringEntry
+    {
+        $length    = strlen($value);
+        $valOffset = Core::type('zend_string')->getStructFieldOffset('val');
+
+        $buffer = Core::new('char[' . ($valOffset + $length + 1) . ']', false, true);
+        $string = Core::cast('zend_string *', $buffer);
+
+        $string->gc->refcount     = 1;
+        $string->gc->u->type_info = Core::engineConstant('GC_STRING') | Core::engineConstant('GC_PERSISTENT');
+        $string->len              = $length;
+        Core::memcpy(Core::cast('char *', $buffer) + $valOffset, $value . "\0", $length + 1);
+        $string->h = Core::call('zend_string_hash_func', $string);
+
+        $stringEntry                = static::fromCData($string);
+        $stringEntry->ownsReference = true;
 
         return $stringEntry;
     }
@@ -95,20 +149,6 @@ class StringEntry implements ReferenceCountedInterface
     }
 
     /**
-     * This methods releases a string entry
-     *
-     * @see zend_string.h:zend_string_release function
-     */
-    public function release(): void
-    {
-        if (!$this->isInterned()) {
-            if ($this->decrementReferenceCount() === 0) {
-                Core::free($this->pointer);
-            }
-        }
-    }
-
-    /**
      * Creates a copy of string value
      *
      * @see zend_string.h::zend_string_copy function
@@ -122,6 +162,18 @@ class StringEntry implements ReferenceCountedInterface
         }
 
         return $this;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    protected function doRelease(bool $ownsReference, bool $ownsContainer): void
+    {
+        if ($ownsReference) {
+            // Full engine semantics (interned no-op, rc_dtor_func at refcount zero),
+            // never an FFI-level free of engine memory
+            $this->releaseReference();
+        }
     }
 
     /**
