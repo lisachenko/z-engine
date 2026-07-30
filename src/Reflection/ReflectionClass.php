@@ -313,9 +313,15 @@ class ReflectionClass extends NativeReflectionClass
         $closureEntry->setCalledScope($this->name);
 
         // TODO: replace with ReflectionFunction instead of low-level structures
-        $rawFunction                        = $closureEntry->getRawFunction();
-        $funcName                           = (new StringEntry($methodName))->getRawValue();
-        $rawFunction->common->function_name = $funcName;
+        $rawFunction  = $closureEntry->getRawFunction();
+        $previousName = $rawFunction->common->function_name;
+        if ($previousName !== null) {
+            StringEntry::fromCData($previousName)->releaseReference();
+        }
+        // The function structure takes over one owned reference on its new name
+        $rawFunction->common->function_name = StringEntry::fromString($methodName)
+            ->transferReferenceOwnership()
+            ->getRawValue();
 
         // Adjust the scope of our function to our class
         $classScopeValue            = Core::$executor->classTable->find(strtolower($this->name));
@@ -398,11 +404,18 @@ class ReflectionClass extends NativeReflectionClass
         for ($position = $totalTraits, $index = 0; $index < $numTraitsToAdd; $position++, $index++) {
             $traitName   = $traitsToAdd[$index];
             $lcTraitName = strtolower($traitName);
-            $name        = new StringEntry($traitName);
-            $lcName      = new StringEntry($lcTraitName);
+            // The class entry takes over one owned reference per stored name; persistent
+            // class entries need malloc-backed strings the engine can release safely
+            if ($isPersistent) {
+                $name   = StringEntry::persistent($traitName);
+                $lcName = StringEntry::persistent($lcTraitName);
+            } else {
+                $name   = StringEntry::fromString($traitName);
+                $lcName = StringEntry::fromString($lcTraitName);
+            }
 
-            $memory[$position]->name    = $name->getRawValue();
-            $memory[$position]->lc_name = $lcName->getRawValue();
+            $memory[$position]->name    = $name->transferReferenceOwnership()->getRawValue();
+            $memory[$position]->lc_name = $lcName->transferReferenceOwnership()->getRawValue();
         }
         // As we don't have realloc methods in PHP, we can free non-persistent memory to prevent leaks
         if ($totalTraits > 0 && !$isPersistent) {
@@ -608,8 +621,15 @@ class ReflectionClass extends NativeReflectionClass
         if (!$this->isUserDefined()) {
             throw new \ReflectionException('File can be configured only for user-defined class');
         }
-        $stringEntry                         = new StringEntry($newFileName);
-        $this->pointer->info->user->filename = $stringEntry->getRawValue();
+        // Release the previous filename (the class entry owned a reference on it) and store
+        // an owned string whose reference is handed over to the class entry
+        $previousFileName = $this->pointer->info->user->filename;
+        if ($previousFileName !== null) {
+            StringEntry::fromCData($previousFileName)->releaseReference();
+        }
+        $this->pointer->info->user->filename = StringEntry::fromString($newFileName)
+            ->transferReferenceOwnership()
+            ->getRawValue();
     }
 
     /**

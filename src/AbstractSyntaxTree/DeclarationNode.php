@@ -142,8 +142,8 @@ class DeclarationNode extends Node
             return '';
         }
 
-        // TODO: investigate what to do with string copying
-        return StringEntry::fromCData($this->node->doc_comment)->copy()->getStringValue();
+        // Borrowed read: the node keeps its own reference, no refcount change needed
+        return StringEntry::fromCData($this->node->doc_comment)->getStringValue();
     }
 
     /**
@@ -151,10 +151,15 @@ class DeclarationNode extends Node
      */
     public function setDocComment(string $newDocComment): void
     {
-        $entry = new StringEntry($newDocComment);
+        $previousDocComment = $this->node->doc_comment;
+        if ($previousDocComment !== null) {
+            StringEntry::fromCData($previousDocComment)->releaseReference();
+        }
 
-        // TODO: investigate what to do with string copying
-        $this->node->doc_comment = $entry->copy()->getRawValue();
+        // The node takes over one owned reference (zend_ast_destroy releases it later)
+        $this->node->doc_comment = StringEntry::fromString($newDocComment)
+            ->transferReferenceOwnership()
+            ->getRawValue();
     }
 
     /**
@@ -162,8 +167,8 @@ class DeclarationNode extends Node
      */
     public function getName(): string
     {
-        // TODO: investigate what to do with string copying
-        return StringEntry::fromCData($this->node->name)->copy()->getStringValue();
+        // Borrowed read: the node keeps its own reference, no refcount change needed
+        return StringEntry::fromCData($this->node->name)->getStringValue();
     }
 
     /**
@@ -171,10 +176,15 @@ class DeclarationNode extends Node
      */
     public function setName(string $newName): void
     {
-        $entry = new StringEntry($newName);
+        $previousName = $this->node->name;
+        if ($previousName !== null) {
+            StringEntry::fromCData($previousName)->releaseReference();
+        }
 
-        // TODO: investigate what to do with string copying
-        $this->node->name = $entry->copy()->getRawValue();
+        // The node takes over one owned reference (zend_ast_destroy releases it later)
+        $this->node->name = StringEntry::fromString($newName)
+            ->transferReferenceOwnership()
+            ->getRawValue();
     }
 
     /**
