@@ -1,0 +1,54 @@
+# Cascade-merge automation: when a version branch receives a push, open (or
+# refresh) a merge-up pull request into its successor branch as defined in
+# .github/branch-flow.json. Fixes always land on the minimum affected version
+# branch and cascade upward. See AGENTS.md ("Branch model").
+name: Merge up
+
+on:
+  push:
+    branches:
+      - '[0-9].[0-9]'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  merge-up:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve successor branch
+        id: flow
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          SUCCESSOR=$(jq -r --arg b "$BRANCH" '.[$b] // empty' .github/branch-flow.json)
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "successor=$SUCCESSOR" >> "$GITHUB_OUTPUT"
+          if [ -z "$SUCCESSOR" ]; then
+            echo "Branch $BRANCH is frozen or unknown - no cascade." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Open or refresh merge-up PR
+        if: steps.flow.outputs.successor != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.flow.outputs.branch }}
+          SUCCESSOR: ${{ steps.flow.outputs.successor }}
+        run: |
+          EXISTING=$(gh pr list --repo "$GITHUB_REPOSITORY" \
+            --head "$BRANCH" --base "$SUCCESSOR" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            echo "Merge-up PR #$EXISTING already open; push updated it automatically." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if git ls-remote --exit-code origin "refs/heads/$SUCCESSOR" > /dev/null; then
+            BODY=$(printf '%s\n\n%s' \
+              "Automated cascade merge of \`$BRANCH\` into \`$SUCCESSOR\` (branch flow defined in \`.github/branch-flow.json\`)." \
+              "Resolve conflicts in favour of the newer engine structures where they touch \`include/\` - regenerate headers on the target branch instead of merging them textually. See AGENTS.md.")
+            gh pr create --repo "$GITHUB_REPOSITORY" \
+              --head "$BRANCH" --base "$SUCCESSOR" \
+              --title "merge: cascade $BRANCH into $SUCCESSOR" \
+              --body "$BODY"
+          fi

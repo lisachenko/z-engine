@@ -1,0 +1,5 @@
+{
+    "$comment": "Cascade-merge flow: fixes land on the minimum affected version branch and are merged upward. Key = source branch, value = successor branch (null = frozen, no cascade). See AGENTS.md.",
+    "8.0": null,
+    "8.4": "master"
+}
