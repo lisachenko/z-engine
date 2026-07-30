@@ -154,7 +154,7 @@ class ReflectionValue implements ReferenceCountedInterface
     /**
      * Creates a new entry from it's type and value
      *
-     * @param int   $type Value type
+     * @param int   $type Value type (base type constant, any type flags are recomputed from the payload)
      * @param CData $value Value, should be zval-compatible
      *
      * @return ReflectionValue
@@ -164,10 +164,42 @@ class ReflectionValue implements ReferenceCountedInterface
         // Allocate non-owned Zval
         $entry = Core::new('zval', false, $isPersistent);
 
-        $entry->u1->type_info = $type;
         $entry->value->zv     = Core::cast('zval', $value);
+        $entry->u1->type_info = self::buildTypeInfo($type, $entry);
 
         return self::fromValueEntry(Core::addr($entry));
+    }
+
+    /**
+     * Computes the full zval type_info word (base type plus type flags) for a payload
+     *
+     * Callers historically passed bare type constants (eg IS_STRING instead of IS_STRING_EX), which
+     * made every refcount-aware consumer (copy(), isTypeInfoRefCounted()) silently skip refcounting.
+     * The flags are derived from the payload's GC header, exactly like the engine's IS_*_EX macros do.
+     *
+     * @see zend_types.h:IS_STRING_EX/IS_ARRAY_EX/IS_OBJECT_EX macro family
+     */
+    private static function buildTypeInfo(int $type, CData $zvalEntry): int
+    {
+        $baseType = $type & Core::engineConstant('Z_TYPE_MASK');
+
+        // Only real data types in the IS_STRING..IS_CONSTANT_AST range are backed by a GC header
+        if ($baseType < self::IS_STRING || $baseType > self::IS_CONSTANT_AST) {
+            return $baseType;
+        }
+
+        // Immutable payloads (interned strings, immutable arrays, SHM data) are copied without refcounting
+        $gcTypeInfo = $zvalEntry->value->counted->gc->u->type_info;
+        if (($gcTypeInfo & ReferenceCountedInterface::GC_IMMUTABLE) !== 0) {
+            return $baseType;
+        }
+
+        $typeFlags = Core::engineConstant('IS_TYPE_REFCOUNTED');
+        if ($baseType === self::IS_ARRAY || $baseType === self::IS_OBJECT) {
+            $typeFlags |= Core::engineConstant('IS_TYPE_COLLECTABLE');
+        }
+
+        return $baseType | ($typeFlags << Core::engineConstant('Z_TYPE_FLAGS_SHIFT'));
     }
 
     /**
@@ -414,6 +446,13 @@ class ReflectionValue implements ReferenceCountedInterface
      */
     protected function getGC(): CData
     {
+        if (!$this->isTypeInfoRefCounted($this->getType())) {
+            throw new \LogicException(
+                'Cannot access the reference counter of a non-refcounted value of type '
+                . self::name($this->pointer->u1->v->type)
+            );
+        }
+
         return $this->pointer->value->counted->gc;
     }
 
