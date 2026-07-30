@@ -883,6 +883,12 @@ parameters:
 			path: src/EngineExtension/ModuleDependency.php
 
 		-
+			message: '#^Binary operation "\." between non\-falsy\-string and mixed results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: src/Hook/AbstractHook.php
+
+		-
 			message: '#^Method ZEngine\\Hook\\AbstractHook\:\:__construct\(\) has parameter \$rawStructure with no type specified\.$#'
 			identifier: missingType.parameter
 			count: 1

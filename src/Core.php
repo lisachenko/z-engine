@@ -20,6 +20,7 @@ use FFI\CType;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
+use ZEngine\Hook\AbstractHook;
 use ZEngine\System\Compiler;
 use ZEngine\System\Executor;
 use ZEngine\System\Hook\AstProcessHook;
@@ -174,6 +175,26 @@ class Core
     private static array $trackedBlocks = [];
 
     /**
+     * Per-field chains of installed engine hooks, keyed by container address + field name
+     *
+     * Strong references: an installed hook (and its libffi trampoline) can never be collected
+     * while the engine still points at it. Chains unwind in reverse installation order.
+     *
+     * @var array<string, array<int, AbstractHook>>
+     */
+    private static array $installedHooks = [];
+
+    /**
+     * Whether Core::shutdown() has run: no engine pointers may be written anymore
+     */
+    private static bool $isShutdown = false;
+
+    /**
+     * Whether the shutdown handler was already registered for this request
+     */
+    private static bool $shutdownRegistered = false;
+
+    /**
      * Performs Z-engine core initialization
      */
     public static function init(): void
@@ -202,6 +223,17 @@ class Core
         self::$executor = new Executor($engine->executor_globals);
         self::$compiler = new Compiler($engine->compiler_globals);
         self::$modules  = new HashTable(Core::addr($engine->module_registry));
+
+        // Deterministic teardown: user shutdown functions run before object destructors and
+        // before ext/ffi RSHUTDOWN frees the callback trampolines, so every hooked engine
+        // pointer is restored while writing it is still safe
+        if (!self::$shutdownRegistered) {
+            register_shutdown_function(static function (): void {
+                self::shutdown();
+            });
+            self::$shutdownRegistered = true;
+        }
+        self::$isShutdown = false;
 
         self::preloadFrameworkClasses();
     }
@@ -446,6 +478,98 @@ class Core
     public static function untrack(CData $pointer): void
     {
         unset(self::$trackedBlocks[self::addressOf($pointer)]);
+    }
+
+    /**
+     * Records a freshly installed hook at the top of its field chain
+     *
+     * @internal called by AbstractHook::install()
+     */
+    public static function registerHook(AbstractHook $hook): void
+    {
+        self::$installedHooks[$hook->getHookFieldKey()][] = $hook;
+    }
+
+    /**
+     * Removes an uninstalled hook from the top of its field chain
+     *
+     * @internal called by AbstractHook::uninstall()
+     */
+    public static function unregisterHook(AbstractHook $hook): void
+    {
+        $fieldKey = $hook->getHookFieldKey();
+        if (self::isTopHook($hook)) {
+            array_pop(self::$installedHooks[$fieldKey]);
+            if (self::$installedHooks[$fieldKey] === []) {
+                unset(self::$installedHooks[$fieldKey]);
+            }
+        }
+    }
+
+    /**
+     * Checks if the given hook is the most recently installed one on its engine field
+     */
+    public static function isTopHook(AbstractHook $hook): bool
+    {
+        $chain = self::$installedHooks[$hook->getHookFieldKey()] ?? [];
+
+        return $chain !== [] && end($chain) === $hook;
+    }
+
+    /**
+     * Checks if Core::shutdown() has already run for this request
+     */
+    public static function isShutdown(): bool
+    {
+        return self::$isShutdown;
+    }
+
+    /**
+     * Restores every hooked engine pointer and forgets all z-engine registries (idempotent)
+     *
+     * Registered automatically from Core::init() via register_shutdown_function: user shutdown
+     * functions run before object destructors and before ext/ffi frees callback trampolines,
+     * which makes this the last safe moment to write into engine structures. Invariant after
+     * this call: no libffi trampoline pointer survives in any structure that outlives the
+     * request, and z-engine performs no further engine writes.
+     */
+    public static function shutdown(): void
+    {
+        if (self::$isShutdown) {
+            return;
+        }
+
+        // Unwind every chain in reverse installation order so each hook restores its predecessor
+        foreach (array_reverse(self::$installedHooks) as $chain) {
+            for ($index = count($chain) - 1; $index >= 0; $index--) {
+                $chain[$index]->uninstall();
+            }
+        }
+        self::$installedHooks = [];
+
+        // Tracked buffers referenced from engine structures stay allocated: the engine frees
+        // request-lifetime ones when their owning structures die, persistent ones are process
+        // lifetime by design. Dropping the registry only releases the bookkeeping.
+        self::$trackedBlocks = [];
+
+        self::$isShutdown = true;
+    }
+
+    /**
+     * Rewrites the trampolines of all installed hooks (escape hatch for SAPIs that cycle FFI
+     * callback state between handled requests, eg FrankenPHP worker mode)
+     *
+     * Note: for fields with several stacked hooks only the top trampoline is reachable by the
+     * engine; intermediate proceed() chains keep pointing at the trampolines captured at
+     * install time, so cycle-safe setups should prefer one hook per engine field.
+     */
+    public static function reinstallHooks(): void
+    {
+        foreach (self::$installedHooks as $chain) {
+            foreach ($chain as $hook) {
+                $hook->refreshTrampoline();
+            }
+        }
     }
 
     /**
