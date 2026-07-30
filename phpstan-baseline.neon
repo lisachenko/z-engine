@@ -469,8 +469,20 @@ parameters:
 			path: src/ClassExtension/Hook/InterfaceGetsImplementedHook.php
 
 		-
+			message: '#^Method ZEngine\\ClassExtension\\Hook\\ReadPropertyHook\:\:handle\(\) should return FFI\\CData but returns FFI\\CData\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: src/ClassExtension/Hook/ReadPropertyHook.php
+
+		-
 			message: '#^Method ZEngine\\ClassExtension\\Hook\\ReadPropertyHook\:\:proceed\(\) has no return type specified\.$#'
 			identifier: missingType.return
+			count: 1
+			path: src/ClassExtension/Hook/ReadPropertyHook.php
+
+		-
+			message: '#^Parameter \#1 \$dstZval of method ZEngine\\Reflection\\ReflectionValue\:\:copy\(\) expects FFI\\CData, FFI\\CData\|null given\.$#'
+			identifier: argument.type
 			count: 1
 			path: src/ClassExtension/Hook/ReadPropertyHook.php
 
@@ -1904,12 +1916,6 @@ parameters:
 
 		-
 			message: '#^Parameter \#2 \$pointer of static method ZEngine\\Core\:\:cast\(\) expects FFI\\CData, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Reflection/ReflectionValue.php
-
-		-
-			message: '#^Parameter \#2 \$value of static method ZEngine\\Reflection\\ReflectionValue\:\:newEntry\(\) expects FFI\\CData, mixed given\.$#'
 			identifier: argument.type
 			count: 1
 			path: src/Reflection/ReflectionValue.php

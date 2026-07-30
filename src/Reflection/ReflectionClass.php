@@ -948,7 +948,7 @@ class ReflectionClass extends NativeReflectionClass
         // container exists only for the duration of this call and must be freed here
         $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawFunction);
         $this->methodTable->add(strtolower($methodName), $valueEntry);
-        Core::free($valueEntry->getRawValue());
+        $valueEntry->release();
 
         $refMethod = ReflectionMethod::fromCData($rawFunction);
 

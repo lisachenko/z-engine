@@ -49,8 +49,14 @@ class GetPropertiesForHook extends AbstractHook
 
         $result   = ($this->userHandler)($this);
         $refValue = new ReflectionValue($result);
+        $rawArray = $refValue->getRawArray();
 
-        return $refValue->getRawArray();
+        // The engine caller releases the returned hashtable (zend_release_properties), so
+        // exactly one reference is handed over; the temporary container itself is freed here
+        $refValue->transferReferenceOwnership();
+        $refValue->release();
+
+        return $rawArray;
     }
 
     /**

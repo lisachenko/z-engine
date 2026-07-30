@@ -89,9 +89,7 @@ class StringEntry implements ReferenceCountedInterface
     {
         $entry = ReflectionValue::newEntry(ReflectionValue::IS_STRING, $this->pointer[0]);
         $entry->getNativeValue($realString);
-
-        // TODO: Incapsulate memory management into ReflectionValue->release() method
-        Core::free($entry->getRawValue());
+        $entry->release();
 
         return $realString;
     }

@@ -109,9 +109,7 @@ class ObjectEntry implements ReferenceCountedInterface
     {
         $entry = ReflectionValue::newEntry(ReflectionValue::IS_OBJECT, $this->pointer[0]);
         $entry->getNativeValue($realObject);
-
-        // TODO: Incapsulate memory management into ReflectionValue->release() method
-        Core::free($entry->getRawValue());
+        $entry->release();
 
         return $realObject;
     }

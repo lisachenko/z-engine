@@ -43,10 +43,16 @@ class ReadPropertyHook extends AbstractPropertyHook
     {
         [$this->object, $this->member, $this->type, $this->cacheSlot, $this->rv] = $rawArguments;
 
-        $result   = ($this->userHandler)($this);
-        $refValue = new ReflectionValue($result);
+        $result = ($this->userHandler)($this);
 
-        return $refValue->getRawValue();
+        // Return the result through the engine-provided retval slot: the slot is uninitialized
+        // scratch memory owned by the caller and the VM consumes the reference left in it,
+        // so nothing leaks - unlike a heap zval container which nobody would ever free
+        $refValue = new ReflectionValue($result);
+        $refValue->copy($this->rv);
+        $refValue->release();
+
+        return $this->rv;
     }
 
     /**

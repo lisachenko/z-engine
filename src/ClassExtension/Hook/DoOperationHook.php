@@ -55,7 +55,15 @@ class DoOperationHook extends AbstractHook
         [$this->opCode, $this->returnValue, $this->op1, $this->op2] = $rawArguments;
 
         $result = ($this->userHandler)($this);
-        ReflectionValue::fromValueEntry($this->returnValue)->setNativeValue($result);
+        $target = ReflectionValue::fromValueEntry($this->returnValue);
+        if (Core::addressOf($this->returnValue) === Core::addressOf($this->op1)) {
+            // Compound assignment (eg $a += $b): the result slot is op1 and holds a live
+            // value which must be released when it gets replaced
+            $target->setNativeValue($result);
+        } else {
+            // Plain binary operation: the result slot is uninitialized scratch memory
+            $target->initializeNativeValue($result);
+        }
 
         return Core::SUCCESS;
     }

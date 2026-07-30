@@ -210,7 +210,7 @@ class Compiler
         $this->setCompilationMode($originalCompilationMode);
 
         // The scanner made its own copy of the source, the temporary zval container is ours to free
-        Core::free($rawSourceVal);
+        $sourceEntry->release();
 
         if ($ast === null) {
             throw new \RuntimeException('Unable to parse the given source code');
