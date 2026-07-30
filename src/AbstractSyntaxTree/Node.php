@@ -38,6 +38,11 @@ class Node implements NodeInterface
     protected CData $node;
 
     /**
+     * Keeps the arena/tree owner alive for detached trees (null for engine-owned/borrowed nodes)
+     */
+    protected ?AstOwnership $owner = null;
+
+    /**
      * Creates an instance of Node
      *
      * @param int       $kind       Node kind
@@ -69,13 +74,16 @@ class Node implements NodeInterface
 
     /**
      * Node static constructor.
+     *
+     * @param AstOwnership|null $owner Ownership handle that must stay alive while this node is used
      */
-    public static function fromCData(CData $node): Node
+    public static function fromCData(CData $node, ?AstOwnership $owner = null): Node
     {
         /** @var self $instance */
         $instance = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
 
-        $instance->node = $node;
+        $instance->node  = $node;
+        $instance->owner = $owner;
 
         return $instance;
     }
@@ -146,7 +154,7 @@ class Node implements NodeInterface
         $castChildren = Core::cast('zend_ast **', $this->node->child);
         for ($index = 0; $index < $totalChildren; $index++) {
             if ($castChildren[$index] !== null) {
-                $children[$index] = NodeFactory::fromCData($castChildren[$index]);
+                $children[$index] = NodeFactory::fromCData($castChildren[$index], $this->owner);
             } else {
                 $children[$index] = null;
             }
@@ -171,7 +179,7 @@ class Node implements NodeInterface
             return null;
         }
 
-        return NodeFactory::fromCData($castChildren[$index]);
+        return NodeFactory::fromCData($castChildren[$index], $this->owner);
     }
 
     /**
@@ -202,7 +210,7 @@ class Node implements NodeInterface
             throw new \OutOfBoundsException('Child index is out of range, there are ' . $totalChildren . ' children.');
         }
         $castChildren = Core::cast('zend_ast **', $this->node->child);
-        $child        = NodeFactory::fromCData($castChildren[$index]);
+        $child        = NodeFactory::fromCData($castChildren[$index], $this->owner);
 
         $castChildren[$index] = null;
 
