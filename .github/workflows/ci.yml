@@ -64,20 +64,32 @@ jobs:
     runs-on: ubuntu-latest
     # The segfault-prone destructive tests run only against a --enable-debug
     # PHP build, where corruption surfaces as assertion failures. The image is
-    # published by publish-php-images.yml; if it is not available yet this job
-    # is skipped rather than failing the whole pipeline.
-    container:
-      image: ghcr.io/lisachenko/z-engine-php:8.4-nts-debug
-      options: --user root
-    continue-on-error: true
+    # published by publish-php-images.yml. Until it has been published once,
+    # this job reports success with a notice instead of a red X - it is an
+    # optional bootstrap dependency, not a gate.
     steps:
       - uses: actions/checkout@v4
-      - name: Install dependencies
+
+      - name: Check whether the debug image is available
+        id: image
         run: |
-          curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-          composer install --no-interaction --no-progress
+          IMAGE=ghcr.io/${{ github.repository_owner }}/z-engine-php:8.4-nts-debug
+          echo "ref=$IMAGE" >> "$GITHUB_OUTPUT"
+          if docker pull "$IMAGE" >/dev/null 2>&1; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Debug PHP image not published yet - run the 'Publish PHP debug images' workflow once to enable the internal test group. Skipping."
+          fi
+
       - name: Run internal group with process isolation
-        run: composer test:internal
+        if: steps.image.outputs.available == 'true'
+        run: |
+          docker run --rm -v "$PWD:/app" -w /app "${{ steps.image.outputs.ref }}" sh -c '
+            curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer &&
+            composer install --no-interaction --no-progress &&
+            composer test:internal
+          '
 
   header-drift:
     name: Generated headers up to date
