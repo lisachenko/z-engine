@@ -166,11 +166,18 @@ final class ObjectStore implements Countable, ArrayAccess
             // We use -2 because exception object also increments index by one
             throw new \OutOfBoundsException("Index {$offset} is out of bounds 0.." . ($this->pointer->top - 2));
         }
-        $taggedNumber        = Core::new('uintptr_t');
-        $taggedNumber->cdata = ($this->pointer->free_list_head << 1) | self::OBJ_BUCKET_INVALID;
+        // Prepare every FFI temporary FIRST: each CData is itself a PHP object whose
+        // allocation pops this very free list, so creating one between reading and
+        // writing free_list_head would stale the captured head and orphan slots
+        $taggedNumber = Core::new('uintptr_t');
+        $bucketValue  = Core::cast('zend_object *', $taggedNumber);
+        $buckets      = Core::cast('zend_object **', $this->pointer->object_buckets);
 
-        $this->pointer->object_buckets[$offset] = Core::cast('zend_object *', $taggedNumber);
-        $this->pointer->free_list_head          = $offset;
+        // No CData allocations below this line (scalar reads/writes only)
+        $taggedNumber->cdata = ($this->pointer->free_list_head << 1) | self::OBJ_BUCKET_INVALID;
+        $buckets[$offset]    = $bucketValue;
+
+        $this->pointer->free_list_head = $offset;
     }
 
     /**

@@ -201,6 +201,15 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
         }
     }
 
+    /**
+     * Returns raw C value entry (HashTable *)
+     * @internal
+     */
+    public function getRawValue(): CData
+    {
+        return $this->pointer;
+    }
+
     public function __debugInfo()
     {
         return iterator_to_array($this->getIterator());

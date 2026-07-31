@@ -147,14 +147,6 @@ final class PersistentHashTable extends HashTable
     }
 
     /**
-     * Returns raw C value entry (HashTable *)
-     */
-    public function getRawValue(): CData
-    {
-        return $this->pointer;
-    }
-
-    /**
      * Returns arData pointing right past the shared sentinel, as HT_SET_DATA_ADDR does
      *
      * @see zend_types.h:HT_SET_DATA_ADDR/HT_HASH_SIZE - for HT_MIN_MASK the hash part

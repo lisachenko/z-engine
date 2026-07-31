@@ -823,6 +823,12 @@ parameters:
 			path: src/Core.php
 
 		-
+			message: '#^Cannot access offset int\<0, max\> on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: src/EngineExtension/AbstractModule.php
+
+		-
 			message: '#^Deprecated in PHP 8\.4\: Parameter \#1 \$moduleName \(string\) is implicitly nullable via default value null\.$#'
 			identifier: parameter.implicitlyNullable
 			count: 1
@@ -835,7 +841,19 @@ parameters:
 			path: src/EngineExtension/AbstractModule.php
 
 		-
+			message: '#^Parameter \#1 \$stringPointer of static method ZEngine\\Type\\StringEntry\:\:fromCData\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/EngineExtension/AbstractModule.php
+
+		-
 			message: '#^Parameter \#1 \$type of static method ZEngine\\Core\:\:cast\(\) expects string, string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/EngineExtension/AbstractModule.php
+
+		-
+			message: '#^Parameter \#1 \$variable of static method ZEngine\\Core\:\:addr\(\) expects FFI\\CData, mixed given\.$#'
 			identifier: argument.type
 			count: 1
 			path: src/EngineExtension/AbstractModule.php
@@ -2217,7 +2235,7 @@ parameters:
 		-
 			message: '#^Cannot access offset int\<0, max\> on mixed\.$#'
 			identifier: offsetAccess.nonOffsetAccessible
-			count: 4
+			count: 3
 			path: src/System/ObjectStore.php
 
 		-
@@ -2265,7 +2283,7 @@ parameters:
 		-
 			message: '#^Parameter \#2 \$pointer of static method ZEngine\\Core\:\:cast\(\) expects FFI\\CData, mixed given\.$#'
 			identifier: argument.type
-			count: 1
+			count: 2
 			path: src/System/ObjectStore.php
 
 		-
