@@ -5,6 +5,7 @@
 #include "zend_hash.h"
 #include "zend_modules.h"
 #include "zend_arena.h"
+#include "zend_exceptions.h"
 #include "supplement.h"
 #include <stdio.h>
 
@@ -384,6 +385,27 @@ int main(void) {
 #endif
 #ifdef MODULE_TEMPORARY
     fprintf(constants, "    'MODULE_TEMPORARY' => %lld,\n", (long long)(MODULE_TEMPORARY));
+#endif
+#ifdef CONST_CS
+    fprintf(constants, "    'CONST_CS' => %lld,\n", (long long)(CONST_CS));
+#endif
+#ifdef CONST_PERSISTENT
+    fprintf(constants, "    'CONST_PERSISTENT' => %lld,\n", (long long)(CONST_PERSISTENT));
+#endif
+#ifdef CONST_NO_FILE_CACHE
+    fprintf(constants, "    'CONST_NO_FILE_CACHE' => %lld,\n", (long long)(CONST_NO_FILE_CACHE));
+#endif
+#ifdef CONST_DEPRECATED
+    fprintf(constants, "    'CONST_DEPRECATED' => %lld,\n", (long long)(CONST_DEPRECATED));
+#endif
+#ifdef CONST_OWNED
+    fprintf(constants, "    'CONST_OWNED' => %lld,\n", (long long)(CONST_OWNED));
+#endif
+#ifdef CONST_RECURSIVE
+    fprintf(constants, "    'CONST_RECURSIVE' => %lld,\n", (long long)(CONST_RECURSIVE));
+#endif
+#ifdef PHP_USER_CONSTANT
+    fprintf(constants, "    'PHP_USER_CONSTANT' => %lld,\n", (long long)(PHP_USER_CONSTANT));
 #endif
 #ifdef ZEND_DEBUG
     fprintf(constants, "    'ZEND_DEBUG' => %lld,\n", (long long)(ZEND_DEBUG));
@@ -947,6 +969,11 @@ int main(void) {
     fprintf(layouts, ", \"type\": %zu", offsetof(zend_property_info, type));
     fprintf(layouts, ", \"prototype\": %zu", offsetof(zend_property_info, prototype));
     fprintf(layouts, ", \"hooks\": %zu", offsetof(zend_property_info, hooks));
+    fputs("}},\n", layouts);
+    fputs("        \"zend_constant\": {", layouts);
+    fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_constant));
+    fprintf(layouts, "\"value\": %zu", offsetof(zend_constant, value));
+    fprintf(layouts, ", \"name\": %zu", offsetof(zend_constant, name));
     fputs("}},\n", layouts);
     fputs("        \"zend_op_array\": {", layouts);
     fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_op_array));
