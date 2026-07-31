@@ -33,8 +33,9 @@ class PersistentObjectFactoryTest extends TestCase
         $this->assertTrue($entry->isPersistent());
         $this->assertFalse($entry->isImmutable());
 
-        $destructorCalled = Core::engineConstant('IS_OBJ_DESTRUCTOR_CALLED');
-        $this->assertSame($destructorCalled, $entry->getExtraFlags() & $destructorCalled);
+        $shutdownSkipFlags = Core::engineConstant('IS_OBJ_DESTRUCTOR_CALLED')
+            | Core::engineConstant('IS_OBJ_FREE_CALLED');
+        $this->assertSame($shutdownSkipFlags, $entry->getExtraFlags() & $shutdownSkipFlags);
         $this->assertTrue(PersistentObjectFactory::usesStandardHandlers($clone));
         $this->assertNull($entry->getDynamicPropertiesPointer());
     }

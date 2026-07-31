@@ -76,7 +76,12 @@ final class PersistentObjectFactory
         $object->gc->u->type_info = Core::engineConstant('GC_OBJECT')
             | Core::engineConstant('GC_NOT_COLLECTABLE')
             | Core::engineConstant('GC_PERSISTENT');
-        $object->extra_flags |= Core::engineConstant('IS_OBJ_DESTRUCTOR_CALLED');
+        // Both shutdown passes over the object store must skip persistent clones: the
+        // destructor pass honors IS_OBJ_DESTRUCTOR_CALLED, the free-storage pass honors
+        // IS_OBJ_FREE_CALLED. Callers detach the object before teardown anyway - these
+        // flags are the belt-and-braces layer for buckets that leak past a missed detach.
+        $object->extra_flags |= Core::engineConstant('IS_OBJ_DESTRUCTOR_CALLED')
+            | Core::engineConstant('IS_OBJ_FREE_CALLED');
         $object->handlers   = Core::addr(Core::getStandardObjectHandlers());
         $object->properties = null;
 
