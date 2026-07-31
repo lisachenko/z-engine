@@ -77,10 +77,12 @@ return [
     'functions' => [
         // Hash API
         'zend_hash_del',
+        'zend_hash_index_del',
         'zend_hash_find',
         'zend_hash_add_or_update',
         'zend_hash_index_add_or_update',
         'zend_hash_index_find',
+        'zend_hash_destroy',
         // Opcode API
         'zend_set_user_opcode_handler',
         'zend_get_user_opcode_handler',
@@ -125,6 +127,11 @@ return [
         'rc_dtor_func',
         'zend_string_concat2',
         'zend_string_hash_func',
+        // libc free(): the ONLY way to release a malloc-backed block whose allocating
+        // request is already over (FFI::free needs the original owning CData, which is a
+        // PHP static and therefore request-scoped). Used by Core::persistentFree for
+        // persistent blocks minted by z-engine or by the engine's pemalloc(..., 1).
+        'free',
     ],
 
     'variables' => [

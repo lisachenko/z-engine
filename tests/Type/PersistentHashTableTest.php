@@ -103,6 +103,115 @@ class PersistentHashTableTest extends TestCase
         $this->assertSame(2, $table->getReferenceCount());
     }
 
+    public function testDeleteIndexRemovesTheBucket(): void
+    {
+        $table = PersistentHashTable::create();
+
+        foreach ([1, 2, 3] as $index) {
+            $value = new ReflectionValue($index * 10);
+            $table->addIndex($index, $value);
+            $value->release();
+        }
+
+        $table->deleteIndex(2);
+
+        $this->assertNull($table->findIndex(2));
+        $table->findIndex(1)->getNativeValue($first);
+        $table->findIndex(3)->getNativeValue($third);
+        $this->assertSame(10, $first);
+        $this->assertSame(30, $third);
+
+        // Deleting a key that is not there is a failure, not a silent no-op
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/index 2/');
+        $table->deleteIndex(2);
+    }
+
+    public function testDestroyReleasesAnUninitializedTable(): void
+    {
+        // An empty table still points at the shared uninitialized-bucket sentinel, which
+        // zend_hash_destroy() must NOT free - only the struct block goes away here. The
+        // sentinel is shared process-wide, so the next table minted after the drop proves
+        // it survived (freeing it would have taken every other persistent table with it)
+        PersistentHashTable::create()->destroy();
+
+        $survivor = PersistentHashTable::create();
+        $value    = new ReflectionValue('still alive');
+        $survivor->add('probe', $value);
+        $value->release();
+
+        $survivor->find('probe')->getNativeValue($native);
+        $this->assertSame('still alive', $native);
+
+        $survivor->destroy();
+    }
+
+    public function testDestroyReleasesFilledAndSealedTables(): void
+    {
+        $handles = 0;
+        foreach ([false, true] as $sealed) {
+            $table = PersistentHashTable::create();
+
+            $value = new ReflectionValue(1);
+            $table->add('interned-key', $value);
+            $table->addIndex(42, $value);
+            $value->release();
+
+            if ($sealed) {
+                // Sealed tables sit at refcount 2; destroy() re-baselines it for the engine
+                $table->markImmutable();
+            }
+            $table->destroy();
+            $handles++;
+        }
+
+        $this->assertSame(2, $handles, 'Both the mutable and the sealed table were destroyed');
+    }
+
+    public function testDestroyReturnsProcessMemoryToTheAllocator(): void
+    {
+        $residentKiloBytes = static function (): int {
+            foreach (file('/proc/self/status') ?: [] as $line) {
+                if (str_starts_with($line, 'VmRSS:')) {
+                    return (int) filter_var($line, FILTER_SANITIZE_NUMBER_INT);
+                }
+            }
+
+            return 0;
+        };
+
+        if ($residentKiloBytes() === 0) {
+            self::markTestSkipped('VmRSS is not readable on this platform');
+        }
+
+        $churn = static function (int $cycles): void {
+            for ($cycle = 0; $cycle < $cycles; $cycle++) {
+                $table = PersistentHashTable::create();
+                for ($index = 0; $index < 64; $index++) {
+                    $value = new ReflectionValue($index);
+                    $table->addIndex($index, $value);
+                    $value->release();
+                }
+                $table->destroy();
+            }
+        };
+
+        // Warm up first: the very first cycles also grow the interned-string table and
+        // the request heap, which has nothing to do with the tables being churned
+        $churn(200);
+        $baseline = $residentKiloBytes();
+
+        // 1000 tables x (struct + a 64-element persistent data block) is several megabytes
+        // of malloc traffic - if destroy() did not free it, RSS would climb accordingly
+        $churn(1_000);
+
+        $this->assertLessThan(
+            2_048,
+            $residentKiloBytes() - $baseline,
+            'Destroyed persistent tables did not return their memory to the allocator',
+        );
+    }
+
     public function testStringKeysAreStoredAsPersistentInterned(): void
     {
         $table = PersistentHashTable::create();

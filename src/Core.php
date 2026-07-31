@@ -550,6 +550,36 @@ class Core
     }
 
     /**
+     * Releases a RAW malloc-backed pointer through libc free()
+     *
+     * DANGER - this is a plain free(3) with no ownership bookkeeping whatsoever. Passing a
+     * pointer that was not obtained from malloc(), or freeing the same block twice, corrupts
+     * the process heap. Only ever pass blocks that are provably malloc-backed:
+     *
+     *  - z-engine persistent FFI allocations: Core::new()/trackedNew() with $persistent=true
+     *    (ext/ffi allocates those with pemalloc(size, 1), i.e. malloc);
+     *  - engine structures the engine itself allocated persistently, e.g. the arData block
+     *    an engine hash API call grew for a GC_PERSISTENT HashTable.
+     *
+     * Never pass request-lifetime memory (the Zend MM owns it), interned zend_strings (the
+     * engine's interned-string table references them), or anything reachable from a live
+     * engine structure.
+     *
+     * This is the CROSS-REQUEST companion to untrackAndFree(): that one frees through the
+     * owning CData recorded in the tracked-block registry, which is a PHP static and therefore
+     * dies with the request that allocated the block. Persistent data structures are dismantled
+     * by a LATER request, when the registry no longer knows the block - hence the raw form.
+     * The two stay orthogonal: this method does not touch the tracked-block registry, so a
+     * caller that frees a block allocated in the same request must Core::untrack() it too.
+     *
+     * @param CData $pointer Pointer to the malloc-backed block to release
+     */
+    public static function persistentFree(CData $pointer): void
+    {
+        self::call('free', self::cast('void *', $pointer));
+    }
+
+    /**
      * Records a freshly installed hook at the top of its field chain
      *
      * @internal called by AbstractHook::install() and OpCodeHook::install()
