@@ -28,6 +28,8 @@ use ZEngine\Stub\TestClass;
 use ZEngine\Stub\TestInterface;
 use ZEngine\Stub\TestTrait;
 use ZEngine\Type\ClosureEntry;
+use ZEngine\Type\PersistentHashTable;
+use ZEngine\Type\PersistentObjectFactory;
 use ZEngine\Type\StringEntry;
 
 require __DIR__ . '/../../vendor/autoload.php';
@@ -52,6 +54,21 @@ $closureEntry = new ClosureEntry($closure);
 $propertyName = 'property';
 $baseline     = null;
 
+// Persistent structures are minted once at boot (immortal-by-design) and then
+// attached/detached every iteration like a per-request lifecycle would
+$persistentTable = PersistentHashTable::create();
+$seedValue       = new ReflectionValue(42);
+$persistentTable->add('seed', $seedValue);
+$seedValue->release();
+$persistentTable->markImmutable();
+
+$candidate          = new ZEngine\Stub\TestPersistentCandidate();
+$candidate->counter = 42;
+$candidateValue     = new ReflectionValue($candidate);
+$persistentClone    = PersistentObjectFactory::persistentClone($candidateValue->getRawObject());
+$candidateValue->release();
+unset($candidate, $candidateValue);
+
 for ($iteration = 1; $iteration <= $totalIterations; $iteration++) {
     // Value wrapper churn
     $value = new ReflectionValue('iteration payload ' . $iteration);
@@ -74,6 +91,24 @@ for ($iteration = 1; $iteration <= $totalIterations; $iteration++) {
 
     // Closure this-rebinding
     $closureEntry->setThis(new ArrayObject([$iteration]));
+
+    // Persistent object attach / materialize / detach cycle plus immutable-array COW
+    $handle = Core::$executor->objectStore->put($persistentClone);
+    $entry  = ReflectionValue::newEntry(ReflectionValue::IS_OBJECT, $persistentClone[0]);
+    $entry->getNativeValue($persistentAlias);
+    $entry->release();
+    if ($persistentAlias->counter !== 42) {
+        fwrite(STDERR, "Persistent clone read failed at iteration {$iteration}\n");
+        exit(1);
+    }
+    unset($persistentAlias);
+    Core::$executor->objectStore->recycle($handle);
+
+    $tableEntry = ReflectionValue::newEntry(ReflectionValue::IS_ARRAY, $persistentTable->getRawValue()[0]);
+    $tableEntry->getNativeValue($persistentCopy);
+    $tableEntry->release();
+    $persistentCopy['seed'] = $iteration; // must copy-on-write, never touch the block
+    unset($persistentCopy);
 
     // AST parse / destroy cycle
     if ($iteration % 10 === 0) {
