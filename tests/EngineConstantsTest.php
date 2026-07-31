@@ -31,9 +31,10 @@ final class EngineConstantsTest extends TestCase
     public static function constantOwnerProvider(): array
     {
         return [
-            'ZEND_ACC_* on Core'    => [Core::class, 'ZEND_ACC_'],
-            'opcodes on OpCode'     => [OpCode::class, ''],
-            'AST kinds on NodeKind' => [NodeKind::class, 'AST_'],
+            'ZEND_ACC_* on Core'           => [Core::class, 'ZEND_ACC_'],
+            'ZEND_PROPERTY_HOOK_* on Core' => [Core::class, 'ZEND_PROPERTY_HOOK_'],
+            'opcodes on OpCode'            => [OpCode::class, ''],
+            'AST kinds on NodeKind'        => [NodeKind::class, 'AST_'],
         ];
     }
 

@@ -15,6 +15,7 @@ namespace ZEngine\Reflection;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Type\HashTable;
 use ZEngine\Type\OpLine;
 use ZEngine\Type\StringEntry;
 
@@ -178,6 +179,25 @@ trait FunctionLikeTrait
     public function isUserDefined(): bool
     {
         return (bool) ($this->pointer->type & Core::ZEND_USER_FUNCTION);
+    }
+
+    /**
+     * Returns the engine attributes table of this function or null if the function has no attributes
+     *
+     * Each element of the returned table is an IS_PTR value pointing to a zend_attribute:
+     * wrap it with ReflectionAttributeEntry::fromValueEntry() for structured access.
+     *
+     * @return HashTable|ReflectionValue[]|null
+     */
+    public function getAttributesTable(): ?HashTable
+    {
+        $attributes = $this->getCommonPointer()->attributes;
+        if ($attributes === null) {
+            return null;
+        }
+        assert($attributes instanceof CData);
+
+        return new HashTable($attributes);
     }
 
     /**
