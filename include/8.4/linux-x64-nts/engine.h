@@ -901,6 +901,10 @@ struct _zend_ini_parser_param {
  zend_ini_parser_cb_t ini_parser_cb;
  void *arg;
 };
+typedef struct _zend_constant {
+ zval value;
+ zend_string *name;
+} zend_constant;
 typedef struct {
  zend_string *name;
  zval value;
@@ -981,6 +985,8 @@ extern zend_ast * zend_ast_create_5(zend_ast_kind, zend_ast *, zend_ast *, zend_
 extern zend_ast * zend_ast_create_decl(zend_ast_kind, uint32_t, uint32_t, zend_string *, zend_string *, zend_ast *, zend_ast *, zend_ast *, zend_ast *, zend_ast *);
 extern zend_module_entry * zend_register_module_ex(zend_module_entry *, int);
 extern zend_result zend_startup_module_ex(zend_module_entry *);
+extern zend_result zend_register_constant(zend_constant *);
+extern void zend_clear_exception(void);
 extern void zval_ptr_dtor(zval *);
 extern void zval_add_ref(zval *);
 extern void rc_dtor_func(zend_refcounted *);

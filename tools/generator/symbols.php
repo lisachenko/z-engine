@@ -44,6 +44,8 @@ return [
         'zend_internal_function',
         'zend_arg_info',
         'zend_internal_arg_info',
+        // Engine-level constants (EG(zend_constants) entries)
+        'zend_constant',
         // VM
         'zend_op',
         'zend_execute_data',
@@ -106,6 +108,11 @@ return [
         // Module API
         'zend_register_module_ex',
         'zend_startup_module_ex',
+        // Constant API
+        'zend_register_constant',
+        // Exception API (clearing EG(exception) safely: releases the object and
+        // restores opline_before_exception, unlike a raw EG(exception) = NULL)
+        'zend_clear_exception',
         // Memory management API (the inline zend_string_init/release family is not linkable,
         // zend_string_concat2 is the pragmatic exported way to mint an owned zend_string)
         'zval_ptr_dtor',
@@ -166,6 +173,13 @@ return [
         'HT_MIN_MASK', 'HT_MIN_SIZE',
         // Module API (zend_modules.h)
         'ZEND_MODULE_API_NO', 'MODULE_PERSISTENT', 'MODULE_TEMPORARY',
+        // Constant flags (zend_constants.h); the flags and the module number are
+        // packed into zval.u2.constant_flags of zend_constant.value: the low byte
+        // holds CONST_* flags (ZEND_CONSTANT_FLAGS), the upper bits hold the
+        // module number (ZEND_CONSTANT_MODULE_NUMBER, PHP_USER_CONSTANT for
+        // userland define()d constants)
+        'CONST_CS', 'CONST_PERSISTENT', 'CONST_NO_FILE_CACHE', 'CONST_DEPRECATED',
+        'CONST_OWNED', 'CONST_RECURSIVE', 'PHP_USER_CONSTANT',
         // Engine build info
         'ZEND_DEBUG', 'ZEND_MM_ALIGNMENT', 'ZEND_MAX_RESERVED_RESOURCES',
         // Function kinds (zend_compile.h)
@@ -219,6 +233,7 @@ return [
         'zend_class_constant',
         'zend_class_name',
         'zend_property_info',
+        'zend_constant',
         'zend_attribute',
         'zend_attribute_arg',
         'zend_op_array',

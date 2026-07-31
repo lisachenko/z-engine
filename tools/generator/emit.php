@@ -133,6 +133,7 @@ if ($emitHeader) {
     #include "zend_hash.h"
     #include "zend_modules.h"
     #include "zend_arena.h"
+    #include "zend_exceptions.h"
     #include "supplement.h"
     C;
     file_put_contents($buildDir . '/input.c', $inputC);

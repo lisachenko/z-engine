@@ -48,6 +48,37 @@ class ExecutorTest extends TestCase
         $this->assertFalse(Core::$executor->hasException());
     }
 
+    public function testConstantTableContainsEngineConstants(): void
+    {
+        $constantEntry = Core::$executor->constantTable->find('PHP_VERSION');
+        $this->assertNotNull($constantEntry);
+
+        // EG(zend_constants) keys are case-sensitive since PHP 8.0
+        $this->assertNull(Core::$executor->constantTable->find('php_version'));
+    }
+
+    public function testConstantTableSeesUserDefinedConstants(): void
+    {
+        define('ZENGINE_EXECUTOR_TEST_CONSTANT', 'executor-test');
+
+        $constantEntry = Core::$executor->constantTable->find('ZENGINE_EXECUTOR_TEST_CONSTANT');
+        $this->assertNotNull($constantEntry);
+    }
+
+    /**
+     * Only the no-op path is testable from userland: the engine never executes PHP code
+     * while EG(exception) is set (see testGetCurrentExceptionIsNullDuringNormalExecution),
+     * and planting an exception into EG(exception) manually is VM corruption, not a test
+     * setup - the next CHECK_EXCEPTION would re-dispatch a stale opline forever because
+     * nothing switched the frame to EG(exception_op).
+     */
+    public function testSuppressCurrentExceptionIsNoOpWithoutException(): void
+    {
+        Core::$executor->suppressCurrentException();
+
+        $this->assertFalse(Core::$executor->hasException());
+    }
+
     /**
      * Only the null path is testable from userland: the engine never executes PHP code
      * while EG(exception) is set (zend_call_function refuses with a pending exception and

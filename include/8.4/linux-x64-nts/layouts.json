@@ -172,6 +172,13 @@
                 "hooks": 64
             }
         },
+        "zend_constant": {
+            "size": 24,
+            "fields": {
+                "value": 0,
+                "name": 16
+            }
+        },
         "zend_attribute": {
             "size": 56,
             "fields": {
