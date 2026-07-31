@@ -15,10 +15,12 @@ namespace ZEngine\Stub;
 
 use ZEngine\ClassExtension\Hook\GetClassNameHook;
 use ZEngine\ClassExtension\Hook\GetConstructorHook;
+use ZEngine\ClassExtension\Hook\GetPropertiesHook;
 use ZEngine\ClassExtension\ObjectCreateInterface;
 use ZEngine\ClassExtension\ObjectCreateTrait;
 use ZEngine\ClassExtension\ObjectGetClassNameInterface;
 use ZEngine\ClassExtension\ObjectGetConstructorInterface;
+use ZEngine\ClassExtension\ObjectGetPropertiesInterface;
 
 /**
  * Transparent-proxy style stub for the method/closure/constructor resolution handlers
@@ -26,7 +28,8 @@ use ZEngine\ClassExtension\ObjectGetConstructorInterface;
 class VirtualProxy implements
     ObjectCreateInterface,
     ObjectGetClassNameInterface,
-    ObjectGetConstructorInterface
+    ObjectGetConstructorInterface,
+    ObjectGetPropertiesInterface
 {
     use ObjectCreateTrait;
 
@@ -80,5 +83,20 @@ class VirtualProxy implements
         self::$constructorResolutions++;
 
         return $hook->proceed();
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public static function __getProperties(GetPropertiesHook $hook): array
+    {
+        $proxy = $hook->getObject();
+        assert($proxy instanceof self);
+
+        // A fresh table is built on every call (see ObjectGetPropertiesInterface docs)
+        return [
+            'subject' => $proxy->subject,
+            'virtual' => true,
+        ];
     }
 }

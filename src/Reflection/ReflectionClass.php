@@ -26,6 +26,7 @@ use ZEngine\ClassExtension\Hook\GetClassNameHook;
 use ZEngine\ClassExtension\Hook\GetConstructorHook;
 use ZEngine\ClassExtension\Hook\GetDebugInfoHook;
 use ZEngine\ClassExtension\Hook\GetPropertiesForHook;
+use ZEngine\ClassExtension\Hook\GetPropertiesHook;
 use ZEngine\ClassExtension\Hook\GetPropertyPointerHook;
 use ZEngine\ClassExtension\Hook\HasDimensionHook;
 use ZEngine\ClassExtension\Hook\HasPropertyHook;
@@ -46,6 +47,7 @@ use ZEngine\ClassExtension\ObjectGetClassNameInterface;
 use ZEngine\ClassExtension\ObjectGetConstructorInterface;
 use ZEngine\ClassExtension\ObjectGetDebugInfoInterface;
 use ZEngine\ClassExtension\ObjectGetPropertiesForInterface;
+use ZEngine\ClassExtension\ObjectGetPropertiesInterface;
 use ZEngine\ClassExtension\ObjectGetPropertyPointerInterface;
 use ZEngine\ClassExtension\ObjectHasDimensionInterface;
 use ZEngine\ClassExtension\ObjectHasPropertyInterface;
@@ -1379,6 +1381,11 @@ class ReflectionClass extends NativeReflectionClass
             $handler = parent::getMethod('__getConstructor')->getClosure();
             $this->setGetConstructorHandler($handler);
         }
+
+        if ($this->implementsInterface(ObjectGetPropertiesInterface::class)) {
+            $handler = parent::getMethod('__getProperties')->getClosure();
+            $this->setGetPropertiesHandler($handler);
+        }
     }
 
     public function __debugInfo()
@@ -1519,6 +1526,23 @@ class ReflectionClass extends NativeReflectionClass
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new GetPropertiesForHook($handler, $handlers);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs the "get_properties" handler for the current class
+     *
+     * @param Closure $handler Callback function (GetPropertiesHook $hook): array;
+     *
+     * @see ObjectGetPropertiesInterface
+     */
+    public function setGetPropertiesHandler(Closure $handler): GetPropertiesHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new GetPropertiesHook($handler, $handlers);
         $hook->install();
 
         return $hook;

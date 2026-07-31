@@ -19,6 +19,7 @@ use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use ZEngine\ClassExtension\Hook\GetClassNameHook;
 use ZEngine\ClassExtension\Hook\GetConstructorHook;
+use ZEngine\ClassExtension\Hook\GetPropertiesHook;
 use ZEngine\ClassExtension\ObjectCreateTrait;
 use ZEngine\Stub\TestClass;
 use ZEngine\Stub\VirtualProxy;
@@ -168,6 +169,124 @@ class ReflectionClassResolutionHandlersTest extends TestCase
         $constructed = new VirtualProxy('constructed');
         $this->assertTrue($constructed->constructed);
         $this->assertSame('constructed', $constructed->subject);
+    }
+
+    #[RunInSeparateProcess]
+    public function testInstallExtensionHandlersEnablesGetProperties(): void
+    {
+        $refClass = new ReflectionClass(VirtualProxy::class);
+        $refClass->installExtensionHandlers();
+
+        // The stub does not implement Traversable - engine-level property overloading is
+        // the feature under test - so the instance is annotated with its runtime behavior
+        /** @var VirtualProxy&\Traversable<string, mixed> $proxy */
+        $proxy = new VirtualProxy('visible');
+
+        $expected = ['subject' => 'visible', 'virtual' => true];
+        $this->assertSame($expected, self::propertySnapshot($proxy));
+        $this->assertSame($expected, get_object_vars($proxy));
+
+        $iterated = [];
+        foreach ($proxy as $key => $value) {
+            $iterated[$key] = $value;
+        }
+        $this->assertSame($expected, $iterated);
+    }
+
+    #[RunInSeparateProcess]
+    public function testGetPropertiesHandlerReflectsCurrentObjectState(): void
+    {
+        $refClass = new ReflectionClass(VirtualProxy::class);
+        $refClass->installExtensionHandlers();
+
+        $proxy = new VirtualProxy('first');
+        $this->assertSame('first', self::propertySnapshot($proxy)['subject']);
+
+        // The table is rebuilt on every consultation, an aged snapshot is never served
+        $proxy->subject = 'second';
+        $this->assertSame('second', self::propertySnapshot($proxy)['subject']);
+
+        // Stress the rebuild path: every iteration replaces the anchored table
+        for ($index = 0; $index < 1000; $index++) {
+            $proxy->subject = "value{$index}";
+            if (self::propertySnapshot($proxy)['subject'] !== "value{$index}") {
+                self::fail('Unexpected property table snapshot');
+            }
+        }
+    }
+
+    #[RunInSeparateProcess]
+    public function testGetPropertiesProceedReturnsEngineTable(): void
+    {
+        $refClass = $this->createTestClassReflection();
+        $refClass->setGetPropertiesHandler(function (GetPropertiesHook $hook) {
+            $this->assertInstanceOf(TestClass::class, $hook->getObject());
+            $properties = $hook->proceed();
+
+            return ['decorated' => true] + $properties;
+        });
+
+        $instance = new TestClass();
+        $result   = self::propertySnapshot($instance);
+
+        $this->assertTrue($result['decorated']);
+        $this->assertSame(42, $result['property']);
+        // Private declared properties keep their engine name mangling
+        $this->assertSame(100500, $result["\0" . TestClass::class . "\0secret"]);
+    }
+
+    #[RunInSeparateProcess]
+    public function testGetPropertiesHookSurvivesGarbageCollection(): void
+    {
+        $refClass = new ReflectionClass(VirtualProxy::class);
+        $refClass->installExtensionHandlers();
+
+        $proxy = new VirtualProxy('gc');
+        // Push the object into the GC root buffer: the container destruction delrefs the
+        // object without freeing it, marking it as a possible cycle root
+        $container = [$proxy, $proxy];
+        unset($container);
+
+        // The collector reaches the object through the redirected get_gc implementation,
+        // which serves the anchored table without re-entering userland (see the hook docs)
+        gc_collect_cycles();
+
+        $this->assertSame('gc', self::propertySnapshot($proxy)['subject']);
+    }
+
+    #[RunInSeparateProcess]
+    public function testUninstallRestoresOriginalGetPropertiesBehavior(): void
+    {
+        $refClass = $this->createTestClassReflection();
+        $hook     = $refClass->setGetPropertiesHandler(function (GetPropertiesHook $hook) {
+            return ['masked' => true];
+        });
+
+        $instance = new TestClass();
+        $this->assertSame(['masked' => true], self::propertySnapshot($instance));
+
+        $hook->uninstall();
+
+        // The consulted instance keeps its anchored table (the standard handler serves an
+        // existing zobj->properties as-is), fresh objects get the engine behavior back
+        $freshInstance = new TestClass();
+        $properties    = self::propertySnapshot($freshInstance);
+        $this->assertSame(42, $properties['property']);
+        $this->assertArrayNotHasKey('masked', $properties);
+    }
+
+    /**
+     * Snapshots the engine property table of an object through an (array) cast
+     *
+     * The mixed-typed seam erases the declared-property array shape static analysis
+     * would infer: with a get_properties hook installed the table is engine-defined
+     * and has nothing to do with the declared properties.
+     *
+     * @return array<array-key, mixed>
+     */
+    private static function propertySnapshot(object $object): array
+    {
+        return (array) $object;
     }
 
     /**
