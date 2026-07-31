@@ -172,6 +172,25 @@
                 "hooks": 64
             }
         },
+        "zend_attribute": {
+            "size": 56,
+            "fields": {
+                "name": 0,
+                "lcname": 8,
+                "flags": 16,
+                "lineno": 20,
+                "offset": 24,
+                "argc": 28,
+                "args": 32
+            }
+        },
+        "zend_attribute_arg": {
+            "size": 24,
+            "fields": {
+                "name": 0,
+                "value": 8
+            }
+        },
         "zend_op_array": {
             "size": 256,
             "fields": {

@@ -127,6 +127,7 @@ if ($emitHeader) {
     $inputC = <<<'C'
     #include "php.h"
     #include "zend_ast.h"
+    #include "zend_attributes.h"
     #include "zend_language_scanner.h"
     #include "zend_inheritance.h"
     #include "zend_hash.h"
