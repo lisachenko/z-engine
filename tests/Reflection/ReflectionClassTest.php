@@ -65,7 +65,7 @@ class ReflectionClassTest extends TestCase
         // so the debug-build shutdown report would flag it although nothing is wrong
         ini_set('report_memleaks', '0');
         $methodName = 'newMethod';
-        $this->refClass->addMethod($methodName, function (string $argument): string {
+        $refMethod  = $this->refClass->addMethod($methodName, function (string $argument): string {
             return $argument;
         });
         $isMethodExists = method_exists(TestClass::class, $methodName);
@@ -73,6 +73,24 @@ class ReflectionClassTest extends TestCase
         $instance = new TestClass();
         $result   = $instance->$methodName('Test');
         $this->assertSame('Test', $result);
+
+        // The returned reflection must be fully functional
+        $this->assertSame($methodName, $refMethod->getName());
+        $this->assertSame(TestClass::class, $refMethod->getDeclaringClass()->getName());
+        $this->assertTrue($refMethod->isPublic());
+        $this->assertFalse($refMethod->isClosure());
+        $this->assertSame('Invoked', $refMethod->invoke($instance, 'Invoked'));
+
+        // ...including the pointer-level API: redefine the fresh method and call it again
+        // (the redefining closure must stay alive while the method is callable - it owns
+        // the op_array the method now executes)
+        $newBody = function (string $argument): string {
+            return strrev($argument);
+        };
+        $refMethod->redefine($newBody);
+        // The runtime-resolved name keeps static analysis away from the dynamic method
+        $dynamicName = $refMethod->getName();
+        $this->assertSame('tseT', $instance->$dynamicName('Test'));
     }
 
     public function testSetAbstract()
