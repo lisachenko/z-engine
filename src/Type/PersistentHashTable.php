@@ -147,6 +147,45 @@ final class PersistentHashTable extends HashTable
     }
 
     /**
+     * Dismantles the table completely: engine data block first, then the struct itself
+     *
+     * The counterpart of create(): it turns an "immortal by design" persistent table back
+     * into free memory, which is what makes persistent registries droppable instead of
+     * process-lifetime only.
+     *
+     * Caller contract - violating any of these corrupts the heap:
+     *  - the caller must OWN the table (it minted it, or inherited ownership) and nothing,
+     *    in this request or a later one, may reference the struct or its buckets afterwards;
+     *  - the wrapper is dead after this call, as is every ReflectionValue previously
+     *    obtained from find()/findIndex()/getIterator();
+     *  - stored PAYLOADS are not touched: pDestructor is NULL on persistent tables by
+     *    construction, so whoever wrote a value into the table still owns it. Release
+     *    payloads (nested tables, persistent buffers) BEFORE destroying their container.
+     *
+     * Sealed (markImmutable()) tables are valid input: the refcount is dropped back to 1
+     * first, so the engine's debug-build "nobody else holds this array" assertion in
+     * zend_hash_destroy() is satisfied. That is the drop path for persisted user payloads.
+     *
+     * Both frees go through the persistent allocator: zend_hash_destroy() pefree()s the
+     * engine-grown arData block because the GC header carries GC_PERSISTENT (an
+     * uninitialized table keeps the shared sentinel and is skipped), and the struct block
+     * itself was minted with malloc by the FFI persistent allocator.
+     */
+    public function destroy(): void
+    {
+        // Sealed tables sit at the immutable refcount of 2; the engine asserts <= 1
+        $this->pointer->gc->refcount = 1;
+
+        Core::call('zend_hash_destroy', $this->pointer);
+
+        // Drop the block from z-engine's tracked registry before the memory goes away:
+        // a stale entry would make isTrackedBlock() lie about a recycled address and could
+        // turn a later untrackAndFree() into a double free
+        Core::untrack($this->pointer);
+        Core::persistentFree($this->pointer);
+    }
+
+    /**
      * Returns arData pointing right past the shared sentinel, as HT_SET_DATA_ADDR does
      *
      * @see zend_types.h:HT_SET_DATA_ADDR/HT_HASH_SIZE - for HT_MIN_MASK the hash part

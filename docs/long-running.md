@@ -134,9 +134,39 @@ The debug-build leak gate treats the following as expected, by design:
 | Refcount-0 persistent strings | never freed with the request allocator; bounded, reclaimed at process end |
 | Engine-original interface/trait buffers replaced by z-engine (including the trait alias/precedence lists replaced by `addTraitAlias()`/`addTraitPrecedence()` and their `remove*` counterparts) | possibly shared or in opcache SHM, never freed by z-engine; at most one per touched class |
 | Persistent interned strings (`StringEntry::persistentInterned`) | interned-style (immutable, non-refcounted) blocks referenced by persistent tables and object properties; bounded by the number of persisted keys/values, reclaimed at process end |
-| Persistent hashtables and their engine-grown data blocks (`PersistentHashTable`) | registries that must outlive the request by design; the engine resizes their data with the persistent allocator, nothing may free them mid-process |
+| Persistent hashtables and their engine-grown data blocks (`PersistentHashTable`) | registries that must outlive the request by design; the engine resizes their data with the persistent allocator, so only `PersistentHashTable::destroy()` may release them (see below) |
 | The shared `uninitialized_bucket` sentinel block | one `uint32_t[2]` per process backing every uninitialized persistent table, mirroring the engine's static |
 | Persistent object clones (`PersistentObjectFactory::persistentClone`) | refcount-pinned malloc objects designed to survive the request boundary; detached from the object store before teardown so no engine path ever frees them |
 
 Everything else is a bug: the test suite runs with `report_memleaks=1` on a debug build and
 fails on any leak report.
+
+## Dismantling persistent data (cross-request free)
+
+"Immortal by design" is the *default* for persistent allocations, not a life sentence: a
+long-running process that keeps persisting new state needs a way to drop old state again.
+That path is deliberately narrow, because releasing persistent memory is the one operation
+the engine cannot help with.
+
+| Primitive | What it releases |
+|-----------|------------------|
+| `Core::untrackAndFree($ptr)` | a block **allocated in this same request**, through the owning CData in the tracked-block registry (right allocator guaranteed, no-op for engine-original buffers) |
+| `Core::persistentFree($ptr)` | any malloc-backed block, through libc `free()`, with no bookkeeping at all |
+| `PersistentHashTable::destroy()` | one persistent table: `zend_hash_destroy()` for the engine-grown data block, then the struct itself |
+
+`Core::persistentFree()` exists because the tracked-block registry is a PHP static: it dies
+with the request that filled it. A block persisted by request *N* can only be dropped by
+request *N+k*, where the registry no longer knows it — hence the raw form. It is a plain
+`free(3)`: pass only blocks that are provably malloc-backed (z-engine persistent FFI
+allocations, or engine structures allocated with `pemalloc(..., 1)`), never request memory,
+never an interned `zend_string` (the engine's interned-string table references it), and never
+a block that is still reachable from a live engine structure. The two primitives stay
+orthogonal — `persistentFree()` does not touch the registry, so a caller dropping a block
+allocated in the *current* request must `Core::untrack()` it as well, or a recycled address
+could later be freed a second time through `untrackAndFree()`.
+
+`PersistentHashTable::destroy()` composes both halves for a table and is safe on sealed
+(`markImmutable()`) tables: it re-baselines the immutable refcount so the engine's debug-build
+"nobody else holds this array" assertion in `zend_hash_destroy()` holds. Stored *payloads*
+are never touched (persistent tables carry a NULL `pDestructor` by construction), so nested
+tables and buffers must be released by their owner before the container goes away.

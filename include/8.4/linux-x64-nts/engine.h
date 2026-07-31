@@ -956,10 +956,12 @@ typedef struct _zend_closure {
 
 /* Imported functions */
 extern zend_result zend_hash_del(HashTable *, zend_string *);
+extern zend_result zend_hash_index_del(HashTable *, zend_ulong);
 extern zval * zend_hash_find(const HashTable *, zend_string *);
 extern zval * zend_hash_add_or_update(HashTable *, zend_string *, zval *, uint32_t);
 extern zval * zend_hash_index_add_or_update(HashTable *, zend_ulong, zval *, uint32_t);
 extern zval * zend_hash_index_find(const HashTable *, zend_ulong);
+extern void zend_hash_destroy(HashTable *);
 extern zend_result zend_set_user_opcode_handler(uint8_t, user_opcode_handler_t);
 extern user_opcode_handler_t zend_get_user_opcode_handler(uint8_t);
 extern void zend_do_inheritance_ex(zend_class_entry *, zend_class_entry *, _Bool);
@@ -993,6 +995,7 @@ extern void zval_add_ref(zval *);
 extern void rc_dtor_func(zend_refcounted *);
 extern zend_string * zend_string_concat2(const char *, size_t, const char *, size_t);
 extern zend_ulong zend_string_hash_func(zend_string *);
+extern void free(void *);
 
 /* Imported globals */
 extern zend_executor_globals executor_globals;

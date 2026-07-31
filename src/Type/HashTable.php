@@ -145,6 +145,23 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
     }
 
     /**
+     * Deletes a value by integer key from the hashtable
+     *
+     * Same ownership contract as delete(): the engine destructor releases the bucket
+     * payload, nothing on the PHP side may release it again.
+     *
+     * @param int $key Integer key in the hash to delete
+     * @internal
+     */
+    public function deleteIndex(int $key): void
+    {
+        $result = Core::call('zend_hash_index_del', $this->pointer, $key);
+        if ($result === Core::FAILURE) {
+            throw new \RuntimeException("Can not delete an item with index {$key}");
+        }
+    }
+
+    /**
      * Adds new value to the HashTable
      */
     public function add(string $key, ReflectionValue $value): void
