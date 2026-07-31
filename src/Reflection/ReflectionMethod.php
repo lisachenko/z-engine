@@ -76,6 +76,59 @@ class ReflectionMethod extends NativeReflectionMethod
     }
 
     /**
+     * Creates a reflection for a property hook function (PHP 8.4+)
+     *
+     * Property hook bodies are real zend_function entries, but the engine does not publish
+     * them in the class function table - they are only reachable via zend_property_info.hooks.
+     * The native ReflectionMethod constructor resolves methods through the function table, so
+     * the hook is published there under its mangled name ("$prop::get"/"$prop::set") just for
+     * the duration of the native construction and then unpublished again. The transient entry
+     * is removed with the table destructor disabled, so the hook function itself is untouched.
+     *
+     * @param CData $functionEntry Pointer to the hook zend_function structure
+     */
+    public static function fromHookCData(CData $functionEntry): ReflectionMethod
+    {
+        if ($functionEntry->type === Core::ZEND_INTERNAL_FUNCTION) {
+            $functionEntry = Core::cast('zend_internal_function *', $functionEntry);
+            $commonPointer = $functionEntry;
+        } else {
+            $commonPointer = $functionEntry->common;
+        }
+        assert($commonPointer instanceof CData);
+        $functionNamePtr = $commonPointer->function_name;
+        assert($functionNamePtr instanceof CData);
+        $lowerName = strtolower(StringEntry::fromCData($functionNamePtr)->getStringValue());
+
+        $scope = $commonPointer->scope;
+        assert($scope instanceof CData);
+        $functionTable = Core::addr($scope->function_table);
+        $methodTable   = new HashTable($functionTable);
+        if ($methodTable->find($lowerName) !== null) {
+            // Already published (eg by a future engine version) - use the regular path
+            return static::fromCData($functionEntry);
+        }
+
+        // The temporary container is released right after the engine copied it into a bucket
+        $rawFunction = Core::cast('zend_function *', $functionEntry)[0];
+        assert($rawFunction instanceof CData);
+        $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawFunction);
+        $methodTable->add($lowerName, $valueEntry);
+        $valueEntry->release();
+        try {
+            return static::fromCData($functionEntry);
+        } finally {
+            // Unpublish the transient entry without destroying the hook function: the table
+            // destructor (zend_function_dtor) is disabled around the delete, so the bucket
+            // removal releases nothing - the hook stays owned by zend_property_info.hooks
+            $previousDestructor         = $functionTable->pDestructor;
+            $functionTable->pDestructor = null;
+            $methodTable->delete($lowerName);
+            $functionTable->pDestructor = $previousDestructor;
+        }
+    }
+
+    /**
      * Binds the zend_function embedded into a closure to the given class as a method
      *
      * All function surgery goes through the wrapper API: the entry is renamed, attached to

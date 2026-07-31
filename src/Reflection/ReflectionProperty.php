@@ -27,8 +27,11 @@ use ZEngine\Type\StringEntry;
  *     uint32_t flags;
  *     zend_string *name;
  *     zend_string *doc_comment;
+ *     HashTable *attributes;
  *     zend_class_entry *ce;
  *     zend_type type;
+ *     const zend_property_info *prototype;
+ *     zend_function **hooks;
  * } zend_property_info;
  */
 class ReflectionProperty extends NativeReflectionProperty
@@ -81,6 +84,72 @@ class ReflectionProperty extends NativeReflectionProperty
     public function getOffset(): int
     {
         return $this->pointer->offset;
+    }
+
+    /**
+     * Checks if this property declares at least one property hook (PHP 8.4+)
+     */
+    public function hasHooks(): bool
+    {
+        return $this->pointer->hooks !== null;
+    }
+
+    /**
+     * Returns the engine-level reflection of one property hook or null if that hook is not declared
+     *
+     * The hooks array of zend_property_info is indexed by the hook kind; the wrapped
+     * zend_function is the real hook body compiled into the class (also published in the
+     * class function table under the mangled "$prop::get"/"$prop::set" name).
+     *
+     * The parameter is intentionally wider than the native getHook(): both the native
+     * PropertyHookType enum and the raw engine kind (Core::ZEND_PROPERTY_HOOK_GET or
+     * Core::ZEND_PROPERTY_HOOK_SET, the index into zend_property_info.hooks) are accepted.
+     *
+     * @param \PropertyHookType|int $kind Hook kind
+     */
+    public function getHook(\PropertyHookType|int $kind): ?ReflectionMethod
+    {
+        if ($kind instanceof \PropertyHookType) {
+            $kind = $kind === \PropertyHookType::Get
+                ? Core::ZEND_PROPERTY_HOOK_GET
+                : Core::ZEND_PROPERTY_HOOK_SET;
+        }
+        if ($kind !== Core::ZEND_PROPERTY_HOOK_GET && $kind !== Core::ZEND_PROPERTY_HOOK_SET) {
+            throw new \InvalidArgumentException(
+                'Hook kind must be Core::ZEND_PROPERTY_HOOK_GET or Core::ZEND_PROPERTY_HOOK_SET',
+            );
+        }
+        $hooks = $this->pointer->hooks;
+        if ($hooks === null) {
+            return null;
+        }
+        assert($hooks instanceof CData);
+        $hookFunction = $hooks[$kind];
+        if ($hookFunction === null) {
+            return null;
+        }
+        assert($hookFunction instanceof CData);
+
+        return ReflectionMethod::fromHookCData($hookFunction);
+    }
+
+    /**
+     * Returns the engine attributes table of this property or null if the property has no attributes
+     *
+     * Each element of the returned table is an IS_PTR value pointing to a zend_attribute:
+     * wrap it with ReflectionAttributeEntry::fromValueEntry() for structured access.
+     *
+     * @return HashTable|ReflectionValue[]|null
+     */
+    public function getAttributesTable(): ?HashTable
+    {
+        $attributes = $this->pointer->attributes;
+        if ($attributes === null) {
+            return null;
+        }
+        assert($attributes instanceof CData);
+
+        return new HashTable($attributes);
     }
 
     /**

@@ -37,6 +37,8 @@ return [
         'zend_class_constant',
         'zend_class_name',
         'zend_property_info',
+        'zend_attribute',
+        'zend_attribute_arg',
         'zend_function',
         'zend_op_array',
         'zend_internal_function',
@@ -178,10 +180,17 @@ return [
         // Call frame (zend_compile.h)
         'ZEND_CALL_FUNCTION', 'ZEND_CALL_CODE', 'ZEND_CALL_NESTED', 'ZEND_CALL_TOP',
         'ZEND_CALL_HAS_THIS', 'ZEND_CALL_FAKE_CLOSURE', 'ZEND_CALL_CLOSURE',
+        // Attribute targets/flags (zend_attributes.h)
+        'ZEND_ATTRIBUTE_TARGET_CLASS', 'ZEND_ATTRIBUTE_TARGET_FUNCTION', 'ZEND_ATTRIBUTE_TARGET_METHOD',
+        'ZEND_ATTRIBUTE_TARGET_PROPERTY', 'ZEND_ATTRIBUTE_TARGET_CLASS_CONST', 'ZEND_ATTRIBUTE_TARGET_PARAMETER',
+        'ZEND_ATTRIBUTE_TARGET_CONST', 'ZEND_ATTRIBUTE_TARGET_ALL', 'ZEND_ATTRIBUTE_IS_REPEATABLE',
+        'ZEND_ATTRIBUTE_FLAGS',
     ],
 
     'enums' => [
         '_zend_ast_kind',
+        // Anonymous enum aliased by its typedef name (ZEND_PROPERTY_HOOK_GET/SET)
+        'zend_property_hook_kind',
     ],
 
     // System/libc types that z-engine only ever uses behind a pointer. Their
@@ -210,6 +219,8 @@ return [
         'zend_class_constant',
         'zend_class_name',
         'zend_property_info',
+        'zend_attribute',
+        'zend_attribute_arg',
         'zend_op_array',
         'zend_internal_function',
         'zend_op',

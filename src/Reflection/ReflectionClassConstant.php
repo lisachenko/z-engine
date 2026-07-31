@@ -137,6 +137,25 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
     }
 
     /**
+     * Returns the engine attributes table of this constant or null if the constant has no attributes
+     *
+     * Each element of the returned table is an IS_PTR value pointing to a zend_attribute:
+     * wrap it with ReflectionAttributeEntry::fromValueEntry() for structured access.
+     *
+     * @return HashTable|ReflectionValue[]|null
+     */
+    public function getAttributesTable(): ?HashTable
+    {
+        $attributes = $this->pointer->attributes;
+        if ($attributes === null) {
+            return null;
+        }
+        assert($attributes instanceof CData);
+
+        return new HashTable($attributes);
+    }
+
+    /**
      * Returns a user-friendly representation of internal structure to prevent segfault
      */
     public function __debugInfo(): array

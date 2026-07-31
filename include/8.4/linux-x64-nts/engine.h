@@ -901,6 +901,19 @@ struct _zend_ini_parser_param {
  zend_ini_parser_cb_t ini_parser_cb;
  void *arg;
 };
+typedef struct {
+ zend_string *name;
+ zval value;
+} zend_attribute_arg;
+typedef struct _zend_attribute {
+ zend_string *name;
+ zend_string *lcname;
+ uint32_t flags;
+ uint32_t lineno;
+ uint32_t offset;
+ uint32_t argc;
+ zend_attribute_arg args[1];
+} zend_attribute;
 typedef struct _zend_lex_state {
  unsigned int yy_leng;
  unsigned char *yy_start;

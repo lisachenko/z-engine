@@ -105,6 +105,17 @@ class Core
     public const ZEND_ACC_READONLY = 0x80;
     public const ZEND_ACC_VIRTUAL  = 0x200;
 
+    /**
+     * Property hook kinds (zend_property_hook_kind), used to index zend_property_info.hooks
+     */
+    public const ZEND_PROPERTY_HOOK_GET = 0;
+    public const ZEND_PROPERTY_HOOK_SET = 1;
+
+    /**
+     * Number of entries in a zend_property_info.hooks array (one per hook kind)
+     */
+    public const ZEND_PROPERTY_HOOK_COUNT = 2;
+
     /* Function flags */
     public const ZEND_ACC_DEPRECATED          = 0x800;
     public const ZEND_ACC_RETURN_REFERENCE    = 0x1000;
