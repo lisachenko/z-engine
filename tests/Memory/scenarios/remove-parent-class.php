@@ -75,9 +75,15 @@ for ($index = 0; $index < $iterations; $index++) {
 }
 
 // Relink churn: removeParentClass() followed by setParent() must return the class to a
-// fully consistent state without leaking the per-relink table reallocations
-$refChild = new ReflectionClass(TestChildClass::class);
+// fully consistent state without leaking the per-relink table reallocations. Reading a
+// static member re-materializes the live statics table on every cycle, so the fold-back
+// in setParent() (values moved into the defaults, table block efree'd) is exercised too.
+$refChild       = new ReflectionClass(TestChildClass::class);
+$refChildNative = new \ReflectionClass(TestChildClass::class);
 for ($index = 0; $index < 50; $index++) {
+    if ($refChildNative->getStaticPropertyValue('childStaticProperty') !== ['child']) {
+        throw new RuntimeException('Own static member was corrupted during the relink churn');
+    }
     $refChild->removeParentClass();
     $refChild->setParent(TestParentClass::class);
 }

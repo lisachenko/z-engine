@@ -985,13 +985,14 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
-     * Folds the live (materialized) static member values back into the default table
+     * Folds the live (materialized) static member values back into the default table and
+     * releases the materialized table itself
      *
      * The materialized table cannot be reused after inheritance changes the static member
-     * count, and it cannot be freed through FFI (it belongs to the request allocator, the
-     * engine releases it at shutdown only through the map pointer). Transferring the values
-     * into default_static_members_table keeps them alive and leak-free; only the bare table
-     * block stays allocated until the end of the request.
+     * count. Its values are transferred into default_static_members_table (so they survive
+     * the re-link) and the emalloc'd table block from zend_class_init_statics() is handed
+     * back to the request allocator: FFI::free() on a pointer CData performs an engine
+     * efree() of the pointed block, which matches the original allocation exactly.
      */
     private function foldMaterializedStaticMembersTable(): void
     {
@@ -1021,10 +1022,14 @@ class ReflectionClass extends NativeReflectionClass
                 Core::memcpy($defaultValue, $liveValue, $zvalSize);
                 self::markZvalUndef($liveValue);
             }
+            // Every value has been moved out (or is an indirect view): return the bare
+            // zval[] block to the request allocator, exactly reversing the engine's
+            // emalloc in zend_class_init_statics()
+            Core::free($materialized);
         }
         // Detach the map pointer: zend_do_inheritance_ex() reallocates the default table, so
-        // a stale alias or an undersized materialized table would dangle after re-linking;
-        // the engine re-materializes the statics lazily on next access
+        // a stale alias would dangle after re-linking; the engine re-materializes the
+        // statics lazily on next access
         $this->pointer->static_members_table__ptr = null;
     }
 
