@@ -22,6 +22,7 @@ use ZEngine\ClassExtension\Hook\CompareValuesHook;
 use ZEngine\ClassExtension\Hook\CountElementsHook;
 use ZEngine\ClassExtension\Hook\CreateObjectHook;
 use ZEngine\ClassExtension\Hook\DoOperationHook;
+use ZEngine\ClassExtension\Hook\GetClassNameHook;
 use ZEngine\ClassExtension\Hook\GetDebugInfoHook;
 use ZEngine\ClassExtension\Hook\GetPropertiesForHook;
 use ZEngine\ClassExtension\Hook\GetPropertyPointerHook;
@@ -40,6 +41,7 @@ use ZEngine\ClassExtension\ObjectCompareValuesInterface;
 use ZEngine\ClassExtension\ObjectCountElementsInterface;
 use ZEngine\ClassExtension\ObjectCreateInterface;
 use ZEngine\ClassExtension\ObjectDoOperationInterface;
+use ZEngine\ClassExtension\ObjectGetClassNameInterface;
 use ZEngine\ClassExtension\ObjectGetDebugInfoInterface;
 use ZEngine\ClassExtension\ObjectGetPropertiesForInterface;
 use ZEngine\ClassExtension\ObjectGetPropertyPointerInterface;
@@ -1365,6 +1367,11 @@ class ReflectionClass extends NativeReflectionClass
             $handler = parent::getMethod('__count')->getClosure();
             $this->setCountElementsHandler($handler);
         }
+
+        if ($this->implementsInterface(ObjectGetClassNameInterface::class)) {
+            $handler = parent::getMethod('__getClassName')->getClosure();
+            $this->setGetClassNameHandler($handler);
+        }
     }
 
     public function __debugInfo()
@@ -1624,6 +1631,23 @@ class ReflectionClass extends NativeReflectionClass
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new CountElementsHook($handler, $handlers);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs the "get_class_name" handler for the current class
+     *
+     * @param Closure $handler Callback function (GetClassNameHook $hook): string;
+     *
+     * @see ObjectGetClassNameInterface
+     */
+    public function setGetClassNameHandler(Closure $handler): GetClassNameHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new GetClassNameHook($handler, $handlers);
         $hook->install();
 
         return $hook;
