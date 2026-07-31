@@ -20,6 +20,21 @@ use ZEngine\Core;
 /**
  * Class ClosureEntry
  *
+ * Memory ownership contract (see docs/long-running.md for the full model):
+ *
+ *  - The wrapper itself owns nothing: the constructor and fromCData() are BORROWED views,
+ *    the caller must keep the closure object alive while the entry is used. Lifetime
+ *    control goes through the closure's object header - getClosureObjectEntry() exposes it
+ *    as a (borrowed) ObjectEntry.
+ *  - setThis() has full ZVAL_COPY semantics: it releases the previously bound $this and
+ *    takes a closure-owned reference on the new object, so the caller does NOT have to
+ *    keep the bound object alive - the engine releases it with the closure.
+ *  - setCalledScope() performs no refcounting: class entries are not refcounted values.
+ *  - getRawFunction() returns the zend_function EMBEDDED in the closure object: anything
+ *    that stores this pointer (eg a method table) must guarantee the closure object
+ *    outlives that structure - ReflectionClass::addMethod() immortalizes the closure for
+ *    exactly this reason.
+ *
  * typedef struct _zend_closure {
  *   zend_object       std;
  *   zend_function     func;
@@ -99,7 +114,10 @@ class ClosureEntry
     /**
      * Changes the current $this, bound to the closure
      *
-     * <span style="color:red; font-weight: bold">Warning!</span> Given object should live more than closure itself!
+     * The previous bound object (if any) is released and the closure takes its own reference
+     * on the new one, exactly like the engine's ZVAL_COPY - the caller no longer has to keep
+     * the object alive for the closure lifetime.
+     *
      * @param object $object New object
      *
      * @internal
@@ -109,7 +127,13 @@ class ClosureEntry
         $selfExecutionState = Core::$executor->getExecutionState();
         $objectArgument     = $selfExecutionState->getArgument(0);
         $objectZval         = $objectArgument->getRawValue();
+
+        $thisPtr = Core::addr($this->pointer->this_ptr);
+        // Release the previously bound $this (safe no-op for unbound IS_UNDEF/IS_NULL closures)
+        Core::call('zval_ptr_dtor', $thisPtr);
         Core::memcpy($this->pointer->this_ptr, $objectZval[0], Core::sizeof(Core::type('zval')));
+        // The closure now holds its own reference on the new $this
+        Core::call('zval_add_ref', $thisPtr);
     }
 
     /**

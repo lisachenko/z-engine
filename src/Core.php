@@ -20,6 +20,7 @@ use FFI\CType;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
+use ZEngine\Hook\AbstractHook;
 use ZEngine\System\Compiler;
 use ZEngine\System\Executor;
 use ZEngine\System\Hook\AstProcessHook;
@@ -27,6 +28,33 @@ use ZEngine\Type\HashTable;
 
 /**
  * Class Core
+ *
+ * Central access point to the engine FFI binding, plus the low-level memory management
+ * primitives and the process-wide registries (see docs/long-running.md for the full model):
+ *
+ *  - new()/free(): FFI allocation, for z-engine's OWN containers and buffers only. Engine
+ *    memory must never be freed through the FFI allocator - refcounted payloads are
+ *    released through the exported engine primitives instead (zval_ptr_dtor, zval_add_ref,
+ *    rc_dtor_func, reachable via call()).
+ *  - trackedNew()/isTrackedBlock()/untrackAndFree()/untrack(): registry of buffers that
+ *    z-engine stores INSIDE engine structures (interface lists, trait name arrays, object
+ *    handler blocks), keyed by address. untrackAndFree() frees a block if and only if
+ *    z-engine allocated it, which makes buffer replacement legal in every branch while
+ *    engine-original (and possibly shared-memory) arrays are never touched. Allocation
+ *    class matters: persistent (malloc) only for structures the engine frees with the
+ *    persistent allocator (internal classes); request memory everywhere else.
+ *  - addressOf(): numeric pointer identity, used for cache keys and the registries above.
+ *  - cast(): array-to-pointer decay without FFI::typeof() - probing a CData's kind and then
+ *    referencing it again leaks the owned FFI type structure, so arrays are detected with
+ *    count() instead.
+ *  - registerHook()/unregisterHook()/isTopHook(): per-field chains of installed engine
+ *    hooks; the strong references keep libffi trampolines alive while the engine points at
+ *    them, and chains unwind strictly in reverse installation order.
+ *  - shutdown() (auto-registered via register_shutdown_function in init()): restores every
+ *    hooked engine pointer while the trampolines are still valid, then stops all engine
+ *    writes for the rest of the request - the invariant that makes long-running runtimes
+ *    (worker loops, FPM + opcache preload) safe. reinstallHooks() re-mints trampolines for
+ *    SAPIs that cycle FFI callback state between handled requests.
  */
 class Core
 {
@@ -164,6 +192,36 @@ class Core
     private static ?array $engineConstants = null;
 
     /**
+     * Registry of engine-visible buffers allocated by z-engine, keyed by numeric address
+     *
+     * Keeping the original CData here both marks the block as "ours to free" and prevents
+     * ext/ffi from considering the memory unreachable while an engine structure points to it.
+     *
+     * @var array<int, CData>
+     */
+    private static array $trackedBlocks = [];
+
+    /**
+     * Per-field chains of installed engine hooks, keyed by container address + field name
+     *
+     * Strong references: an installed hook (and its libffi trampoline) can never be collected
+     * while the engine still points at it. Chains unwind in reverse installation order.
+     *
+     * @var array<string, array<int, AbstractHook>>
+     */
+    private static array $installedHooks = [];
+
+    /**
+     * Whether Core::shutdown() has run: no engine pointers may be written anymore
+     */
+    private static bool $isShutdown = false;
+
+    /**
+     * Whether the shutdown handler was already registered for this request
+     */
+    private static bool $shutdownRegistered = false;
+
+    /**
      * Performs Z-engine core initialization
      */
     public static function init(): void
@@ -192,6 +250,17 @@ class Core
         self::$executor = new Executor($engine->executor_globals);
         self::$compiler = new Compiler($engine->compiler_globals);
         self::$modules  = new HashTable(Core::addr($engine->module_registry));
+
+        // Deterministic teardown: user shutdown functions run before object destructors and
+        // before ext/ffi RSHUTDOWN frees the callback trampolines, so every hooked engine
+        // pointer is restored while writing it is still safe
+        if (!self::$shutdownRegistered) {
+            register_shutdown_function(static function (): void {
+                self::shutdown();
+            });
+            self::$shutdownRegistered = true;
+        }
+        self::$isShutdown = false;
 
         self::preloadFrameworkClasses();
     }
@@ -331,8 +400,16 @@ class Core
         // instead of decaying it to a pointer to its data. Restore the decay
         // semantics explicitly, otherwise every buffer cast becomes a wild
         // pointer made of the buffer's leading bytes.
-        if (FFI::typeof($pointer)->getKind() === CType::TYPE_ARRAY) {
+        //
+        // The decay deliberately avoids FFI::typeof(): probing the kind of a CData and then
+        // taking another reference to it leaks the owned FFI type structure (~116 bytes per
+        // call), which made every buffer cast a slow leak in long-running processes.
+        try {
+            // Only C arrays are countable; pointers, structs and scalars throw here
+            \count($pointer);
             $pointer = FFI::addr($pointer[0]);
+        } catch (FFI\Exception) {
+            // Not an array: cast directly
         }
 
         return self::$engine->cast($type, $pointer);
@@ -352,6 +429,16 @@ class Core
     public static function addr(CData $variable): CData
     {
         return FFI::addr($variable);
+    }
+
+    /**
+     * Returns the numeric address of a pointer for use as a stable identity key
+     *
+     * @param CData $pointer Pointer CData (eg zend_class_entry *)
+     */
+    public static function addressOf(CData $pointer): int
+    {
+        return (int) self::cast('uintptr_t', $pointer)->cdata;
     }
 
     /**
@@ -375,6 +462,149 @@ class Core
     public static function new(string $type, bool $owned = true, bool $persistent = false): CData
     {
         return self::$engine->new($type, $owned, $persistent);
+    }
+
+    /**
+     * Allocates a buffer that will be stored inside an engine structure and records it in the
+     * z-engine block registry
+     *
+     * The registry makes replacement of such buffers safe in every branch: untrackAndFree()
+     * frees a block if and only if z-engine allocated it, so engine-original arrays (including
+     * shared-memory data of immutable classes) are never freed through the FFI allocator.
+     *
+     * @param string $type Name of the type (eg "zend_class_entry *[4]")
+     */
+    public static function trackedNew(string $type, bool $persistent = false): CData
+    {
+        $memory                                                    = self::new($type, false, $persistent);
+        self::$trackedBlocks[self::addressOf(self::addr($memory))] = $memory;
+
+        return $memory;
+    }
+
+    /**
+     * Checks if the given pointer refers to a block allocated by z-engine via trackedNew()
+     */
+    public static function isTrackedBlock(CData $pointer): bool
+    {
+        return isset(self::$trackedBlocks[self::addressOf($pointer)]);
+    }
+
+    /**
+     * Frees the pointed block if and only if z-engine allocated it (no-op otherwise)
+     *
+     * Engine-original buffers are deliberately left alone: freeing memory that z-engine did
+     * not allocate is exactly the wrong-allocator corruption this registry exists to prevent.
+     */
+    public static function untrackAndFree(CData $pointer): void
+    {
+        $address = self::addressOf($pointer);
+        if (!isset(self::$trackedBlocks[$address])) {
+            return;
+        }
+        // Free through the original CData so ext/ffi picks the right (persistent) allocator
+        FFI::free(self::$trackedBlocks[$address]);
+        unset(self::$trackedBlocks[$address]);
+    }
+
+    /**
+     * Removes a block from the registry without freeing it (ownership handed to the engine)
+     */
+    public static function untrack(CData $pointer): void
+    {
+        unset(self::$trackedBlocks[self::addressOf($pointer)]);
+    }
+
+    /**
+     * Records a freshly installed hook at the top of its field chain
+     *
+     * @internal called by AbstractHook::install()
+     */
+    public static function registerHook(AbstractHook $hook): void
+    {
+        self::$installedHooks[$hook->getHookFieldKey()][] = $hook;
+    }
+
+    /**
+     * Removes an uninstalled hook from the top of its field chain
+     *
+     * @internal called by AbstractHook::uninstall()
+     */
+    public static function unregisterHook(AbstractHook $hook): void
+    {
+        $fieldKey = $hook->getHookFieldKey();
+        if (self::isTopHook($hook)) {
+            array_pop(self::$installedHooks[$fieldKey]);
+            if (self::$installedHooks[$fieldKey] === []) {
+                unset(self::$installedHooks[$fieldKey]);
+            }
+        }
+    }
+
+    /**
+     * Checks if the given hook is the most recently installed one on its engine field
+     */
+    public static function isTopHook(AbstractHook $hook): bool
+    {
+        $chain = self::$installedHooks[$hook->getHookFieldKey()] ?? [];
+
+        return $chain !== [] && end($chain) === $hook;
+    }
+
+    /**
+     * Checks if Core::shutdown() has already run for this request
+     */
+    public static function isShutdown(): bool
+    {
+        return self::$isShutdown;
+    }
+
+    /**
+     * Restores every hooked engine pointer and forgets all z-engine registries (idempotent)
+     *
+     * Registered automatically from Core::init() via register_shutdown_function: user shutdown
+     * functions run before object destructors and before ext/ffi frees callback trampolines,
+     * which makes this the last safe moment to write into engine structures. Invariant after
+     * this call: no libffi trampoline pointer survives in any structure that outlives the
+     * request, and z-engine performs no further engine writes.
+     */
+    public static function shutdown(): void
+    {
+        if (self::$isShutdown) {
+            return;
+        }
+
+        // Unwind every chain in reverse installation order so each hook restores its predecessor
+        foreach (array_reverse(self::$installedHooks) as $chain) {
+            for ($index = count($chain) - 1; $index >= 0; $index--) {
+                $chain[$index]->uninstall();
+            }
+        }
+        self::$installedHooks = [];
+
+        // Tracked buffers referenced from engine structures stay allocated: the engine frees
+        // request-lifetime ones when their owning structures die, persistent ones are process
+        // lifetime by design. Dropping the registry only releases the bookkeeping.
+        self::$trackedBlocks = [];
+
+        self::$isShutdown = true;
+    }
+
+    /**
+     * Rewrites the trampolines of all installed hooks (escape hatch for SAPIs that cycle FFI
+     * callback state between handled requests, eg FrankenPHP worker mode)
+     *
+     * Note: for fields with several stacked hooks only the top trampoline is reachable by the
+     * engine; intermediate proceed() chains keep pointing at the trampolines captured at
+     * install time, so cycle-safe setups should prefer one hook per engine field.
+     */
+    public static function reinstallHooks(): void
+    {
+        foreach (self::$installedHooks as $chain) {
+            foreach ($chain as $hook) {
+                $hook->refreshTrampoline();
+            }
+        }
     }
 
     /**
@@ -474,10 +704,12 @@ class Core
      *
      * @param Closure $handler function(NodeInterface $node): void callback
      */
-    public static function setASTProcessHandler(Closure $handler): void
+    public static function setASTProcessHandler(Closure $handler): AstProcessHook
     {
         $hook = new AstProcessHook($handler, self::$engine);
         $hook->install();
+
+        return $hook;
     }
 
     /**

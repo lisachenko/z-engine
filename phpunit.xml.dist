@@ -36,12 +36,11 @@
     <php>
         <!-- Verify FFI struct layouts against the C ground truth on every boot -->
         <env name="ZENGINE_STRICT_LAYOUT_CHECK" value="1"/>
-        <!-- z-engine deliberately holds FFI resources for the engine's lifetime,
-             so on a debug build the shutdown leak report is expected noise, not
-             corruption (Zend assertions still catch real corruption). Declaring
-             it here propagates it to the isolated child processes too. Harmless
-             on a release build, where it is off by default. -->
-        <ini name="report_memleaks" value="0"/>
+        <!-- Leak gate: after the memory-lifetime overhaul (issue #62) every leak
+             report from a debug build is a genuine bug. Declaring it here
+             propagates it to the isolated child processes too. No-op on a
+             release build. -->
+        <ini name="report_memleaks" value="1"/>
         <!-- ffi.enable=preload|1 and zend.assertions=1 must be set in php.ini
              (or via `php -d` on the CLI) - they cannot be changed at runtime.
              See AGENTS.md and the CI workflow. -->

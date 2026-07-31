@@ -101,6 +101,13 @@ return [
         // Module API
         'zend_register_module_ex',
         'zend_startup_module_ex',
+        // Memory management API (the inline zend_string_init/release family is not linkable,
+        // zend_string_concat2 is the pragmatic exported way to mint an owned zend_string)
+        'zval_ptr_dtor',
+        'zval_add_ref',
+        'rc_dtor_func',
+        'zend_string_concat2',
+        'zend_string_hash_func',
     ],
 
     'variables' => [

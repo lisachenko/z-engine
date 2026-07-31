@@ -22,6 +22,18 @@ use ZEngine\Reflection\ReflectionValue;
 /**
  * Class HashTable provides general access to the internal array objects, aka hash-table
  *
+ * Memory ownership contract (see docs/long-running.md for the full model):
+ *
+ *  - The wrapper is always a BORROWED view over an engine-owned hashtable (no addref).
+ *  - add() makes the ENGINE copy the source zval into its own bucket: the temporary
+ *    container passed in stays with the caller and must still be released by the caller
+ *    (the bucket owns the payload reference that copy() took).
+ *  - find() and iteration yield BORROWED ReflectionValue wrappers over bucket zvals: they
+ *    are valid only until the bucket is deleted or the table is rehashed, and reading them
+ *    never changes refcounts.
+ *  - delete() lets the engine destructor release the bucket payload - nothing on the PHP
+ *    side may release it again.
+ *
  * struct _zend_array {
  *     zend_refcounted_h gc;
  *     union {
@@ -108,7 +120,7 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
     public function find(string $key): ?ReflectionValue
     {
         $stringEntry = new StringEntry($key);
-        $pointer     = Core::call('zend_hash_find', $this->pointer, Core::addr($stringEntry->getRawValue()));
+        $pointer     = Core::call('zend_hash_find', $this->pointer, $stringEntry->getRawValue());
 
         if ($pointer !== null) {
             $pointer = ReflectionValue::fromValueEntry($pointer);
@@ -126,7 +138,7 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
     public function delete(string $key): void
     {
         $stringEntry = new StringEntry($key);
-        $result      = Core::call('zend_hash_del', $this->pointer, Core::addr($stringEntry->getRawValue()));
+        $result      = Core::call('zend_hash_del', $this->pointer, $stringEntry->getRawValue());
         if ($result === Core::FAILURE) {
             throw new \RuntimeException("Can not delete an item with key {$key}");
         }
@@ -141,7 +153,7 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
         $result      = Core::call(
             'zend_hash_add_or_update',
             $this->pointer,
-            Core::addr($stringEntry->getRawValue()),
+            $stringEntry->getRawValue(),
             $value->getRawValue(),
             self::HASH_ADD_NEW,
         );

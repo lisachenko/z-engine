@@ -19,9 +19,34 @@ use ZEngine\Core;
 use ZEngine\Type\ReferenceCountedInterface;
 use ZEngine\Type\ReferenceCountedTrait;
 use ZEngine\Type\ReferenceEntry;
+use ZEngine\Type\ReleasableTrait;
 
 /**
  * Class ReflectionValue represents a value in PHP
+ *
+ * Memory ownership contract (see docs/long-running.md for the full model):
+ *
+ *  - `new ReflectionValue($value)` is an OWNING construction: it allocates its own 16-byte
+ *    zval container and takes exactly one reference on refcounted payloads. Both are dropped
+ *    automatically on destruction, or eagerly via the idempotent release(); any access after
+ *    release() throws instead of touching freed memory.
+ *  - fromValueEntry() is a BORROWED view over an engine-owned zval: it owns nothing,
+ *    release() is a no-op, and the caller must guarantee the pointed zval stays valid.
+ *  - newEntry() returns a wrapper that owns only its container - the payload reference still
+ *    belongs to the caller. Call acquireReference() before handing the zval to an engine
+ *    function with ownership semantics (one that may release or replace the value inside,
+ *    eg zend_prepare_string_for_scanning), and release() to free whatever is owned.
+ *  - transferReferenceOwnership() hands the owned payload reference over to an engine sink
+ *    that will release it later (hashtable bucket, class entry field, AST node); after the
+ *    transfer this wrapper no longer drops the reference.
+ *  - copy() follows ZVAL_COPY semantics (takes a reference on refcounted payloads).
+ *    setNativeValue() releases the previous destination content like an engine assignment;
+ *    initializeNativeValue() writes into UNINITIALIZED engine output slots (cast_object
+ *    retval, do_operation result) where interpreting the previous bytes would crash.
+ *  - Engine memory is never freed through the FFI allocator: payload releases are routed
+ *    through zval_ptr_dtor/rc_dtor_func, so interned, immutable and persistent payloads
+ *    keep their engine semantics. Because every owning wrapper holds its own reference,
+ *    aliasing two wrappers over one pointer can never double-free.
  *
  * struct _zval_struct {
  *   zend_value        value;            // value
@@ -73,6 +98,7 @@ use ZEngine\Type\ReferenceEntry;
 class ReflectionValue implements ReferenceCountedInterface
 {
     use ReferenceCountedTrait;
+    use ReleasableTrait;
 
     /* regular data types */
     public const IS_UNDEF        = 0;
@@ -125,6 +151,9 @@ class ReflectionValue implements ReferenceCountedInterface
     /**
      * ReflectionValue constructor.
      *
+     * The constructed instance owns its zval container and exactly one reference on the
+     * payload (when the payload is refcounted); both are dropped by release()/__destruct.
+     *
      * @param mixed $value Any value to be reflected
      */
     public function __construct($value)
@@ -132,9 +161,14 @@ class ReflectionValue implements ReferenceCountedInterface
         // Trick here is to look at internal structures and steal pointer to our value from current frame
         $selfExecutionState = Core::$executor->getExecutionState();
         $valueEntry         = $selfExecutionState->getArgument(0);
-        $newEntry           = self::newEntry($valueEntry->getType(), $valueEntry->getRawValue()[0]);
-        $valueEntry->copy($newEntry->getRawValue());
-        $this->pointer = $newEntry->getRawValue();
+
+        $container     = Core::new('zval', false);
+        $this->pointer = Core::addr($container);
+        // copy() takes an own reference on refcounted payloads, exactly like ZVAL_COPY
+        $valueEntry->copy($this->pointer);
+
+        $this->ownsContainer = true;
+        $this->ownsReference = $this->isTypeInfoRefCounted($this->getType());
     }
 
     /**
@@ -154,7 +188,7 @@ class ReflectionValue implements ReferenceCountedInterface
     /**
      * Creates a new entry from it's type and value
      *
-     * @param int   $type Value type
+     * @param int   $type Value type (base type constant, any type flags are recomputed from the payload)
      * @param CData $value Value, should be zval-compatible
      *
      * @return ReflectionValue
@@ -164,10 +198,46 @@ class ReflectionValue implements ReferenceCountedInterface
         // Allocate non-owned Zval
         $entry = Core::new('zval', false, $isPersistent);
 
-        $entry->u1->type_info = $type;
         $entry->value->zv     = Core::cast('zval', $value);
+        $entry->u1->type_info = self::buildTypeInfo($type, $entry);
 
-        return self::fromValueEntry(Core::addr($entry));
+        $reflectionValue = self::fromValueEntry(Core::addr($entry));
+        // The container is ours to free, the payload reference still belongs to the caller
+        $reflectionValue->ownsContainer = true;
+
+        return $reflectionValue;
+    }
+
+    /**
+     * Computes the full zval type_info word (base type plus type flags) for a payload
+     *
+     * Callers historically passed bare type constants (eg IS_STRING instead of IS_STRING_EX), which
+     * made every refcount-aware consumer (copy(), isTypeInfoRefCounted()) silently skip refcounting.
+     * The flags are derived from the payload's GC header, exactly like the engine's IS_*_EX macros do.
+     *
+     * @see zend_types.h:IS_STRING_EX/IS_ARRAY_EX/IS_OBJECT_EX macro family
+     */
+    private static function buildTypeInfo(int $type, CData $zvalEntry): int
+    {
+        $baseType = $type & Core::engineConstant('Z_TYPE_MASK');
+
+        // Only real data types in the IS_STRING..IS_CONSTANT_AST range are backed by a GC header
+        if ($baseType < self::IS_STRING || $baseType > self::IS_CONSTANT_AST) {
+            return $baseType;
+        }
+
+        // Immutable payloads (interned strings, immutable arrays, SHM data) are copied without refcounting
+        $gcTypeInfo = $zvalEntry->value->counted->gc->u->type_info;
+        if (($gcTypeInfo & ReferenceCountedInterface::GC_IMMUTABLE) !== 0) {
+            return $baseType;
+        }
+
+        $typeFlags = Core::engineConstant('IS_TYPE_REFCOUNTED');
+        if ($baseType === self::IS_ARRAY || $baseType === self::IS_OBJECT) {
+            $typeFlags |= Core::engineConstant('IS_TYPE_COLLECTABLE');
+        }
+
+        return $baseType | ($typeFlags << Core::engineConstant('Z_TYPE_FLAGS_SHIFT'));
     }
 
     /**
@@ -187,21 +257,68 @@ class ReflectionValue implements ReferenceCountedInterface
      */
     public function getNativeValue(&$returnValue): void
     {
+        $this->assertNotReleased();
         $reference = new ReferenceEntry($returnValue);
         $dstZval   = $reference->getValue()->pointer;
 
-        $this->copy($dstZval);
+        self::copyAndReleasePrevious($this, $dstZval);
     }
 
     /**
      * Change the existing value of entry to another one
      *
+     * The previous content of this entry is properly released, exactly like an engine
+     * variable assignment would do. For uninitialized engine output slots (which contain
+     * garbage, not a value) use initializeNativeValue() instead.
+     *
      * @param mixed $newValue Value to change to
      */
     public function setNativeValue($newValue): void
     {
+        $this->assertNotReleased();
         $selfExecutionState = Core::$executor->getExecutionState();
+
+        self::copyAndReleasePrevious($selfExecutionState->getArgument(0), $this->pointer);
+    }
+
+    /**
+     * Writes a value into an uninitialized engine output slot
+     *
+     * Unlike setNativeValue() this does not release the previous slot content: engine
+     * handler result slots (cast_object retval, do_operation result) are uninitialized
+     * scratch memory, and interpreting the garbage in them as a value would crash.
+     *
+     * @param mixed $newValue Value to write
+     */
+    public function initializeNativeValue($newValue): void
+    {
+        $this->assertNotReleased();
+        $selfExecutionState = Core::$executor->getExecutionState();
+
         $selfExecutionState->getArgument(0)->copy($this->pointer);
+    }
+
+    /**
+     * Copies a value over a destination zval, releasing whatever the destination held before
+     *
+     * The previous content is saved aside and released only after the copy took its own
+     * reference, so a self-assignment of a refcount-1 payload cannot use freed memory.
+     */
+    private static function copyAndReleasePrevious(ReflectionValue $source, CData $dstZval): void
+    {
+        // The destination may arrive as an embedded zval struct (16 bytes) or as a zval
+        // pointer (8 bytes). FFI::typeof is avoided on purpose: probing a CData's kind and
+        // then referencing it again leaks the FFI type structure, see Core::cast
+        if (\FFI::sizeof($dstZval) === Core::sizeof(Core::type('zval'))) {
+            $dstZval = Core::addr($dstZval);
+        }
+
+        $previousValue = Core::new('zval');
+        Core::memcpy($previousValue, $dstZval[0], Core::sizeof(Core::type('zval')));
+
+        $source->copy($dstZval);
+
+        Core::call('zval_ptr_dtor', Core::addr($previousValue));
     }
 
     /**
@@ -342,7 +459,41 @@ class ReflectionValue implements ReferenceCountedInterface
      */
     public function getRawValue(): CData
     {
+        $this->assertNotReleased();
+
         return $this->pointer;
+    }
+
+    /**
+     * Takes an own reference on the payload, making this wrapper responsible for one release
+     *
+     * Required when the zval is handed to an engine function with ownership semantics (one
+     * that may release or replace the value inside, eg zend_prepare_string_for_scanning):
+     * a bare aliasing container would make the engine release a reference nobody gave it.
+     */
+    public function acquireReference(): self
+    {
+        $this->assertNotReleased();
+        if (!$this->ownsReference && $this->isTypeInfoRefCounted($this->getType())) {
+            Core::call('zval_add_ref', $this->pointer);
+            $this->ownsReference = true;
+        }
+
+        return $this;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    protected function doRelease(bool $ownsReference, bool $ownsContainer): void
+    {
+        if ($ownsReference) {
+            // Full engine release semantics for the payload reference this wrapper held
+            Core::call('zval_ptr_dtor', $this->pointer);
+        }
+        if ($ownsContainer) {
+            Core::free($this->pointer);
+        }
     }
 
     /**
@@ -354,6 +505,7 @@ class ReflectionValue implements ReferenceCountedInterface
      */
     public function copy(CData $dstZval): void
     {
+        $this->assertNotReleased();
         $typeInfo = $this->getType();
         $gc       = $this->pointer->value->counted;
 
@@ -414,6 +566,13 @@ class ReflectionValue implements ReferenceCountedInterface
      */
     protected function getGC(): CData
     {
+        if (!$this->isTypeInfoRefCounted($this->getType())) {
+            throw new \LogicException(
+                'Cannot access the reference counter of a non-refcounted value of type '
+                . self::name($this->pointer->u1->v->type),
+            );
+        }
+
         return $this->pointer->value->counted->gc;
     }
 

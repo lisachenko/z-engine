@@ -15,6 +15,10 @@ namespace ZEngine\Type;
 
 /**
  * Interface for all refcounted entries
+ *
+ * Implementations expose the raw engine reference counter of the wrapped payload; the GC_*
+ * constants mirror the zend_refcounted_h type_info flag bits. See ReferenceCountedTrait for
+ * the guard-railed primitives and docs/long-running.md for the ownership model built on top.
  */
 interface ReferenceCountedInterface
 {

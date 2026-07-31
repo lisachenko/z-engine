@@ -56,6 +56,10 @@ class ReflectionClassTest extends TestCase
     #[Group('internal')]
     public function testAddMethod()
     {
+        // Immortal-by-design: addMethod() keeps the closure body alive until the class
+        // entry is destroyed at the very end of the request (see docs/long-running.md),
+        // so the debug-build shutdown report would flag it although nothing is wrong
+        ini_set('report_memleaks', '0');
         $methodName = 'newMethod';
         $this->refClass->addMethod($methodName, function (string $argument): string {
             return $argument;

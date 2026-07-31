@@ -965,6 +965,11 @@ extern zend_ast * zend_ast_create_5(zend_ast_kind, zend_ast *, zend_ast *, zend_
 extern zend_ast * zend_ast_create_decl(zend_ast_kind, uint32_t, uint32_t, zend_string *, zend_string *, zend_ast *, zend_ast *, zend_ast *, zend_ast *, zend_ast *);
 extern zend_module_entry * zend_register_module_ex(zend_module_entry *, int);
 extern zend_result zend_startup_module_ex(zend_module_entry *);
+extern void zval_ptr_dtor(zval *);
+extern void zval_add_ref(zval *);
+extern void rc_dtor_func(zend_refcounted *);
+extern zend_string * zend_string_concat2(const char *, size_t, const char *, size_t);
+extern zend_ulong zend_string_hash_func(zend_string *);
 
 /* Imported globals */
 extern zend_executor_globals executor_globals;

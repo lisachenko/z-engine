@@ -51,7 +51,9 @@ class CastObjectHook extends AbstractHook
         [$this->object, $this->returnValue, $this->type] = $rawArguments;
 
         $result = ($this->userHandler)($this);
-        ReflectionValue::fromValueEntry($this->returnValue)->setNativeValue($result);
+        // The retval slot is uninitialized scratch memory provided by the engine caller,
+        // so there is no previous value to release in it
+        ReflectionValue::fromValueEntry($this->returnValue)->initializeNativeValue($result);
 
         return Core::SUCCESS;
     }

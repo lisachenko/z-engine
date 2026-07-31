@@ -14,9 +14,22 @@ declare(strict_types=1);
 namespace ZEngine\Type;
 
 use FFI\CData;
+use ZEngine\Core;
 
 /**
  * Trait RefcountedTrait
+ *
+ * Direct access to the engine reference counter of a wrapped payload. These are the raw
+ * primitives underneath the ownership layer; prefer ReleasableTrait::release() (which
+ * releases exactly what a wrapper owns) over manual counter surgery. Direct calls are only
+ * appropriate when editing a reference owned by an engine structure, eg dropping the names
+ * of a removed trait entry.
+ *
+ * Guard rails: increment/decrement throw on immutable payloads (interned strings, immutable
+ * arrays, shared-memory data must never be mutated) and on counter underflow.
+ * releaseReference() drops exactly one reference with full engine semantics - destruction
+ * at zero goes through rc_dtor_func, persistent (malloc) payloads are left for the engine
+ * to reclaim, and nothing is ever freed through the FFI allocator.
  */
 trait ReferenceCountedTrait
 {
@@ -35,6 +48,13 @@ trait ReferenceCountedTrait
      */
     public function incrementReferenceCount(): int
     {
+        if ($this->isImmutable()) {
+            throw new \LogicException(
+                'Cannot increment the reference counter of an immutable engine value '
+                . '(interned string, immutable array or shared-memory data)',
+            );
+        }
+
         return ++$this->getGC()->refcount;
     }
 
@@ -45,9 +65,41 @@ trait ReferenceCountedTrait
      */
     public function decrementReferenceCount(): int
     {
-        assert($this->getGC()->refcount > 0);
+        if ($this->isImmutable()) {
+            throw new \LogicException(
+                'Cannot decrement the reference counter of an immutable engine value '
+                . '(interned string, immutable array or shared-memory data)',
+            );
+        }
+        if ($this->getGC()->refcount <= 0) {
+            throw new \RuntimeException('Reference counter underflow: the value has already been released');
+        }
 
         return --$this->getGC()->refcount;
+    }
+
+    /**
+     * Releases exactly one engine reference on the payload with full engine semantics
+     *
+     * Interned/immutable payloads are not refcounted and stay untouched. When the last
+     * reference is dropped, the payload is destroyed through the engine's rc_dtor_func
+     * (never through the FFI allocator). Persistent payloads at refcount zero are left
+     * allocated: z-engine never frees engine-visible malloc memory that an engine
+     * structure may still reach - such blocks are bounded and reclaimed at process end.
+     *
+     * @see zend_types.h:GC_DTOR/rc_dtor_func
+     */
+    public function releaseReference(): void
+    {
+        if ($this->isImmutable()) {
+            return;
+        }
+        if ($this->decrementReferenceCount() === 0) {
+            if ($this->isPersistent()) {
+                return;
+            }
+            Core::call('rc_dtor_func', Core::cast('zend_refcounted *', Core::addr($this->getGC())));
+        }
     }
 
     /**

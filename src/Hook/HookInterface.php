@@ -23,9 +23,19 @@ interface HookInterface
     public function handle(...$rawArguments);
 
     /**
-     * Performs installation of current hook
+     * Performs installation of current hook (idempotent)
      */
     public function install(): void;
+
+    /**
+     * Restores the original engine pointer (idempotent)
+     */
+    public function uninstall(): void;
+
+    /**
+     * Checks if this hook is currently installed into the engine structure
+     */
+    public function isInstalled(): bool;
 
     /**
      * Checks if original handler is present to call it later with proceed

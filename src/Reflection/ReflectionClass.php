@@ -75,7 +75,13 @@ class ReflectionClass extends NativeReflectionClass
     private CData $pointer;
 
     /**
-     * Stores all allocated zend_object_handler pointers per class
+     * Stores all allocated zend_object_handler pointers, keyed by zend_class_entry address
+     *
+     * Keying by address (and not by class name) keeps the cache bounded: anonymous classes
+     * reuse name patterns while their class entries are distinct, and a name-keyed cache both
+     * grew without limit and could alias a stale handlers block to an unrelated class.
+     *
+     * @var array<int, CData>
      */
     private static array $objectHandlers = [];
 
@@ -180,11 +186,11 @@ class ReflectionClass extends NativeReflectionClass
         $totalInterfaces     = count($availableInterfaces);
         $numResultInterfaces = $totalInterfaces + $numInterfacesToAdd;
 
-        // Memory should be non-owned to keep it live more that $memory variable in this method.
-        // If this class is internal then we should use persistent memory
-        // If this class is user-defined and we are not in CLI, then use persistent memory, otherwise non-persistent
-        $isPersistent = $this->isInternal() || PHP_SAPI !== 'cli';
-        $memory       = Core::new("zend_class_entry *[$numResultInterfaces]", false, $isPersistent);
+        // Tracked non-owned memory outlives this method; persistent (malloc) only for internal
+        // classes - user classes must get request memory, because destroy_zend_class() frees
+        // these buffers with the request allocator when the class dies
+        $isPersistent = $this->isPersistentAllocation();
+        $memory       = Core::trackedNew("zend_class_entry *[$numResultInterfaces]", $isPersistent);
 
         $itemsSize = Core::sizeof(Core::type('zend_class_entry *'));
         if ($totalInterfaces > 0) {
@@ -200,9 +206,9 @@ class ReflectionClass extends NativeReflectionClass
             $memory[$position] = $interfaceClass;
         }
 
-        // As we don't have realloc methods in PHP, we can free non-persistent memory to prevent leaks
-        if ($totalInterfaces > 0 && !$isPersistent) {
-            Core::free($this->pointer->interfaces);
+        // Free the previous buffer if z-engine allocated it; engine-original arrays are left alone
+        if ($totalInterfaces > 0) {
+            Core::untrackAndFree($this->pointer->interfaces);
         }
         $this->pointer->interfaces = Core::cast('zend_class_entry **', Core::addr($memory));
 
@@ -233,29 +239,29 @@ class ReflectionClass extends NativeReflectionClass
         $totalInterfaces     = count($availableInterfaces);
         $numResultInterfaces = $totalInterfaces - count($indexesToRemove);
 
-        // Memory should be non-owned to keep it live more that $memory variable in this method.
-        // If this class is internal then we should use persistent memory
-        // If this class is user-defined and we are not in CLI, then use persistent memory, otherwise non-persistent
-        $isPersistent = $this->isInternal() || PHP_SAPI !== 'cli';
+        // Tracked non-owned memory outlives this method; persistent (malloc) only for internal
+        // classes - user classes must get request memory, because destroy_zend_class() frees
+        // these buffers with the request allocator when the class dies
+        $isPersistent = $this->isPersistentAllocation();
 
         // If we remove all interfaces then just clear $this->pointer->interfaces field
         if ($numResultInterfaces === 0) {
-            if ($totalInterfaces > 0 && !$isPersistent) {
-                Core::free($this->pointer->interfaces);
+            if ($totalInterfaces > 0) {
+                Core::untrackAndFree($this->pointer->interfaces);
             }
             // We should also clean ZEND_ACC_RESOLVED_INTERFACES
             $this->pointer->interfaces = null;
             $this->pointer->ce_flags &= (~ Core::ZEND_ACC_RESOLVED_INTERFACES);
         } else {
-            // Allocate non-owned memory, either persistent (for internal classes) or not (for user-defined)
-            $memory = Core::new("zend_class_entry *[$numResultInterfaces]", false, $isPersistent);
+            // Allocate tracked memory, either persistent (for internal classes) or not (for user-defined)
+            $memory = Core::trackedNew("zend_class_entry *[$numResultInterfaces]", $isPersistent);
             for ($index = 0, $destIndex = 0; $index < $this->pointer->num_interfaces; $index++) {
                 if (!isset($indexesToRemove[$index])) {
                     $memory[$destIndex++] = $this->pointer->interfaces[$index];
                 }
             }
-            if ($totalInterfaces > 0 && !$isPersistent) {
-                Core::free($this->pointer->interfaces);
+            if ($totalInterfaces > 0) {
+                Core::untrackAndFree($this->pointer->interfaces);
             }
             $this->pointer->interfaces = Core::cast('zend_class_entry **', Core::addr($memory));
         }
@@ -307,9 +313,15 @@ class ReflectionClass extends NativeReflectionClass
         $closureEntry->setCalledScope($this->name);
 
         // TODO: replace with ReflectionFunction instead of low-level structures
-        $rawFunction                        = $closureEntry->getRawFunction();
-        $funcName                           = (new StringEntry($methodName))->getRawValue();
-        $rawFunction->common->function_name = $funcName;
+        $rawFunction  = $closureEntry->getRawFunction();
+        $previousName = $rawFunction->common->function_name;
+        if ($previousName !== null) {
+            StringEntry::fromCData($previousName)->releaseReference();
+        }
+        // The function structure takes over one owned reference on its new name
+        $rawFunction->common->function_name = StringEntry::fromString($methodName)
+            ->transferReferenceOwnership()
+            ->getRawValue();
 
         // Adjust the scope of our function to our class
         $classScopeValue            = Core::$executor->classTable->find(strtolower($this->name));
@@ -318,8 +330,7 @@ class ReflectionClass extends NativeReflectionClass
         // Clean closure flag
         $rawFunction->common->fn_flags &= (~Core::ZEND_ACC_CLOSURE);
 
-        $isPersistent = $this->isInternal() || PHP_SAPI !== 'cli';
-        $refMethod    = $this->addRawMethod($methodName, $rawFunction, $isPersistent);
+        $refMethod = $this->addRawMethod($methodName, $rawFunction);
         $refMethod->setPublic();
 
         return $refMethod;
@@ -329,6 +340,18 @@ class ReflectionClass extends NativeReflectionClass
     public function isInternal()
     {
         return ord($this->pointer->type) === Core::ZEND_INTERNAL_CLASS;
+    }
+
+    /**
+     * Selects the allocation class for buffers stored inside this class entry
+     *
+     * Internal classes are persistent engine structures (malloc), while user classes are
+     * destroyed with the request allocator: destroy_zend_class() frees their interface and
+     * trait buffers with efree(), so storing malloc memory there corrupts the heap.
+     */
+    private function isPersistentAllocation(): bool
+    {
+        return (bool) $this->isInternal();
     }
 
     #[\ReturnTypeWillChange]
@@ -380,11 +403,11 @@ class ReflectionClass extends NativeReflectionClass
         $totalTraits     = count($availableTraits);
         $numResultTraits = $totalTraits + $numTraitsToAdd;
 
-        // Memory should be non-owned to keep it live more that $memory variable in this method.
-        // If this class is internal then we should use persistent memory
-        // If this class is user-defined and we are not in CLI, then use persistent memory, otherwise non-persistent
-        $isPersistent = $this->isInternal() || PHP_SAPI !== 'cli';
-        $memory       = Core::new("zend_class_name [$numResultTraits]", false, $isPersistent);
+        // Tracked non-owned memory outlives this method; persistent (malloc) only for internal
+        // classes - user classes must get request memory, because destroy_zend_class() frees
+        // these buffers with the request allocator when the class dies
+        $isPersistent = $this->isPersistentAllocation();
+        $memory       = Core::trackedNew("zend_class_name [$numResultTraits]", $isPersistent);
 
         $itemsSize = Core::sizeof(Core::type('zend_class_name'));
         if ($totalTraits > 0) {
@@ -393,15 +416,22 @@ class ReflectionClass extends NativeReflectionClass
         for ($position = $totalTraits, $index = 0; $index < $numTraitsToAdd; $position++, $index++) {
             $traitName   = $traitsToAdd[$index];
             $lcTraitName = strtolower($traitName);
-            $name        = new StringEntry($traitName);
-            $lcName      = new StringEntry($lcTraitName);
+            // The class entry takes over one owned reference per stored name; persistent
+            // class entries need malloc-backed strings the engine can release safely
+            if ($isPersistent) {
+                $name   = StringEntry::persistent($traitName);
+                $lcName = StringEntry::persistent($lcTraitName);
+            } else {
+                $name   = StringEntry::fromString($traitName);
+                $lcName = StringEntry::fromString($lcTraitName);
+            }
 
-            $memory[$position]->name    = $name->getRawValue();
-            $memory[$position]->lc_name = $lcName->getRawValue();
+            $memory[$position]->name    = $name->transferReferenceOwnership()->getRawValue();
+            $memory[$position]->lc_name = $lcName->transferReferenceOwnership()->getRawValue();
         }
-        // As we don't have realloc methods in PHP, we can free non-persistent memory to prevent leaks
-        if ($totalTraits > 0 && !$isPersistent) {
-            Core::free($this->pointer->trait_names);
+        // Free the previous buffer if z-engine allocated it; engine-original arrays are left alone
+        if ($totalTraits > 0) {
+            Core::untrackAndFree($this->pointer->trait_names);
         }
 
         $this->pointer->trait_names = Core::cast('zend_class_name *', Core::addr($memory));
@@ -428,13 +458,13 @@ class ReflectionClass extends NativeReflectionClass
         $totalTraits     = count($availableTraits);
         $numResultTraits = $totalTraits - count($indexesToRemove);
 
-        // Memory should be non-owned to keep it live more that $memory variable in this method.
-        // If this class is internal then we should use persistent memory
-        // If this class is user-defined and we are not in CLI, then use persistent memory, otherwise non-persistent
-        $isPersistent = $this->isInternal() || PHP_SAPI !== 'cli';
+        // Tracked non-owned memory outlives this method; persistent (malloc) only for internal
+        // classes - user classes must get request memory, because destroy_zend_class() frees
+        // these buffers with the request allocator when the class dies
+        $isPersistent = $this->isPersistentAllocation();
 
         if ($numResultTraits > 0) {
-            $memory = Core::new("zend_class_name[$numResultTraits]", false, $isPersistent);
+            $memory = Core::trackedNew("zend_class_name[$numResultTraits]", $isPersistent);
         } else {
             $memory = null;
         }
@@ -444,12 +474,14 @@ class ReflectionClass extends NativeReflectionClass
                 $memory[$destIndex++] = $traitNameStruct;
             } else {
                 // Clean strings to prevent memory leaks
-                StringEntry::fromCData($traitNameStruct->name)->release();
-                StringEntry::fromCData($traitNameStruct->lc_name)->release();
+                // Drop the class entry's own reference on the removed trait names with
+                // engine semantics (previously this was a wrong-allocator FFI free)
+                StringEntry::fromCData($traitNameStruct->name)->releaseReference();
+                StringEntry::fromCData($traitNameStruct->lc_name)->releaseReference();
             }
         }
-        if ($totalTraits > 0 && !$isPersistent) {
-            Core::free($this->pointer->trait_names);
+        if ($totalTraits > 0) {
+            Core::untrackAndFree($this->pointer->trait_names);
         }
         if ($numResultTraits > 0) {
             $this->pointer->trait_names = Core::cast('zend_class_name *', Core::addr($memory));
@@ -601,8 +633,15 @@ class ReflectionClass extends NativeReflectionClass
         if (!$this->isUserDefined()) {
             throw new \ReflectionException('File can be configured only for user-defined class');
         }
-        $stringEntry                         = new StringEntry($newFileName);
-        $this->pointer->info->user->filename = $stringEntry->getRawValue();
+        // Release the previous filename (the class entry owned a reference on it) and store
+        // an owned string whose reference is handed over to the class entry
+        $previousFileName = $this->pointer->info->user->filename;
+        if ($previousFileName !== null) {
+            StringEntry::fromCData($previousFileName)->releaseReference();
+        }
+        $this->pointer->info->user->filename = StringEntry::fromString($newFileName)
+            ->transferReferenceOwnership()
+            ->getRawValue();
     }
 
     /**
@@ -718,12 +757,14 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectCastInterface
      */
-    public function setCastObjectHandler(Closure $handler): void
+    public function setCastObjectHandler(Closure $handler): CastObjectHook
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new CastObjectHook($handler, $handlers);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -733,12 +774,14 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectCompareValuesInterface
      */
-    public function setCompareValuesHandler(Closure $handler): void
+    public function setCompareValuesHandler(Closure $handler): CompareValuesHook
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new CompareValuesHook($handler, $handlers);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -748,12 +791,14 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectReadPropertyInterface
      */
-    public function setReadPropertyHandler(Closure $handler): void
+    public function setReadPropertyHandler(Closure $handler): ReadPropertyHook
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new ReadPropertyHook($handler, $handlers);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -763,12 +808,14 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectWritePropertyInterface
      */
-    public function setWritePropertyHandler(Closure $handler): void
+    public function setWritePropertyHandler(Closure $handler): WritePropertyHook
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new WritePropertyHook($handler, $handlers);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -778,12 +825,14 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectUnsetPropertyInterface
      */
-    public function setUnsetPropertyHandler(Closure $handler): void
+    public function setUnsetPropertyHandler(Closure $handler): UnsetPropertyHook
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new UnsetPropertyHook($handler, $handlers);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -793,12 +842,14 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectHasPropertyInterface
      */
-    public function setHasPropertyHandler(Closure $handler): void
+    public function setHasPropertyHandler(Closure $handler): HasPropertyHook
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new HasPropertyHook($handler, $handlers);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -808,12 +859,14 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectGetPropertyPointerInterface
      */
-    public function setGetPropertyPointerHandler(Closure $handler): void
+    public function setGetPropertyPointerHandler(Closure $handler): GetPropertyPointerHook
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new GetPropertyPointerHook($handler, $handlers);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -823,12 +876,14 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectGetPropertiesForInterface
      */
-    public function setGetPropertiesForHandler(Closure $handler): void
+    public function setGetPropertiesForHandler(Closure $handler): GetPropertiesForHook
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new GetPropertiesForHook($handler, $handlers);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -838,12 +893,14 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectDoOperationInterface
      */
-    public function setDoOperationHandler(Closure $handler): void
+    public function setDoOperationHandler(Closure $handler): DoOperationHook
     {
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new DoOperationHook($handler, $handlers);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -853,16 +910,18 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see ObjectCreateInterface
      */
-    public function setCreateObjectHandler(Closure $handler): void
+    public function setCreateObjectHandler(Closure $handler): CreateObjectHook
     {
         // User handlers are only allowed with std_object_handler (when create_object handler is empty)
         if ($this->isInternal()) {
             trigger_error('Create object handler is available for user-defined classes only', E_USER_ERROR);
         }
-        self::allocateClassObjectHandlers($this->getName());
+        self::getObjectHandlers($this->pointer);
 
         $hook = new CreateObjectHook($handler, $this->pointer);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -870,7 +929,7 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @param Closure $handler Callback function (ReflectionClass $reflectionClass)
      */
-    public function setInterfaceGetsImplementedHandler(Closure $handler): void
+    public function setInterfaceGetsImplementedHandler(Closure $handler): InterfaceGetsImplementedHook
     {
         if (!$this->isInterface()) {
             throw new \LogicException('Interface implemented handler can be installed only for interfaces');
@@ -878,6 +937,8 @@ class ReflectionClass extends NativeReflectionClass
 
         $hook = new InterfaceGetsImplementedHook($handler, $this->pointer);
         $hook->install();
+
+        return $hook;
     }
 
     /**
@@ -934,14 +995,16 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @param string $methodName Method name to use
      * @param CData  $rawFunction zend_function instance
-     * @param bool   $isPersistent Whether this method is persistent or not
      *
      * @return ReflectionMethod
      */
-    private function addRawMethod(string $methodName, CData $rawFunction, bool $isPersistent = true): ReflectionMethod
+    private function addRawMethod(string $methodName, CData $rawFunction): ReflectionMethod
     {
-        $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawFunction, $isPersistent);
+        // The engine hashtable copies the zval into its own bucket, so the temporary
+        // container exists only for the duration of this call and must be freed here
+        $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawFunction);
         $this->methodTable->add(strtolower($methodName), $valueEntry);
+        $valueEntry->release();
 
         $refMethod = ReflectionMethod::fromCData($rawFunction);
 
@@ -975,25 +1038,23 @@ class ReflectionClass extends NativeReflectionClass
      */
     private static function getObjectHandlers(CData $classType): CData
     {
-        $className = (StringEntry::fromCData($classType->name)->getStringValue());
-        if (!isset(self::$objectHandlers[$className])) {
-            self::allocateClassObjectHandlers($className);
+        $classEntryAddress = Core::addressOf($classType);
+        if (!isset(self::$objectHandlers[$classEntryAddress])) {
+            self::$objectHandlers[$classEntryAddress] = self::allocateClassObjectHandlers();
         }
 
-        return self::$objectHandlers[$className];
+        return self::$objectHandlers[$classEntryAddress];
     }
 
     /**
-     * Allocates a new zend_object_handlers structure for class as a copy of std_object_handlers
-     *
-     * @param string $className Class name to use
+     * Allocates a new zend_object_handlers structure for a class as a copy of std_object_handlers
      */
-    private static function allocateClassObjectHandlers(string $className): void
+    private static function allocateClassObjectHandlers(): CData
     {
-        $handlers    = Core::new('zend_object_handlers', false, true);
+        $handlers    = Core::trackedNew('zend_object_handlers', true);
         $stdHandlers = Core::getStandardObjectHandlers();
         Core::memcpy($handlers, $stdHandlers, Core::sizeof($stdHandlers));
 
-        self::$objectHandlers[$className] = Core::addr($handlers);
+        return Core::addr($handlers);
     }
 }
