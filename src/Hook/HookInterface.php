@@ -41,4 +41,22 @@ interface HookInterface
      * Checks if original handler is present to call it later with proceed
      */
     public function hasOriginalHandler(): bool;
+
+    /**
+     * Returns the identity of the engine slot this hook targets
+     *
+     * For struct-field hooks this is "<container address>::<field>", for slots that live
+     * outside any struct (e.g. user opcode handlers) it is a synthetic key. Hooks with the
+     * same key form one chain that unwinds in reverse installation order.
+     *
+     * @internal used by the Core hook registry to build per-slot chains
+     */
+    public function getHookFieldKey(): string;
+
+    /**
+     * Writes this hook's trampoline into the engine slot again without touching the chain
+     *
+     * @internal escape hatch used by Core::reinstallHooks() for SAPIs that cycle FFI state
+     */
+    public function refreshTrampoline(): void;
 }
