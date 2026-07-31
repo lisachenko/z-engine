@@ -19,6 +19,7 @@ use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use ZEngine\ClassExtension\Hook\CastObjectHook;
+use ZEngine\ClassExtension\Hook\CloneObjectHook;
 use ZEngine\ClassExtension\Hook\CompareValuesHook;
 use ZEngine\ClassExtension\Hook\CreateObjectHook;
 use ZEngine\ClassExtension\Hook\DoOperationHook;
@@ -31,6 +32,7 @@ use ZEngine\ClassExtension\Hook\UnsetPropertyHook;
 use ZEngine\ClassExtension\Hook\WritePropertyHook;
 use ZEngine\ClassExtension\ObjectCreateTrait;
 use ZEngine\Core;
+use ZEngine\Stub\DebuggableCloneable;
 use ZEngine\Stub\NativeNumber;
 use ZEngine\Stub\TestClass;
 use ZEngine\Stub\TestInterface;
@@ -542,6 +544,101 @@ class ReflectionClassTest extends TestCase
         $this->assertStringNotContainsString('["custom"]', $defaultOutput);
         $this->assertStringContainsString('["property"]', $defaultOutput);
         $this->assertStringContainsString('int(42)', $defaultOutput);
+    }
+
+    #[Group('internal')]
+    public function testInstallCloneObjectHandler(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+
+        $replacement = null;
+        $this->refClass->setCloneObjectHandler(function (CloneObjectHook $hook) use (&$replacement): object {
+            $this->assertInstanceOf(TestClass::class, $hook->getObject());
+            $replacement           = new TestClass();
+            $replacement->property = 4242;
+
+            return $replacement;
+        });
+
+        $instance = new TestClass();
+        $clone    = clone $instance;
+
+        // The clone result is exactly the object produced by the handler
+        $this->assertSame($replacement, $clone);
+        $this->assertNotSame($instance, $clone);
+        $this->assertSame(4242, $clone->property);
+        $this->assertSame(42, $instance->property);
+    }
+
+    #[Group('internal')]
+    public function testCloneObjectHandlerProceedYieldsDefaultClone(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+        $this->refClass->setCloneObjectHandler(function (CloneObjectHook $hook): object {
+            return $hook->proceed();
+        });
+
+        $instance           = new TestClass();
+        $instance->property = 100;
+        $clone              = clone $instance;
+
+        // proceed() produces the default field-copy clone: same state, distinct object
+        $this->assertInstanceOf(TestClass::class, $clone);
+        $this->assertNotSame($instance, $clone);
+        $this->assertSame(100, $clone->property);
+
+        $clone->property = 500;
+        $this->assertSame(100, $instance->property);
+    }
+
+    #[Group('internal')]
+    public function testCloneObjectHandlerUninstallRestoresDefaultBehavior(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+
+        $callsCount = 0;
+        $hook       = $this->refClass->setCloneObjectHandler(
+            function (CloneObjectHook $hook) use (&$callsCount): object {
+                $callsCount++;
+
+                return $hook->proceed();
+            },
+        );
+
+        $instance    = new TestClass();
+        $hookedClone = clone $instance;
+        $this->assertNotSame($instance, $hookedClone);
+        $this->assertSame(1, $callsCount);
+
+        $hook->uninstall();
+
+        $clone = clone $instance;
+        $this->assertSame(1, $callsCount, 'Uninstalled handler should not be called anymore');
+        $this->assertNotSame($instance, $clone);
+        $this->assertSame(42, $clone->property);
+    }
+
+    #[Group('internal')]
+    public function testInstallExtensionHandlersWiresGetDebugInfoAndCloneObject(): void
+    {
+        $refClass = new ReflectionClass(DebuggableCloneable::class);
+        $refClass->installExtensionHandlers();
+
+        $instance = new DebuggableCloneable();
+        ob_start();
+        var_dump($instance);
+        $output = (string) ob_get_clean();
+        $this->assertStringContainsString('["marker"]', $output);
+        $this->assertStringContainsString('string(17) "custom-debug-info"', $output);
+
+        $clone = clone $instance;
+        $this->assertInstanceOf(DebuggableCloneable::class, $clone);
+        $this->assertNotSame($instance, $clone);
+        $this->assertSame(0, $instance->generation);
+        $this->assertSame(1, $clone->generation);
     }
 
     public function testInstallExtensionHandlers(): void

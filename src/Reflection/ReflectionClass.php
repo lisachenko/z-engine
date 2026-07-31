@@ -17,6 +17,7 @@ use Closure;
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
 use ZEngine\ClassExtension\Hook\CastObjectHook;
+use ZEngine\ClassExtension\Hook\CloneObjectHook;
 use ZEngine\ClassExtension\Hook\CompareValuesHook;
 use ZEngine\ClassExtension\Hook\CreateObjectHook;
 use ZEngine\ClassExtension\Hook\DoOperationHook;
@@ -29,6 +30,7 @@ use ZEngine\ClassExtension\Hook\ReadPropertyHook;
 use ZEngine\ClassExtension\Hook\UnsetPropertyHook;
 use ZEngine\ClassExtension\Hook\WritePropertyHook;
 use ZEngine\ClassExtension\ObjectCastInterface;
+use ZEngine\ClassExtension\ObjectCloneInterface;
 use ZEngine\ClassExtension\ObjectCompareValuesInterface;
 use ZEngine\ClassExtension\ObjectCreateInterface;
 use ZEngine\ClassExtension\ObjectDoOperationInterface;
@@ -748,6 +750,11 @@ class ReflectionClass extends NativeReflectionClass
             $handler = parent::getMethod('__getDebugInfo')->getClosure();
             $this->setGetDebugInfoHandler($handler);
         }
+
+        if ($this->implementsInterface(ObjectCloneInterface::class)) {
+            $handler = parent::getMethod('__cloneObject')->getClosure();
+            $this->setCloneObjectHandler($handler);
+        }
     }
 
     public function __debugInfo()
@@ -905,6 +912,23 @@ class ReflectionClass extends NativeReflectionClass
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new GetDebugInfoHook($handler, $handlers);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs the "clone_obj" handler for the current class
+     *
+     * @param Closure $handler Callback function (CloneObjectHook $hook): object;
+     *
+     * @see ObjectCloneInterface
+     */
+    public function setCloneObjectHandler(Closure $handler): CloneObjectHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new CloneObjectHook($handler, $handlers);
         $hook->install();
 
         return $hook;
