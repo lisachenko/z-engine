@@ -37,8 +37,6 @@ class ResourceEntryTest extends TestCase
 
         preg_match('/Resource id #(\d+)/', (string) $this->file, $matches);
         $this->assertSame((int) $matches[1], $refResource->getHandle());
-        $refResource->setHandle(1);
-        $this->assertSame(1, $refResource->getHandle());
     }
 
     #[Group('internal')]
@@ -46,8 +44,15 @@ class ResourceEntryTest extends TestCase
     {
         $refResource = new ResourceEntry($this->file);
 
-        $refResource->setHandle(1);
-        $this->assertSame(1, $refResource->getHandle());
+        // The handle must be restored before tearDown: while it is aliased, closing the
+        // stream would delete whichever unrelated resource currently owns list entry 1
+        $originalHandle = $refResource->getHandle();
+        try {
+            $refResource->setHandle(1);
+            $this->assertSame(1, $refResource->getHandle());
+        } finally {
+            $refResource->setHandle($originalHandle);
+        }
     }
 
     public function testGetRawData()
@@ -70,14 +75,20 @@ class ResourceEntryTest extends TestCase
     {
         $refResource = new ResourceEntry($this->file);
 
-        // persistent_stream has type=3
-        $refResource->setType(3);
-        $this->assertSame(3, $refResource->getType());
-        ob_start();
-        var_dump($this->file);
-        $value = ob_get_clean();
+        $originalType = $refResource->getType();
+        try {
+            // persistent_stream has type=3
+            $refResource->setType(3);
+            $this->assertSame(3, $refResource->getType());
+            ob_start();
+            var_dump($this->file);
+            $value = ob_get_clean();
 
-        preg_match('/resource\(\d+\) of type \(([^)]+)\)/', $value, $matches);
-        $this->assertSame('persistent stream', $matches[1]);
+            preg_match('/resource\(\d+\) of type \(([^)]+)\)/', $value, $matches);
+            $this->assertSame('persistent stream', $matches[1]);
+        } finally {
+            // Restore before tearDown so fclose() treats the stream as a regular one again
+            $refResource->setType($originalType);
+        }
     }
 }

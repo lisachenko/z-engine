@@ -96,6 +96,7 @@ The debug-build leak gate treats the following as expected, by design:
 | One `zend_object_handlers` block per hooked class entry | objects still dereference `->handlers` after user shutdown functions ran, so freeing at shutdown would be a use-after-free; blocks are malloc-backed, keyed by class entry address, and bounded |
 | One live libffi trampoline per installed hook | owned by ext/ffi, freed by its RSHUTDOWN |
 | Closures immortalized by `ReflectionClass::addMethod()` | the method table references the closure body for the rest of the request |
+| Previous function body after `redefine()` | the redefined entry keeps sharing the original `arg_info`/name, so the old opcodes/literals cannot be freed without exporting `destroy_op_array` and unsharing those pointers; bounded to one body per redefined function |
 | Engine-chained arena blocks for >32 KiB parses | allocated by the engine; z-engine never frees memory it did not allocate |
 | Refcount-0 persistent strings | never freed with the request allocator; bounded, reclaimed at process end |
 | Engine-original interface/trait buffers replaced by z-engine | possibly shared or in opcache SHM, never freed by z-engine; at most one per touched class |
