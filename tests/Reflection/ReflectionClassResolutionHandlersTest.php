@@ -18,6 +18,7 @@ use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use ZEngine\ClassExtension\Hook\GetClassNameHook;
+use ZEngine\ClassExtension\Hook\GetConstructorHook;
 use ZEngine\ClassExtension\ObjectCreateTrait;
 use ZEngine\Stub\TestClass;
 use ZEngine\Stub\VirtualProxy;
@@ -88,6 +89,87 @@ class ReflectionClassResolutionHandlersTest extends TestCase
         $this->assertStringContainsString('object(' . TestClass::class . ')', $dump);
     }
 
+    #[RunInSeparateProcess]
+    public function testInstallExtensionHandlersEnablesGetConstructor(): void
+    {
+        $refClass = new ReflectionClass(VirtualProxy::class);
+        $refClass->installExtensionHandlers();
+
+        $proxy = new VirtualProxy('injected');
+
+        $this->assertSame(1, VirtualProxy::$constructorResolutions);
+        // The stub proceeds to the engine-resolved constructor, so construction is intact
+        $this->assertTrue($proxy->constructed);
+        $this->assertSame('injected', $proxy->subject);
+    }
+
+    #[RunInSeparateProcess]
+    public function testGetConstructorHandlerCanSkipConstruction(): void
+    {
+        $refClass = $this->createVirtualProxyReflection();
+        $refClass->setGetConstructorHandler(function (GetConstructorHook $hook) {
+            return null;
+        });
+
+        // The NEW opcode receives no constructor and skips the call entirely
+        $proxy = new VirtualProxy('ignored');
+
+        $this->assertFalse($proxy->constructed);
+        $this->assertSame('uninitialized', $proxy->subject);
+    }
+
+    #[RunInSeparateProcess]
+    public function testGetConstructorHandlerCanRedirectConstruction(): void
+    {
+        $refClass = $this->createVirtualProxyReflection();
+        $refClass->setGetConstructorHandler(function (GetConstructorHook $hook) {
+            $this->assertInstanceOf(VirtualProxy::class, $hook->getObject());
+
+            return new \ReflectionMethod(VirtualProxy::class, 'altConstructor');
+        });
+
+        $proxy = new VirtualProxy('redirected');
+
+        $this->assertTrue($proxy->constructed);
+        $this->assertSame('alt-redirected', $proxy->subject);
+    }
+
+    #[RunInSeparateProcess]
+    public function testGetConstructorProceedReturnsNullForConstructorlessClass(): void
+    {
+        $refClass       = $this->createTestClassReflection();
+        $proceedResults = [];
+        $refClass->setGetConstructorHandler(function (GetConstructorHook $hook) use (&$proceedResults) {
+            $constructor      = $hook->proceed();
+            $proceedResults[] = $constructor;
+
+            return $constructor;
+        });
+
+        $instance = new TestClass();
+
+        $this->assertSame(42, $instance->property);
+        $this->assertSame([null], $proceedResults, 'TestClass has no constructor to resolve');
+    }
+
+    #[RunInSeparateProcess]
+    public function testUninstallRestoresOriginalGetConstructorBehavior(): void
+    {
+        $refClass = $this->createVirtualProxyReflection();
+        $hook     = $refClass->setGetConstructorHandler(function (GetConstructorHook $hook) {
+            return null;
+        });
+
+        $skipped = new VirtualProxy('skipped');
+        $this->assertFalse($skipped->constructed);
+
+        $hook->uninstall();
+
+        $constructed = new VirtualProxy('constructed');
+        $this->assertTrue($constructed->constructed);
+        $this->assertSame('constructed', $constructed->subject);
+    }
+
     /**
      * Creates a TestClass reflection with the create_object handler installed,
      * so new instances receive the adjustable object handlers structure
@@ -95,6 +177,18 @@ class ReflectionClassResolutionHandlersTest extends TestCase
     private function createTestClassReflection(): ReflectionClass
     {
         $refClass = new ReflectionClass(TestClass::class);
+        $refClass->setCreateObjectHandler(Closure::fromCallable([ObjectCreateTrait::class, '__init']));
+
+        return $refClass;
+    }
+
+    /**
+     * Creates a VirtualProxy reflection with the create_object handler installed,
+     * so new instances receive the adjustable object handlers structure
+     */
+    private function createVirtualProxyReflection(): ReflectionClass
+    {
+        $refClass = new ReflectionClass(VirtualProxy::class);
         $refClass->setCreateObjectHandler(Closure::fromCallable([ObjectCreateTrait::class, '__init']));
 
         return $refClass;

@@ -23,6 +23,7 @@ use ZEngine\ClassExtension\Hook\CountElementsHook;
 use ZEngine\ClassExtension\Hook\CreateObjectHook;
 use ZEngine\ClassExtension\Hook\DoOperationHook;
 use ZEngine\ClassExtension\Hook\GetClassNameHook;
+use ZEngine\ClassExtension\Hook\GetConstructorHook;
 use ZEngine\ClassExtension\Hook\GetDebugInfoHook;
 use ZEngine\ClassExtension\Hook\GetPropertiesForHook;
 use ZEngine\ClassExtension\Hook\GetPropertyPointerHook;
@@ -42,6 +43,7 @@ use ZEngine\ClassExtension\ObjectCountElementsInterface;
 use ZEngine\ClassExtension\ObjectCreateInterface;
 use ZEngine\ClassExtension\ObjectDoOperationInterface;
 use ZEngine\ClassExtension\ObjectGetClassNameInterface;
+use ZEngine\ClassExtension\ObjectGetConstructorInterface;
 use ZEngine\ClassExtension\ObjectGetDebugInfoInterface;
 use ZEngine\ClassExtension\ObjectGetPropertiesForInterface;
 use ZEngine\ClassExtension\ObjectGetPropertyPointerInterface;
@@ -1372,6 +1374,11 @@ class ReflectionClass extends NativeReflectionClass
             $handler = parent::getMethod('__getClassName')->getClosure();
             $this->setGetClassNameHandler($handler);
         }
+
+        if ($this->implementsInterface(ObjectGetConstructorInterface::class)) {
+            $handler = parent::getMethod('__getConstructor')->getClosure();
+            $this->setGetConstructorHandler($handler);
+        }
     }
 
     public function __debugInfo()
@@ -1631,6 +1638,23 @@ class ReflectionClass extends NativeReflectionClass
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new CountElementsHook($handler, $handlers);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs the "get_constructor" handler for the current class
+     *
+     * @param Closure $handler Callback function (GetConstructorHook $hook): ?\ReflectionMethod;
+     *
+     * @see ObjectGetConstructorInterface
+     */
+    public function setGetConstructorHandler(Closure $handler): GetConstructorHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new GetConstructorHook($handler, $handlers);
         $hook->install();
 
         return $hook;
