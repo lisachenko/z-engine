@@ -20,6 +20,7 @@ use ZEngine\ClassExtension\Hook\CastObjectHook;
 use ZEngine\ClassExtension\Hook\CompareValuesHook;
 use ZEngine\ClassExtension\Hook\CreateObjectHook;
 use ZEngine\ClassExtension\Hook\DoOperationHook;
+use ZEngine\ClassExtension\Hook\GetDebugInfoHook;
 use ZEngine\ClassExtension\Hook\GetPropertiesForHook;
 use ZEngine\ClassExtension\Hook\GetPropertyPointerHook;
 use ZEngine\ClassExtension\Hook\HasPropertyHook;
@@ -31,6 +32,7 @@ use ZEngine\ClassExtension\ObjectCastInterface;
 use ZEngine\ClassExtension\ObjectCompareValuesInterface;
 use ZEngine\ClassExtension\ObjectCreateInterface;
 use ZEngine\ClassExtension\ObjectDoOperationInterface;
+use ZEngine\ClassExtension\ObjectGetDebugInfoInterface;
 use ZEngine\ClassExtension\ObjectGetPropertiesForInterface;
 use ZEngine\ClassExtension\ObjectGetPropertyPointerInterface;
 use ZEngine\ClassExtension\ObjectHasPropertyInterface;
@@ -741,6 +743,11 @@ class ReflectionClass extends NativeReflectionClass
             $handler = parent::getMethod('__fieldPointer')->getClosure();
             $this->setGetPropertyPointerHandler($handler);
         }
+
+        if ($this->implementsInterface(ObjectGetDebugInfoInterface::class)) {
+            $handler = parent::getMethod('__getDebugInfo')->getClosure();
+            $this->setGetDebugInfoHandler($handler);
+        }
     }
 
     public function __debugInfo()
@@ -881,6 +888,23 @@ class ReflectionClass extends NativeReflectionClass
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new GetPropertiesForHook($handler, $handlers);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs the "get_debug_info" handler for the current class
+     *
+     * @param Closure $handler Callback function (GetDebugInfoHook $hook): array;
+     *
+     * @see ObjectGetDebugInfoInterface
+     */
+    public function setGetDebugInfoHandler(Closure $handler): GetDebugInfoHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new GetDebugInfoHook($handler, $handlers);
         $hook->install();
 
         return $hook;

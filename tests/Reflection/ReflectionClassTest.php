@@ -22,6 +22,7 @@ use ZEngine\ClassExtension\Hook\CastObjectHook;
 use ZEngine\ClassExtension\Hook\CompareValuesHook;
 use ZEngine\ClassExtension\Hook\CreateObjectHook;
 use ZEngine\ClassExtension\Hook\DoOperationHook;
+use ZEngine\ClassExtension\Hook\GetDebugInfoHook;
 use ZEngine\ClassExtension\Hook\GetPropertiesForHook;
 use ZEngine\ClassExtension\Hook\HasPropertyHook;
 use ZEngine\ClassExtension\Hook\InterfaceGetsImplementedHook;
@@ -470,6 +471,78 @@ class ReflectionClassTest extends TestCase
         $this->markTestIncomplete('Initialization object handler brings segfaults thus run it separately');
     }
 
+
+    #[Group('internal')]
+    public function testInstallGetDebugInfoHandler(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+        $this->refClass->setGetDebugInfoHandler(function (GetDebugInfoHook $hook): array {
+            $this->assertInstanceOf(TestClass::class, $hook->getObject());
+
+            return ['custom' => 'debug-info', 'answer' => 42];
+        });
+
+        $instance = new TestClass();
+        ob_start();
+        var_dump($instance);
+        $output = (string) ob_get_clean();
+
+        // The custom array fully replaces the default engine debug info
+        $this->assertStringContainsString('["custom"]', $output);
+        $this->assertStringContainsString('string(10) "debug-info"', $output);
+        $this->assertStringContainsString('["answer"]', $output);
+        $this->assertStringNotContainsString('["property"]', $output);
+    }
+
+    #[Group('internal')]
+    public function testGetDebugInfoHandlerProceedYieldsDefaultInfo(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+        $this->refClass->setGetDebugInfoHandler(function (GetDebugInfoHook $hook): array {
+            $default = $hook->proceed();
+            // The default engine debug info contains the declared properties
+            $this->assertSame(42, $default['property'] ?? null);
+
+            return $default + ['extra' => 'appended'];
+        });
+
+        $instance = new TestClass();
+        ob_start();
+        var_dump($instance);
+        $output = (string) ob_get_clean();
+
+        $this->assertStringContainsString('["property"]', $output);
+        $this->assertStringContainsString('int(42)', $output);
+        $this->assertStringContainsString('["extra"]', $output);
+        $this->assertStringContainsString('string(8) "appended"', $output);
+    }
+
+    #[Group('internal')]
+    public function testGetDebugInfoHandlerUninstallRestoresDefaultBehavior(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+        $hook = $this->refClass->setGetDebugInfoHandler(function (GetDebugInfoHook $hook): array {
+            return ['custom' => 'debug-info'];
+        });
+
+        $instance = new TestClass();
+        ob_start();
+        var_dump($instance);
+        $hookedOutput = (string) ob_get_clean();
+        $this->assertStringContainsString('["custom"]', $hookedOutput);
+
+        $hook->uninstall();
+
+        ob_start();
+        var_dump($instance);
+        $defaultOutput = (string) ob_get_clean();
+        $this->assertStringNotContainsString('["custom"]', $defaultOutput);
+        $this->assertStringContainsString('["property"]', $defaultOutput);
+        $this->assertStringContainsString('int(42)', $defaultOutput);
+    }
 
     public function testInstallExtensionHandlers(): void
     {

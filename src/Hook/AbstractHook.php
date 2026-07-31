@@ -146,6 +146,32 @@ abstract class AbstractHook implements HookInterface
     }
 
     /**
+     * Returns the original engine handler as an invocable callable for proceed() implementations
+     *
+     * FFI\CData function pointers are invocable at runtime (FFI provides an engine-level
+     * get_closure handler for them), which static analysis cannot model on the CData type
+     * itself: the mixed-typed seam below erases the type so the callable check narrows
+     * instead of contradicting.
+     */
+    final protected function getOriginalCallable(): callable
+    {
+        $originalHandler = $this->getOriginalHandlerErased();
+        if (!is_callable($originalHandler)) {
+            throw new \LogicException('Original handler is not available');
+        }
+
+        return $originalHandler;
+    }
+
+    /**
+     * Type-erasing seam for getOriginalCallable()
+     */
+    private function getOriginalHandlerErased(): mixed
+    {
+        return $this->originalHandler;
+    }
+
+    /**
      * Returns the identity of the engine field this hook targets (container address + field)
      *
      * @internal used by the Core hook registry to build per-field chains
