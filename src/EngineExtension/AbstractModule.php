@@ -23,6 +23,7 @@ use ZEngine\EngineExtension\Hook\ModuleStartupHook;
 use ZEngine\EngineExtension\Hook\RequestShutdownHook;
 use ZEngine\EngineExtension\Hook\RequestStartupHook;
 use ZEngine\Reflection\ReflectionExtension;
+use ZEngine\Type\StringEntry;
 
 /**
  * Base class for userland PHP extensions (engine modules)
@@ -125,9 +126,11 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
             throw new \RuntimeException('Module ' . $this->moduleName . ' was already registered.');
         }
 
-        // Since PHP 8.4 the engine stores this entry pointer directly in the module registry
-        // (no copy anymore), so the entry and every buffer it references must stay valid for
-        // the rest of the process: persistent, immortal-by-design (docs/long-running.md)
+        // Since PHP 8.4 zend_register_module_ex stores THIS pointer directly in the
+        // module registry (zend_hash_add_ptr - the old copying add_mem behaviour is
+        // gone), so the entry must be malloc-backed and never FFI-collected: the engine
+        // frees it itself at module destruction. Every buffer the entry references
+        // (name, globals, deps) is persistent for the same reason (docs/long-running.md)
         $module     = Core::trackedNew('zend_module_entry', true);
         $moduleName = $this->moduleName;
         $moduleType = static::targetPersistent() ? self::MODULE_PERSISTENT : self::MODULE_TEMPORARY;
@@ -161,18 +164,21 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
 
         $this->moduleEntry = $realModulePointer;
 
-        // dl() parity: a temporary module registered mid-request is only deactivated and
-        // destroyed at request shutdown when the engine walks the full module registry
-        // instead of the handler lists precomputed at process startup
-        if (!static::targetPersistent()) {
+        if (static::targetPersistent()) {
+            // The registry bucket key interned at runtime is request-lifetime: swap it for
+            // a persistent interned string so the registry teardown at process shutdown
+            // does not read a dangling key
+            $this->makeRegistryKeyPersistent();
+        } else {
+            // dl() parity: a temporary module registered mid-request is only deactivated
+            // and destroyed at request shutdown when the engine walks the full module
+            // registry instead of the handler lists precomputed at process startup
             Core::$executor->enableFullTablesCleanup();
         }
 
         $this->wireOptInCallbacks();
 
-        // Initialize the native reflection state for the freshly registered module; the
-        // ['obj', 'Class::method'] callable form is deprecated since PHP 8.4
-        (new \ReflectionMethod(\ReflectionExtension::class, '__construct'))->invoke($this, $moduleName);
+        (new \ReflectionMethod(\ReflectionExtension::class, '__construct'))->invokeArgs($this, [$moduleName]);
     }
 
     /**
@@ -351,6 +357,40 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
         Core::memcpy($buffer, $value, $length - 1);
 
         return $buffer;
+    }
+
+    /**
+     * Swaps the module_registry bucket key for a persistent interned string
+     *
+     * Registering a module at runtime makes zend_register_module_ex intern the registry
+     * key as a REQUEST-lifetime string (zend_new_interned_string goes to the per-request
+     * interned table outside of engine startup), so a persistent module's bucket key
+     * would dangle after the first request and crash the registry teardown at process
+     * shutdown. A persistent interned replacement has the same content hash and is never
+     * released by the engine (interned strings are release no-ops).
+     */
+    private function makeRegistryKeyPersistent(): void
+    {
+        $registryTable = Core::$modules->getRawValue();
+        $lowerName     = strtolower($this->moduleName);
+
+        $numUsed = $registryTable->nNumUsed;
+        for ($index = 0; $index < $numUsed; $index++) {
+            $bucket = Core::addr($registryTable->arData[$index]);
+            if ($bucket->key === null) {
+                continue;
+            }
+            $key = StringEntry::fromCData($bucket->key);
+            if ($key->getStringValue() !== $lowerName) {
+                continue;
+            }
+            // A permanent interned key (registered during engine startup) is already safe
+            if (!$key->isPermanent()) {
+                $bucket->key = StringEntry::persistentInterned($lowerName)->getRawValue();
+            }
+
+            return;
+        }
     }
 
     /**

@@ -118,6 +118,8 @@ return [
     'HASH_UPDATE_INDIRECT' => 4,
     'HASH_ADD_NEW' => 8,
     'HASH_ADD_NEXT' => 16,
+    'HT_MIN_MASK' => 4294967294,
+    'HT_MIN_SIZE' => 8,
     'ZEND_MODULE_API_NO' => 20240924,
     'MODULE_PERSISTENT' => 1,
     'MODULE_TEMPORARY' => 2,
