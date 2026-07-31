@@ -74,6 +74,8 @@ return [
         'zend_hash_del',
         'zend_hash_find',
         'zend_hash_add_or_update',
+        'zend_hash_index_add_or_update',
+        'zend_hash_index_find',
         // Opcode API
         'zend_set_user_opcode_handler',
         'zend_get_user_opcode_handler',
@@ -82,6 +84,7 @@ return [
         'zend_objects_new',
         'zend_object_std_init',
         'object_properties_init',
+        'zend_objects_store_put',
         // Language scanner API
         'zend_save_lexical_state',
         'zend_restore_lexical_state',
@@ -160,6 +163,7 @@ return [
         'HASH_FLAG_CONSISTENCY', 'HASH_FLAG_PACKED', 'HASH_FLAG_UNINITIALIZED',
         'HASH_FLAG_STATIC_KEYS', 'HASH_FLAG_HAS_EMPTY_IND', 'HASH_FLAG_ALLOW_COW_VIOLATION',
         'HASH_UPDATE', 'HASH_ADD', 'HASH_UPDATE_INDIRECT', 'HASH_ADD_NEW', 'HASH_ADD_NEXT',
+        'HT_MIN_MASK', 'HT_MIN_SIZE',
         // Module API (zend_modules.h)
         'ZEND_MODULE_API_NO', 'MODULE_PERSISTENT', 'MODULE_TEMPORARY',
         // Engine build info

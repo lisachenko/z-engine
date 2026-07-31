@@ -68,6 +68,32 @@ If you touch a struct the PHP code dereferences, add it to `layout_structs` in
 FFI-loads the header and asserts every offset against the C compiler, so a
 wrong header cannot be produced.
 
+### Regenerating without Docker (sandboxed/proxied environments)
+
+When Docker or the Debian package mirrors are unreachable (as in restricted CI
+sandboxes), the generator can run directly on the host — the Docker image is a
+convenience, not a requirement. `emit.php` derives everything from the
+*running* PHP build (`php-config --includes`, clang over the real headers, a C
+probe compiled with `cc`); the php-src tree is only needed to slice
+`Zend/zend_closures.c`. Verified recipe:
+
+1. Host needs: `clang`, `cc`, `php-config` + dev headers for the exact running
+   PHP version, ext-ffi. Fetch the matching `Zend/zend_closures.c` (and nothing
+   else) from `raw.githubusercontent.com/php/php-src/php-<version>/`.
+2. First run against the **committed** `symbols.php` into a scratch directory
+   and `diff` against `include/<minor>/<platform>/` — the output must be
+   byte-identical (it was, verified on Ubuntu clang-18 vs the trixie image:
+   the emitter normalizes declarations from the clang AST, so compiler
+   version does not leak into the artifacts). If the diff is clean, host
+   regeneration is equivalent to the Docker/CI pipeline for this host.
+3. Only then apply the `symbols.php` change and regenerate into `include/`
+   for real: `php -d memory_limit=2G tools/generator/emit.php
+   --php-src=<dir> [--out=...]`.
+
+The byte-identical pre-check is what makes this safe: the `header-drift` CI
+job re-runs the Docker pipeline and fails on any divergence, so never skip
+step 2.
+
 ## Running tests safely
 
 ```bash

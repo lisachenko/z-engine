@@ -17,6 +17,7 @@ use FFI\CData;
 use ZEngine\Core;
 use ZEngine\EngineExtension\Hook\ExtensionConstructorHook;
 use ZEngine\Reflection\ReflectionExtension;
+use ZEngine\Type\StringEntry;
 
 abstract class AbstractModule extends ReflectionExtension implements ModuleInterface
 {
@@ -88,8 +89,11 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
             throw new \RuntimeException('Module ' . $this->moduleName . ' was already registered.');
         }
 
-        // We don't need persistent memory here, as PHP copies structures into persistent memory itself
-        $module     = Core::new('zend_module_entry');
+        // Since PHP 8.4 zend_register_module_ex stores THIS pointer directly in the
+        // module registry (zend_hash_add_ptr - the old copying add_mem behaviour is
+        // gone), so the entry must be malloc-backed and never FFI-collected: the
+        // engine frees it itself with free() at module destruction
+        $module     = Core::trackedNew('zend_module_entry', true);
         $moduleName = $this->moduleName;
         $nameLength = strlen($moduleName) + 1;
         /* extra zero-byte */;
@@ -111,14 +115,16 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
             $module->globals_ptr  = Core::addr($memoryStructure);
         }
 
-        // $module pointer will be updated, as registration method returns a copy of memory.
         // Since PHP 8.3 the module type is passed explicitly instead of being read from the entry.
         $realModulePointer = Core::call('zend_register_module_ex', Core::addr($module), (int) $module->type);
 
         $this->moduleEntry = $realModulePointer;
 
-        $extensionConstructor = \ReflectionExtension::class . '::__construct';
-        call_user_func([$this, $extensionConstructor], $moduleName);
+        if (static::targetPersistent()) {
+            $this->makeRegistryKeyPersistent();
+        }
+
+        (new \ReflectionMethod(\ReflectionExtension::class, '__construct'))->invokeArgs($this, [$moduleName]);
     }
 
     /**
@@ -153,6 +159,40 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
         }
 
         return $rawPointer;
+    }
+
+    /**
+     * Swaps the module_registry bucket key for a persistent interned string
+     *
+     * Registering a module at runtime makes zend_register_module_ex intern the registry
+     * key as a REQUEST-lifetime string (zend_new_interned_string goes to the per-request
+     * interned table outside of engine startup), so a persistent module's bucket key
+     * would dangle after the first request and crash the registry teardown at process
+     * shutdown. A persistent interned replacement has the same content hash and is never
+     * released by the engine (interned strings are release no-ops).
+     */
+    private function makeRegistryKeyPersistent(): void
+    {
+        $registryTable = Core::$modules->getRawValue();
+        $lowerName     = strtolower($this->moduleName);
+
+        $numUsed = $registryTable->nNumUsed;
+        for ($index = 0; $index < $numUsed; $index++) {
+            $bucket = Core::addr($registryTable->arData[$index]);
+            if ($bucket->key === null) {
+                continue;
+            }
+            $key = StringEntry::fromCData($bucket->key);
+            if ($key->getStringValue() !== $lowerName) {
+                continue;
+            }
+            // A permanent interned key (registered during engine startup) is already safe
+            if (!$key->isPermanent()) {
+                $bucket->key = StringEntry::persistentInterned($lowerName)->getRawValue();
+            }
+
+            return;
+        }
     }
 
     /**

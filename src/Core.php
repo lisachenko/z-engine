@@ -416,10 +416,11 @@ class Core
         // taking another reference to it leaks the owned FFI type structure (~116 bytes per
         // call), which made every buffer cast a slow leak in long-running processes.
         try {
-            // Only C arrays are countable; pointers, structs and scalars throw here
+            // Only C arrays are countable; pointers and structs throw FFI\Exception,
+            // scalar CData (eg uintptr_t) throws TypeError - both mean "not an array"
             \count($pointer);
             $pointer = FFI::addr($pointer[0]);
-        } catch (FFI\Exception) {
+        } catch (FFI\Exception | \TypeError) {
             // Not an array: cast directly
         }
 

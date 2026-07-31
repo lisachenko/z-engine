@@ -108,6 +108,26 @@ final class ObjectStore implements Countable, ArrayAccess
     }
 
     /**
+     * Registers an object in the store, assigning it a fresh handle
+     *
+     * Wraps zend_objects_store_put: pops the free list or grows the bucket array with the
+     * engine's own request allocator, then writes the new handle into the object. Required
+     * for objects allocated outside zend_object_std_init (eg persistent clones) that must
+     * become visible to the engine for the current request.
+     *
+     * @param CData $object zend_object* to register
+     *
+     * @return int The handle assigned by the engine (== spl_object_id)
+     * @internal
+     */
+    public function put(CData $object): int
+    {
+        Core::call('zend_objects_store_put', $object);
+
+        return $object->handle;
+    }
+
+    /**
      * Detaches existing object from the object store
      *
      * <span style="color:red; font-weight: bold">Warning!</span> This call doesn't invokes object destructors,
@@ -127,6 +147,37 @@ final class ObjectStore implements Countable, ArrayAccess
         $rawPointer->cdata = $invalidPointer;
 
         $this->pointer->object_buckets[$offset] = Core::cast('zend_object *', $rawPointer);
+    }
+
+    /**
+     * Detaches an object from the store AND returns its slot to the free list
+     *
+     * Mirrors the slot bookkeeping of zend_objects_store_del: the bucket receives the
+     * tagged number of the previous free head and becomes the new head, so a later
+     * put() reuses the slot instead of growing the bucket array. Like detach(), this
+     * never invokes destructors or frees the object itself.
+     *
+     * @see zend_objects_API.h:SET_OBJ_BUCKET_NUMBER macro
+     * @internal
+     */
+    public function recycle(int $offset): void
+    {
+        if ($offset < 0 || $offset > $this->pointer->top - 1) {
+            // We use -2 because exception object also increments index by one
+            throw new \OutOfBoundsException("Index {$offset} is out of bounds 0.." . ($this->pointer->top - 2));
+        }
+        // Prepare every FFI temporary FIRST: each CData is itself a PHP object whose
+        // allocation pops this very free list, so creating one between reading and
+        // writing free_list_head would stale the captured head and orphan slots
+        $taggedNumber = Core::new('uintptr_t');
+        $bucketValue  = Core::cast('zend_object *', $taggedNumber);
+        $buckets      = Core::cast('zend_object **', $this->pointer->object_buckets);
+
+        // No CData allocations below this line (scalar reads/writes only)
+        $taggedNumber->cdata = ($this->pointer->free_list_head << 1) | self::OBJ_BUCKET_INVALID;
+        $buckets[$offset]    = $bucketValue;
+
+        $this->pointer->free_list_head = $offset;
     }
 
     /**
