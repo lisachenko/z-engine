@@ -27,7 +27,12 @@ use ZEngine\ClassExtension\ObjectUnsetDimensionInterface;
 use ZEngine\ClassExtension\ObjectWriteDimensionInterface;
 
 /**
- * Collection with native array-access and count() support, without ArrayAccess/Countable
+ * Collection with native array-access and count() support, without implementing ArrayAccess
+ *
+ * \Countable is implemented (with a sentinel value) because debug PHP builds verify
+ * count()'s arginfo ("Countable|array") before consulting the count_elements handler,
+ * see the ObjectCountElementsInterface documentation. The dimension handlers need no
+ * such escort: $collection[...] operations are plain VM opcodes without arginfo checks.
  */
 class NativeCollection implements
     ObjectCreateInterface,
@@ -35,7 +40,8 @@ class NativeCollection implements
     ObjectWriteDimensionInterface,
     ObjectHasDimensionInterface,
     ObjectUnsetDimensionInterface,
-    ObjectCountElementsInterface
+    ObjectCountElementsInterface,
+    \Countable
 {
     use ObjectCreateTrait;
 
@@ -50,6 +56,15 @@ class NativeCollection implements
     public function __construct(array $items = [])
     {
         $this->items = $items;
+    }
+
+    /**
+     * Only reached when the count_elements hook is NOT installed: the engine checks the
+     * handler first. The sentinel value lets tests tell the two code paths apart.
+     */
+    public function count(): int
+    {
+        return PHP_INT_MAX;
     }
 
     /**

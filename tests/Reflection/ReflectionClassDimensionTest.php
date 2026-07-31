@@ -29,9 +29,12 @@ use ZEngine\Stub\TestClass;
 /**
  * Tests for the dimension family of object handlers (read/write/has/unset_dimension + count_elements)
  *
- * The hooked classes intentionally do NOT implement ArrayAccess/Countable - engine-level
- * overloading is the feature under test - so instances are annotated with the intersection
- * types describing their actual runtime behavior once the handlers are installed.
+ * The hooked classes intentionally do NOT implement ArrayAccess - engine-level overloading
+ * is the feature under test - so instances are annotated with the intersection types
+ * describing their actual runtime behavior once the handlers are installed. Countable IS
+ * implemented by the count-hooked classes: debug builds verify count()'s arginfo before
+ * the count_elements handler is consulted (see ObjectCountElementsInterface), exactly like
+ * the engine's own count_elements classes do.
  */
 #[Group('internal')]
 class ReflectionClassDimensionTest extends TestCase
@@ -131,8 +134,7 @@ class ReflectionClassDimensionTest extends TestCase
     #[RunInSeparateProcess]
     public function testProceedFallsThroughToOriginalArrayAccessHandlers(): void
     {
-        $refClass = new ReflectionClass(DimensionArrayAccessFixture::class);
-        $refClass->setCreateObjectHandler(Closure::fromCallable([ObjectCreateTrait::class, '__init']));
+        $refClass = $this->createFixtureReflection();
         $refClass->setReadDimensionHandler(function (ReadDimensionHook $hook) {
             // Fall through to the engine handler, which dispatches to offsetGet()
             $value = $hook->proceed();
@@ -185,9 +187,9 @@ class ReflectionClassDimensionTest extends TestCase
     }
 
     #[RunInSeparateProcess]
-    public function testCountElementsProceedIsUnavailableForStandardObjects(): void
+    public function testCountElementsHookWinsOverCountableAndHasNoOriginalHandler(): void
     {
-        $refClass = $this->createTestClassReflection();
+        $refClass = $this->createFixtureReflection();
         $refClass->setCountElementsHandler(function (CountElementsHook $hook) {
             // std_object_handlers has no count_elements entry, so nothing to proceed to
             $this->assertFalse($hook->hasOriginalHandler());
@@ -195,7 +197,10 @@ class ReflectionClassDimensionTest extends TestCase
             return 42;
         });
 
-        $instance = $this->newHookedTestClass();
+        $instance = new DimensionArrayAccessFixture(['value']);
+
+        // The engine consults the count_elements handler before Countable::count(),
+        // which would have reported 1 - proof that the hook intercepted the call
         $this->assertSame(42, count($instance));
     }
 
@@ -221,19 +226,18 @@ class ReflectionClassDimensionTest extends TestCase
     #[RunInSeparateProcess]
     public function testUninstallRestoresOriginalCountBehavior(): void
     {
-        $refClass = $this->createTestClassReflection();
+        $refClass = $this->createFixtureReflection();
         $hook     = $refClass->setCountElementsHandler(function (CountElementsHook $hook) {
             return 42;
         });
 
-        $instance = $this->newHookedTestClass();
+        $instance = new DimensionArrayAccessFixture(['value']);
         $this->assertSame(42, count($instance));
 
         $hook->uninstall();
 
-        // With the hook removed, count() rejects non-Countable objects again
-        $this->expectException(\TypeError::class);
-        $unused = count($instance);
+        // With the hook removed, count() falls back to the real Countable::count()
+        $this->assertSame(1, count($instance));
     }
 
     /**
@@ -257,11 +261,11 @@ class ReflectionClassDimensionTest extends TestCase
     /**
      * Creates a TestClass instance that received the adjustable object handlers structure
      *
-     * @return TestClass&\ArrayAccess<array-key, mixed>&\Countable
+     * @return TestClass&\ArrayAccess<array-key, mixed>
      */
     private function newHookedTestClass()
     {
-        /** @var TestClass&\ArrayAccess<array-key, mixed>&\Countable $instance */
+        /** @var TestClass&\ArrayAccess<array-key, mixed> $instance */
         $instance = new TestClass();
 
         return $instance;
@@ -278,14 +282,30 @@ class ReflectionClassDimensionTest extends TestCase
 
         return $refClass;
     }
+
+    /**
+     * Creates a DimensionArrayAccessFixture reflection with the create_object handler
+     * installed, so new instances receive the adjustable object handlers structure
+     */
+    private function createFixtureReflection(): ReflectionClass
+    {
+        $refClass = new ReflectionClass(DimensionArrayAccessFixture::class);
+        $refClass->setCreateObjectHandler(Closure::fromCallable([ObjectCreateTrait::class, '__init']));
+
+        return $refClass;
+    }
 }
 
 /**
- * Fixture with real ArrayAccess handlers behind the hooks, used by the proceed() fallthrough test
+ * Fixture with real ArrayAccess/Countable behavior behind the hooks: used to prove
+ * proceed() falls through to the original engine handlers, and that count() falls back
+ * to Countable::count() once the count_elements hook is uninstalled. Countable is also
+ * what keeps debug builds happy - they verify count()'s arginfo ("Countable|array")
+ * before the count_elements handler is consulted (see ObjectCountElementsInterface)
  *
  * @implements \ArrayAccess<array-key, mixed>
  */
-class DimensionArrayAccessFixture implements \ArrayAccess
+class DimensionArrayAccessFixture implements \ArrayAccess, \Countable
 {
     /**
      * @param array<array-key, mixed> $items
@@ -320,5 +340,10 @@ class DimensionArrayAccessFixture implements \ArrayAccess
     {
         assert(is_int($offset) || is_string($offset));
         unset($this->items[$offset]);
+    }
+
+    public function count(): int
+    {
+        return count($this->items);
     }
 }

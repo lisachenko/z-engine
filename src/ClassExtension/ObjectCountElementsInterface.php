@@ -17,6 +17,15 @@ use ZEngine\ClassExtension\Hook\CountElementsHook;
 
 /**
  * Interface ObjectCountElementsInterface allows to intercept count($object) calls
+ *
+ * Classes that install a count_elements handler should also implement \Countable: debug
+ * PHP builds verify every internal call against its arginfo, and count() declares
+ * "Countable|array $value", so counting a non-Countable object aborts there with
+ * "Arginfo / zpp mismatch" even though the handler could have served the call. The engine
+ * consults the count_elements handler before ever dispatching to Countable::count(), so
+ * the hook still intercepts every count($object) - Countable::count() is only reached
+ * when no handler is installed. This mirrors the engine's own practice: every internal
+ * class with a count_elements handler implements Countable too.
  */
 interface ObjectCountElementsInterface
 {
