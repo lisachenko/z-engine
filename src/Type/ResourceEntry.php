@@ -20,6 +20,20 @@ use ZEngine\Reflection\ReflectionValue;
 /**
  * Class ResourceEntry represents a resource instance in PHP
  *
+ * Memory ownership contract (see docs/long-running.md for the full model):
+ *
+ *  - `new ResourceEntry($resource)` is an OWNING construction: the wrapper holds one
+ *    reference and keeps the zend_resource alive for its own lifetime; released
+ *    automatically on destruction or via release().
+ *  - fromCData() is BORROWED (no addref): valid only while another owner (the resource
+ *    list, a PHP variable) keeps the resource alive.
+ *  - setHandle()/setType() are raw structure writes with no bookkeeping: the resource list
+ *    still indexes the entry under its ORIGINAL handle, so an aliased handle must be
+ *    restored before the resource is closed - otherwise the close targets whichever
+ *    unrelated list entry owns the aliased id.
+ *  - A resource released to refcount zero through this wrapper is destroyed by the engine
+ *    (rc_dtor_func), never by the FFI allocator.
+ *
  * struct _zend_resource {
  *     zend_refcounted_h gc;
  *     int               handle; // TODO: may be removed ???

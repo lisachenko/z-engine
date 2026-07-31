@@ -28,6 +28,33 @@ use ZEngine\Type\HashTable;
 
 /**
  * Class Core
+ *
+ * Central access point to the engine FFI binding, plus the low-level memory management
+ * primitives and the process-wide registries (see docs/long-running.md for the full model):
+ *
+ *  - new()/free(): FFI allocation, for z-engine's OWN containers and buffers only. Engine
+ *    memory must never be freed through the FFI allocator - refcounted payloads are
+ *    released through the exported engine primitives instead (zval_ptr_dtor, zval_add_ref,
+ *    rc_dtor_func, reachable via call()).
+ *  - trackedNew()/isTrackedBlock()/untrackAndFree()/untrack(): registry of buffers that
+ *    z-engine stores INSIDE engine structures (interface lists, trait name arrays, object
+ *    handler blocks), keyed by address. untrackAndFree() frees a block if and only if
+ *    z-engine allocated it, which makes buffer replacement legal in every branch while
+ *    engine-original (and possibly shared-memory) arrays are never touched. Allocation
+ *    class matters: persistent (malloc) only for structures the engine frees with the
+ *    persistent allocator (internal classes); request memory everywhere else.
+ *  - addressOf(): numeric pointer identity, used for cache keys and the registries above.
+ *  - cast(): array-to-pointer decay without FFI::typeof() - probing a CData's kind and then
+ *    referencing it again leaks the owned FFI type structure, so arrays are detected with
+ *    count() instead.
+ *  - registerHook()/unregisterHook()/isTopHook(): per-field chains of installed engine
+ *    hooks; the strong references keep libffi trampolines alive while the engine points at
+ *    them, and chains unwind strictly in reverse installation order.
+ *  - shutdown() (auto-registered via register_shutdown_function in init()): restores every
+ *    hooked engine pointer while the trampolines are still valid, then stops all engine
+ *    writes for the rest of the request - the invariant that makes long-running runtimes
+ *    (worker loops, FPM + opcache preload) safe. reinstallHooks() re-mints trampolines for
+ *    SAPIs that cycle FFI callback state between handled requests.
  */
 class Core
 {

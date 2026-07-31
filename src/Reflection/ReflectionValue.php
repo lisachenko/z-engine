@@ -24,6 +24,30 @@ use ZEngine\Type\ReleasableTrait;
 /**
  * Class ReflectionValue represents a value in PHP
  *
+ * Memory ownership contract (see docs/long-running.md for the full model):
+ *
+ *  - `new ReflectionValue($value)` is an OWNING construction: it allocates its own 16-byte
+ *    zval container and takes exactly one reference on refcounted payloads. Both are dropped
+ *    automatically on destruction, or eagerly via the idempotent release(); any access after
+ *    release() throws instead of touching freed memory.
+ *  - fromValueEntry() is a BORROWED view over an engine-owned zval: it owns nothing,
+ *    release() is a no-op, and the caller must guarantee the pointed zval stays valid.
+ *  - newEntry() returns a wrapper that owns only its container - the payload reference still
+ *    belongs to the caller. Call acquireReference() before handing the zval to an engine
+ *    function with ownership semantics (one that may release or replace the value inside,
+ *    eg zend_prepare_string_for_scanning), and release() to free whatever is owned.
+ *  - transferReferenceOwnership() hands the owned payload reference over to an engine sink
+ *    that will release it later (hashtable bucket, class entry field, AST node); after the
+ *    transfer this wrapper no longer drops the reference.
+ *  - copy() follows ZVAL_COPY semantics (takes a reference on refcounted payloads).
+ *    setNativeValue() releases the previous destination content like an engine assignment;
+ *    initializeNativeValue() writes into UNINITIALIZED engine output slots (cast_object
+ *    retval, do_operation result) where interpreting the previous bytes would crash.
+ *  - Engine memory is never freed through the FFI allocator: payload releases are routed
+ *    through zval_ptr_dtor/rc_dtor_func, so interned, immutable and persistent payloads
+ *    keep their engine semantics. Because every owning wrapper holds its own reference,
+ *    aliasing two wrappers over one pointer can never double-free.
+ *
  * struct _zval_struct {
  *   zend_value        value;            // value
  *   union {

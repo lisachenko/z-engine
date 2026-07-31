@@ -18,6 +18,18 @@ use ZEngine\Core;
 
 /**
  * Trait RefcountedTrait
+ *
+ * Direct access to the engine reference counter of a wrapped payload. These are the raw
+ * primitives underneath the ownership layer; prefer ReleasableTrait::release() (which
+ * releases exactly what a wrapper owns) over manual counter surgery. Direct calls are only
+ * appropriate when editing a reference owned by an engine structure, eg dropping the names
+ * of a removed trait entry.
+ *
+ * Guard rails: increment/decrement throw on immutable payloads (interned strings, immutable
+ * arrays, shared-memory data must never be mutated) and on counter underflow.
+ * releaseReference() drops exactly one reference with full engine semantics - destruction
+ * at zero goes through rc_dtor_func, persistent (malloc) payloads are left for the engine
+ * to reclaim, and nothing is ever freed through the FFI allocator.
  */
 trait ReferenceCountedTrait
 {

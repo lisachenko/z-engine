@@ -22,6 +22,14 @@ use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
 
+/**
+ * Class Compiler provides an access to the compiler global state (CG)
+ *
+ * Memory notes: parseString() returns a DETACHED tree whose arena and payload references
+ * are owned by an AstOwnership handle travelling with every node built from it - keep any
+ * node alive while reading the tree, and do not graft its nodes into the live compilation
+ * AST (getAST()), which stays engine-owned and borrowed. See docs/long-running.md.
+ */
 class Compiler
 {
     /**

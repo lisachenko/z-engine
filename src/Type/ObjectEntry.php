@@ -22,6 +22,22 @@ use ZEngine\Reflection\ReflectionValue;
 /**
  * Class ObjectEntry represents an object instance in PHP
  *
+ * Memory ownership contract (see docs/long-running.md for the full model):
+ *
+ *  - `new ObjectEntry($object)` is an OWNING construction: the wrapper holds one reference
+ *    and keeps the object alive for its own lifetime; released automatically on destruction
+ *    or via release().
+ *  - fromCData() is BORROWED (no addref): valid only while somebody else keeps the object
+ *    alive - typically inside engine hook callbacks where the caller guarantees liveness.
+ *  - weakFor() is BORROWED with a WeakReference guard: it does not extend the object
+ *    lifetime, but every accessor throws once the object has been destroyed instead of
+ *    dereferencing a dangling zend_object pointer. Prefer it over fromCData() whenever the
+ *    source PHP object is at hand.
+ *  - setClass() intentionally performs no refcounting: zend_class_entry structures are not
+ *    refcounted engine values, so swapping the ce pointer transfers no ownership.
+ *  - An object released to refcount zero through this wrapper is destroyed by the engine
+ *    (rc_dtor_func -> objects store), never by the FFI allocator.
+ *
  * struct _zend_object {
  *   zend_refcounted_h gc;
  *   uint32_t          handle;

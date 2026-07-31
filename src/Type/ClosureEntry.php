@@ -20,6 +20,21 @@ use ZEngine\Core;
 /**
  * Class ClosureEntry
  *
+ * Memory ownership contract (see docs/long-running.md for the full model):
+ *
+ *  - The wrapper itself owns nothing: the constructor and fromCData() are BORROWED views,
+ *    the caller must keep the closure object alive while the entry is used. Lifetime
+ *    control goes through the closure's object header - getClosureObjectEntry() exposes it
+ *    as a (borrowed) ObjectEntry.
+ *  - setThis() has full ZVAL_COPY semantics: it releases the previously bound $this and
+ *    takes a closure-owned reference on the new object, so the caller does NOT have to
+ *    keep the bound object alive - the engine releases it with the closure.
+ *  - setCalledScope() performs no refcounting: class entries are not refcounted values.
+ *  - getRawFunction() returns the zend_function EMBEDDED in the closure object: anything
+ *    that stores this pointer (eg a method table) must guarantee the closure object
+ *    outlives that structure - ReflectionClass::addMethod() immortalizes the closure for
+ *    exactly this reason.
+ *
  * typedef struct _zend_closure {
  *   zend_object       std;
  *   zend_function     func;

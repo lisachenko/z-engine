@@ -21,6 +21,27 @@ use ZEngine\Reflection\ReflectionValue;
 /**
  * This class wraps PHP's zend_string structure and provide an API for working with it
  *
+ * Memory ownership contract (see docs/long-running.md for the full model):
+ *
+ *  - `new StringEntry($php)` is an OWNING construction: it takes one reference on the
+ *    argument's zend_string, released automatically on destruction or via release().
+ *    Interned strings are immortal engine values - no reference is taken for them and
+ *    every release is a no-op.
+ *  - fromCData() is BORROWED (no addref): the pointer is valid only for as long as the
+ *    engine owner keeps the string alive. All construction paths store zend_string*.
+ *  - fromString() mints a fresh OWNED refcount-1 request-lifetime string; persistent()
+ *    mints an owned malloc-backed string for sinks inside persistent engine structures
+ *    (internal classes). Neither aliases caller memory, which makes them the only safe
+ *    sources for pointers stored into engine structures - hand the reference over with
+ *    transferReferenceOwnership() so the engine sink releases it instead of the wrapper.
+ *  - releaseReference() drops exactly one engine reference with full engine semantics
+ *    (interned/immutable untouched, destruction at zero via rc_dtor_func, persistent
+ *    blocks never freed with the request allocator). Use it only when editing a reference
+ *    owned by an engine structure (eg removing trait names); wrapper-owned references are
+ *    handled by release().
+ *  - Never free a zend_string through the FFI allocator: request strings belong to the
+ *    Zend memory manager and persistent ones to the engine's malloc bookkeeping.
+ *
  * struct _zend_string {
  *   zend_refcounted_h gc;
  *   zend_ulong        h;                // hash value
