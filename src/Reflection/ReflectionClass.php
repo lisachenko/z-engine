@@ -2392,20 +2392,12 @@ class ReflectionClass extends NativeReflectionClass
      */
     private function addRawMethod(string $methodName, CData $rawFunction): ReflectionMethod
     {
-        // The engine hashtable copies the zval into its own bucket, so the temporary
-        // container exists only for the duration of this call and must be freed here
-        $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawFunction);
-        $this->methodTable->add(strtolower($methodName), $valueEntry);
-        $valueEntry->release();
+        // Shared publish path with ReflectionFunction::addFunction(): the engine copies the
+        // temporary container into its own bucket and returns the pointer it stores, which
+        // is what pointer-level wrapper APIs like redefine() must operate on
+        $storedFunction = $this->methodTable->addFunctionEntry($methodName, $rawFunction);
 
-        // Wrap the zend_function pointer stored in the method table (not the passed
-        // structure) so pointer-level wrapper APIs like redefine() work on the result
-        $storedEntry = $this->methodTable->find(strtolower($methodName));
-        if ($storedEntry === null) {
-            throw new \ReflectionException("Method {$methodName} was not published in the class");
-        }
-
-        return ReflectionMethod::fromCData($storedEntry->getRawFunction());
+        return ReflectionMethod::fromCData($storedFunction);
     }
 
     /**
