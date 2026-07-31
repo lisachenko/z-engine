@@ -57,12 +57,13 @@ class CreateObjectHook extends AbstractHook
     /**
      * Proceeds with object creation
      */
-    public function proceed()
+    public function proceed(): CData
     {
         if ($this->originalHandler === null) {
             $object = ReflectionClass::newInstanceRaw($this->classType);
         } else {
             $object = ($this->originalHandler)($this->classType);
+            assert($object instanceof CData);
         }
 
         return $object;

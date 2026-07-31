@@ -18,24 +18,34 @@ use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
 use ZEngine\ClassExtension\Hook\CastObjectHook;
 use ZEngine\ClassExtension\Hook\CompareValuesHook;
+use ZEngine\ClassExtension\Hook\CountElementsHook;
 use ZEngine\ClassExtension\Hook\CreateObjectHook;
 use ZEngine\ClassExtension\Hook\DoOperationHook;
 use ZEngine\ClassExtension\Hook\GetPropertiesForHook;
 use ZEngine\ClassExtension\Hook\GetPropertyPointerHook;
+use ZEngine\ClassExtension\Hook\HasDimensionHook;
 use ZEngine\ClassExtension\Hook\HasPropertyHook;
 use ZEngine\ClassExtension\Hook\InterfaceGetsImplementedHook;
+use ZEngine\ClassExtension\Hook\ReadDimensionHook;
 use ZEngine\ClassExtension\Hook\ReadPropertyHook;
+use ZEngine\ClassExtension\Hook\UnsetDimensionHook;
 use ZEngine\ClassExtension\Hook\UnsetPropertyHook;
+use ZEngine\ClassExtension\Hook\WriteDimensionHook;
 use ZEngine\ClassExtension\Hook\WritePropertyHook;
 use ZEngine\ClassExtension\ObjectCastInterface;
 use ZEngine\ClassExtension\ObjectCompareValuesInterface;
+use ZEngine\ClassExtension\ObjectCountElementsInterface;
 use ZEngine\ClassExtension\ObjectCreateInterface;
 use ZEngine\ClassExtension\ObjectDoOperationInterface;
 use ZEngine\ClassExtension\ObjectGetPropertiesForInterface;
 use ZEngine\ClassExtension\ObjectGetPropertyPointerInterface;
+use ZEngine\ClassExtension\ObjectHasDimensionInterface;
 use ZEngine\ClassExtension\ObjectHasPropertyInterface;
+use ZEngine\ClassExtension\ObjectReadDimensionInterface;
 use ZEngine\ClassExtension\ObjectReadPropertyInterface;
+use ZEngine\ClassExtension\ObjectUnsetDimensionInterface;
 use ZEngine\ClassExtension\ObjectUnsetPropertyInterface;
+use ZEngine\ClassExtension\ObjectWriteDimensionInterface;
 use ZEngine\ClassExtension\ObjectWritePropertyInterface;
 use ZEngine\Core;
 use ZEngine\Type\ClosureEntry;
@@ -741,6 +751,31 @@ class ReflectionClass extends NativeReflectionClass
             $handler = parent::getMethod('__fieldPointer')->getClosure();
             $this->setGetPropertyPointerHandler($handler);
         }
+
+        if ($this->implementsInterface(ObjectReadDimensionInterface::class)) {
+            $handler = parent::getMethod('__dimensionRead')->getClosure();
+            $this->setReadDimensionHandler($handler);
+        }
+
+        if ($this->implementsInterface(ObjectWriteDimensionInterface::class)) {
+            $handler = parent::getMethod('__dimensionWrite')->getClosure();
+            $this->setWriteDimensionHandler($handler);
+        }
+
+        if ($this->implementsInterface(ObjectHasDimensionInterface::class)) {
+            $handler = parent::getMethod('__dimensionHas')->getClosure();
+            $this->setHasDimensionHandler($handler);
+        }
+
+        if ($this->implementsInterface(ObjectUnsetDimensionInterface::class)) {
+            $handler = parent::getMethod('__dimensionUnset')->getClosure();
+            $this->setUnsetDimensionHandler($handler);
+        }
+
+        if ($this->implementsInterface(ObjectCountElementsInterface::class)) {
+            $handler = parent::getMethod('__count')->getClosure();
+            $this->setCountElementsHandler($handler);
+        }
     }
 
     public function __debugInfo()
@@ -881,6 +916,91 @@ class ReflectionClass extends NativeReflectionClass
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new GetPropertiesForHook($handler, $handlers);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs the "read_dimension" handler for the current class
+     *
+     * @param Closure $handler Callback function (ReadDimensionHook $hook): mixed;
+     *
+     * @see ObjectReadDimensionInterface
+     */
+    public function setReadDimensionHandler(Closure $handler): ReadDimensionHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new ReadDimensionHook($handler, $handlers);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs the "write_dimension" handler for the current class
+     *
+     * @param Closure $handler Callback function (WriteDimensionHook $hook): void;
+     *
+     * @see ObjectWriteDimensionInterface
+     */
+    public function setWriteDimensionHandler(Closure $handler): WriteDimensionHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new WriteDimensionHook($handler, $handlers);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs the "has_dimension" handler for the current class
+     *
+     * @param Closure $handler Callback function (HasDimensionHook $hook): int;
+     *
+     * @see ObjectHasDimensionInterface
+     */
+    public function setHasDimensionHandler(Closure $handler): HasDimensionHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new HasDimensionHook($handler, $handlers);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs the "unset_dimension" handler for the current class
+     *
+     * @param Closure $handler Callback function (UnsetDimensionHook $hook): void;
+     *
+     * @see ObjectUnsetDimensionInterface
+     */
+    public function setUnsetDimensionHandler(Closure $handler): UnsetDimensionHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new UnsetDimensionHook($handler, $handlers);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs the "count_elements" handler for the current class
+     *
+     * @param Closure $handler Callback function (CountElementsHook $hook): int;
+     *
+     * @see ObjectCountElementsInterface
+     */
+    public function setCountElementsHandler(Closure $handler): CountElementsHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new CountElementsHook($handler, $handlers);
         $hook->install();
 
         return $hook;
