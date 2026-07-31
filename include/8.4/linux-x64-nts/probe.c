@@ -382,6 +382,12 @@ int main(void) {
 #ifdef HASH_ADD_NEXT
     fprintf(constants, "    'HASH_ADD_NEXT' => %lld,\n", (long long)(HASH_ADD_NEXT));
 #endif
+#ifdef HT_MIN_MASK
+    fprintf(constants, "    'HT_MIN_MASK' => %lld,\n", (long long)(HT_MIN_MASK));
+#endif
+#ifdef HT_MIN_SIZE
+    fprintf(constants, "    'HT_MIN_SIZE' => %lld,\n", (long long)(HT_MIN_SIZE));
+#endif
 #ifdef ZEND_MODULE_API_NO
     fprintf(constants, "    'ZEND_MODULE_API_NO' => %lld,\n", (long long)(ZEND_MODULE_API_NO));
 #endif

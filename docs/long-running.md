@@ -101,6 +101,10 @@ The debug-build leak gate treats the following as expected, by design:
 | Engine-chained arena blocks for >32 KiB parses | allocated by the engine; z-engine never frees memory it did not allocate |
 | Refcount-0 persistent strings | never freed with the request allocator; bounded, reclaimed at process end |
 | Engine-original interface/trait buffers replaced by z-engine | possibly shared or in opcache SHM, never freed by z-engine; at most one per touched class |
+| Persistent interned strings (`StringEntry::persistentInterned`) | interned-style (immutable, non-refcounted) blocks referenced by persistent tables and object properties; bounded by the number of persisted keys/values, reclaimed at process end |
+| Persistent hashtables and their engine-grown data blocks (`PersistentHashTable`) | registries that must outlive the request by design; the engine resizes their data with the persistent allocator, nothing may free them mid-process |
+| The shared `uninitialized_bucket` sentinel block | one `uint32_t[2]` per process backing every uninitialized persistent table, mirroring the engine's static |
+| Persistent object clones (`PersistentObjectFactory::persistentClone`) | refcount-pinned malloc objects designed to survive the request boundary; detached from the object store before teardown so no engine path ever frees them |
 
 Everything else is a bug: the test suite runs with `report_memleaks=1` on a debug build and
 fails on any leak report.
