@@ -945,12 +945,15 @@ typedef struct _zend_closure {
 extern zend_result zend_hash_del(HashTable *, zend_string *);
 extern zval * zend_hash_find(const HashTable *, zend_string *);
 extern zval * zend_hash_add_or_update(HashTable *, zend_string *, zval *, uint32_t);
+extern zval * zend_hash_index_add_or_update(HashTable *, zend_ulong, zval *, uint32_t);
+extern zval * zend_hash_index_find(const HashTable *, zend_ulong);
 extern zend_result zend_set_user_opcode_handler(uint8_t, user_opcode_handler_t);
 extern user_opcode_handler_t zend_get_user_opcode_handler(uint8_t);
 extern void zend_do_inheritance_ex(zend_class_entry *, zend_class_entry *, _Bool);
 extern zend_object * zend_objects_new(zend_class_entry *);
 extern void zend_object_std_init(zend_object *, zend_class_entry *);
 extern void object_properties_init(zend_object *, zend_class_entry *);
+extern void zend_objects_store_put(zend_object *);
 extern void zend_save_lexical_state(zend_lex_state *);
 extern void zend_restore_lexical_state(zend_lex_state *);
 extern void zend_prepare_string_for_scanning(zval *, zend_string *);

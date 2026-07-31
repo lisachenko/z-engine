@@ -137,6 +137,35 @@ class StringEntry implements ReferenceCountedInterface
     }
 
     /**
+     * Mints an owned persistent interned-style (malloc-backed, immutable) zend_string
+     *
+     * Unlike persistent(), the GC_IMMUTABLE flag makes every engine consumer treat the
+     * string exactly like an interned one: zvals hold it without refcounting and
+     * mutation paths copy-on-write into request memory instead of touching this block.
+     * Required for strings reachable from userland values that outlive the request
+     * (persistent object properties): a refcounted persistent string reaching refcount
+     * zero would be freed with the request allocator and corrupt the malloc heap.
+     *
+     * The string is never registered in the engine's interned tables, so equality
+     * against a real interned string falls back to a content compare - same contract
+     * as opcache SHM strings in processes that attach without the interning pass.
+     */
+    public static function persistentInterned(string $value): StringEntry
+    {
+        $stringEntry = static::persistent($value);
+        $pointer     = $stringEntry->pointer;
+
+        $pointer->gc->u->type_info |= Core::engineConstant('GC_IMMUTABLE');
+        // Interned strings live outside refcounting: the engine never addrefs or
+        // releases them, the conventional refcount value for such headers is 2
+        $pointer->gc->refcount = 2;
+        // The wrapper must not treat this as an owned engine reference either
+        $stringEntry->ownsReference = false;
+
+        return $stringEntry;
+    }
+
+    /**
      * Returns raw C value entry
      */
     public function getRawValue(): ?CData
@@ -208,6 +237,17 @@ class StringEntry implements ReferenceCountedInterface
     public function isInterned(): bool
     {
         return $this->isImmutable();
+    }
+
+    /**
+     * Checks if this string is a permanent interned string (lives for the process
+     * lifetime, eg opcache SHM or startup interning) rather than a request-interned one
+     *
+     * @see zend_string.h:IS_STR_PERMANENT
+     */
+    public function isPermanent(): bool
+    {
+        return (bool) ($this->getGC()->u->type_info & Core::engineConstant('IS_STR_PERMANENT'));
     }
 
     /**
