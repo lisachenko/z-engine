@@ -124,20 +124,22 @@ class ReflectionFunctionTest extends TestCase
         ini_set('report_memleaks', '0');
 
         $functionName = 'zengine_generated_twice';
-        $refFunction  = ReflectionFunction::addFunction($functionName, fn (int $x): int => $x * 2);
+        $refFunction  = ReflectionFunction::addFunction($functionName, fn(int $x): int => $x * 2);
 
         $this->assertTrue(function_exists($functionName));
         $this->assertSame($functionName, $refFunction->getName());
         $this->assertFalse($refFunction->isClosure());
 
         // The generated function dispatches through the normal VM with no FFI trampoline
+        // @phpstan-ignore callable.nonCallable (function is generated at runtime by addFunction)
         $this->assertSame(42, $functionName(21));
 
         // The returned reflection is fully functional, including the pointer-level API: the
         // redefining closure must stay alive while the function is callable (it owns the
         // op_array the function now executes)
-        $newBody = fn (int $x): int => $x * 3;
+        $newBody = fn(int $x): int => $x * 3;
         $refFunction->redefine($newBody);
+        // @phpstan-ignore callable.nonCallable (function is generated at runtime by addFunction)
         $this->assertSame(63, $functionName(21));
     }
 
@@ -148,6 +150,6 @@ class ReflectionFunctionTest extends TestCase
 
         // strlen is always registered - addFunction must refuse to clobber it (and bail out
         // before touching any engine memory)
-        ReflectionFunction::addFunction('strlen', fn (): int => 0);
+        ReflectionFunction::addFunction('strlen', fn(): int => 0);
     }
 }

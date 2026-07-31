@@ -45,15 +45,17 @@ class GeneratedFunctionBenchmarkTest extends TestCase
         ini_set('report_memleaks', '0');
 
         $generatedName = 'zengine_benchmark_twice';
-        ReflectionFunction::addFunction($generatedName, static fn (int $x): int => $x * 2);
+        ReflectionFunction::addFunction($generatedName, static fn(int $x): int => $x * 2);
 
-        $declared  = $this->time(static function (): void {
+        $declared = $this->time(static function (): void {
             for ($i = 0; $i < self::ITERATIONS; $i++) {
+                // @phpstan-ignore function.resultUnused (benchmark loop intentionally discards the result)
                 benchmarkDeclaredTwice($i);
             }
         });
         $generated = $this->time(static function () use ($generatedName): void {
             for ($i = 0; $i < self::ITERATIONS; $i++) {
+                // @phpstan-ignore callable.nonCallable (function is generated at runtime by addFunction)
                 $generatedName($i);
             }
         });

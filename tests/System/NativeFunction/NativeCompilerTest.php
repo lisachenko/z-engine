@@ -19,9 +19,7 @@ use PHPUnit\Framework\TestCase;
 /**
  * Target class for compiled-method tests
  */
-class CompileTarget
-{
-}
+class CompileTarget {}
 
 class NativeCompilerTest extends TestCase
 {
@@ -37,6 +35,7 @@ class NativeCompilerTest extends TestCase
 
         $this->assertTrue(function_exists($functionName));
         // Dispatches through the normal VM, no FFI trampoline
+        // @phpstan-ignore callable.nonCallable (function is generated at runtime by compileFunction)
         $this->assertSame(81, $functionName(9));
     }
 
@@ -49,6 +48,7 @@ class NativeCompilerTest extends TestCase
 
         $this->assertTrue(method_exists(CompileTarget::class, 'add'));
         $instance = new CompileTarget();
+        // @phpstan-ignore method.notFound (method is generated at runtime by compileMethod)
         $this->assertSame(42, $instance->add(20, 22));
     }
 
