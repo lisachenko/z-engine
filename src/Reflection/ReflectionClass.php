@@ -348,6 +348,19 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
+     * Returns the engine attributes table of this class or null if the class has no attributes
+     *
+     * Each element of the returned table is an IS_PTR value pointing to a zend_attribute:
+     * wrap it with ReflectionAttributeEntry::fromValueEntry() for structured access.
+     *
+     * @return HashTable|ReflectionValue[]|null
+     */
+    public function getAttributesTable(): ?HashTable
+    {
+        return $this->attributesTable;
+    }
+
+    /**
      * Adds a new method to the class in runtime
      * @internal
      */
@@ -1728,8 +1741,13 @@ class ReflectionClass extends NativeReflectionClass
         $this->methodTable     = new HashTable(Core::addr($classEntry->function_table));
         $this->propertiesTable = new HashTable(Core::addr($classEntry->properties_info));
         $this->constantsTable  = new HashTable(Core::addr($classEntry->constants_table));
-        if ($classEntry->attributes !== null) {
-            $this->attributesTable = new HashTable(Core::addr($classEntry->attributes));
+
+        $classAttributes = $classEntry->attributes;
+        if ($classAttributes !== null) {
+            assert($classAttributes instanceof CData);
+            $this->attributesTable = new HashTable($classAttributes);
+        } else {
+            $this->attributesTable = null;
         }
     }
 
