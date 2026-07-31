@@ -746,6 +746,21 @@ class ReflectionClass extends NativeReflectionClass
             $this->setGetPropertyPointerHandler($handler);
         }
 
+        if ($this->implementsInterface(ObjectHasPropertyInterface::class)) {
+            $handler = parent::getMethod('__fieldIsset')->getClosure();
+            $this->setHasPropertyHandler($handler);
+        }
+
+        if ($this->implementsInterface(ObjectUnsetPropertyInterface::class)) {
+            $handler = parent::getMethod('__fieldUnset')->getClosure();
+            $this->setUnsetPropertyHandler($handler);
+        }
+
+        if ($this->implementsInterface(ObjectGetPropertiesForInterface::class)) {
+            $handler = parent::getMethod('__getFields')->getClosure();
+            $this->setGetPropertiesForHandler($handler);
+        }
+
         if ($this->implementsInterface(ObjectGetDebugInfoInterface::class)) {
             $handler = parent::getMethod('__getDebugInfo')->getClosure();
             $this->setGetDebugInfoHandler($handler);
