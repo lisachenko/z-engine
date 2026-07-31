@@ -193,8 +193,11 @@ class ObjectEntry implements ReferenceCountedInterface
         if ($index < 0 || $index >= $propertiesCount) {
             throw new \OutOfBoundsException("Property slot {$index} is out of bounds 0.." . ($propertiesCount - 1));
         }
+        // properties_table is a flexible array member declared zval[1]: FFI bounds-checks
+        // direct indexing, so slots past the first must go through pointer arithmetic
+        $tableBase = Core::cast('zval *', Core::addr($this->pointer->properties_table[0]));
 
-        return ReflectionValue::fromValueEntry(Core::addr($this->pointer->properties_table[$index]));
+        return ReflectionValue::fromValueEntry(Core::addr($tableBase[$index]));
     }
 
     /**

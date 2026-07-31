@@ -112,6 +112,12 @@ class PersistentObjectFactoryTest extends TestCase
         $slot->getNativeValue($value);
         $this->assertSame(7, $value);
 
+        // Slots past the first exercise the pointer-arithmetic path (zval[1] flexible member)
+        $entry->getPropertySlot(1)->getNativeValue($ratio);
+        $this->assertSame(1.5, $ratio);
+        $entry->getPropertySlot(2)->getNativeValue($enabled);
+        $this->assertFalse($enabled);
+
         $this->assertInstanceOf(\FFI\CData::class, $entry->getPropertyTablePointer());
 
         $this->expectException(\OutOfBoundsException::class);
