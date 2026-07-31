@@ -344,28 +344,15 @@ class ReflectionClass extends NativeReflectionClass
         $closureEntry->getClosureObjectEntry()->incrementReferenceCount();
         $closureEntry->setCalledScope($this->name);
 
-        // TODO: replace with ReflectionFunction instead of low-level structures
-        $rawFunction  = $closureEntry->getRawFunction();
-        $previousName = $rawFunction->common->function_name;
-        if ($previousName !== null) {
-            StringEntry::fromCData($previousName)->releaseReference();
-        }
-        // The function structure takes over one owned reference on its new name
-        $rawFunction->common->function_name = StringEntry::fromString($methodName)
-            ->transferReferenceOwnership()
-            ->getRawValue();
+        // Bind the closure-backed zend_function to this class through the reflection
+        // wrappers: renaming, scope binding and closure-flag surgery live in the
+        // ReflectionMethod/FunctionLikeTrait API instead of hand-written field writes
+        $boundMethod = ReflectionMethod::fromClosureEntry($closureEntry, $this->name, $methodName);
+        $boundMethod->setPublic();
 
-        // Adjust the scope of our function to our class
-        $classScopeValue            = Core::$executor->classTable->find(strtolower($this->name));
-        $rawFunction->common->scope = $classScopeValue->getRawClass();
-
-        // Clean closure flag
-        $rawFunction->common->fn_flags &= (~Core::ZEND_ACC_CLOSURE);
-
-        $refMethod = $this->addRawMethod($methodName, $rawFunction);
-        $refMethod->setPublic();
-
-        return $refMethod;
+        // Publish the function in the method table and re-wrap it so the returned
+        // reflection is backed by fully-initialized native reflection state
+        return $this->addRawMethod($methodName, $closureEntry->getRawFunction());
     }
 
     #[\ReturnTypeWillChange]
@@ -1536,9 +1523,14 @@ class ReflectionClass extends NativeReflectionClass
         $this->methodTable->add(strtolower($methodName), $valueEntry);
         $valueEntry->release();
 
-        $refMethod = ReflectionMethod::fromCData($rawFunction);
+        // Wrap the zend_function pointer stored in the method table (not the passed
+        // structure) so pointer-level wrapper APIs like redefine() work on the result
+        $storedEntry = $this->methodTable->find(strtolower($methodName));
+        if ($storedEntry === null) {
+            throw new \ReflectionException("Method {$methodName} was not published in the class");
+        }
 
-        return $refMethod;
+        return ReflectionMethod::fromCData($storedEntry->getRawFunction());
     }
 
     /**
