@@ -33,6 +33,17 @@ final class ClangAstIndex
     /** @var array<string, DeclNode> variable name => declaration node */
     private array $variables = [];
 
+    /**
+     * Anonymous struct/union/enum declarations by clang node id, so a later
+     * "typedef struct {...} name;" can alias them under the typedef name.
+     *
+     * @var array<string, DeclNode>
+     */
+    private array $anonymousTagsById = [];
+
+    /** @var array<string, DeclNode> typedef name => anonymous record definition */
+    private array $anonymousRecords = [];
+
     private function __construct(private readonly string $source) {}
 
     public static function fromFiles(string $preprocessedFile, string $astJsonFile): self
@@ -74,16 +85,21 @@ final class ClangAstIndex
                 // Keep the first occurrence: later re-typedefs are always identical in C
                 if ($name !== '' && !isset($this->typedefs[$name]) && $this->hasRange($decl)) {
                     $this->typedefs[$name] = $decl;
+                    $this->aliasAnonymousTag($name, $decl);
                 }
                 break;
             case 'RecordDecl':
                 if ($name !== '' && $this->hasRange($decl)) {
                     $this->records[$name][] = $decl;
+                } elseif ($name === '' && $this->hasRange($decl) && is_string($decl['id'] ?? null)) {
+                    $this->anonymousTagsById[$decl['id']] = $decl;
                 }
                 break;
             case 'EnumDecl':
                 if ($name !== '' && !isset($this->enums[$name]) && $this->hasRange($decl)) {
                     $this->enums[$name] = $decl;
+                } elseif ($name === '' && $this->hasRange($decl) && is_string($decl['id'] ?? null)) {
+                    $this->anonymousTagsById[$decl['id']] = $decl;
                 }
                 break;
             case 'FunctionDecl':
@@ -96,6 +112,39 @@ final class ClangAstIndex
                     $this->variables[$name] = $decl;
                 }
                 break;
+        }
+    }
+
+    /**
+     * Registers "typedef struct/enum {...} name;" declarations of anonymous
+     * tags under the typedef name: the anonymous EnumDecl/RecordDecl precedes
+     * its TypedefDecl at the top level and is referenced via ownedTagDecl.
+     *
+     * @param DeclNode $typedefDecl
+     */
+    private function aliasAnonymousTag(string $typedefName, array $typedefDecl): void
+    {
+        $typeNodes = $typedefDecl['inner'] ?? [];
+        if (!is_array($typeNodes)) {
+            return;
+        }
+        foreach ($typeNodes as $typeNode) {
+            if (!is_array($typeNode)) {
+                continue;
+            }
+            $ownedTag = $typeNode['ownedTagDecl'] ?? null;
+            if (!is_array($ownedTag) || !is_string($ownedTag['id'] ?? null)) {
+                continue;
+            }
+            $anonymous = $this->anonymousTagsById[$ownedTag['id']] ?? null;
+            if ($anonymous === null) {
+                continue;
+            }
+            if (($ownedTag['kind'] ?? '') === 'EnumDecl' && !isset($this->enums[$typedefName])) {
+                $this->enums[$typedefName] = $anonymous;
+            } elseif (($ownedTag['kind'] ?? '') === 'RecordDecl' && !isset($this->anonymousRecords[$typedefName])) {
+                $this->anonymousRecords[$typedefName] = $anonymous;
+            }
         }
     }
 
@@ -287,11 +336,14 @@ final class ClangAstIndex
         if ($typedef !== null) {
             $qualType = $typedef['type']['qualType'] ?? '';
             if (is_string($qualType) && preg_match('/^(?:struct|union)\s+(\w+)$/', $qualType, $matches) === 1) {
-                return $this->fullRecordDefinition($matches[1]);
+                $tagDefinition = $this->fullRecordDefinition($matches[1]);
+                if ($tagDefinition !== null) {
+                    return $tagDefinition;
+                }
             }
         }
 
-        return null;
+        return $this->anonymousRecords[$typeName] ?? null;
     }
 
     /**

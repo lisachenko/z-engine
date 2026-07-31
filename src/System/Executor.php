@@ -291,6 +291,20 @@ class Executor
     }
 
     /**
+     * Requests the full-table cleanup mode for the current request shutdown
+     *
+     * Mirrors what dl() does when it loads a temporary extension mid-request: with
+     * EG(full_tables_cleanup) set the engine walks the complete module registry at request
+     * shutdown instead of the handler lists precomputed at process startup, so modules
+     * registered at runtime are properly deactivated and temporary ones destroyed at
+     * request end.
+     */
+    public function enableFullTablesCleanup(): void
+    {
+        $this->pointer->full_tables_cleanup = 1;
+    }
+
+    /**
      * Materializes a user handler slot (an engine-owned embedded zval) into a PHP callable
      *
      * Memory contract: the slot is read through a BORROWED ReflectionValue view; an unset

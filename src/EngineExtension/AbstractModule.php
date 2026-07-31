@@ -15,10 +15,31 @@ namespace ZEngine\EngineExtension;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\EngineExtension\Hook\AbstractModuleLifecycleHook;
 use ZEngine\EngineExtension\Hook\ExtensionConstructorHook;
+use ZEngine\EngineExtension\Hook\ModuleInfoHook;
+use ZEngine\EngineExtension\Hook\ModuleShutdownHook;
+use ZEngine\EngineExtension\Hook\ModuleStartupHook;
+use ZEngine\EngineExtension\Hook\RequestShutdownHook;
+use ZEngine\EngineExtension\Hook\RequestStartupHook;
 use ZEngine\Reflection\ReflectionExtension;
 use ZEngine\Type\StringEntry;
 
+/**
+ * Base class for userland PHP extensions (engine modules)
+ *
+ * Memory model (docs/long-running.md): since PHP 8.4 zend_register_module_ex() stores the
+ * given zend_module_entry pointer directly in the module registry - it no longer copies the
+ * structure. The entry and every buffer it references (module name, globals, dependency
+ * array and its strings) are therefore allocated persistently and stay alive for the whole
+ * process: immortal-by-design allocations.
+ *
+ * Lifecycle callbacks (ModuleLifecycleInterface) and phpinfo() output (ModuleInfoInterface)
+ * are wired opt-in through FFI-closure trampolines that follow the standard hook lifecycle:
+ * Core::shutdown() restores the NULL pointers, so the persistent module entry never points
+ * into freed libffi memory. See the interfaces and docs/long-running.md ("Module lifecycle
+ * callbacks") for the delivery guarantees.
+ */
 abstract class AbstractModule extends ReflectionExtension implements ModuleInterface
 {
     /**
@@ -37,11 +58,16 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
     private string $moduleName;
 
     /**
+     * Whether the request-end delivery of requestShutdown() has already happened
+     */
+    private bool $requestShutdownDelivered = false;
+
+    /**
      * Module constructor.
      *
      * @param string|null $moduleName Module name (optional). If not set, class name will be used as module name
      */
-    final public function __construct(string $moduleName = null)
+    final public function __construct(?string $moduleName = null)
     {
         $this->moduleName = $moduleName ?? self::detectModuleName();
 
@@ -73,6 +99,17 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
     }
 
     /**
+     * Returns the list of dependencies of this module on other engine modules
+     *
+     * @inheritDoc
+     * @return list<ModuleDependency>
+     */
+    public function getModuleDependencies(): array
+    {
+        return [];
+    }
+
+    /**
      * Checks if this module loaded or not
      */
     final public function isModuleRegistered(): bool
@@ -91,38 +128,55 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
 
         // Since PHP 8.4 zend_register_module_ex stores THIS pointer directly in the
         // module registry (zend_hash_add_ptr - the old copying add_mem behaviour is
-        // gone), so the entry must be malloc-backed and never FFI-collected: the
-        // engine frees it itself with free() at module destruction
+        // gone), so the entry must be malloc-backed and never FFI-collected: the engine
+        // frees it itself at module destruction. Every buffer the entry references
+        // (name, globals, deps) is persistent for the same reason (docs/long-running.md)
         $module     = Core::trackedNew('zend_module_entry', true);
         $moduleName = $this->moduleName;
-        $nameLength = strlen($moduleName) + 1;
-        /* extra zero-byte */;
-        $rawName = Core::new("char[$nameLength]", false, static::targetPersistent());
-        Core::memcpy($rawName, $moduleName, $nameLength - 1);
-        $rawName[$nameLength - 1] = "\0";
+        $moduleType = static::targetPersistent() ? self::MODULE_PERSISTENT : self::MODULE_TEMPORARY;
 
         $module->size       = Core::sizeof($module);
-        $module->type       = static::targetPersistent() ? self::MODULE_PERSISTENT : self::MODULE_TEMPORARY;
-        $module->name       = $rawName;
+        $module->type       = $moduleType;
+        $module->name       = self::newPersistentString($moduleName);
         $module->zend_api   = static::targetApiVersion();
         $module->zend_debug = (int) static::targetDebug();
         $module->zts        = (int) static::targetThreadSafe();
 
         $globalType = static::globalType();
         if ($globalType !== null) {
+            // The engine dereferences globals_ptr for the module's whole registry lifetime
             $module->globals_size = Core::sizeof(Core::type($globalType));
-            $memoryStructure      = Core::new($globalType, false, static::targetPersistent());
+            $memoryStructure      = Core::trackedNew($globalType, true);
             $module->globals_ptr  = Core::addr($memoryStructure);
         }
 
+        $this->attachDependencies($module);
+
         // Since PHP 8.3 the module type is passed explicitly instead of being read from the entry.
-        $realModulePointer = Core::call('zend_register_module_ex', Core::addr($module), (int) $module->type);
+        $realModulePointer = Core::call('zend_register_module_ex', Core::addr($module), $moduleType);
+        if ($realModulePointer === null) {
+            // The engine refused the entry (conflicting dependency or duplicate name) and
+            // reported an E_CORE_WARNING; the persistent buffers above are bounded, error-path
+            // allocations that stay in the tracked-block registry
+            throw new \RuntimeException('Can not register module ' . $moduleName . ' in the engine');
+        }
+        \assert($realModulePointer instanceof CData);
 
         $this->moduleEntry = $realModulePointer;
 
         if (static::targetPersistent()) {
+            // The registry bucket key interned at runtime is request-lifetime: swap it for
+            // a persistent interned string so the registry teardown at process shutdown
+            // does not read a dangling key
             $this->makeRegistryKeyPersistent();
+        } else {
+            // dl() parity: a temporary module registered mid-request is only deactivated
+            // and destroyed at request shutdown when the engine walks the full module
+            // registry instead of the handler lists precomputed at process startup
+            Core::$executor->enableFullTablesCleanup();
         }
+
+        $this->wireOptInCallbacks();
 
         (new \ReflectionMethod(\ReflectionExtension::class, '__construct'))->invokeArgs($this, [$moduleName]);
     }
@@ -144,6 +198,12 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
         if ($result !== Core::SUCCESS) {
             throw new \RuntimeException('Can not startup module ' . $this->moduleName);
         }
+
+        // dl() parity: a module started in the middle of a request receives the current
+        // request's RINIT immediately - the engine only activates modules at request start
+        if ($this instanceof ModuleLifecycleInterface) {
+            AbstractModuleLifecycleHook::invokeContained($this->requestStartup(...), 'requestStartup');
+        }
     }
 
     /**
@@ -159,6 +219,144 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
         }
 
         return $rawPointer;
+    }
+
+    /**
+     * Renders a phpinfo()-style table for this module's information section
+     *
+     * Used as the default rendering of ModuleInfoInterface::getDisplayInfo() rows: plain
+     * `label => value` lines in text mode, an HTML table otherwise. The engine's own
+     * text/HTML switch (sapi_module.phpinfo_as_text) is not exported, PHP_SAPI is a
+     * faithful proxy for it.
+     *
+     * @param array<string, scalar> $rows Map from row label to row value
+     */
+    final protected function printInfoTable(array $rows): void
+    {
+        if (in_array(PHP_SAPI, ['cli', 'phpdbg', 'embed'], true)) {
+            foreach ($rows as $label => $value) {
+                echo $label, ' => ', (string) $value, "\n";
+            }
+
+            return;
+        }
+        echo "<table>\n";
+        foreach ($rows as $label => $value) {
+            $renderedLabel = htmlspecialchars($label);
+            $renderedValue = htmlspecialchars((string) $value);
+            echo '<tr><td class="e">', $renderedLabel, '</td><td class="v">', $renderedValue, "</td></tr>\n";
+        }
+        echo "</table>\n";
+    }
+
+    /**
+     * Wires the opt-in lifecycle and info trampolines into the registered module entry
+     *
+     * Installed hooks follow the standard hook lifecycle: Core::shutdown() restores the
+     * NULL pointers while the trampolines are still alive, so the persistent module entry
+     * never points into freed libffi memory.
+     */
+    private function wireOptInCallbacks(): void
+    {
+        if ($this instanceof ModuleLifecycleInterface) {
+            // The Core hook registry keeps every installed hook (and its trampoline) alive
+            $lifecycleHooks = [
+                new ModuleStartupHook($this->moduleStartup(...), $this->moduleEntry),
+                new ModuleShutdownHook($this->moduleShutdown(...), $this->moduleEntry),
+                new RequestStartupHook($this->requestStartup(...), $this->moduleEntry),
+                new RequestShutdownHook($this->requestShutdown(...), $this->moduleEntry),
+            ];
+            foreach ($lifecycleHooks as $hook) {
+                $hook->install();
+            }
+
+            // Guaranteed request-end delivery of requestShutdown(): the engine walks the
+            // module registry only after user shutdown functions have run, ie after
+            // Core::shutdown() has already cleared the trampoline pointers. User shutdown
+            // functions run in registration order and Core::init() registered
+            // Core::shutdown() before any module could register itself, so this callback
+            // always runs right after the engine pointers were restored.
+            register_shutdown_function(function (): void {
+                $this->deliverRequestShutdown();
+            });
+        }
+
+        if ($this instanceof ModuleInfoInterface) {
+            $moduleInfo = $this;
+            $infoHook   = new ModuleInfoHook(function () use ($moduleInfo): void {
+                $this->printInfoTable($moduleInfo->getDisplayInfo());
+            }, $this->moduleEntry);
+            $infoHook->install();
+        }
+    }
+
+    /**
+     * Delivers ModuleLifecycleInterface::requestShutdown() at request end (idempotent)
+     *
+     * Runs after Core::shutdown(): engine pointers are already restored, so the callback
+     * must not (and cannot) write into engine structures anymore.
+     */
+    private function deliverRequestShutdown(): void
+    {
+        if ($this->requestShutdownDelivered || !$this instanceof ModuleLifecycleInterface) {
+            return;
+        }
+        $this->requestShutdownDelivered = true;
+        // A module that was registered but never started does not take part in the request
+        // lifecycle (the engine skips RSHUTDOWN for non-started modules as well)
+        if (!$this->wasModuleStarted()) {
+            return;
+        }
+        AbstractModuleLifecycleHook::invokeContained($this->requestShutdown(...), 'requestShutdown');
+    }
+
+    /**
+     * Writes the declared dependencies into the entry as a NULL-terminated zend_module_dep[]
+     *
+     * The array and its strings are persistent: the module registry references them for the
+     * rest of the process (immortal-by-design, docs/long-running.md).
+     */
+    private function attachDependencies(CData $module): void
+    {
+        $dependencies = $this->getModuleDependencies();
+        if ($dependencies === []) {
+            return;
+        }
+
+        $count           = count($dependencies);
+        $rawDependencies = Core::trackedNew('zend_module_dep[' . ($count + 1) . ']', true);
+        $index           = 0;
+        foreach ($dependencies as $dependency) {
+            $rawDependency = $rawDependencies[$index];
+            \assert($rawDependency instanceof CData);
+            $rawDependency->name = self::newPersistentString($dependency->getName());
+            $relation            = $dependency->getRelation();
+            if ($relation !== null) {
+                $rawDependency->rel = self::newPersistentString($relation);
+            }
+            $version = $dependency->getVersion();
+            if ($version !== null) {
+                $rawDependency->version = self::newPersistentString($version);
+            }
+            $rawDependency->type = $dependency->getDependencyType();
+            $index++;
+        }
+        // The trailing element stays zero-initialized: the NULL terminator the engine
+        // iterates up to
+        $module->deps = Core::cast('zend_module_dep *', $rawDependencies);
+    }
+
+    /**
+     * Allocates a persistent NUL-terminated C string tracked in the z-engine block registry
+     */
+    private static function newPersistentString(string $value): CData
+    {
+        $length = strlen($value) + 1;
+        $buffer = Core::trackedNew("char[{$length}]", true);
+        // FFI zero-initializes the buffer, so the trailing NUL byte is already in place
+        Core::memcpy($buffer, $value, $length - 1);
+
+        return $buffer;
     }
 
     /**

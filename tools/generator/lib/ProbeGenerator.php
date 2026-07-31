@@ -36,6 +36,7 @@ final class ProbeGenerator
         $lines   = [];
         $lines[] = '#include "php.h"';
         $lines[] = '#include "zend_ast.h"';
+        $lines[] = '#include "zend_attributes.h"';
         $lines[] = '#include "zend_language_scanner.h"';
         $lines[] = '#include "zend_inheritance.h"';
         $lines[] = '#include "zend_hash.h"';

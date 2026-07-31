@@ -50,6 +50,21 @@ interface ModuleInterface
     public static function globalType(): ?string;
 
     /**
+     * Returns the list of dependencies of this module on other engine modules
+     *
+     * The dependencies are written into the module entry's `deps` field as a persistent
+     * NULL-terminated `zend_module_dep[]` during registration. AbstractModule provides a
+     * default implementation returning an empty list.
+     *
+     * Named getModuleDependencies() because AbstractModule inherits the native
+     * ReflectionExtension::getDependencies(), which reads the registered entry back in the
+     * engine's own `name => relationship` format.
+     *
+     * @return list<ModuleDependency>
+     */
+    public function getModuleDependencies(): array;
+
+    /**
      * Starts this module
      *
      * Startup includes calling callbacks for global memory allocation, checking deps, etc

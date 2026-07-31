@@ -31,6 +31,8 @@ abstract class AbstractHook implements HookInterface
 {
     /**
      * This field should be updated in children class and accessed through LSB
+     *
+     * @var string
      */
     protected const HOOK_FIELD = 'unknown';
 
