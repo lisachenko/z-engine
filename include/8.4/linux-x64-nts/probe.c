@@ -345,6 +345,12 @@ int main(void) {
 #ifdef IS_OBJ_FREE_CALLED
     fprintf(constants, "    'IS_OBJ_FREE_CALLED' => %lld,\n", (long long)(IS_OBJ_FREE_CALLED));
 #endif
+#ifdef IS_OBJ_LAZY_UNINITIALIZED
+    fprintf(constants, "    'IS_OBJ_LAZY_UNINITIALIZED' => %lld,\n", (long long)(IS_OBJ_LAZY_UNINITIALIZED));
+#endif
+#ifdef IS_OBJ_LAZY_PROXY
+    fprintf(constants, "    'IS_OBJ_LAZY_PROXY' => %lld,\n", (long long)(IS_OBJ_LAZY_PROXY));
+#endif
 #ifdef HASH_FLAG_CONSISTENCY
     fprintf(constants, "    'HASH_FLAG_CONSISTENCY' => %lld,\n", (long long)(HASH_FLAG_CONSISTENCY));
 #endif
@@ -1318,6 +1324,24 @@ int main(void) {
     fprintf(layouts, ", \"do_operation\": %zu", offsetof(zend_object_handlers, do_operation));
     fprintf(layouts, ", \"compare\": %zu", offsetof(zend_object_handlers, compare));
     fprintf(layouts, ", \"get_properties_for\": %zu", offsetof(zend_object_handlers, get_properties_for));
+    fputs("}},\n", layouts);
+    fputs("        \"zend_object_iterator\": {", layouts);
+    fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_object_iterator));
+    fprintf(layouts, "\"std\": %zu", offsetof(zend_object_iterator, std));
+    fprintf(layouts, ", \"data\": %zu", offsetof(zend_object_iterator, data));
+    fprintf(layouts, ", \"funcs\": %zu", offsetof(zend_object_iterator, funcs));
+    fprintf(layouts, ", \"index\": %zu", offsetof(zend_object_iterator, index));
+    fputs("}},\n", layouts);
+    fputs("        \"zend_object_iterator_funcs\": {", layouts);
+    fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_object_iterator_funcs));
+    fprintf(layouts, "\"dtor\": %zu", offsetof(zend_object_iterator_funcs, dtor));
+    fprintf(layouts, ", \"valid\": %zu", offsetof(zend_object_iterator_funcs, valid));
+    fprintf(layouts, ", \"get_current_data\": %zu", offsetof(zend_object_iterator_funcs, get_current_data));
+    fprintf(layouts, ", \"get_current_key\": %zu", offsetof(zend_object_iterator_funcs, get_current_key));
+    fprintf(layouts, ", \"move_forward\": %zu", offsetof(zend_object_iterator_funcs, move_forward));
+    fprintf(layouts, ", \"rewind\": %zu", offsetof(zend_object_iterator_funcs, rewind));
+    fprintf(layouts, ", \"invalidate_current\": %zu", offsetof(zend_object_iterator_funcs, invalidate_current));
+    fprintf(layouts, ", \"get_gc\": %zu", offsetof(zend_object_iterator_funcs, get_gc));
     fputs("}},\n", layouts);
     fputs("        \"zend_ast\": {", layouts);
     fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_ast));

@@ -67,6 +67,9 @@ return [
         'zend_arena',
         // Object handlers
         'zend_object_handlers',
+        // Engine-level iterators (foreach over objects with ce->get_iterator)
+        'zend_object_iterator',
+        'zend_object_iterator_funcs',
         // Private engine structs injected via supplement.h (see Dockerfile)
         'zend_closure',
     ],
@@ -105,6 +108,8 @@ return [
         'zend_ast_create_4',
         'zend_ast_create_5',
         'zend_ast_create_decl',
+        // Iterator API (wraps a zend_object_iterator as an engine object)
+        'zend_iterator_init',
         // Module API
         'zend_register_module_ex',
         'zend_startup_module_ex',
@@ -166,6 +171,8 @@ return [
         'IS_STR_PERMANENT', 'IS_STR_VALID_UTF8',
         'IS_ARRAY_IMMUTABLE', 'IS_ARRAY_PERSISTENT',
         'IS_OBJ_WEAKLY_REFERENCED', 'IS_OBJ_DESTRUCTOR_CALLED', 'IS_OBJ_FREE_CALLED',
+        // Lazy objects (PHP 8.4, zend_types.h; tested against obj->extra_flags aka OBJ_EXTRA_FLAGS)
+        'IS_OBJ_LAZY_UNINITIALIZED', 'IS_OBJ_LAZY_PROXY',
         // HashTable flags (zend_hash.h / zend_types.h)
         'HASH_FLAG_CONSISTENCY', 'HASH_FLAG_PACKED', 'HASH_FLAG_UNINITIALIZED',
         'HASH_FLAG_STATIC_KEYS', 'HASH_FLAG_HAS_EMPTY_IND', 'HASH_FLAG_ALLOW_COW_VIOLATION',
@@ -246,6 +253,8 @@ return [
         'zend_module_entry',
         'zend_module_dep',
         'zend_object_handlers',
+        'zend_object_iterator',
+        'zend_object_iterator_funcs',
         'zend_ast',
         'zend_ast_decl',
         'zend_ast_list',

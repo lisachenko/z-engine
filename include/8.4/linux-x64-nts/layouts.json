@@ -508,6 +508,28 @@
                 "get_properties_for": 192
             }
         },
+        "zend_object_iterator": {
+            "size": 88,
+            "fields": {
+                "std": 0,
+                "data": 56,
+                "funcs": 72,
+                "index": 80
+            }
+        },
+        "zend_object_iterator_funcs": {
+            "size": 64,
+            "fields": {
+                "dtor": 0,
+                "valid": 8,
+                "get_current_data": 16,
+                "get_current_key": 24,
+                "move_forward": 32,
+                "rewind": 40,
+                "invalidate_current": 48,
+                "get_gc": 56
+            }
+        },
         "zend_ast": {
             "size": 16,
             "fields": {
