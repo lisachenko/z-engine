@@ -18,6 +18,7 @@ use ZEngine\AbstractSyntaxTree\AstOwnership;
 use ZEngine\AbstractSyntaxTree\NodeFactory;
 use ZEngine\AbstractSyntaxTree\NodeInterface;
 use ZEngine\Core;
+use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
@@ -167,6 +168,98 @@ class Compiler
     public function setOptions(int $newOptions): void
     {
         $this->pointer->compiler_options = $newOptions;
+    }
+
+    /**
+     * Returns the class entry which is being compiled at the moment, or null outside class compilation
+     *
+     * Memory notes: the returned wrapper is a BORROWED view over CG(active_class_entry) (no addref,
+     * no ownership) - the engine resets the pointer once the class body compilation finishes, so use
+     * the value only while compilation of that class is still in progress (e.g. inside compiler hooks).
+     */
+    public function getActiveClassEntry(): ?ReflectionClass
+    {
+        $activeClassEntry = $this->pointer->active_class_entry;
+        if ($activeClassEntry === null) {
+            return null;
+        }
+        assert($activeClassEntry instanceof CData);
+
+        return ReflectionClass::fromCData($activeClassEntry);
+    }
+
+    /**
+     * Returns the op_array which is being compiled at the moment, or null outside compilation
+     *
+     * Memory notes: the returned `zend_op_array*` is a raw BORROWED engine pointer (no ownership) -
+     * it is only valid while the engine compiles that op_array, do not store it beyond the current
+     * compilation (e.g. beyond the `zend_ast_process` callback it was observed in).
+     */
+    public function getActiveOpArray(): ?CData
+    {
+        $activeOpArray = $this->pointer->active_op_array;
+        assert($activeOpArray === null || $activeOpArray instanceof CData);
+
+        return $activeOpArray;
+    }
+
+    /**
+     * Returns the line number which is compiled at the moment, aka CG(zend_lineno)
+     */
+    public function getCurrentLineNumber(): int
+    {
+        $lineNumber = $this->pointer->zend_lineno;
+        assert(is_int($lineNumber));
+
+        return $lineNumber;
+    }
+
+    /**
+     * Returns the hashtable with all registered auto-globals (_SERVER, GLOBALS, etc), aka CG(auto_globals)
+     *
+     * Memory notes: the wrapper is a BORROWED view over the engine-owned CG(auto_globals) table
+     * (no addref, no ownership). Values in this table are raw `zend_auto_global*` pointers, not
+     * ordinary zvals - inspect keys only, do not read them as native PHP values.
+     *
+     * @return HashTable|ReflectionValue[]
+     */
+    public function getAutoGlobals(): HashTable
+    {
+        $autoGlobals = $this->pointer->auto_globals;
+        assert($autoGlobals instanceof CData);
+
+        return new HashTable($autoGlobals);
+    }
+
+    /**
+     * Returns extra flags that will be applied to the next compiled function, aka CG(extra_fn_flags)
+     */
+    public function getExtraFnFlags(): int
+    {
+        $extraFnFlags = $this->pointer->extra_fn_flags;
+        assert(is_int($extraFnFlags));
+
+        return $extraFnFlags;
+    }
+
+    /**
+     * Configures extra flags (ZEND_ACC_xxx) that will be applied to the next compiled function
+     *
+     * This is an engine-documented pattern: for example, the engine itself uses it to mark
+     * fake closures and generators. The engine resets the value during compilation, so set
+     * it right before the compilation it should affect and restore the previous value after.
+     *
+     * @param int $flags New set of extra function flags
+     *
+     * @return int Previous value of CG(extra_fn_flags)
+     */
+    public function setExtraFnFlags(int $flags): int
+    {
+        $previousFlags = $this->getExtraFnFlags();
+
+        $this->pointer->extra_fn_flags = $flags;
+
+        return $previousFlags;
     }
 
     /**

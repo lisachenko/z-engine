@@ -16,10 +16,50 @@ namespace ZEngine\Reflection;
 use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Type\OpLine;
+use ZEngine\Type\StringEntry;
 
 trait FunctionLikeTrait
 {
     private CData $pointer;
+
+    /**
+     * Changes the name of this function/method
+     *
+     * The function structure releases its previous name (if any) and takes over one owned
+     * reference on the new one, following engine assignment semantics.
+     *
+     * @internal
+     */
+    public function setFunctionName(string $newName): void
+    {
+        $commonPointer = $this->getCommonPointer();
+        $previousName  = $commonPointer->function_name;
+        if ($previousName !== null) {
+            assert($previousName instanceof CData);
+            StringEntry::fromCData($previousName)->releaseReference();
+        }
+        $commonPointer->function_name = StringEntry::fromString($newName)
+            ->transferReferenceOwnership()
+            ->getRawValue();
+    }
+
+    /**
+     * Marks this function as a closure or converts a closure-backed entry into a regular
+     * function/method (toggles the ZEND_ACC_CLOSURE flag)
+     *
+     * @internal
+     */
+    public function setClosureFlag(bool $isClosure = true): void
+    {
+        $commonPointer = $this->getCommonPointer();
+        $flags         = $commonPointer->fn_flags;
+        assert(is_int($flags));
+        if ($isClosure) {
+            $commonPointer->fn_flags = $flags | Core::ZEND_ACC_CLOSURE;
+        } else {
+            $commonPointer->fn_flags = $flags & (~Core::ZEND_ACC_CLOSURE);
+        }
+    }
 
     /**
     * Declares method as deprecated/non-deprecated
@@ -64,6 +104,24 @@ trait FunctionLikeTrait
     }
 
     /**
+     * Function flags that describe the body of the function (as opposed to its declaration):
+     * they must always travel together with the op_array they were compiled for.
+     *
+     * ZEND_ACC_HEAP_RT_CACHE and the run_time_cache/T fields live in zend_function.common
+     * since PHP 8.2, so a whole-common copy from the previous entry would graft a run-time
+     * cache and a temporaries count sized for the OLD opcodes onto the new body - the VM
+     * then reads cache slots out of bounds and crashes.
+     */
+    private const BODY_LEVEL_FUNCTION_FLAGS = Core::ZEND_ACC_HEAP_RT_CACHE
+        | Core::ZEND_ACC_GENERATOR
+        | Core::ZEND_ACC_VARIADIC
+        | Core::ZEND_ACC_RETURN_REFERENCE
+        | Core::ZEND_ACC_HAS_RETURN_TYPE
+        | Core::ZEND_ACC_HAS_TYPE_HINTS
+        | Core::ZEND_ACC_STRICT_TYPES
+        | Core::ZEND_ACC_IMMUTABLE;
+
+    /**
      * Redefines an existing method in the class with closure
      * @internal
      */
@@ -76,11 +134,33 @@ trait FunctionLikeTrait
             $newCodeEntry       = $selfExecutionState->getArgument(0)->getRawObject();
             $newCodeEntry       = Core::cast('zend_closure *', $newCodeEntry);
 
-            // Copy only common op_array part from original one to keep name, scope, etc
-            Core::memcpy($newCodeEntry->func, $this->pointer[0], Core::sizeof($newCodeEntry->func->common));
+            // Remember the declaration identity of the redefined entry: it survives the
+            // body replacement, while everything executor-related (opcodes, literals,
+            // run-time cache, temporaries count) comes from the new closure body
+            $targetCommon  = $this->getCommonPointer();
+            $previousName  = $targetCommon->function_name;
+            $previousScope = $targetCommon->scope;
+            $previousProto = $targetCommon->prototype;
+            $previousFlags = $targetCommon->fn_flags;
+            $newFunction   = $newCodeEntry->func;
+            assert(is_int($previousFlags) && $newFunction instanceof CData);
+            $newFunctionCommon = $newFunction->common;
+            assert($newFunctionCommon instanceof CData);
+            $newBodyFlags = $newFunctionCommon->fn_flags;
+            assert(is_int($newBodyFlags));
 
-            // Replace original method with redefined closure
-            Core::memcpy($this->pointer, Core::addr($newCodeEntry->func), Core::sizeof($newCodeEntry->func));
+            // Replace the whole function with the closure-backed one (the donor closure
+            // object itself stays untouched - it keeps sole ownership of its own fields)
+            Core::memcpy($this->pointer, Core::addr($newFunction), Core::sizeof($newFunction));
+
+            // Restore the declaration identity: the single owned reference on the previous
+            // name stays with this entry, declaration-level flags (visibility, static,
+            // final, closure bit) are kept while body-level flags follow the new op_array
+            $targetCommon->function_name = $previousName;
+            $targetCommon->scope         = $previousScope;
+            $targetCommon->prototype     = $previousProto;
+            $targetCommon->fn_flags      = ($previousFlags & ~self::BODY_LEVEL_FUNCTION_FLAGS)
+                | ($newBodyFlags & self::BODY_LEVEL_FUNCTION_FLAGS);
         } else {
             // For internal function we can simply adjust a handler
             $this->pointer->handler = function (CData $executeData, CData $returnValue) use ($newCode): void {
@@ -247,8 +327,10 @@ trait FunctionLikeTrait
      */
     private function getCommonPointer(): CData
     {
-        // For zend_internal_function we have same fields directly in current structure
-        if ($this->isInternal()) {
+        // For zend_internal_function we have same fields directly in current structure.
+        // The check goes through the low-level structure (not native isInternal()) so it
+        // also works on wrappers whose native reflection state is not initialized yet
+        if (!$this->isUserDefined()) {
             $pointer = $this->pointer;
         } else {
             // zend_function uses "common" struct to store all important fields

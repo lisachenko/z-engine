@@ -14,8 +14,8 @@ declare(strict_types=1);
 namespace ZEngine\System;
 
 use Closure;
-use FFI\CData;
 use ZEngine\Core;
+use ZEngine\System\Hook\OpCodeHook;
 
 /**
  * Hold all internal opcode constants and provide an API to hook any existing opcode
@@ -259,56 +259,35 @@ final class OpCode
     /**
      * Installs a user opcode handler that will be used to handle specific opcode
      *
+     * The handler participates in the engine hook lifecycle: it chains to a previously
+     * installed user handler on ZEND_USER_OPCODE_DISPATCH, unwinds automatically at
+     * Core::shutdown() and can be uninstalled explicitly via the returned hook.
+     *
      * @param int     $opCode  Operation code to hook
      * @param Closure $handler Callback that will receive a control for overloaded operation code
      */
-    public static function setHandler(int $opCode, Closure $handler): void
+    public static function setHandler(int $opCode, Closure $handler): OpCodeHook
     {
-        self::ensureValidOpCodeHandler($handler);
-        $result = Core::call('zend_set_user_opcode_handler', $opCode, function (CData $state) use ($handler) {
-            $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2);
-            $class = $trace[1]['class'] ?? '';
-            if (strpos($class, 'ZEngine') === 0) {
-                // For all our internal classes just proceed with default opcode handler
+        $hook = new OpCodeHook($opCode, $handler);
+        $hook->install();
 
-                return Core::ZEND_USER_OPCODE_DISPATCH;
-            }
-            $executionState = new ExecutionData($state);
-            $handleResult   = $handler($executionState);
-
-            return $handleResult;
-        });
-        if ($result === Core::FAILURE) {
-            throw new \RuntimeException('Can not install user opcode handler');
-        }
+        return $hook;
     }
 
     /**
-     * Restores default opcode handler
+     * Restores the previous opcode handler by uninstalling the top hook for that opcode
+     *
+     * No-op when no user opcode handler is installed (keeps the historic idempotent
+     * contract of this method).
      *
      * @param int $opCode Operation code
      */
     public static function restoreHandler(int $opCode): void
     {
-        $result = Core::call('zend_set_user_opcode_handler', $opCode, null);
-        if ($result === Core::FAILURE) {
-            throw new \RuntimeException('Can not restore original opcode handler');
+        $topHook = Core::topHook(OpCodeHook::fieldKeyFor($opCode));
+        if ($topHook === null) {
+            return;
         }
-    }
-
-    /**
-     * Ensures that given callback can be used as opcode handler, otherwise throws an error
-     *
-     * @param Closure $handler User-defined opcode handler
-     */
-    private static function ensureValidOpCodeHandler(Closure $handler): void
-    {
-        $reflection = new \ReflectionFunction($handler);
-
-        $hasOneArgument     = $reflection->getNumberOfParameters() === 1;
-        $hasValidReturnType = $reflection->hasReturnType() && ($reflection->getReturnType()->getName() === 'int');
-        if (!$hasValidReturnType || !$hasOneArgument) {
-            throw new \InvalidArgumentException('Opcode handler signature should be: function($scope): int {}');
-        }
+        $topHook->uninstall();
     }
 }

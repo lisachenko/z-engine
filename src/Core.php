@@ -20,7 +20,7 @@ use FFI\CType;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
-use ZEngine\Hook\AbstractHook;
+use ZEngine\Hook\HookInterface;
 use ZEngine\System\Compiler;
 use ZEngine\System\Executor;
 use ZEngine\System\Hook\AstProcessHook;
@@ -207,7 +207,7 @@ class Core
      * Strong references: an installed hook (and its libffi trampoline) can never be collected
      * while the engine still points at it. Chains unwind in reverse installation order.
      *
-     * @var array<string, array<int, AbstractHook>>
+     * @var array<string, array<int, HookInterface>>
      */
     private static array $installedHooks = [];
 
@@ -518,9 +518,9 @@ class Core
     /**
      * Records a freshly installed hook at the top of its field chain
      *
-     * @internal called by AbstractHook::install()
+     * @internal called by AbstractHook::install() and OpCodeHook::install()
      */
-    public static function registerHook(AbstractHook $hook): void
+    public static function registerHook(HookInterface $hook): void
     {
         self::$installedHooks[$hook->getHookFieldKey()][] = $hook;
     }
@@ -528,9 +528,9 @@ class Core
     /**
      * Removes an uninstalled hook from the top of its field chain
      *
-     * @internal called by AbstractHook::uninstall()
+     * @internal called by AbstractHook::uninstall() and OpCodeHook::uninstall()
      */
-    public static function unregisterHook(AbstractHook $hook): void
+    public static function unregisterHook(HookInterface $hook): void
     {
         $fieldKey = $hook->getHookFieldKey();
         if (self::isTopHook($hook)) {
@@ -544,11 +544,23 @@ class Core
     /**
      * Checks if the given hook is the most recently installed one on its engine field
      */
-    public static function isTopHook(AbstractHook $hook): bool
+    public static function isTopHook(HookInterface $hook): bool
     {
         $chain = self::$installedHooks[$hook->getHookFieldKey()] ?? [];
 
         return $chain !== [] && end($chain) === $hook;
+    }
+
+    /**
+     * Returns the most recently installed hook on the given engine slot (null if none)
+     *
+     * @internal used by OpCode::restoreHandler() to resolve the active user opcode hook
+     */
+    public static function topHook(string $fieldKey): ?HookInterface
+    {
+        $chain = self::$installedHooks[$fieldKey] ?? [];
+
+        return $chain === [] ? null : end($chain);
     }
 
     /**

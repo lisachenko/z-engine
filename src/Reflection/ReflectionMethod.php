@@ -16,6 +16,7 @@ namespace ZEngine\Reflection;
 use FFI\CData;
 use ReflectionMethod as NativeReflectionMethod;
 use ZEngine\Core;
+use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
 
@@ -70,6 +71,37 @@ class ReflectionMethod extends NativeReflectionMethod
             $functionName->getStringValue(),
         );
         $reflectionMethod->pointer = $functionEntry;
+
+        return $reflectionMethod;
+    }
+
+    /**
+     * Binds the zend_function embedded into a closure to the given class as a method
+     *
+     * All function surgery goes through the wrapper API: the entry is renamed, attached to
+     * the class scope and stripped of its ZEND_ACC_CLOSURE flag. The caller stays responsible
+     * for the closure lifetime (the embedded zend_function lives inside the closure object)
+     * and for publishing the function in the class method table.
+     *
+     * Note: the native reflection state of the returned wrapper is not initialized (the
+     * method is not registered in the class yet), so only the low-level API is usable on it.
+     * Re-wrap the function after publishing to get a fully functional reflection, like
+     * ReflectionClass::addMethod() does.
+     *
+     * @internal
+     */
+    public static function fromClosureEntry(
+        ClosureEntry $closureEntry,
+        string $className,
+        string $methodName,
+    ): ReflectionMethod {
+        /** @var ReflectionMethod $reflectionMethod */
+        $reflectionMethod          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionMethod->pointer = Core::cast('zend_function *', Core::addr($closureEntry->getRawFunction()));
+
+        $reflectionMethod->setFunctionName($methodName);
+        $reflectionMethod->setDeclaringClass($className);
+        $reflectionMethod->setClosureFlag(false);
 
         return $reflectionMethod;
     }
