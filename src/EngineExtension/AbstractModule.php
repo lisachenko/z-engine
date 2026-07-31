@@ -88,8 +88,11 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
             throw new \RuntimeException('Module ' . $this->moduleName . ' was already registered.');
         }
 
-        // We don't need persistent memory here, as PHP copies structures into persistent memory itself
-        $module     = Core::new('zend_module_entry');
+        // Since PHP 8.4 zend_register_module_ex stores THIS pointer directly in the
+        // module registry (zend_hash_add_ptr - the old copying add_mem behaviour is
+        // gone), so the entry must be malloc-backed and never FFI-collected: the
+        // engine frees it itself with free() at module destruction
+        $module     = Core::trackedNew('zend_module_entry', true);
         $moduleName = $this->moduleName;
         $nameLength = strlen($moduleName) + 1;
         /* extra zero-byte */;
@@ -117,8 +120,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
 
         $this->moduleEntry = $realModulePointer;
 
-        $extensionConstructor = \ReflectionExtension::class . '::__construct';
-        call_user_func([$this, $extensionConstructor], $moduleName);
+        (new \ReflectionMethod(\ReflectionExtension::class, '__construct'))->invokeArgs($this, [$moduleName]);
     }
 
     /**
