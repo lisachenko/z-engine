@@ -26,6 +26,7 @@ use ZEngine\ClassExtension\Hook\GetClassNameHook;
 use ZEngine\ClassExtension\Hook\GetClosureHook;
 use ZEngine\ClassExtension\Hook\GetConstructorHook;
 use ZEngine\ClassExtension\Hook\GetDebugInfoHook;
+use ZEngine\ClassExtension\Hook\GetMethodHook;
 use ZEngine\ClassExtension\Hook\GetPropertiesForHook;
 use ZEngine\ClassExtension\Hook\GetPropertiesHook;
 use ZEngine\ClassExtension\Hook\GetPropertyPointerHook;
@@ -48,6 +49,7 @@ use ZEngine\ClassExtension\ObjectGetClassNameInterface;
 use ZEngine\ClassExtension\ObjectGetClosureInterface;
 use ZEngine\ClassExtension\ObjectGetConstructorInterface;
 use ZEngine\ClassExtension\ObjectGetDebugInfoInterface;
+use ZEngine\ClassExtension\ObjectGetMethodInterface;
 use ZEngine\ClassExtension\ObjectGetPropertiesForInterface;
 use ZEngine\ClassExtension\ObjectGetPropertiesInterface;
 use ZEngine\ClassExtension\ObjectGetPropertyPointerInterface;
@@ -1393,6 +1395,11 @@ class ReflectionClass extends NativeReflectionClass
             $handler = parent::getMethod('__getClosure')->getClosure();
             $this->setGetClosureHandler($handler);
         }
+
+        if ($this->implementsInterface(ObjectGetMethodInterface::class)) {
+            $handler = parent::getMethod('__getMethod')->getClosure();
+            $this->setGetMethodHandler($handler);
+        }
     }
 
     public function __debugInfo()
@@ -1669,6 +1676,23 @@ class ReflectionClass extends NativeReflectionClass
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new CountElementsHook($handler, $handlers);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs the "get_method" handler for the current class
+     *
+     * @param Closure $handler Callback function (GetMethodHook $hook): ?\ReflectionMethod;
+     *
+     * @see ObjectGetMethodInterface
+     */
+    public function setGetMethodHandler(Closure $handler): GetMethodHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new GetMethodHook($handler, $handlers);
         $hook->install();
 
         return $hook;

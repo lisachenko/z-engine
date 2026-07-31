@@ -46,6 +46,11 @@ class ReflectionMethod extends NativeReflectionMethod
     /**
      * Creates a reflection from the zend_function/zend_internal_function structure
      *
+     * Engine-managed __call trampolines (ZEND_ACC_CALL_VIA_TRAMPOLINE) are not registered
+     * in any method table, so the native reflection state cannot be initialized for them:
+     * the returned wrapper is low-level only (like fromClosureEntry() results) and is meant
+     * to round-trip through the hook APIs, not to be introspected natively.
+     *
      * @param CData $functionEntry Pointer to the structure
      *
      * @return ReflectionMethod
@@ -54,22 +59,30 @@ class ReflectionMethod extends NativeReflectionMethod
     {
         /** @var ReflectionMethod $reflectionMethod */
         $reflectionMethod = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $isTrampoline     = false;
         if ($functionEntry->type !== Core::ZEND_INTERNAL_FUNCTION) {
-            $functionNamePtr = $functionEntry->common->function_name;
-            $scopeNamePtr    = $functionEntry->common->scope->name;
+            $commonPointer = $functionEntry->common;
+            assert($commonPointer instanceof CData);
+            $functionNamePtr = $commonPointer->function_name;
+            $scopeNamePtr    = $commonPointer->scope->name;
+            $functionFlags   = $commonPointer->fn_flags;
+            assert(is_int($functionFlags));
+            $isTrampoline = ($functionFlags & Core::ZEND_ACC_CALL_VIA_TRAMPOLINE) !== 0;
         } else {
             $functionNamePtr = $functionEntry->function_name;
             $scopeNamePtr    = $functionEntry->scope->name;
         }
 
-        $scopeName    = StringEntry::fromCData($scopeNamePtr);
-        $functionName = StringEntry::fromCData($functionNamePtr);
-        Core::callParentConstructor(
-            $reflectionMethod,
-            static::class,
-            $scopeName->getStringValue(),
-            $functionName->getStringValue(),
-        );
+        if (!$isTrampoline) {
+            $scopeName    = StringEntry::fromCData($scopeNamePtr);
+            $functionName = StringEntry::fromCData($functionNamePtr);
+            Core::callParentConstructor(
+                $reflectionMethod,
+                static::class,
+                $scopeName->getStringValue(),
+                $functionName->getStringValue(),
+            );
+        }
         $reflectionMethod->pointer = $functionEntry;
 
         return $reflectionMethod;

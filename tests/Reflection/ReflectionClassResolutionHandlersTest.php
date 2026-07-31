@@ -20,6 +20,7 @@ use PHPUnit\Framework\TestCase;
 use ZEngine\ClassExtension\Hook\GetClassNameHook;
 use ZEngine\ClassExtension\Hook\GetClosureHook;
 use ZEngine\ClassExtension\Hook\GetConstructorHook;
+use ZEngine\ClassExtension\Hook\GetMethodHook;
 use ZEngine\ClassExtension\Hook\GetPropertiesHook;
 use ZEngine\ClassExtension\ObjectCreateTrait;
 use ZEngine\Stub\TestClass;
@@ -399,6 +400,142 @@ class ReflectionClassResolutionHandlersTest extends TestCase
         $this->expectException(\Error::class);
         $this->expectExceptionMessage('Object of type ' . TestClass::class . ' is not callable');
         $instance();
+    }
+
+    #[RunInSeparateProcess]
+    public function testInstallExtensionHandlersEnablesGetMethod(): void
+    {
+        $refClass = new ReflectionClass(VirtualProxy::class);
+        $refClass->installExtensionHandlers();
+
+        $proxy = new VirtualProxy('proxied');
+
+        // The virtual method is redirected to realMethod() at engine level...
+        $this->assertSame('real-proxied', $proxy->virtualMethod());
+        // ...while defined methods fall through proceed() to the engine resolution
+        $this->assertSame('real-proxied', $proxy->realMethod());
+    }
+
+    #[RunInSeparateProcess]
+    public function testGetMethodReceivesConstantNameWithLowercasedKey(): void
+    {
+        $refClass = new ReflectionClass(VirtualProxy::class);
+        $refClass->installExtensionHandlers();
+
+        $proxy = new VirtualProxy('key');
+
+        // Compile-time constant method names arrive as written, escorted by the
+        // engine's pre-lowercased key literal
+        $this->assertSame('real-key', $proxy->virtualMethod());
+        $this->assertSame([['virtualMethod', 'virtualmethod', 'virtualmethod']], VirtualProxy::$methodResolutions);
+    }
+
+    #[RunInSeparateProcess]
+    public function testGetMethodReceivesDynamicNameWithoutKey(): void
+    {
+        $refClass = new ReflectionClass(VirtualProxy::class);
+        $refClass->installExtensionHandlers();
+
+        $proxy = new VirtualProxy('dynamic');
+
+        // Dynamic names bypass the inline cache and carry no pre-lowercased key: the
+        // hook lowercases in userland, preserving the as-written spelling for the user
+        $methodName = self::dynamicMethodName('VirtualMETHOD');
+        $result     = $proxy->$methodName();
+
+        $this->assertSame('real-dynamic', $result);
+        $this->assertSame([['VirtualMETHOD', 'virtualmethod', null]], VirtualProxy::$methodResolutions);
+    }
+
+    #[RunInSeparateProcess]
+    public function testGetMethodConstantCallSiteIsInlineCached(): void
+    {
+        $refClass = new ReflectionClass(VirtualProxy::class);
+        $refClass->installExtensionHandlers();
+
+        $proxy = new VirtualProxy('cached');
+
+        // A constant-name call site consults the hook once, then the VM serves the
+        // resolution from its polymorphic inline cache - while every iteration still
+        // dispatches to the redirected method
+        for ($index = 0; $index < 1000; $index++) {
+            if ($proxy->virtualMethod() !== 'real-cached') {
+                self::fail('Unexpected redirected method result');
+            }
+        }
+        $this->assertCount(1, VirtualProxy::$methodResolutions);
+
+        // A dynamic-name call bypasses the cache and consults the hook every time
+        $methodName = 'virtualMethod';
+        for ($index = 0; $index < 10; $index++) {
+            if ($proxy->$methodName() !== 'real-cached') {
+                self::fail('Unexpected redirected dynamic method result');
+            }
+        }
+        $this->assertCount(11, VirtualProxy::$methodResolutions);
+    }
+
+    #[RunInSeparateProcess]
+    public function testGetMethodNullRaisesUndefinedMethodError(): void
+    {
+        $refClass = $this->createVirtualProxyReflection();
+        $refClass->setGetMethodHandler(function (GetMethodHook $hook) {
+            $this->assertInstanceOf(VirtualProxy::class, $hook->getObject());
+
+            return null;
+        });
+
+        $proxy = new VirtualProxy('missing');
+
+        $this->expectException(\Error::class);
+        $this->expectExceptionMessage('Call to undefined method ' . VirtualProxy::class . '::realMethod()');
+        $unused = $proxy->realMethod();
+    }
+
+    #[RunInSeparateProcess]
+    public function testGetMethodIsConsultedByCallableChecks(): void
+    {
+        $refClass = new ReflectionClass(VirtualProxy::class);
+        $refClass->installExtensionHandlers();
+
+        $proxy = new VirtualProxy('callable');
+
+        // Array-callable checks resolve through get_method as well
+        $this->assertTrue(is_callable([$proxy, 'virtualMethod']));
+        $callable = \Closure::fromCallable([$proxy, 'virtualMethod']);
+        $this->assertSame('real-callable', $callable());
+    }
+
+    #[RunInSeparateProcess]
+    public function testUninstallRestoresOriginalGetMethodBehavior(): void
+    {
+        $refClass = $this->createVirtualProxyReflection();
+        $hook     = $refClass->setGetMethodHandler(function (GetMethodHook $hook) {
+            return new \ReflectionMethod(VirtualProxy::class, 'realMethod');
+        });
+
+        $proxy = new VirtualProxy('restore');
+
+        // Every method name resolves to realMethod() while the hook is installed
+        // (dynamic name: constant call sites would be inline-cached across uninstall)
+        $methodName = self::dynamicMethodName('anythingGoes');
+        $this->assertSame('real-restore', $proxy->$methodName());
+
+        $hook->uninstall();
+
+        $this->expectException(\Error::class);
+        $this->expectExceptionMessage('Call to undefined method ' . VirtualProxy::class . '::anythingGoes()');
+        $unused = $proxy->$methodName();
+    }
+
+    /**
+     * Type-erasing seam for dynamic method names: engine-level method resolution (the
+     * feature under test) is invisible to static analysis, which would otherwise treat
+     * literal-typed name strings as regular method references
+     */
+    private static function dynamicMethodName(string $methodName): string
+    {
+        return $methodName;
     }
 
     /**
