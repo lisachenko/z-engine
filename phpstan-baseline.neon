@@ -2199,13 +2199,19 @@ parameters:
 		-
 			message: '#^Binary operation "\-" between mixed and 1 results in an error\.$#'
 			identifier: binaryOp.invalid
-			count: 3
+			count: 4
 			path: src/System/ObjectStore.php
 
 		-
 			message: '#^Binary operation "\-" between mixed and 2 results in an error\.$#'
 			identifier: binaryOp.invalid
-			count: 2
+			count: 3
+			path: src/System/ObjectStore.php
+
+		-
+			message: '#^Binary operation "\<\<" between mixed and 1 results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
 			path: src/System/ObjectStore.php
 
 		-
@@ -2217,7 +2223,7 @@ parameters:
 		-
 			message: '#^Cannot access offset int\<0, max\> on mixed\.$#'
 			identifier: offsetAccess.nonOffsetAccessible
-			count: 3
+			count: 4
 			path: src/System/ObjectStore.php
 
 		-
@@ -2240,6 +2246,12 @@ parameters:
 
 		-
 			message: '#^Method ZEngine\\System\\ObjectStore\:\:nextHandle\(\) should return int but returns mixed\.$#'
+			identifier: return.type
+			count: 1
+			path: src/System/ObjectStore.php
+
+		-
+			message: '#^Method ZEngine\\System\\ObjectStore\:\:put\(\) should return int but returns mixed\.$#'
 			identifier: return.type
 			count: 1
 			path: src/System/ObjectStore.php
@@ -2407,30 +2419,6 @@ parameters:
 			path: src/Type/HashTable.php
 
 		-
-			message: '#^Constant ZEngine\\Type\\HashTable\:\:HASH_ADD is unused\.$#'
-			identifier: classConstant.unused
-			count: 1
-			path: src/Type/HashTable.php
-
-		-
-			message: '#^Constant ZEngine\\Type\\HashTable\:\:HASH_ADD_NEXT is unused\.$#'
-			identifier: classConstant.unused
-			count: 1
-			path: src/Type/HashTable.php
-
-		-
-			message: '#^Constant ZEngine\\Type\\HashTable\:\:HASH_UPDATE is unused\.$#'
-			identifier: classConstant.unused
-			count: 1
-			path: src/Type/HashTable.php
-
-		-
-			message: '#^Constant ZEngine\\Type\\HashTable\:\:HASH_UPDATE_INDIRECT is unused\.$#'
-			identifier: classConstant.unused
-			count: 1
-			path: src/Type/HashTable.php
-
-		-
 			message: '#^Method ZEngine\\Type\\HashTable\:\:getGC\(\) should return FFI\\CData but returns mixed\.$#'
 			identifier: return.type
 			count: 1
@@ -2457,7 +2445,7 @@ parameters:
 		-
 			message: '#^Parameter \#1 \$valueEntry of static method ZEngine\\Reflection\\ReflectionValue\:\:fromValueEntry\(\) expects FFI\\CData, mixed given\.$#'
 			identifier: argument.type
-			count: 3
+			count: 4
 			path: src/Type/HashTable.php
 
 		-
@@ -2479,6 +2467,30 @@ parameters:
 			path: src/Type/ObjectEntry.php
 
 		-
+			message: '#^Binary operation "\-" between mixed and 1 results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: src/Type/ObjectEntry.php
+
+		-
+			message: '#^Cannot access offset 0 on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: src/Type/ObjectEntry.php
+
+		-
+			message: '#^Cannot access offset int\<0, max\> on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: src/Type/ObjectEntry.php
+
+		-
+			message: '#^Cannot access property \$default_properties_count on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: src/Type/ObjectEntry.php
+
+		-
 			message: '#^Cannot access property \$type_info on mixed\.$#'
 			identifier: property.nonObject
 			count: 3
@@ -2493,6 +2505,18 @@ parameters:
 		-
 			message: '#^Cannot use \-\- on mixed\.$#'
 			identifier: preDec.type
+			count: 1
+			path: src/Type/ObjectEntry.php
+
+		-
+			message: '#^Method ZEngine\\Type\\ObjectEntry\:\:getDynamicPropertiesPointer\(\) should return FFI\\CData\|null but returns mixed\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Type/ObjectEntry.php
+
+		-
+			message: '#^Method ZEngine\\Type\\ObjectEntry\:\:getExtraFlags\(\) should return int but returns mixed\.$#'
+			identifier: return.type
 			count: 1
 			path: src/Type/ObjectEntry.php
 
@@ -2530,6 +2554,12 @@ parameters:
 			message: '#^Parameter \#1 \$hashInstance of class ZEngine\\Type\\HashTable constructor expects FFI\\CData, mixed given\.$#'
 			identifier: argument.type
 			count: 1
+			path: src/Type/ObjectEntry.php
+
+		-
+			message: '#^Parameter \#1 \$variable of static method ZEngine\\Core\:\:addr\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 2
 			path: src/Type/ObjectEntry.php
 
 		-
@@ -2651,6 +2681,114 @@ parameters:
 			identifier: argument.type
 			count: 1
 			path: src/Type/OpLine.php
+
+		-
+			message: '#^Binary operation "\+" between FFI\\CData and 8 results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: src/Type/PersistentHashTable.php
+
+		-
+			message: '#^Binary operation "\|\=" between mixed and int results in an error\.$#'
+			identifier: assignOp.invalid
+			count: 1
+			path: src/Type/PersistentHashTable.php
+
+		-
+			message: '#^Cannot access offset 1 on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: src/Type/PersistentHashTable.php
+
+		-
+			message: '#^Cannot access property \$flags on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: src/Type/PersistentHashTable.php
+
+		-
+			message: '#^Cannot access property \$refcount on mixed\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: src/Type/PersistentHashTable.php
+
+		-
+			message: '#^Cannot access property \$type_info on mixed\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: src/Type/PersistentHashTable.php
+
+		-
+			message: '#^Cannot access property \$u on mixed\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: src/Type/PersistentHashTable.php
+
+		-
+			message: '#^Method ZEngine\\Type\\PersistentHashTable\:\:create\(\) return type has no value type specified in iterable type ZEngine\\Type\\PersistentHashTable\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Type/PersistentHashTable.php
+
+		-
+			message: '#^Method ZEngine\\Type\\PersistentHashTable\:\:fromCData\(\) return type has no value type specified in iterable type ZEngine\\Type\\PersistentHashTable\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Type/PersistentHashTable.php
+
+		-
+			message: '#^Parameter \#2 \$pointer of static method ZEngine\\Core\:\:cast\(\) expects FFI\\CData, FFI\\CData\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Type/PersistentHashTable.php
+
+		-
+			message: '#^Parameter \#2 \$pointer of static method ZEngine\\Core\:\:cast\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Type/PersistentHashTable.php
+
+		-
+			message: '#^Static property ZEngine\\Type\\PersistentHashTable\:\:\$uninitializedBucket \(FFI\\CData\|null\) does not accept mixed\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: src/Type/PersistentHashTable.php
+
+		-
+			message: '#^Binary operation "\|\=" between mixed and int results in an error\.$#'
+			identifier: assignOp.invalid
+			count: 1
+			path: src/Type/PersistentObjectFactory.php
+
+		-
+			message: '#^Cannot access property \$refcount on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: src/Type/PersistentObjectFactory.php
+
+		-
+			message: '#^Cannot access property \$type_info on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: src/Type/PersistentObjectFactory.php
+
+		-
+			message: '#^Cannot access property \$u on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: src/Type/PersistentObjectFactory.php
+
+		-
+			message: '#^Parameter \#1 \$classType of static method ZEngine\\Reflection\\ReflectionClass\:\:getObjectSize\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Type/PersistentObjectFactory.php
+
+		-
+			message: '#^Parameter \#1 \$pointer of static method ZEngine\\Core\:\:addressOf\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Type/PersistentObjectFactory.php
 
 		-
 			message: '#^Binary operation "&" between mixed and 128 results in an error\.$#'
@@ -2809,27 +2947,39 @@ parameters:
 			path: src/Type/StringEntry.php
 
 		-
+			message: '#^Binary operation "&" between mixed and int results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: src/Type/StringEntry.php
+
+		-
 			message: '#^Binary operation "\+" between FFI\\CData and int\<0, max\> results in an error\.$#'
 			identifier: binaryOp.invalid
 			count: 1
 			path: src/Type/StringEntry.php
 
 		-
+			message: '#^Binary operation "\|\=" between mixed and int results in an error\.$#'
+			identifier: assignOp.invalid
+			count: 1
+			path: src/Type/StringEntry.php
+
+		-
 			message: '#^Cannot access property \$refcount on mixed\.$#'
 			identifier: property.nonObject
-			count: 1
+			count: 2
 			path: src/Type/StringEntry.php
 
 		-
 			message: '#^Cannot access property \$type_info on mixed\.$#'
 			identifier: property.nonObject
-			count: 4
+			count: 6
 			path: src/Type/StringEntry.php
 
 		-
 			message: '#^Cannot access property \$u on mixed\.$#'
 			identifier: property.nonObject
-			count: 1
+			count: 2
 			path: src/Type/StringEntry.php
 
 		-
@@ -2939,6 +3089,36 @@ parameters:
 			identifier: binaryOp.invalid
 			count: 1
 			path: tests/Memory/scenarios/hook-install-uninstall.php
+
+		-
+			message: '#^Cannot access offset ''key\-1'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tests/Memory/scenarios/persistent-hashtable-churn.php
+
+		-
+			message: '#^Parameter \#2 \$value of static method ZEngine\\Reflection\\ReflectionValue\:\:newEntry\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Memory/scenarios/persistent-hashtable-churn.php
+
+		-
+			message: '#^Cannot access property \$counter on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Memory/scenarios/persistent-object-put-detach.php
+
+		-
+			message: '#^Parameter \#1 \$object of function spl_object_id expects object, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Memory/scenarios/persistent-object-put-detach.php
+
+		-
+			message: '#^Parameter \#2 \$value of static method ZEngine\\Reflection\\ReflectionValue\:\:newEntry\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Memory/scenarios/persistent-object-put-detach.php
 
 		-
 			message: '#^Binary operation "\*" between mixed and 2 results in an error\.$#'
@@ -3641,6 +3821,24 @@ parameters:
 			identifier: isset.variable
 			count: 1
 			path: tests/Type/ClosureEntryTest.php
+
+		-
+			message: '#^Cannot call method getNativeValue\(\) on ZEngine\\Reflection\\ReflectionValue\|null\.$#'
+			identifier: method.nonObject
+			count: 3
+			path: tests/Type/PersistentHashTableTest.php
+
+		-
+			message: '#^Parameter \#2 \$value of static method ZEngine\\Reflection\\ReflectionValue\:\:newEntry\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Type/PersistentHashTableTest.php
+
+		-
+			message: '#^Parameter \#2 \$value of static method ZEngine\\Reflection\\ReflectionValue\:\:newEntry\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Type/PersistentObjectFactoryTest.php
 
 		-
 			message: '#^Cannot cast mixed to string\.$#'

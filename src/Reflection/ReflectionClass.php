@@ -982,6 +982,19 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
+     * Returns the full allocation size of an instance: zend_object plus the inline
+     * properties_table slots for a given class type
+     *
+     * @param CData $classType zend_class_entry type to measure
+     *
+     * @see zend_objects_API.h:zend_objects_store_put (callers size allocations this way)
+     */
+    public static function getObjectSize(CData $classType): int
+    {
+        return Core::sizeof(Core::type('zend_object')) + self::getObjectPropertiesSize($classType);
+    }
+
+    /**
      * Checks if the current class has a parent
      */
     private function hasParentClass(): bool

@@ -159,6 +159,104 @@ class ObjectEntry implements ReferenceCountedInterface
     }
 
     /**
+     * Returns the object's extra_flags word (IS_OBJ_* engine flags)
+     */
+    public function getExtraFlags(): int
+    {
+        $this->assertObjectAlive();
+
+        return $this->pointer->extra_flags;
+    }
+
+    /**
+     * Replaces the object's extra_flags word
+     *
+     * <span style="color:red; font-weight:bold">Danger!</span> Low-level API, can bring a segmentation fault
+     * @internal
+     */
+    public function setExtraFlags(int $flags): void
+    {
+        $this->assertObjectAlive();
+        $this->pointer->extra_flags = $flags;
+    }
+
+    /**
+     * Returns a borrowed view of one inline property slot (properties_table[$index])
+     *
+     * The returned value owns neither the zval container nor a payload reference; it is
+     * valid only while the object itself is alive.
+     */
+    public function getPropertySlot(int $index): ReflectionValue
+    {
+        $this->assertObjectAlive();
+        $propertiesCount = $this->pointer->ce->default_properties_count;
+        if ($index < 0 || $index >= $propertiesCount) {
+            throw new \OutOfBoundsException("Property slot {$index} is out of bounds 0.." . ($propertiesCount - 1));
+        }
+
+        return ReflectionValue::fromValueEntry(Core::addr($this->pointer->properties_table[$index]));
+    }
+
+    /**
+     * Returns a raw pointer (zval *) to the first inline property slot, eg for snapshotting
+     * the whole properties_table with memcpy
+     * @internal
+     */
+    public function getPropertyTablePointer(): CData
+    {
+        $this->assertObjectAlive();
+
+        return Core::addr($this->pointer->properties_table[0]);
+    }
+
+    /**
+     * Returns the raw dynamic-properties HashTable pointer or null if it was never built
+     * @internal
+     */
+    public function getDynamicPropertiesPointer(): ?CData
+    {
+        $this->assertObjectAlive();
+
+        return $this->pointer->properties;
+    }
+
+    /**
+     * Replaces the raw dynamic-properties HashTable pointer
+     *
+     * No refcounting is performed on either the previous or the new table - the caller
+     * keeps ownership of both, exactly like setClass() does for class entries.
+     * @internal
+     */
+    public function setDynamicPropertiesPointer(?CData $hashTable): void
+    {
+        $this->assertObjectAlive();
+        $this->pointer->properties = $hashTable;
+    }
+
+    /**
+     * Points the object at another zend_object_handlers block
+     *
+     * Handler blocks are not refcounted engine structures, so replacing the pointer
+     * transfers no ownership (same contract as setClass()).
+     * @internal
+     */
+    public function setHandlers(CData $handlers): void
+    {
+        $this->assertObjectAlive();
+        $this->pointer->handlers = Core::cast('zend_object_handlers *', $handlers);
+    }
+
+    /**
+     * Returns raw C value entry
+     */
+    public function getRawValue(): CData
+    {
+        $this->assertObjectAlive();
+
+        return $this->pointer;
+    }
+
+    /**
      * Returns a PHP instance of object, associated with this entry
      */
     public function getNativeValue(): object

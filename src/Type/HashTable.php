@@ -59,18 +59,18 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
 {
     use ReferenceCountedTrait;
 
-    private const HASH_UPDATE          = (1 << 0);
-    private const HASH_ADD             = (1 << 1);
-    private const HASH_UPDATE_INDIRECT = (1 << 2);
-    private const HASH_ADD_NEW         = (1 << 3);
-    private const HASH_ADD_NEXT        = (1 << 4);
+    protected const HASH_UPDATE          = (1 << 0);
+    protected const HASH_ADD             = (1 << 1);
+    protected const HASH_UPDATE_INDIRECT = (1 << 2);
+    protected const HASH_ADD_NEW         = (1 << 3);
+    protected const HASH_ADD_NEXT        = (1 << 4);
 
     /**
      * Corresponds to the HASH_FLAG_PACKED flag in zend_types.h
      */
-    private const HASH_FLAG_PACKED = (1 << 2);
+    protected const HASH_FLAG_PACKED = (1 << 2);
 
-    private CData $pointer;
+    protected CData $pointer;
 
     public function __construct(CData $hashInstance)
     {
@@ -159,6 +159,45 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
         );
         if ($result === Core::FAILURE) {
             throw new \RuntimeException("Can not add an item with key {$key}");
+        }
+    }
+
+    /**
+     * Performs search by integer key in the hashtable
+     *
+     * Same borrowing contract as find(): the returned wrapper is valid until the bucket
+     * is deleted or the table is rehashed, and reading it never changes refcounts.
+     *
+     * @return ReflectionValue|null Value or null if not found
+     */
+    public function findIndex(int $key): ?ReflectionValue
+    {
+        $pointer = Core::call('zend_hash_index_find', $this->pointer, $key);
+
+        if ($pointer !== null) {
+            $pointer = ReflectionValue::fromValueEntry($pointer);
+        }
+
+        return $pointer;
+    }
+
+    /**
+     * Adds new value with an integer key to the HashTable
+     *
+     * Same ownership contract as add(): the engine copies the source zval into its own
+     * bucket, the temporary container stays with the caller.
+     */
+    public function addIndex(int $key, ReflectionValue $value): void
+    {
+        $result = Core::call(
+            'zend_hash_index_add_or_update',
+            $this->pointer,
+            $key,
+            $value->getRawValue(),
+            self::HASH_ADD_NEW,
+        );
+        if ($result === null) {
+            throw new \RuntimeException("Can not add an item with index {$key}");
         }
     }
 
