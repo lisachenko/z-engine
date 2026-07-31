@@ -963,6 +963,7 @@ extern zend_ast * zend_ast_create_3(zend_ast_kind, zend_ast *, zend_ast *, zend_
 extern zend_ast * zend_ast_create_4(zend_ast_kind, zend_ast *, zend_ast *, zend_ast *, zend_ast *);
 extern zend_ast * zend_ast_create_5(zend_ast_kind, zend_ast *, zend_ast *, zend_ast *, zend_ast *, zend_ast *);
 extern zend_ast * zend_ast_create_decl(zend_ast_kind, uint32_t, uint32_t, zend_string *, zend_string *, zend_ast *, zend_ast *, zend_ast *, zend_ast *, zend_ast *);
+extern void zend_iterator_init(zend_object_iterator *);
 extern zend_module_entry * zend_register_module_ex(zend_module_entry *, int);
 extern zend_result zend_startup_module_ex(zend_module_entry *);
 extern void zval_ptr_dtor(zval *);
