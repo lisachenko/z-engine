@@ -442,6 +442,28 @@ class Core
     }
 
     /**
+     * Materializes a typed pointer from a numeric address (the inverse of addressOf())
+     *
+     * The address is written through an integer view of a fresh pointer slot and the
+     * typed pointer value is read back. This is the explicit form of C pointer
+     * arithmetic (base address plus a signed byte offset), which FFI otherwise only
+     * offers through CData operator overloads.
+     *
+     * @param string $type    Pointer type of the result (eg "zend_arg_info *")
+     * @param int    $address Numeric address the pointer should point at
+     */
+    public static function pointerAtAddress(string $type, int $address): CData
+    {
+        $slot           = self::new("{$type}[1]");
+        $addressView    = self::cast('uintptr_t *', $slot);
+        $addressView[0] = $address;
+        $pointer        = $slot[0];
+        assert($pointer instanceof CData);
+
+        return $pointer;
+    }
+
+    /**
      * Copies $size bytes from memory area $source to memory area $target.
      * $source may be any native data structure (FFI\CData) or PHP string.
      *

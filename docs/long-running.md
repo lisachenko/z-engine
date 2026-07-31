@@ -99,7 +99,7 @@ The debug-build leak gate treats the following as expected, by design:
 | Previous function body after `redefine()` | the redefined entry keeps sharing the original `arg_info`/name, so the old opcodes/literals cannot be freed without exporting `destroy_op_array` and unsharing those pointers; bounded to one body per redefined function |
 | Engine-chained arena blocks for >32 KiB parses | allocated by the engine; z-engine never frees memory it did not allocate |
 | Refcount-0 persistent strings | never freed with the request allocator; bounded, reclaimed at process end |
-| Engine-original interface/trait buffers replaced by z-engine | possibly shared or in opcache SHM, never freed by z-engine; at most one per touched class |
+| Engine-original interface/trait buffers replaced by z-engine (including the trait alias/precedence lists replaced by `addTraitAlias()`/`addTraitPrecedence()` and their `remove*` counterparts) | possibly shared or in opcache SHM, never freed by z-engine; at most one per touched class |
 
 Everything else is a bug: the test suite runs with `report_memleaks=1` on a debug build and
 fails on any leak report.
