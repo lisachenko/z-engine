@@ -578,6 +578,477 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
+     * Returns the engine-level view of the trait aliases configured for this class
+     *
+     * Unlike the native reflection method, this reads the zend_trait_alias structures
+     * directly, so it also works on classes that are not linked yet and reports the
+     * modifier flags. Keys are the visible method names (the alias, or the original
+     * method name for modifier-only adaptations); each value describes the referenced
+     * trait method: the trait name (null when the reference is unqualified), the method
+     * name and the ZEND_ACC_* modifier flags (0 keeps the original modifiers).
+     *
+     * @return array<string, array{trait: ?string, method: string, flags: int}>
+     */
+    public function getTraitAliases(): array // @phpstan-ignore method.childReturnType (the engine-level view is deliberately richer than the native alias-name map)
+    {
+        $traitAliases = [];
+        $aliasList    = $this->pointer->trait_aliases;
+        if ($aliasList === null) {
+            return $traitAliases;
+        }
+        assert($aliasList instanceof CData);
+        for ($index = 0; $aliasList[$index] !== null; $index++) {
+            $aliasEntry = $aliasList[$index];
+            assert($aliasEntry instanceof CData);
+            $traitMethodRef = $aliasEntry->trait_method;
+            assert($traitMethodRef instanceof CData);
+            $rawMethodName = $traitMethodRef->method_name;
+            assert($rawMethodName instanceof CData);
+            $methodName = StringEntry::fromCData($rawMethodName)->getStringValue();
+
+            $traitName    = null;
+            $rawTraitName = $traitMethodRef->class_name;
+            if ($rawTraitName !== null) {
+                assert($rawTraitName instanceof CData);
+                $traitName = StringEntry::fromCData($rawTraitName)->getStringValue();
+            }
+
+            $visibleName = $methodName;
+            $rawAlias    = $aliasEntry->alias;
+            if ($rawAlias !== null) {
+                assert($rawAlias instanceof CData);
+                $visibleName = StringEntry::fromCData($rawAlias)->getStringValue();
+            }
+
+            $modifiers = $aliasEntry->modifiers;
+            assert(is_int($modifiers));
+            $traitAliases[$visibleName] = ['trait' => $traitName, 'method' => $methodName, 'flags' => $modifiers];
+        }
+
+        return $traitAliases;
+    }
+
+    /**
+     * Returns the engine-level view of the trait precedences configured for this class
+     *
+     * @return array<string, list<string>> Map of "TraitName::methodName" references to the
+     *         list of trait names the method is taken instead of
+     */
+    public function getTraitPrecedences(): array
+    {
+        $traitPrecedences = [];
+        $precedenceList   = $this->pointer->trait_precedences;
+        if ($precedenceList === null) {
+            return $traitPrecedences;
+        }
+        assert($precedenceList instanceof CData);
+        for ($index = 0; $precedenceList[$index] !== null; $index++) {
+            $precedenceEntry = $precedenceList[$index];
+            assert($precedenceEntry instanceof CData);
+            $traitMethodRef = $precedenceEntry->trait_method;
+            assert($traitMethodRef instanceof CData);
+            $rawMethodName = $traitMethodRef->method_name;
+            $rawTraitName  = $traitMethodRef->class_name;
+            assert($rawMethodName instanceof CData && $rawTraitName instanceof CData);
+            $reference = StringEntry::fromCData($rawTraitName)->getStringValue()
+                . '::' . StringEntry::fromCData($rawMethodName)->getStringValue();
+
+            $excludedTraits = [];
+            $totalExcludes  = $precedenceEntry->num_excludes;
+            assert(is_int($totalExcludes));
+            $excludeNames = self::precedenceExcludeNames($precedenceEntry);
+            for ($excludeIndex = 0; $excludeIndex < $totalExcludes; $excludeIndex++) {
+                $rawExcludeName = $excludeNames[$excludeIndex];
+                assert($rawExcludeName instanceof CData);
+                $excludedTraits[] = StringEntry::fromCData($rawExcludeName)->getStringValue();
+            }
+            $traitPrecedences[$reference] = $excludedTraits;
+        }
+
+        return $traitPrecedences;
+    }
+
+    /**
+     * Registers a runtime trait alias, the equivalent of `use T { T::method as flags alias; }`
+     *
+     * Writes only affect FUTURE linking: like addTraits(), the configured alias is consumed
+     * when the engine links a class (zend_do_link_class/zend_bind_traits), so a class that
+     * is already linked keeps its current method table until it is explicitly re-linked.
+     *
+     * Memory ownership contract (see docs/long-running.md): the zend_trait_alias structure,
+     * the alias list and the stored names are tracked z-engine allocations with the same
+     * allocation class the engine expects (request memory for user classes - freed by
+     * destroy_zend_class() with the class - and persistent memory for internal classes).
+     * removeTraitAlias() releases an entry eagerly; a replaced engine-original alias list
+     * is never freed (bounded, at most one per touched class).
+     *
+     * @param string $traitMethod Trait method reference, either "TraitName::method" or "method"
+     * @param string $alias       New visible name for the trait method
+     * @param int    $flags       Optional new modifiers (ZEND_ACC_PUBLIC/PROTECTED/PRIVATE/FINAL),
+     *                            0 keeps the modifiers of the original method
+     * @internal
+     */
+    public function addTraitAlias(string $traitMethod, string $alias, int $flags = 0): void
+    {
+        $allowedFlags = Core::ZEND_ACC_PPP_MASK | Core::ZEND_ACC_FINAL;
+        if (($flags & ~$allowedFlags) !== 0) {
+            throw new \ReflectionException(
+                'Trait alias flags accept only public/protected/private/final modifiers',
+            );
+        }
+        $this->assertTraitConfigurationIsMutable();
+        [$traitName, $methodName] = self::parseTraitMethodReference($traitMethod);
+        $isPersistent             = $this->isPersistentAllocation();
+
+        $aliasEntry     = Core::trackedNew('zend_trait_alias', $isPersistent);
+        $traitMethodRef = $aliasEntry->trait_method;
+        assert($traitMethodRef instanceof CData);
+        $traitMethodRef->method_name = $this->newOwnedNamePointer($methodName, $isPersistent);
+        if ($traitName !== null) {
+            $traitMethodRef->class_name = $this->newOwnedNamePointer($traitName, $isPersistent);
+        }
+        $aliasEntry->alias     = $this->newOwnedNamePointer($alias, $isPersistent);
+        $aliasEntry->modifiers = $flags;
+
+        $this->pointer->trait_aliases = $this->appendToTraitAdaptationList(
+            $this->pointer->trait_aliases,
+            'zend_trait_alias',
+            Core::addr($aliasEntry),
+        );
+    }
+
+    /**
+     * Removes a trait alias by its visible name (the alias, or the method name for
+     * modifier-only adaptations)
+     *
+     * Only affects future linking, exactly like addTraitAlias(): methods that were already
+     * bound through the alias stay in the method table. The entry's names are released and
+     * the structure is freed with the allocator that owns it (tracked z-engine block or
+     * engine request memory).
+     *
+     * @internal
+     */
+    public function removeTraitAlias(string $alias): void
+    {
+        $this->assertTraitConfigurationIsMutable();
+        $aliasList = $this->pointer->trait_aliases;
+        if ($aliasList !== null) {
+            assert($aliasList instanceof CData);
+            for ($index = 0; $aliasList[$index] !== null; $index++) {
+                $aliasEntry = $aliasList[$index];
+                assert($aliasEntry instanceof CData);
+                $traitMethodRef = $aliasEntry->trait_method;
+                assert($traitMethodRef instanceof CData);
+                $rawVisibleName = $aliasEntry->alias;
+                if ($rawVisibleName === null) {
+                    $rawVisibleName = $traitMethodRef->method_name;
+                }
+                assert($rawVisibleName instanceof CData);
+                if (strcasecmp(StringEntry::fromCData($rawVisibleName)->getStringValue(), $alias) !== 0) {
+                    continue;
+                }
+                self::releaseEngineName($traitMethodRef->method_name);
+                self::releaseEngineName($traitMethodRef->class_name);
+                self::releaseEngineName($aliasEntry->alias);
+                $this->freeTraitAdaptation($aliasEntry);
+                $this->pointer->trait_aliases = $this->removeFromTraitAdaptationList(
+                    $aliasList,
+                    'zend_trait_alias',
+                    $index,
+                );
+
+                return;
+            }
+        }
+
+        throw new \ReflectionException("Trait alias {$alias} was not found in the class");
+    }
+
+    /**
+     * Registers a runtime trait precedence, the equivalent of `use ... { T::method insteadof T2; }`
+     *
+     * Writes only affect FUTURE linking, exactly like addTraitAlias(): an already-linked
+     * class keeps its current method table until it is explicitly re-linked. Memory
+     * ownership follows addTraitAlias() as well (tracked allocations in the allocation
+     * class of this class entry, owned by the engine once stored).
+     *
+     * @param string $traitMethod Qualified trait method reference "TraitName::method"
+     * @param string ...$insteadOf Names of the traits whose colliding method is excluded
+     * @internal
+     */
+    public function addTraitPrecedence(string $traitMethod, string ...$insteadOf): void
+    {
+        if (count($insteadOf) === 0) {
+            throw new \ReflectionException('At least one trait name to exclude is required');
+        }
+        [$traitName, $methodName] = self::parseTraitMethodReference($traitMethod);
+        if ($traitName === null) {
+            throw new \ReflectionException(
+                'Trait precedence requires a qualified "TraitName::method" reference',
+            );
+        }
+        $this->assertTraitConfigurationIsMutable();
+        $isPersistent  = $this->isPersistentAllocation();
+        $totalExcludes = count($insteadOf);
+
+        // zend_trait_precedence embeds a flexible array of excluded names, so the block is
+        // sized manually like the compiler does (one zend_string* slot is already part of
+        // the structure itself)
+        $pointerSize = Core::sizeof(Core::type('zend_string *'));
+        $structSize  = Core::sizeof(Core::type('zend_trait_precedence')) + ($totalExcludes - 1) * $pointerSize;
+        $memory      = Core::trackedNew("char[{$structSize}]", $isPersistent);
+
+        $precedenceEntry = Core::cast('zend_trait_precedence *', $memory);
+        $traitMethodRef  = $precedenceEntry->trait_method;
+        assert($traitMethodRef instanceof CData);
+        $traitMethodRef->method_name   = $this->newOwnedNamePointer($methodName, $isPersistent);
+        $traitMethodRef->class_name    = $this->newOwnedNamePointer($traitName, $isPersistent);
+        $precedenceEntry->num_excludes = $totalExcludes;
+        $excludeNames                  = self::precedenceExcludeNames($precedenceEntry);
+        foreach (array_values($insteadOf) as $position => $excludedTrait) {
+            self::storeAdaptationListSlot($excludeNames, $position, $this->newOwnedNamePointer($excludedTrait, $isPersistent));
+        }
+
+        $this->pointer->trait_precedences = $this->appendToTraitAdaptationList(
+            $this->pointer->trait_precedences,
+            'zend_trait_precedence',
+            $precedenceEntry,
+        );
+    }
+
+    /**
+     * Removes a trait precedence by its qualified "TraitName::method" reference
+     *
+     * Only affects future linking; already-bound methods stay in the method table.
+     *
+     * @internal
+     */
+    public function removeTraitPrecedence(string $traitMethod): void
+    {
+        [$traitName, $methodName] = self::parseTraitMethodReference($traitMethod);
+        if ($traitName === null) {
+            throw new \ReflectionException(
+                'Trait precedence requires a qualified "TraitName::method" reference',
+            );
+        }
+        $this->assertTraitConfigurationIsMutable();
+        $precedenceList = $this->pointer->trait_precedences;
+        if ($precedenceList !== null) {
+            assert($precedenceList instanceof CData);
+            for ($index = 0; $precedenceList[$index] !== null; $index++) {
+                $precedenceEntry = $precedenceList[$index];
+                assert($precedenceEntry instanceof CData);
+                $traitMethodRef = $precedenceEntry->trait_method;
+                assert($traitMethodRef instanceof CData);
+                $rawMethodName = $traitMethodRef->method_name;
+                $rawTraitName  = $traitMethodRef->class_name;
+                assert($rawMethodName instanceof CData && $rawTraitName instanceof CData);
+                $sameMethod = strcasecmp(StringEntry::fromCData($rawMethodName)->getStringValue(), $methodName) === 0;
+                $sameTrait  = strcasecmp(StringEntry::fromCData($rawTraitName)->getStringValue(), $traitName)   === 0;
+                if (!$sameMethod || !$sameTrait) {
+                    continue;
+                }
+                self::releaseEngineName($rawMethodName);
+                self::releaseEngineName($rawTraitName);
+                $totalExcludes = $precedenceEntry->num_excludes;
+                assert(is_int($totalExcludes));
+                $excludeNames = self::precedenceExcludeNames($precedenceEntry);
+                for ($excludeIndex = 0; $excludeIndex < $totalExcludes; $excludeIndex++) {
+                    self::releaseEngineName($excludeNames[$excludeIndex]);
+                }
+                $this->freeTraitAdaptation($precedenceEntry);
+                $this->pointer->trait_precedences = $this->removeFromTraitAdaptationList(
+                    $precedenceList,
+                    'zend_trait_precedence',
+                    $index,
+                );
+
+                return;
+            }
+        }
+
+        throw new \ReflectionException("Trait precedence {$traitMethod} was not found in the class");
+    }
+
+    /**
+     * Splits a "TraitName::method" (or plain "method") reference into its two parts
+     *
+     * @return array{?string, string} Trait name (null when not qualified) and method name
+     */
+    private static function parseTraitMethodReference(string $traitMethod): array
+    {
+        $separatorPosition = strrpos($traitMethod, '::');
+        if ($separatorPosition === false) {
+            if ($traitMethod === '') {
+                throw new \ReflectionException('Trait method reference can not be empty');
+            }
+
+            return [null, $traitMethod];
+        }
+        $traitName  = substr($traitMethod, 0, $separatorPosition);
+        $methodName = substr($traitMethod, $separatorPosition + 2);
+        if ($traitName === '' || $methodName === '') {
+            throw new \ReflectionException("Invalid trait method reference {$traitMethod}");
+        }
+
+        return [$traitName, $methodName];
+    }
+
+    /**
+     * Refuses trait configuration changes on classes whose structures live in shared memory
+     */
+    private function assertTraitConfigurationIsMutable(): void
+    {
+        $classFlags = $this->pointer->ce_flags;
+        assert(is_int($classFlags));
+        if (($classFlags & Core::ZEND_ACC_IMMUTABLE) !== 0) {
+            throw new \ReflectionException(
+                'Cannot modify the trait configuration of an immutable (opcache-shared) class',
+            );
+        }
+    }
+
+    /**
+     * Mints an owned engine string in the allocation class of this class entry and hands
+     * the reference over to the engine sink that will store it
+     */
+    private function newOwnedNamePointer(string $name, bool $isPersistent): CData
+    {
+        $stringEntry = $isPersistent ? StringEntry::persistent($name) : StringEntry::fromString($name);
+        $rawValue    = $stringEntry->transferReferenceOwnership()->getRawValue();
+        assert($rawValue instanceof CData);
+
+        return $rawValue;
+    }
+
+    /**
+     * Drops the class entry's own reference on a stored name (no-op for empty slots)
+     */
+    private static function releaseEngineName(mixed $stringPointer): void
+    {
+        if ($stringPointer === null) {
+            return;
+        }
+        assert($stringPointer instanceof CData);
+        StringEntry::fromCData($stringPointer)->releaseReference();
+    }
+
+    /**
+     * Returns a freely indexable pointer to the flexible exclude_class_names array
+     *
+     * The FFI view of the declared zend_string *exclude_class_names[1] field is
+     * bounds-checked, so the runtime-sized tail is addressed through the raw field offset.
+     */
+    private static function precedenceExcludeNames(CData $precedenceEntry): CData
+    {
+        $excludeOffset = Core::type('zend_trait_precedence')->getStructFieldOffset('exclude_class_names');
+
+        return Core::pointerAtAddress('zend_string **', Core::addressOf($precedenceEntry) + $excludeOffset);
+    }
+
+    /**
+     * Appends one adaptation structure to a NULL-terminated engine list
+     *
+     * The new list is a tracked z-engine block in the allocation class of this class
+     * entry; the previous list is freed if and only if z-engine allocated it (an
+     * engine-original list may live in shared memory and is left alone, bounded to at
+     * most one replaced list per touched class).
+     *
+     * @param mixed  $list     Current NULL-terminated list (CData or null)
+     * @param string $itemType Engine structure name of the list items
+     * @param CData  $item     Pointer to the structure to append
+     */
+    private function appendToTraitAdaptationList(mixed $list, string $itemType, CData $item): CData
+    {
+        // Collect the existing entries first: every value that leaves the CData boundary
+        // is asserted, and the source list may disappear right after the copy
+        $existingItems = [];
+        if ($list !== null) {
+            assert($list instanceof CData);
+            for ($index = 0; $list[$index] !== null; $index++) {
+                $existingItem = $list[$index];
+                assert($existingItem instanceof CData);
+                $existingItems[] = $existingItem;
+            }
+        }
+        $totalItems = count($existingItems);
+        // One extra slot keeps the list NULL-terminated (FFI zero-initializes new blocks)
+        $memory = Core::trackedNew("{$itemType} *[" . ($totalItems + 2) . ']', $this->isPersistentAllocation());
+        foreach ($existingItems as $position => $existingItem) {
+            self::storeAdaptationListSlot($memory, $position, $existingItem);
+        }
+        self::storeAdaptationListSlot($memory, $totalItems, $item);
+        if ($list !== null) {
+            Core::untrackAndFree($list);
+        }
+
+        return Core::cast("{$itemType} **", Core::addr($memory));
+    }
+
+    /**
+     * Stores one structure pointer into the given slot of an adaptation list block
+     *
+     * The write mutates engine-visible memory behind the FFI pointer, which static
+     * analysis cannot see - hence the explicit impurity marker.
+     *
+     * @phpstan-impure
+     */
+    private static function storeAdaptationListSlot(CData $listMemory, int $position, CData $item): void
+    {
+        $listMemory[$position] = $item;
+    }
+
+    /**
+     * Rebuilds a NULL-terminated adaptation list without the given position
+     *
+     * @return CData|null New list, or null when the last entry was removed
+     */
+    private function removeFromTraitAdaptationList(CData $list, string $itemType, int $removeIndex): ?CData
+    {
+        $survivingItems = [];
+        for ($index = 0; $list[$index] !== null; $index++) {
+            if ($index === $removeIndex) {
+                continue;
+            }
+            $survivingItem = $list[$index];
+            assert($survivingItem instanceof CData);
+            $survivingItems[] = $survivingItem;
+        }
+        if ($survivingItems === []) {
+            Core::untrackAndFree($list);
+
+            return null;
+        }
+        $memory = Core::trackedNew(
+            "{$itemType} *[" . (count($survivingItems) + 1) . ']',
+            $this->isPersistentAllocation(),
+        );
+        foreach ($survivingItems as $position => $survivingItem) {
+            self::storeAdaptationListSlot($memory, $position, $survivingItem);
+        }
+        Core::untrackAndFree($list);
+
+        return Core::cast("{$itemType} **", Core::addr($memory));
+    }
+
+    /**
+     * Frees one adaptation structure with the allocator that owns it
+     *
+     * Tracked blocks were allocated by z-engine; other blocks in a user-defined class are
+     * engine request memory (emalloc), released exactly like destroy_zend_class() would.
+     * Engine-original structures of persistent classes are left alone - z-engine cannot
+     * know their allocator, and such classes cannot carry traits in practice.
+     */
+    private function freeTraitAdaptation(CData $adaptationPointer): void
+    {
+        if (Core::isTrackedBlock($adaptationPointer)) {
+            Core::untrackAndFree($adaptationPointer);
+        } elseif ($this->isUserDefined()) {
+            Core::free($adaptationPointer);
+        }
+    }
+
+    /**
      * @inheritDoc
      */
     #[\ReturnTypeWillChange]
