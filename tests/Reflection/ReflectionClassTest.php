@@ -33,6 +33,7 @@ use ZEngine\Core;
 use ZEngine\Stub\NativeNumber;
 use ZEngine\Stub\TestClass;
 use ZEngine\Stub\TestInterface;
+use ZEngine\Stub\TestPropertyHandlers;
 use ZEngine\Stub\TestTrait;
 use ZEngine\System\OpCode;
 
@@ -470,6 +471,56 @@ class ReflectionClassTest extends TestCase
         $this->markTestIncomplete('Initialization object handler brings segfaults thus run it separately');
     }
 
+
+    #[Group('internal')]
+    #[RunInSeparateProcess]
+    public function testInstallExtensionHandlersWiresHasProperty(): void
+    {
+        TestPropertyHandlers::$log = [];
+        $refClass                  = new ReflectionClass(TestPropertyHandlers::class);
+        $refClass->installExtensionHandlers();
+
+        $instance = new TestPropertyHandlers();
+        // The hook proceeds with the default behavior for the initialized property...
+        $this->assertTrue(isset($instance->property));
+        $this->assertContains('isset:property', TestPropertyHandlers::$log);
+        // ...but reports the null-valued "absent" field (invisible for the default
+        // handler) as existing, proving that the hook is installed
+        $this->assertTrue(isset($instance->absent));
+        $this->assertContains('isset:absent', TestPropertyHandlers::$log);
+    }
+
+    #[Group('internal')]
+    #[RunInSeparateProcess]
+    public function testInstallExtensionHandlersWiresUnsetProperty(): void
+    {
+        TestPropertyHandlers::$log = [];
+        $refClass                  = new ReflectionClass(TestPropertyHandlers::class);
+        $refClass->installExtensionHandlers();
+
+        $instance = new TestPropertyHandlers();
+        unset($instance->property);
+        // The hook swallows the unset, so the property should survive
+        $this->assertSame(42, $instance->property);
+        $this->assertContains('unset:property', TestPropertyHandlers::$log);
+    }
+
+    #[Group('internal')]
+    #[RunInSeparateProcess]
+    public function testInstallExtensionHandlersWiresGetPropertiesFor(): void
+    {
+        TestPropertyHandlers::$log = [];
+        $refClass                  = new ReflectionClass(TestPropertyHandlers::class);
+        $refClass->installExtensionHandlers();
+
+        $instance  = new TestPropertyHandlers();
+        $castValue = (array) $instance;
+
+        // The hook is called instead of the default handler, so no real fields are returned
+        $this->assertArrayNotHasKey('property', $castValue);
+        $this->assertSame(['a' => 1, 'b' => true, 'c' => 42.0], $castValue);
+        $this->assertContains('fields:' . TestPropertyHandlers::class, TestPropertyHandlers::$log);
+    }
 
     public function testInstallExtensionHandlers(): void
     {
