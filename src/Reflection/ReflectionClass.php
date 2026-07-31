@@ -75,6 +75,38 @@ class ReflectionClass extends NativeReflectionClass
     private CData $pointer;
 
     /**
+     * Function pointers in zend_class_entry that are grafted from the parent during inheritance
+     * and therefore must be detached together with the parent methods
+     */
+    private const INHERITED_FUNCTION_POINTERS = [
+        'constructor',
+        'destructor',
+        'clone',
+        '__get',
+        '__set',
+        '__unset',
+        '__isset',
+        '__call',
+        '__callstatic',
+        '__tostring',
+        '__debugInfo',
+        '__serialize',
+        '__unserialize',
+    ];
+
+    /**
+     * Remembers the slot capacity of the engine-allocated properties_info_table per class
+     *
+     * The table is arena-allocated by the engine during linking, so it can only be compacted
+     * or refilled in place, never grown. removeParentClass() records the capacity here and
+     * setParent() consults it to refuse a re-link that would not fit (keyed by
+     * zend_class_entry address, like the object handlers cache below).
+     *
+     * @var array<int, int>
+     */
+    private static array $propertyTableCapacity = [];
+
+    /**
      * Stores all allocated zend_object_handler pointers, keyed by zend_class_entry address
      *
      * Keying by address (and not by class name) keeps the cache bounded: anonymous classes
@@ -516,6 +548,17 @@ class ReflectionClass extends NativeReflectionClass
 
     /**
      * Removes the linked parent class from the existing class
+     *
+     * Besides interfaces and methods, this detaches everything the engine grafted from the
+     * parent during linking: class constants, property definitions (including the default
+     * property/static member tables and the property slot offsets) and the inherited
+     * constructor/destructor/magic-method pointers.
+     *
+     * <span style="color:red; font-weight:bold">Danger!</span> No instance of this class may
+     * be alive across this call: existing objects keep the old property slot layout, and
+     * destroying them after the slot count changed reads memory out of bounds. The same
+     * applies to opcodes with warmed-up property inline caches.
+     *
      * @internal
      */
     public function removeParentClass(): void
@@ -546,12 +589,348 @@ class ReflectionClass extends NativeReflectionClass
         } catch (\ReflectionException $e) {
             // This can happen during the class-loading (parent not loaded yet). But we ignore this error
         }
-        // TODO: Detach all related constants, properties, etc...
+        if ($this->isParentStateDetachable()) {
+            $this->detachParentState();
+        }
         $this->pointer->parent = null;
     }
 
     /**
+     * Checks if the grafted parent state (constants, properties, statics) can be detached safely
+     *
+     * Only linked user-defined classes are detachable: unlinked classes have nothing grafted
+     * yet, internal classes store their tables with persistent destructors that would free
+     * the parent's shared entries, and immutable (opcache-shared) classes must not be
+     * modified in place at all.
+     */
+    private function isParentStateDetachable(): bool
+    {
+        $classFlags = $this->pointer->ce_flags;
+        assert(is_int($classFlags));
+        $isLinked  = ($classFlags & Core::ZEND_ACC_LINKED) !== 0;
+        $isMutable = ($classFlags & Core::ZEND_ACC_IMMUTABLE) === 0;
+
+        return $isLinked && $isMutable && $this->isUserDefined();
+    }
+
+    /**
+     * Detaches all class state grafted from the (former) parent class
+     *
+     * Every entry whose declaring class is not this class itself is removed, symmetric with
+     * the method detachment loop in removeParentClass().
+     */
+    private function detachParentState(): void
+    {
+        $selfAddress = Core::addressOf($this->pointer);
+
+        $this->detachParentConstants($selfAddress);
+        $this->detachParentFunctionPointers($selfAddress);
+        $hookedProperties = $this->pointer->num_hooked_props;
+        assert(is_int($hookedProperties));
+        if ($hookedProperties === 0) {
+            $this->detachParentProperties($selfAddress);
+        }
+        // TODO: classes with property hooks (num_hooked_props > 0) keep the parent property
+        // state attached: hooked properties add extra properties_info_table entries whose
+        // layout cannot be compacted with plain slot arithmetic
+    }
+
+    /**
+     * Removes constants declared by the (former) parent class chain
+     *
+     * The constants_table of a user-defined class has no payload destructor: deleting a
+     * bucket only drops the pointer to the zend_class_constant that is still owned (and
+     * later freed) by its declaring class.
+     */
+    private function detachParentConstants(int $selfAddress): void
+    {
+        $inheritedKeys = [];
+        foreach ($this->constantsTable as $constantName => $constantValue) {
+            $rawConstant    = Core::cast('zend_class_constant *', $constantValue->getRawPointer());
+            $declaringClass = $rawConstant->ce;
+            assert(is_string($constantName) && $declaringClass instanceof CData);
+            if (Core::addressOf($declaringClass) !== $selfAddress) {
+                $inheritedKeys[] = $constantName;
+            }
+        }
+        foreach ($inheritedKeys as $constantKey) {
+            $this->constantsTable->delete($constantKey);
+        }
+    }
+
+    /**
+     * Clears constructor/destructor/magic-method shortcuts pointing into the detached parent
+     *
+     * The zend_function entries themselves stay owned by their declaring class; only the
+     * cached pointers inside this class entry are dropped, otherwise `new`, object
+     * destruction or magic-method dispatch would still call into the detached parent.
+     */
+    private function detachParentFunctionPointers(int $selfAddress): void
+    {
+        foreach (self::INHERITED_FUNCTION_POINTERS as $fieldName) {
+            $function = $this->pointer->{$fieldName};
+            if ($function === null) {
+                continue;
+            }
+            assert($function instanceof CData);
+            $functionCommon = $function->common;
+            assert($functionCommon instanceof CData);
+            $functionScope = $functionCommon->scope;
+            assert($functionScope instanceof CData);
+            if (Core::addressOf($functionScope) !== $selfAddress) {
+                $this->pointer->{$fieldName} = null;
+            }
+        }
+    }
+
+    /**
+     * Removes parent-declared properties and compacts all property storages in place
+     *
+     * Instance properties: the default_properties_table is indexed by the slot number encoded
+     * in zend_property_info.offset (OBJ_PROP_TO_NUM math: slot = (offset - base) / sizeof(zval)).
+     * Parent-declared slots - including shadow slots of parent private properties that have no
+     * properties_info entry, and dead slots left behind by property overrides - are released
+     * and the surviving own slots are re-numbered consecutively. The engine-allocated buffers
+     * are compacted in place: they stay owned by the engine, which frees them with the class.
+     *
+     * Static members: same compaction by table index, applied to default_static_members_table
+     * and, when the class statics were already materialized (CE_STATIC_MEMBERS), to the live
+     * table as well. Slots inherited from a userland parent are IS_INDIRECT views into the
+     * parent storage and are dropped without releasing anything.
+     */
+    private function detachParentProperties(int $selfAddress): void
+    {
+        $zvalSize = Core::sizeof(Core::type('zval'));
+        $slotBase = Core::type('zend_object')->getStructFieldOffset('properties_table');
+
+        // Partition properties_info into inherited entries and own instance/static definitions
+        $inheritedKeys  = [];
+        $ownSlotInfos   = [];
+        $ownStaticInfos = [];
+        foreach ($this->propertiesTable as $propertyName => $propertyValue) {
+            $rawInfo        = Core::cast('zend_property_info *', $propertyValue->getRawPointer());
+            $flags          = $rawInfo->flags;
+            $offset         = $rawInfo->offset;
+            $declaringClass = $rawInfo->ce;
+            assert(is_string($propertyName) && is_int($flags) && is_int($offset));
+            assert($declaringClass instanceof CData);
+            if (Core::addressOf($declaringClass) !== $selfAddress) {
+                $inheritedKeys[] = $propertyName;
+            } elseif (($flags & Core::ZEND_ACC_STATIC) !== 0) {
+                $ownStaticInfos[$offset] = $rawInfo;
+            } elseif (($flags & Core::ZEND_ACC_VIRTUAL) === 0) {
+                $ownSlotInfos[intdiv($offset - $slotBase, $zvalSize)] = $rawInfo;
+            }
+        }
+        foreach ($inheritedKeys as $propertyKey) {
+            $this->propertiesTable->delete($propertyKey);
+        }
+
+        $this->compactDefaultPropertiesTable($ownSlotInfos, $slotBase, $zvalSize);
+        $this->compactStaticMembersTables($ownStaticInfos, $zvalSize);
+    }
+
+    /**
+     * Compacts default_properties_table and properties_info_table down to the own slots
+     *
+     * @param array<int, CData> $ownSlotInfos zend_property_info entries of own properties, by old slot
+     */
+    private function compactDefaultPropertiesTable(array $ownSlotInfos, int $slotBase, int $zvalSize): void
+    {
+        $totalSlots = $this->pointer->default_properties_count;
+        assert(is_int($totalSlots));
+        if ($totalSlots === 0) {
+            return;
+        }
+        // The engine-allocated slot table can be refilled in place but never grown: remember
+        // its capacity so setParent() can check whether a new parent still fits
+        self::$propertyTableCapacity[Core::addressOf($this->pointer)] = $totalSlots;
+
+        // Renumber the surviving slots consecutively, keeping their relative order
+        ksort($ownSlotInfos);
+        $newSlotByOldSlot = [];
+        $nextSlot         = 0;
+        foreach ($ownSlotInfos as $oldSlot => $rawInfo) {
+            $newSlotByOldSlot[$oldSlot] = $nextSlot;
+            $rawInfo->offset            = $slotBase + $nextSlot * $zvalSize;
+            $nextSlot++;
+        }
+
+        $defaultTable = $this->pointer->default_properties_table;
+        assert($defaultTable instanceof CData);
+        $this->compactZvalTable($defaultTable, $totalSlots, $newSlotByOldSlot, $zvalSize);
+
+        // The slot-indexed property info table (used by GC, foreach and var_dump) must mirror
+        // the new slot numbering; it is compacted in place for the same ownership reason
+        $infoTable = $this->pointer->properties_info_table;
+        if ($infoTable !== null) {
+            assert($infoTable instanceof CData);
+            foreach ($ownSlotInfos as $oldSlot => $rawInfo) {
+                self::storePropertyInfoSlot($infoTable, $newSlotByOldSlot[$oldSlot], $rawInfo);
+            }
+            for ($slot = $nextSlot; $slot < $totalSlots; $slot++) {
+                self::storePropertyInfoSlot($infoTable, $slot, null);
+            }
+        }
+
+        $this->pointer->default_properties_count = $nextSlot;
+    }
+
+    /**
+     * Compacts one zval slot table in place according to the old-to-new slot mapping
+     *
+     * Dropped slots are released with engine semantics - except IS_INDIRECT views into
+     * foreign storage (inherited static member slots), which are dropped without touching
+     * the value they point to. Surviving slots move down to their new position and the
+     * vacated tail is neutralized to IS_UNDEF so no stale zval bytes can ever be
+     * interpreted - or double-released - again.
+     *
+     * @param array<int, int> $newSlotByOldSlot Surviving slots, old slot => new slot (ascending)
+     */
+    private function compactZvalTable(CData $table, int $totalSlots, array $newSlotByOldSlot, int $zvalSize): void
+    {
+        $nextSlot = count($newSlotByOldSlot);
+        for ($slot = 0; $slot < $totalSlots; $slot++) {
+            $slotValue = self::zvalTableSlot($table, $slot);
+            if (!isset($newSlotByOldSlot[$slot])) {
+                if (!self::isIndirectZval($slotValue)) {
+                    Core::call('zval_ptr_dtor', Core::addr($slotValue));
+                }
+            } elseif ($newSlotByOldSlot[$slot] !== $slot) {
+                Core::memcpy(self::zvalTableSlot($table, $newSlotByOldSlot[$slot]), $slotValue, $zvalSize);
+            }
+        }
+        for ($slot = $nextSlot; $slot < $totalSlots; $slot++) {
+            self::markZvalUndef(self::zvalTableSlot($table, $slot));
+        }
+    }
+
+    /**
+     * Returns the zval stored in the given slot of an engine zval table
+     */
+    private static function zvalTableSlot(CData $table, int $slot): CData
+    {
+        $slotValue = $table[$slot];
+        assert($slotValue instanceof CData);
+
+        return $slotValue;
+    }
+
+    /**
+     * Checks if the given zval is an IS_INDIRECT view into another storage location
+     */
+    private static function isIndirectZval(CData $zvalEntry): bool
+    {
+        $typeUnion = $zvalEntry->u1;
+        assert($typeUnion instanceof CData);
+        $typeInfo = $typeUnion->v;
+        assert($typeInfo instanceof CData);
+
+        return $typeInfo->type === ReflectionValue::IS_INDIRECT;
+    }
+
+    /**
+     * Overwrites the type of the given zval with IS_UNDEF (without releasing anything)
+     */
+    private static function markZvalUndef(CData $zvalEntry): void
+    {
+        $typeUnion = $zvalEntry->u1;
+        assert($typeUnion instanceof CData);
+        $typeUnion->type_info = ReflectionValue::IS_UNDEF;
+    }
+
+    /**
+     * Stores a zend_property_info pointer (or null for an empty slot) into the slot-indexed
+     * properties_info_table
+     *
+     * The offset write mutates engine memory behind the FFI pointer, which static analysis
+     * cannot see - hence the explicit impurity marker.
+     *
+     * @phpstan-impure
+     */
+    private static function storePropertyInfoSlot(CData $infoTable, int $slot, ?CData $propertyInfo): void
+    {
+        $infoTable[$slot] = $propertyInfo;
+    }
+
+    /**
+     * Compacts the default (and, if materialized, the live) static member tables
+     *
+     * @param array<int, CData> $ownStaticInfos zend_property_info entries of own statics, by old index
+     */
+    private function compactStaticMembersTables(array $ownStaticInfos, int $zvalSize): void
+    {
+        $totalSlots = $this->pointer->default_static_members_count;
+        assert(is_int($totalSlots));
+        if ($totalSlots === 0) {
+            return;
+        }
+
+        ksort($ownStaticInfos);
+        $newSlotByOldSlot = [];
+        $nextSlot         = 0;
+        foreach ($ownStaticInfos as $oldSlot => $rawInfo) {
+            $newSlotByOldSlot[$oldSlot] = $nextSlot;
+            $rawInfo->offset            = $nextSlot;
+            $nextSlot++;
+        }
+
+        $tables       = [];
+        $defaultTable = $this->pointer->default_static_members_table;
+        if ($defaultTable !== null) {
+            assert($defaultTable instanceof CData);
+            $tables[] = $defaultTable;
+        }
+        // Inherited slots (IS_INDIRECT views into the parent storage) are dropped without
+        // releasing the parent's value - both in the default table and in the live one
+        $materialized = $this->getMaterializedStaticMembersTable();
+        if ($materialized !== null) {
+            $tables[] = $materialized;
+        }
+        foreach ($tables as $table) {
+            $this->compactZvalTable($table, $totalSlots, $newSlotByOldSlot, $zvalSize);
+        }
+
+        $this->pointer->default_static_members_count = $nextSlot;
+    }
+
+    /**
+     * Returns the materialized CE_STATIC_MEMBERS table if it is a plain separate pointer
+     *
+     * Once any static member is touched, the engine materializes a live copy of the static
+     * table (zend_class_init_statics) and every further access goes through it. Map-ptr
+     * offsets (low bit set, opcache-shared classes) and the legacy case where the map ptr
+     * aliases default_static_members_table are reported as null - nothing extra to fix then.
+     */
+    private function getMaterializedStaticMembersTable(): ?CData
+    {
+        $materialized = $this->pointer->static_members_table__ptr;
+        if ($materialized === null) {
+            return null;
+        }
+        assert($materialized instanceof CData);
+        $materializedAddress = Core::addressOf($materialized);
+        if (($materializedAddress & 1) !== 0) {
+            return null;
+        }
+        $defaultTable = $this->pointer->default_static_members_table;
+        if ($defaultTable !== null) {
+            assert($defaultTable instanceof CData);
+            if ($materializedAddress === Core::addressOf($defaultTable)) {
+                return null;
+            }
+        }
+
+        return $materialized;
+    }
+
+    /**
      * Configures a new parent class for this one
+     *
+     * <span style="color:red; font-weight:bold">Danger!</span> Like removeParentClass(), this
+     * changes the property slot layout: no instance of this class may be alive across the
+     * call, and a parent that declares more properties than the original one cannot be
+     * attached to an already-linked class (the engine-allocated slot tables cannot grow).
      *
      * @param string $newParent New parent class name
      * @internal
@@ -568,9 +947,160 @@ class ReflectionClass extends NativeReflectionClass
         if ($parentClassValue === null) {
             throw new \ReflectionException("Class {$newParent} was not found");
         }
+        $parentEntry = $parentClassValue->getRawClass();
+
+        $isDetachable = $this->isParentStateDetachable();
+        if ($isDetachable) {
+            // Refuse re-linking that would overflow the fixed-capacity slot tables before
+            // any engine state is modified
+            $this->assertParentFitsPropertyTables($parentEntry);
+            // The materialized static members table (if any) matches the pre-inheritance
+            // layout and cannot be resized: fold the live values back into the default
+            // table and let the engine materialize a fresh one lazily
+            $this->foldMaterializedStaticMembersTable();
+        }
 
         // Call API to reduce the boilerplate code
-        Core::call('zend_do_inheritance_ex', $this->pointer, $parentClassValue->getRawClass(), 0);
+        Core::call('zend_do_inheritance_ex', $this->pointer, $parentEntry, 0);
+
+        if ($isDetachable) {
+            // zend_do_inheritance_ex() does not rebuild the slot-indexed property info
+            // table for an already-linked class, so mirror the new layout ourselves
+            $this->refillPropertiesInfoTable($parentEntry);
+        }
+    }
+
+    /**
+     * Ensures the slot tables of this class can hold the properties of the new parent
+     *
+     * @param CData $parentEntry zend_class_entry of the new parent
+     */
+    private function assertParentFitsPropertyTables(CData $parentEntry): void
+    {
+        if ($this->pointer->properties_info_table === null) {
+            return;
+        }
+        $parentHookedProperties = $parentEntry->num_hooked_props;
+        assert(is_int($parentHookedProperties));
+        if ($parentHookedProperties > 0) {
+            throw new \ReflectionException('Cannot inherit a class with property hooks in runtime');
+        }
+        $ownSlots    = $this->pointer->default_properties_count;
+        $parentSlots = $parentEntry->default_properties_count;
+        assert(is_int($ownSlots) && is_int($parentSlots));
+        $capacity = self::$propertyTableCapacity[Core::addressOf($this->pointer)] ?? null;
+        if ($capacity === null || $ownSlots + $parentSlots > $capacity) {
+            throw new \ReflectionException(
+                'Cannot set a parent class with more properties than the original parent: '
+                . 'the engine-allocated property slot tables cannot grow after linking',
+            );
+        }
+    }
+
+    /**
+     * Folds the live (materialized) static member values back into the default table
+     *
+     * The materialized table cannot be reused after inheritance changes the static member
+     * count, and it cannot be freed through FFI (it belongs to the request allocator, the
+     * engine releases it at shutdown only through the map pointer). Transferring the values
+     * into default_static_members_table keeps them alive and leak-free; only the bare table
+     * block stays allocated until the end of the request.
+     */
+    private function foldMaterializedStaticMembersTable(): void
+    {
+        $mapPointer = $this->pointer->static_members_table__ptr;
+        if ($mapPointer === null) {
+            return;
+        }
+        assert($mapPointer instanceof CData);
+        if ((Core::addressOf($mapPointer) & 1) !== 0) {
+            // Map-ptr offset form (opcache-shared class): not ours to manage
+            return;
+        }
+        $materialized = $this->getMaterializedStaticMembersTable();
+        if ($materialized !== null) {
+            $zvalSize     = Core::sizeof(Core::type('zval'));
+            $defaultTable = $this->pointer->default_static_members_table;
+            $totalSlots   = $this->pointer->default_static_members_count;
+            assert($defaultTable instanceof CData && is_int($totalSlots));
+            for ($slot = 0; $slot < $totalSlots; $slot++) {
+                $liveValue = self::zvalTableSlot($materialized, $slot);
+                if (self::isIndirectZval($liveValue) || self::isUndefZval($liveValue)) {
+                    continue;
+                }
+                // The default slot hands its old value over and adopts the live one
+                $defaultValue = self::zvalTableSlot($defaultTable, $slot);
+                Core::call('zval_ptr_dtor', Core::addr($defaultValue));
+                Core::memcpy($defaultValue, $liveValue, $zvalSize);
+                self::markZvalUndef($liveValue);
+            }
+        }
+        // Detach the map pointer: zend_do_inheritance_ex() reallocates the default table, so
+        // a stale alias or an undersized materialized table would dangle after re-linking;
+        // the engine re-materializes the statics lazily on next access
+        $this->pointer->static_members_table__ptr = null;
+    }
+
+    /**
+     * Checks if the given zval slot is IS_UNDEF
+     */
+    private static function isUndefZval(CData $zvalEntry): bool
+    {
+        $typeUnion = $zvalEntry->u1;
+        assert($typeUnion instanceof CData);
+        $typeInfo = $typeUnion->v;
+        assert($typeInfo instanceof CData);
+
+        return $typeInfo->type === ReflectionValue::IS_UNDEF;
+    }
+
+    /**
+     * Refills the slot-indexed properties_info_table after a manual re-link
+     *
+     * Mirrors zend_build_properties_info_table(): parent slots are copied from the parent's
+     * table, own non-static non-virtual properties are placed by their (already re-based)
+     * slot offsets, dead override slots stay empty.
+     *
+     * @param CData $parentEntry zend_class_entry of the freshly attached parent
+     */
+    private function refillPropertiesInfoTable(CData $parentEntry): void
+    {
+        $infoTable = $this->pointer->properties_info_table;
+        if ($infoTable === null) {
+            return;
+        }
+        assert($infoTable instanceof CData);
+        $selfAddress = Core::addressOf($this->pointer);
+        $zvalSize    = Core::sizeof(Core::type('zval'));
+        $slotBase    = Core::type('zend_object')->getStructFieldOffset('properties_table');
+        $totalSlots  = $this->pointer->default_properties_count;
+        assert(is_int($totalSlots));
+
+        for ($slot = 0; $slot < $totalSlots; $slot++) {
+            self::storePropertyInfoSlot($infoTable, $slot, null);
+        }
+        $parentTable = $parentEntry->properties_info_table;
+        if ($parentTable !== null) {
+            assert($parentTable instanceof CData);
+            $parentSlots = $parentEntry->default_properties_count;
+            assert(is_int($parentSlots));
+            for ($slot = 0; $slot < $parentSlots; $slot++) {
+                $parentInfo = $parentTable[$slot];
+                assert($parentInfo === null || $parentInfo instanceof CData);
+                self::storePropertyInfoSlot($infoTable, $slot, $parentInfo);
+            }
+        }
+        foreach ($this->propertiesTable as $propertyValue) {
+            $rawInfo        = Core::cast('zend_property_info *', $propertyValue->getRawPointer());
+            $flags          = $rawInfo->flags;
+            $offset         = $rawInfo->offset;
+            $declaringClass = $rawInfo->ce;
+            assert(is_int($flags) && is_int($offset) && $declaringClass instanceof CData);
+            $isOwn = Core::addressOf($declaringClass) === $selfAddress;
+            if ($isOwn && ($flags & (Core::ZEND_ACC_STATIC | Core::ZEND_ACC_VIRTUAL)) === 0) {
+                self::storePropertyInfoSlot($infoTable, intdiv($offset - $slotBase, $zvalSize), $rawInfo);
+            }
+        }
     }
 
     /**
