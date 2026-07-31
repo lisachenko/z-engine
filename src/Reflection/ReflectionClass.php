@@ -361,6 +361,44 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
+     * Returns the raw backed-enum table of a backed enum (backing value => case name)
+     *
+     * The engine stores one entry per case: the key is the case backing value (a string
+     * key for string-backed enums, an integer key for int-backed enums) and the value is
+     * an IS_STRING zval holding the case name, exactly as zend_enum.c stored it.
+     *
+     * The engine materializes this table lazily: until the first Enum::from()/tryFrom()
+     * call on the enum, ce->backed_enum_table stays NULL and this method returns null.
+     * This is a raw read - it never triggers the materialization itself.
+     *
+     * Memory ownership contract (see docs/long-running.md): the returned HashTable is a
+     * BORROWED view over the engine-owned ce->backed_enum_table - no addref is taken and
+     * no ownership is transferred. The view and every ReflectionValue read from it stay
+     * valid only while the class entry is alive; reading never changes refcounts, and
+     * nothing on the PHP side may release the table or its buckets.
+     *
+     * @see zend_enum.c:zend_enum_build_backed_enum_table() for the table layout and laziness
+     *
+     * @return (HashTable&iterable<int|string|null, ReflectionValue>)|null Borrowed table for backed enums
+     *         (once materialized), null for pure enums, non-enum classes and unmaterialized tables
+     */
+    public function getBackedEnumTable(): ?HashTable
+    {
+        $ceFlags = $this->pointer->ce_flags;
+        if (!\is_int($ceFlags) || ($ceFlags & Core::ZEND_ACC_ENUM) === 0) {
+            return null;
+        }
+
+        // Pure enums have no backing values: the engine leaves the table pointer NULL
+        $rawTable = $this->pointer->backed_enum_table;
+        if (!$rawTable instanceof CData) {
+            return null;
+        }
+
+        return new HashTable($rawTable);
+    }
+
+    /**
      * Removes given methods from the class
      *
      * @param string ...$methodNames Name of methods to remove
