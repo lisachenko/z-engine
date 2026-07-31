@@ -22,9 +22,14 @@ use ZEngine\ClassExtension\Hook\CompareValuesHook;
 use ZEngine\ClassExtension\Hook\CountElementsHook;
 use ZEngine\ClassExtension\Hook\CreateObjectHook;
 use ZEngine\ClassExtension\Hook\DoOperationHook;
+use ZEngine\ClassExtension\Hook\GetClassNameHook;
+use ZEngine\ClassExtension\Hook\GetClosureHook;
+use ZEngine\ClassExtension\Hook\GetConstructorHook;
 use ZEngine\ClassExtension\Hook\GetDebugInfoHook;
 use ZEngine\ClassExtension\Hook\GetIteratorHook;
+use ZEngine\ClassExtension\Hook\GetMethodHook;
 use ZEngine\ClassExtension\Hook\GetPropertiesForHook;
+use ZEngine\ClassExtension\Hook\GetPropertiesHook;
 use ZEngine\ClassExtension\Hook\GetPropertyPointerHook;
 use ZEngine\ClassExtension\Hook\HasDimensionHook;
 use ZEngine\ClassExtension\Hook\HasPropertyHook;
@@ -41,9 +46,14 @@ use ZEngine\ClassExtension\ObjectCompareValuesInterface;
 use ZEngine\ClassExtension\ObjectCountElementsInterface;
 use ZEngine\ClassExtension\ObjectCreateInterface;
 use ZEngine\ClassExtension\ObjectDoOperationInterface;
+use ZEngine\ClassExtension\ObjectGetClassNameInterface;
+use ZEngine\ClassExtension\ObjectGetClosureInterface;
+use ZEngine\ClassExtension\ObjectGetConstructorInterface;
 use ZEngine\ClassExtension\ObjectGetDebugInfoInterface;
 use ZEngine\ClassExtension\ObjectGetIteratorInterface;
+use ZEngine\ClassExtension\ObjectGetMethodInterface;
 use ZEngine\ClassExtension\ObjectGetPropertiesForInterface;
+use ZEngine\ClassExtension\ObjectGetPropertiesInterface;
 use ZEngine\ClassExtension\ObjectGetPropertyPointerInterface;
 use ZEngine\ClassExtension\ObjectHasDimensionInterface;
 use ZEngine\ClassExtension\ObjectHasPropertyInterface;
@@ -1852,6 +1862,31 @@ class ReflectionClass extends NativeReflectionClass
             $this->setCountElementsHandler($handler);
         }
 
+        if ($this->implementsInterface(ObjectGetClassNameInterface::class)) {
+            $handler = parent::getMethod('__getClassName')->getClosure();
+            $this->setGetClassNameHandler($handler);
+        }
+
+        if ($this->implementsInterface(ObjectGetConstructorInterface::class)) {
+            $handler = parent::getMethod('__getConstructor')->getClosure();
+            $this->setGetConstructorHandler($handler);
+        }
+
+        if ($this->implementsInterface(ObjectGetPropertiesInterface::class)) {
+            $handler = parent::getMethod('__getProperties')->getClosure();
+            $this->setGetPropertiesHandler($handler);
+        }
+
+        if ($this->implementsInterface(ObjectGetClosureInterface::class)) {
+            $handler = parent::getMethod('__getClosure')->getClosure();
+            $this->setGetClosureHandler($handler);
+        }
+
+        if ($this->implementsInterface(ObjectGetMethodInterface::class)) {
+            $handler = parent::getMethod('__getMethod')->getClosure();
+            $this->setGetMethodHandler($handler);
+        }
+
         if ($this->implementsInterface(ObjectGetIteratorInterface::class)) {
             $handler = parent::getMethod('__getIterator')->getClosure();
             $this->setGetIteratorHandler($handler);
@@ -2002,6 +2037,23 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
+     * Installs the "get_properties" handler for the current class
+     *
+     * @param Closure $handler Callback function (GetPropertiesHook $hook): array;
+     *
+     * @see ObjectGetPropertiesInterface
+     */
+    public function setGetPropertiesHandler(Closure $handler): GetPropertiesHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new GetPropertiesHook($handler, $handlers);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
      * Installs the "get_debug_info" handler for the current class
      *
      * @param Closure $handler Callback function (GetDebugInfoHook $hook): array;
@@ -2115,6 +2167,74 @@ class ReflectionClass extends NativeReflectionClass
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new CountElementsHook($handler, $handlers);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs the "get_method" handler for the current class
+     *
+     * @param Closure $handler Callback function (GetMethodHook $hook): ?\ReflectionMethod;
+     *
+     * @see ObjectGetMethodInterface
+     */
+    public function setGetMethodHandler(Closure $handler): GetMethodHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new GetMethodHook($handler, $handlers);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs the "get_closure" handler for the current class
+     *
+     * @param Closure $handler Callback function (GetClosureHook $hook): \Closure;
+     *
+     * @see ObjectGetClosureInterface
+     */
+    public function setGetClosureHandler(Closure $handler): GetClosureHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new GetClosureHook($handler, $handlers);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs the "get_constructor" handler for the current class
+     *
+     * @param Closure $handler Callback function (GetConstructorHook $hook): ?\ReflectionMethod;
+     *
+     * @see ObjectGetConstructorInterface
+     */
+    public function setGetConstructorHandler(Closure $handler): GetConstructorHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new GetConstructorHook($handler, $handlers);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs the "get_class_name" handler for the current class
+     *
+     * @param Closure $handler Callback function (GetClassNameHook $hook): string;
+     *
+     * @see ObjectGetClassNameInterface
+     */
+    public function setGetClassNameHandler(Closure $handler): GetClassNameHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new GetClassNameHook($handler, $handlers);
         $hook->install();
 
         return $hook;
