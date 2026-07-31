@@ -17,9 +17,11 @@ use Closure;
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
 use ZEngine\ClassExtension\Hook\CastObjectHook;
+use ZEngine\ClassExtension\Hook\CloneObjectHook;
 use ZEngine\ClassExtension\Hook\CompareValuesHook;
 use ZEngine\ClassExtension\Hook\CreateObjectHook;
 use ZEngine\ClassExtension\Hook\DoOperationHook;
+use ZEngine\ClassExtension\Hook\GetDebugInfoHook;
 use ZEngine\ClassExtension\Hook\GetPropertiesForHook;
 use ZEngine\ClassExtension\Hook\GetPropertyPointerHook;
 use ZEngine\ClassExtension\Hook\HasPropertyHook;
@@ -28,9 +30,11 @@ use ZEngine\ClassExtension\Hook\ReadPropertyHook;
 use ZEngine\ClassExtension\Hook\UnsetPropertyHook;
 use ZEngine\ClassExtension\Hook\WritePropertyHook;
 use ZEngine\ClassExtension\ObjectCastInterface;
+use ZEngine\ClassExtension\ObjectCloneInterface;
 use ZEngine\ClassExtension\ObjectCompareValuesInterface;
 use ZEngine\ClassExtension\ObjectCreateInterface;
 use ZEngine\ClassExtension\ObjectDoOperationInterface;
+use ZEngine\ClassExtension\ObjectGetDebugInfoInterface;
 use ZEngine\ClassExtension\ObjectGetPropertiesForInterface;
 use ZEngine\ClassExtension\ObjectGetPropertyPointerInterface;
 use ZEngine\ClassExtension\ObjectHasPropertyInterface;
@@ -794,6 +798,16 @@ class ReflectionClass extends NativeReflectionClass
             $handler = parent::getMethod('__getFields')->getClosure();
             $this->setGetPropertiesForHandler($handler);
         }
+
+        if ($this->implementsInterface(ObjectGetDebugInfoInterface::class)) {
+            $handler = parent::getMethod('__getDebugInfo')->getClosure();
+            $this->setGetDebugInfoHandler($handler);
+        }
+
+        if ($this->implementsInterface(ObjectCloneInterface::class)) {
+            $handler = parent::getMethod('__cloneObject')->getClosure();
+            $this->setCloneObjectHandler($handler);
+        }
     }
 
     public function __debugInfo()
@@ -934,6 +948,40 @@ class ReflectionClass extends NativeReflectionClass
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new GetPropertiesForHook($handler, $handlers);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs the "get_debug_info" handler for the current class
+     *
+     * @param Closure $handler Callback function (GetDebugInfoHook $hook): array;
+     *
+     * @see ObjectGetDebugInfoInterface
+     */
+    public function setGetDebugInfoHandler(Closure $handler): GetDebugInfoHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new GetDebugInfoHook($handler, $handlers);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs the "clone_obj" handler for the current class
+     *
+     * @param Closure $handler Callback function (CloneObjectHook $hook): object;
+     *
+     * @see ObjectCloneInterface
+     */
+    public function setCloneObjectHandler(Closure $handler): CloneObjectHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new CloneObjectHook($handler, $handlers);
         $hook->install();
 
         return $hook;

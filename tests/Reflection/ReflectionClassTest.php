@@ -19,9 +19,11 @@ use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use ZEngine\ClassExtension\Hook\CastObjectHook;
+use ZEngine\ClassExtension\Hook\CloneObjectHook;
 use ZEngine\ClassExtension\Hook\CompareValuesHook;
 use ZEngine\ClassExtension\Hook\CreateObjectHook;
 use ZEngine\ClassExtension\Hook\DoOperationHook;
+use ZEngine\ClassExtension\Hook\GetDebugInfoHook;
 use ZEngine\ClassExtension\Hook\GetPropertiesForHook;
 use ZEngine\ClassExtension\Hook\HasPropertyHook;
 use ZEngine\ClassExtension\Hook\InterfaceGetsImplementedHook;
@@ -30,6 +32,7 @@ use ZEngine\ClassExtension\Hook\UnsetPropertyHook;
 use ZEngine\ClassExtension\Hook\WritePropertyHook;
 use ZEngine\ClassExtension\ObjectCreateTrait;
 use ZEngine\Core;
+use ZEngine\Stub\DebuggableCloneable;
 use ZEngine\Stub\NativeNumber;
 use ZEngine\Stub\TestClass;
 use ZEngine\Stub\TestInterface;
@@ -471,6 +474,173 @@ class ReflectionClassTest extends TestCase
         $this->markTestIncomplete('Initialization object handler brings segfaults thus run it separately');
     }
 
+
+    #[Group('internal')]
+    public function testInstallGetDebugInfoHandler(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+        $this->refClass->setGetDebugInfoHandler(function (GetDebugInfoHook $hook): array {
+            $this->assertInstanceOf(TestClass::class, $hook->getObject());
+
+            return ['custom' => 'debug-info', 'answer' => 42];
+        });
+
+        $instance = new TestClass();
+        ob_start();
+        var_dump($instance);
+        $output = (string) ob_get_clean();
+
+        // The custom array fully replaces the default engine debug info
+        $this->assertStringContainsString('["custom"]', $output);
+        $this->assertStringContainsString('string(10) "debug-info"', $output);
+        $this->assertStringContainsString('["answer"]', $output);
+        $this->assertStringNotContainsString('["property"]', $output);
+    }
+
+    #[Group('internal')]
+    public function testGetDebugInfoHandlerProceedYieldsDefaultInfo(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+        $this->refClass->setGetDebugInfoHandler(function (GetDebugInfoHook $hook): array {
+            $default = $hook->proceed();
+            // The default engine debug info contains the declared properties
+            $this->assertSame(42, $default['property'] ?? null);
+
+            return $default + ['extra' => 'appended'];
+        });
+
+        $instance = new TestClass();
+        ob_start();
+        var_dump($instance);
+        $output = (string) ob_get_clean();
+
+        $this->assertStringContainsString('["property"]', $output);
+        $this->assertStringContainsString('int(42)', $output);
+        $this->assertStringContainsString('["extra"]', $output);
+        $this->assertStringContainsString('string(8) "appended"', $output);
+    }
+
+    #[Group('internal')]
+    public function testGetDebugInfoHandlerUninstallRestoresDefaultBehavior(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+        $hook = $this->refClass->setGetDebugInfoHandler(function (GetDebugInfoHook $hook): array {
+            return ['custom' => 'debug-info'];
+        });
+
+        $instance = new TestClass();
+        ob_start();
+        var_dump($instance);
+        $hookedOutput = (string) ob_get_clean();
+        $this->assertStringContainsString('["custom"]', $hookedOutput);
+
+        $hook->uninstall();
+
+        ob_start();
+        var_dump($instance);
+        $defaultOutput = (string) ob_get_clean();
+        $this->assertStringNotContainsString('["custom"]', $defaultOutput);
+        $this->assertStringContainsString('["property"]', $defaultOutput);
+        $this->assertStringContainsString('int(42)', $defaultOutput);
+    }
+
+    #[Group('internal')]
+    public function testInstallCloneObjectHandler(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+
+        $replacement = null;
+        $this->refClass->setCloneObjectHandler(function (CloneObjectHook $hook) use (&$replacement): object {
+            $this->assertInstanceOf(TestClass::class, $hook->getObject());
+            $replacement           = new TestClass();
+            $replacement->property = 4242;
+
+            return $replacement;
+        });
+
+        $instance = new TestClass();
+        $clone    = clone $instance;
+
+        // The clone result is exactly the object produced by the handler
+        $this->assertSame($replacement, $clone);
+        $this->assertNotSame($instance, $clone);
+        $this->assertSame(4242, $clone->property);
+        $this->assertSame(42, $instance->property);
+    }
+
+    #[Group('internal')]
+    public function testCloneObjectHandlerProceedYieldsDefaultClone(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+        $this->refClass->setCloneObjectHandler(function (CloneObjectHook $hook): object {
+            return $hook->proceed();
+        });
+
+        $instance           = new TestClass();
+        $instance->property = 100;
+        $clone              = clone $instance;
+
+        // proceed() produces the default field-copy clone: same state, distinct object
+        $this->assertInstanceOf(TestClass::class, $clone);
+        $this->assertNotSame($instance, $clone);
+        $this->assertSame(100, $clone->property);
+
+        $clone->property = 500;
+        $this->assertSame(100, $instance->property);
+    }
+
+    #[Group('internal')]
+    public function testCloneObjectHandlerUninstallRestoresDefaultBehavior(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+
+        $callsCount = 0;
+        $hook       = $this->refClass->setCloneObjectHandler(
+            function (CloneObjectHook $hook) use (&$callsCount): object {
+                $callsCount++;
+
+                return $hook->proceed();
+            },
+        );
+
+        $instance    = new TestClass();
+        $hookedClone = clone $instance;
+        $this->assertNotSame($instance, $hookedClone);
+        $this->assertSame(1, $callsCount);
+
+        $hook->uninstall();
+
+        $clone = clone $instance;
+        $this->assertSame(1, $callsCount, 'Uninstalled handler should not be called anymore');
+        $this->assertNotSame($instance, $clone);
+        $this->assertSame(42, $clone->property);
+    }
+
+    #[Group('internal')]
+    public function testInstallExtensionHandlersWiresGetDebugInfoAndCloneObject(): void
+    {
+        $refClass = new ReflectionClass(DebuggableCloneable::class);
+        $refClass->installExtensionHandlers();
+
+        $instance = new DebuggableCloneable();
+        ob_start();
+        var_dump($instance);
+        $output = (string) ob_get_clean();
+        $this->assertStringContainsString('["marker"]', $output);
+        $this->assertStringContainsString('string(17) "custom-debug-info"', $output);
+
+        $clone = clone $instance;
+        $this->assertInstanceOf(DebuggableCloneable::class, $clone);
+        $this->assertNotSame($instance, $clone);
+        $this->assertSame(0, $instance->generation);
+        $this->assertSame(1, $clone->generation);
+    }
 
     #[Group('internal')]
     #[RunInSeparateProcess]
