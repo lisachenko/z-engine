@@ -18,6 +18,7 @@ use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use ZEngine\ClassExtension\Hook\GetClassNameHook;
+use ZEngine\ClassExtension\Hook\GetClosureHook;
 use ZEngine\ClassExtension\Hook\GetConstructorHook;
 use ZEngine\ClassExtension\Hook\GetPropertiesHook;
 use ZEngine\ClassExtension\ObjectCreateTrait;
@@ -275,6 +276,131 @@ class ReflectionClassResolutionHandlersTest extends TestCase
         $this->assertArrayNotHasKey('masked', $properties);
     }
 
+    #[RunInSeparateProcess]
+    public function testInstallExtensionHandlersEnablesGetClosure(): void
+    {
+        $refClass = new ReflectionClass(VirtualProxy::class);
+        $refClass->installExtensionHandlers();
+
+        // The stub does not implement __invoke - engine-level closure resolution is the
+        // feature under test - so the instance is annotated with its runtime behavior
+        /** @var VirtualProxy&callable(string=): string $proxy */
+        $proxy = new VirtualProxy('closure');
+
+        $this->assertSame('invoked-closure', $proxy());
+        $this->assertSame('invoked-closure!', $proxy('!'));
+
+        $fromCallable = \Closure::fromCallable($proxy);
+        $this->assertSame('invoked-closure?', $fromCallable('?'));
+    }
+
+    #[RunInSeparateProcess]
+    public function testGetClosureCheckOnlyPathIsReportedToTheHandler(): void
+    {
+        $refClass = new ReflectionClass(VirtualProxy::class);
+        $refClass->installExtensionHandlers();
+
+        /** @var VirtualProxy&callable(string=): string $proxy */
+        $proxy = new VirtualProxy('probe');
+
+        // is_callable() probes callability without invoking: check_only must be true
+        // and the resolution must stay side-effect-free
+        $this->assertTrue(is_callable($proxy));
+        $this->assertSame([true], VirtualProxy::$closureChecks);
+        $this->assertSame('probe', $proxy->subject);
+
+        // A real invocation resolves with check_only = false
+        $this->assertSame('invoked-probe', $proxy());
+        $this->assertSame([true, false], VirtualProxy::$closureChecks);
+    }
+
+    #[RunInSeparateProcess]
+    public function testGetClosureHandlerCanResolveBoundClosures(): void
+    {
+        $refClass = $this->createVirtualProxyReflection();
+        $refClass->setGetClosureHandler(function (GetClosureHook $hook) {
+            $instance = $hook->getObject();
+            assert($instance instanceof VirtualProxy);
+
+            return $instance->subjectReporter();
+        });
+
+        /** @var VirtualProxy&callable(): string $proxy */
+        $proxy = new VirtualProxy('target');
+
+        // The bound $this and scope travel through the ce/obj out-parameters
+        $this->assertSame('bound-target', $proxy());
+    }
+
+    #[RunInSeparateProcess]
+    public function testGetClosureProceedResolvesInvokeMethodOrNull(): void
+    {
+        $refClass       = $this->createFixtureReflection();
+        $proceedResults = [];
+        $refClass->setGetClosureHandler(function (GetClosureHook $hook) use (&$proceedResults) {
+            $closure          = $hook->proceed();
+            $proceedResults[] = $closure;
+            assert($closure instanceof \Closure);
+
+            return function (int $value) use ($closure): string {
+                $inner = $closure($value);
+                assert(is_string($inner));
+
+                return 'wrapped-' . $inner;
+            };
+        });
+
+        /** @var InvokableFixture&callable(int): string $instance */
+        $instance = new InvokableFixture();
+
+        // proceed() falls through to the engine resolution of __invoke
+        $this->assertSame('wrapped-invoke-5', $instance(5));
+        $this->assertCount(1, $proceedResults);
+        $this->assertInstanceOf(\Closure::class, $proceedResults[0]);
+    }
+
+    #[RunInSeparateProcess]
+    public function testGetClosureProceedReturnsNullForNonInvokableClass(): void
+    {
+        $refClass       = $this->createTestClassReflection();
+        $proceedResults = [];
+        $refClass->setGetClosureHandler(function (GetClosureHook $hook) use (&$proceedResults) {
+            $proceedResults[] = $hook->proceed();
+
+            return static function (): string {
+                return 'fallback';
+            };
+        });
+
+        /** @var TestClass&callable(): string $instance */
+        $instance = new TestClass();
+
+        $this->assertSame('fallback', $instance());
+        $this->assertSame([null], $proceedResults, 'TestClass has no __invoke to resolve');
+    }
+
+    #[RunInSeparateProcess]
+    public function testUninstallRestoresOriginalGetClosureBehavior(): void
+    {
+        $refClass = $this->createTestClassReflection();
+        $hook     = $refClass->setGetClosureHandler(function (GetClosureHook $hook) {
+            return static function (): string {
+                return 'hooked';
+            };
+        });
+
+        /** @var TestClass&callable(): string $instance */
+        $instance = new TestClass();
+        $this->assertSame('hooked', $instance());
+
+        $hook->uninstall();
+
+        // With the hook removed, the engine's original handler rejects the invocation again
+        $this->expectException(\Error::class);
+        $this->expectExceptionMessage('Object of type ' . TestClass::class . ' is not callable');
+        $instance();
+    }
+
     /**
      * Snapshots the engine property table of an object through an (array) cast
      *
@@ -311,5 +437,29 @@ class ReflectionClassResolutionHandlersTest extends TestCase
         $refClass->setCreateObjectHandler(Closure::fromCallable([ObjectCreateTrait::class, '__init']));
 
         return $refClass;
+    }
+
+    /**
+     * Creates an InvokableFixture reflection with the create_object handler installed,
+     * so new instances receive the adjustable object handlers structure
+     */
+    private function createFixtureReflection(): ReflectionClass
+    {
+        $refClass = new ReflectionClass(InvokableFixture::class);
+        $refClass->setCreateObjectHandler(Closure::fromCallable([ObjectCreateTrait::class, '__init']));
+
+        return $refClass;
+    }
+}
+
+/**
+ * Fixture with a real __invoke behind the get_closure hook: used to prove that proceed()
+ * falls through to the standard engine resolution (which reports the __invoke method)
+ */
+class InvokableFixture
+{
+    public function __invoke(int $value): string
+    {
+        return 'invoke-' . $value;
     }
 }

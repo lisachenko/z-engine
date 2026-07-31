@@ -14,11 +14,13 @@ declare(strict_types=1);
 namespace ZEngine\Stub;
 
 use ZEngine\ClassExtension\Hook\GetClassNameHook;
+use ZEngine\ClassExtension\Hook\GetClosureHook;
 use ZEngine\ClassExtension\Hook\GetConstructorHook;
 use ZEngine\ClassExtension\Hook\GetPropertiesHook;
 use ZEngine\ClassExtension\ObjectCreateInterface;
 use ZEngine\ClassExtension\ObjectCreateTrait;
 use ZEngine\ClassExtension\ObjectGetClassNameInterface;
+use ZEngine\ClassExtension\ObjectGetClosureInterface;
 use ZEngine\ClassExtension\ObjectGetConstructorInterface;
 use ZEngine\ClassExtension\ObjectGetPropertiesInterface;
 
@@ -28,6 +30,7 @@ use ZEngine\ClassExtension\ObjectGetPropertiesInterface;
 class VirtualProxy implements
     ObjectCreateInterface,
     ObjectGetClassNameInterface,
+    ObjectGetClosureInterface,
     ObjectGetConstructorInterface,
     ObjectGetPropertiesInterface
 {
@@ -39,6 +42,13 @@ class VirtualProxy implements
      * Counts how many times the get_constructor handler resolved a construction
      */
     public static int $constructorResolutions = 0;
+
+    /**
+     * Records the check-only flag of every get_closure resolution
+     *
+     * @var list<bool>
+     */
+    public static array $closureChecks = [];
 
     public string $subject = 'uninitialized';
 
@@ -57,6 +67,17 @@ class VirtualProxy implements
     {
         $this->subject     = 'alt-' . $subject;
         $this->constructed = true;
+    }
+
+    /**
+     * Produces a closure bound to this instance (used by the get_closure tests to prove
+     * that the bound $this and scope travel through the out-parameters)
+     */
+    public function subjectReporter(): \Closure
+    {
+        return function (): string {
+            return 'bound-' . $this->subject;
+        };
     }
 
     /**
@@ -83,6 +104,22 @@ class VirtualProxy implements
         self::$constructorResolutions++;
 
         return $hook->proceed();
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public static function __getClosure(GetClosureHook $hook): \Closure
+    {
+        // Recording the probe flag is test bookkeeping, not an object side effect:
+        // the check-only contract is about not mutating the resolved object
+        self::$closureChecks[] = $hook->isCheckOnly();
+        $proxy                 = $hook->getObject();
+        assert($proxy instanceof self);
+
+        return function (string $suffix = '') use ($proxy): string {
+            return 'invoked-' . $proxy->subject . $suffix;
+        };
     }
 
     /**
