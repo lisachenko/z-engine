@@ -52,11 +52,16 @@ class ReflectionFunction extends NativeReflectionFunction
         }
         if ($functionNamePtr !== null) {
             $functionName = StringEntry::fromCData($functionNamePtr);
-            Core::callParentConstructor(
-                $reflectionFunction,
-                static::class,
-                $functionName->getStringValue(),
-            );
+            try {
+                Core::callParentConstructor(
+                    $reflectionFunction,
+                    static::class,
+                    $functionName->getStringValue(),
+                );
+            } catch (\ReflectionException $e) {
+                // Closure-backed functions are not registered in the function table, so the
+                // native reflection state stays uninitialized. The pointer-level API still works.
+            }
         }
         $reflectionFunction->pointer = $functionEntry;
 
