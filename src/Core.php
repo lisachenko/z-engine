@@ -105,6 +105,17 @@ class Core
     public const ZEND_ACC_READONLY = 0x80;
     public const ZEND_ACC_VIRTUAL  = 0x200;
 
+    /**
+     * Property hook kinds (zend_property_hook_kind), used to index zend_property_info.hooks
+     */
+    public const ZEND_PROPERTY_HOOK_GET = 0;
+    public const ZEND_PROPERTY_HOOK_SET = 1;
+
+    /**
+     * Number of entries in a zend_property_info.hooks array (one per hook kind)
+     */
+    public const ZEND_PROPERTY_HOOK_COUNT = 2;
+
     /* Function flags */
     public const ZEND_ACC_DEPRECATED          = 0x800;
     public const ZEND_ACC_RETURN_REFERENCE    = 0x1000;
@@ -440,6 +451,28 @@ class Core
     public static function addressOf(CData $pointer): int
     {
         return (int) self::cast('uintptr_t', $pointer)->cdata;
+    }
+
+    /**
+     * Materializes a typed pointer from a numeric address (the inverse of addressOf())
+     *
+     * The address is written through an integer view of a fresh pointer slot and the
+     * typed pointer value is read back. This is the explicit form of C pointer
+     * arithmetic (base address plus a signed byte offset), which FFI otherwise only
+     * offers through CData operator overloads.
+     *
+     * @param string $type    Pointer type of the result (eg "zend_arg_info *")
+     * @param int    $address Numeric address the pointer should point at
+     */
+    public static function pointerAtAddress(string $type, int $address): CData
+    {
+        $slot           = self::new("{$type}[1]");
+        $addressView    = self::cast('uintptr_t *', $slot);
+        $addressView[0] = $address;
+        $pointer        = $slot[0];
+        assert($pointer instanceof CData);
+
+        return $pointer;
     }
 
     /**

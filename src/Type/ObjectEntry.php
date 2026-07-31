@@ -159,6 +159,51 @@ class ObjectEntry implements ReferenceCountedInterface
     }
 
     /**
+     * Checks if this object is a lazy object (PHP 8.4 ReflectionClass::newLazyGhost()/newLazyProxy())
+     *
+     * Mirrors the engine's zend_object_is_lazy(): true for an uninitialized lazy ghost and for
+     * a lazy proxy in ANY state - an initialized proxy keeps IS_OBJ_LAZY_PROXY because reads
+     * and writes still go through it to the real instance. The lazy flags live in
+     * zend_object.extra_flags (OBJ_EXTRA_FLAGS), not in the GC type_info word.
+     *
+     * @see zend_lazy_objects.h:zend_object_is_lazy
+     */
+    public function isLazy(): bool
+    {
+        $lazyMask = Core::engineConstant('IS_OBJ_LAZY_UNINITIALIZED')
+            | Core::engineConstant('IS_OBJ_LAZY_PROXY');
+
+        return ($this->getExtraFlags() & $lazyMask) !== 0;
+    }
+
+    /**
+     * Checks if this object is a lazy proxy (created by ReflectionClass::newLazyProxy())
+     *
+     * Stays true after initialization: the proxy keeps forwarding to the real instance.
+     *
+     * @see zend_lazy_objects.h:zend_object_is_lazy_proxy
+     */
+    public function isLazyProxy(): bool
+    {
+        return ($this->getExtraFlags() & Core::engineConstant('IS_OBJ_LAZY_PROXY')) !== 0;
+    }
+
+    /**
+     * Checks if the lazy initialization already happened for this object
+     *
+     * Mirrors the engine's zend_lazy_object_initialized(): the only bit consulted is
+     * IS_OBJ_LAZY_UNINITIALIZED, so a plain (never lazy) object reports true as well -
+     * exactly like the engine treats it. Combine with isLazy() to distinguish
+     * "initialized lazy object" from "ordinary object".
+     *
+     * @see zend_lazy_objects.h:zend_lazy_object_initialized
+     */
+    public function isLazyInitialized(): bool
+    {
+        return ($this->getExtraFlags() & Core::engineConstant('IS_OBJ_LAZY_UNINITIALIZED')) === 0;
+    }
+
+    /**
      * Returns the object's extra_flags word (IS_OBJ_* engine flags)
      */
     public function getExtraFlags(): int

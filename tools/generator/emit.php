@@ -127,11 +127,13 @@ if ($emitHeader) {
     $inputC = <<<'C'
     #include "php.h"
     #include "zend_ast.h"
+    #include "zend_attributes.h"
     #include "zend_language_scanner.h"
     #include "zend_inheritance.h"
     #include "zend_hash.h"
     #include "zend_modules.h"
     #include "zend_arena.h"
+    #include "zend_exceptions.h"
     #include "supplement.h"
     C;
     file_put_contents($buildDir . '/input.c', $inputC);

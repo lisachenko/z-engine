@@ -1,10 +1,12 @@
 #include "php.h"
 #include "zend_ast.h"
+#include "zend_attributes.h"
 #include "zend_language_scanner.h"
 #include "zend_inheritance.h"
 #include "zend_hash.h"
 #include "zend_modules.h"
 #include "zend_arena.h"
+#include "zend_exceptions.h"
 #include "supplement.h"
 #include <stdio.h>
 
@@ -343,6 +345,12 @@ int main(void) {
 #ifdef IS_OBJ_FREE_CALLED
     fprintf(constants, "    'IS_OBJ_FREE_CALLED' => %lld,\n", (long long)(IS_OBJ_FREE_CALLED));
 #endif
+#ifdef IS_OBJ_LAZY_UNINITIALIZED
+    fprintf(constants, "    'IS_OBJ_LAZY_UNINITIALIZED' => %lld,\n", (long long)(IS_OBJ_LAZY_UNINITIALIZED));
+#endif
+#ifdef IS_OBJ_LAZY_PROXY
+    fprintf(constants, "    'IS_OBJ_LAZY_PROXY' => %lld,\n", (long long)(IS_OBJ_LAZY_PROXY));
+#endif
 #ifdef HASH_FLAG_CONSISTENCY
     fprintf(constants, "    'HASH_FLAG_CONSISTENCY' => %lld,\n", (long long)(HASH_FLAG_CONSISTENCY));
 #endif
@@ -390,6 +398,27 @@ int main(void) {
 #endif
 #ifdef MODULE_TEMPORARY
     fprintf(constants, "    'MODULE_TEMPORARY' => %lld,\n", (long long)(MODULE_TEMPORARY));
+#endif
+#ifdef CONST_CS
+    fprintf(constants, "    'CONST_CS' => %lld,\n", (long long)(CONST_CS));
+#endif
+#ifdef CONST_PERSISTENT
+    fprintf(constants, "    'CONST_PERSISTENT' => %lld,\n", (long long)(CONST_PERSISTENT));
+#endif
+#ifdef CONST_NO_FILE_CACHE
+    fprintf(constants, "    'CONST_NO_FILE_CACHE' => %lld,\n", (long long)(CONST_NO_FILE_CACHE));
+#endif
+#ifdef CONST_DEPRECATED
+    fprintf(constants, "    'CONST_DEPRECATED' => %lld,\n", (long long)(CONST_DEPRECATED));
+#endif
+#ifdef CONST_OWNED
+    fprintf(constants, "    'CONST_OWNED' => %lld,\n", (long long)(CONST_OWNED));
+#endif
+#ifdef CONST_RECURSIVE
+    fprintf(constants, "    'CONST_RECURSIVE' => %lld,\n", (long long)(CONST_RECURSIVE));
+#endif
+#ifdef PHP_USER_CONSTANT
+    fprintf(constants, "    'PHP_USER_CONSTANT' => %lld,\n", (long long)(PHP_USER_CONSTANT));
 #endif
 #ifdef ZEND_DEBUG
     fprintf(constants, "    'ZEND_DEBUG' => %lld,\n", (long long)(ZEND_DEBUG));
@@ -474,6 +503,36 @@ int main(void) {
 #endif
 #ifdef ZEND_CALL_CLOSURE
     fprintf(constants, "    'ZEND_CALL_CLOSURE' => %lld,\n", (long long)(ZEND_CALL_CLOSURE));
+#endif
+#ifdef ZEND_ATTRIBUTE_TARGET_CLASS
+    fprintf(constants, "    'ZEND_ATTRIBUTE_TARGET_CLASS' => %lld,\n", (long long)(ZEND_ATTRIBUTE_TARGET_CLASS));
+#endif
+#ifdef ZEND_ATTRIBUTE_TARGET_FUNCTION
+    fprintf(constants, "    'ZEND_ATTRIBUTE_TARGET_FUNCTION' => %lld,\n", (long long)(ZEND_ATTRIBUTE_TARGET_FUNCTION));
+#endif
+#ifdef ZEND_ATTRIBUTE_TARGET_METHOD
+    fprintf(constants, "    'ZEND_ATTRIBUTE_TARGET_METHOD' => %lld,\n", (long long)(ZEND_ATTRIBUTE_TARGET_METHOD));
+#endif
+#ifdef ZEND_ATTRIBUTE_TARGET_PROPERTY
+    fprintf(constants, "    'ZEND_ATTRIBUTE_TARGET_PROPERTY' => %lld,\n", (long long)(ZEND_ATTRIBUTE_TARGET_PROPERTY));
+#endif
+#ifdef ZEND_ATTRIBUTE_TARGET_CLASS_CONST
+    fprintf(constants, "    'ZEND_ATTRIBUTE_TARGET_CLASS_CONST' => %lld,\n", (long long)(ZEND_ATTRIBUTE_TARGET_CLASS_CONST));
+#endif
+#ifdef ZEND_ATTRIBUTE_TARGET_PARAMETER
+    fprintf(constants, "    'ZEND_ATTRIBUTE_TARGET_PARAMETER' => %lld,\n", (long long)(ZEND_ATTRIBUTE_TARGET_PARAMETER));
+#endif
+#ifdef ZEND_ATTRIBUTE_TARGET_CONST
+    fprintf(constants, "    'ZEND_ATTRIBUTE_TARGET_CONST' => %lld,\n", (long long)(ZEND_ATTRIBUTE_TARGET_CONST));
+#endif
+#ifdef ZEND_ATTRIBUTE_TARGET_ALL
+    fprintf(constants, "    'ZEND_ATTRIBUTE_TARGET_ALL' => %lld,\n", (long long)(ZEND_ATTRIBUTE_TARGET_ALL));
+#endif
+#ifdef ZEND_ATTRIBUTE_IS_REPEATABLE
+    fprintf(constants, "    'ZEND_ATTRIBUTE_IS_REPEATABLE' => %lld,\n", (long long)(ZEND_ATTRIBUTE_IS_REPEATABLE));
+#endif
+#ifdef ZEND_ATTRIBUTE_FLAGS
+    fprintf(constants, "    'ZEND_ATTRIBUTE_FLAGS' => %lld,\n", (long long)(ZEND_ATTRIBUTE_FLAGS));
 #endif
     fprintf(constants, "    'ZEND_AST_ZVAL' => %lld,\n", (long long)(ZEND_AST_ZVAL));
     fprintf(constants, "    'ZEND_AST_CONSTANT' => %lld,\n", (long long)(ZEND_AST_CONSTANT));
@@ -597,6 +656,8 @@ int main(void) {
     fprintf(constants, "    'ZEND_AST_ENUM_CASE' => %lld,\n", (long long)(ZEND_AST_ENUM_CASE));
     fprintf(constants, "    'ZEND_AST_PROP_ELEM' => %lld,\n", (long long)(ZEND_AST_PROP_ELEM));
     fprintf(constants, "    'ZEND_AST_PARAM' => %lld,\n", (long long)(ZEND_AST_PARAM));
+    fprintf(constants, "    'ZEND_PROPERTY_HOOK_GET' => %lld,\n", (long long)(ZEND_PROPERTY_HOOK_GET));
+    fprintf(constants, "    'ZEND_PROPERTY_HOOK_SET' => %lld,\n", (long long)(ZEND_PROPERTY_HOOK_SET));
     fprintf(constants, "    'ZEND_NOP' => 0,\n");
     fprintf(constants, "    'ZEND_ADD' => 1,\n");
     fprintf(constants, "    'ZEND_SUB' => 2,\n");
@@ -954,6 +1015,26 @@ int main(void) {
     fprintf(layouts, ", \"prototype\": %zu", offsetof(zend_property_info, prototype));
     fprintf(layouts, ", \"hooks\": %zu", offsetof(zend_property_info, hooks));
     fputs("}},\n", layouts);
+    fputs("        \"zend_constant\": {", layouts);
+    fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_constant));
+    fprintf(layouts, "\"value\": %zu", offsetof(zend_constant, value));
+    fprintf(layouts, ", \"name\": %zu", offsetof(zend_constant, name));
+    fputs("}},\n", layouts);
+    fputs("        \"zend_attribute\": {", layouts);
+    fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_attribute));
+    fprintf(layouts, "\"name\": %zu", offsetof(zend_attribute, name));
+    fprintf(layouts, ", \"lcname\": %zu", offsetof(zend_attribute, lcname));
+    fprintf(layouts, ", \"flags\": %zu", offsetof(zend_attribute, flags));
+    fprintf(layouts, ", \"lineno\": %zu", offsetof(zend_attribute, lineno));
+    fprintf(layouts, ", \"offset\": %zu", offsetof(zend_attribute, offset));
+    fprintf(layouts, ", \"argc\": %zu", offsetof(zend_attribute, argc));
+    fprintf(layouts, ", \"args\": %zu", offsetof(zend_attribute, args));
+    fputs("}},\n", layouts);
+    fputs("        \"zend_attribute_arg\": {", layouts);
+    fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_attribute_arg));
+    fprintf(layouts, "\"name\": %zu", offsetof(zend_attribute_arg, name));
+    fprintf(layouts, ", \"value\": %zu", offsetof(zend_attribute_arg, value));
+    fputs("}},\n", layouts);
     fputs("        \"zend_op_array\": {", layouts);
     fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_op_array));
     fprintf(layouts, "\"type\": %zu", offsetof(zend_op_array, type));
@@ -1243,6 +1324,24 @@ int main(void) {
     fprintf(layouts, ", \"do_operation\": %zu", offsetof(zend_object_handlers, do_operation));
     fprintf(layouts, ", \"compare\": %zu", offsetof(zend_object_handlers, compare));
     fprintf(layouts, ", \"get_properties_for\": %zu", offsetof(zend_object_handlers, get_properties_for));
+    fputs("}},\n", layouts);
+    fputs("        \"zend_object_iterator\": {", layouts);
+    fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_object_iterator));
+    fprintf(layouts, "\"std\": %zu", offsetof(zend_object_iterator, std));
+    fprintf(layouts, ", \"data\": %zu", offsetof(zend_object_iterator, data));
+    fprintf(layouts, ", \"funcs\": %zu", offsetof(zend_object_iterator, funcs));
+    fprintf(layouts, ", \"index\": %zu", offsetof(zend_object_iterator, index));
+    fputs("}},\n", layouts);
+    fputs("        \"zend_object_iterator_funcs\": {", layouts);
+    fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_object_iterator_funcs));
+    fprintf(layouts, "\"dtor\": %zu", offsetof(zend_object_iterator_funcs, dtor));
+    fprintf(layouts, ", \"valid\": %zu", offsetof(zend_object_iterator_funcs, valid));
+    fprintf(layouts, ", \"get_current_data\": %zu", offsetof(zend_object_iterator_funcs, get_current_data));
+    fprintf(layouts, ", \"get_current_key\": %zu", offsetof(zend_object_iterator_funcs, get_current_key));
+    fprintf(layouts, ", \"move_forward\": %zu", offsetof(zend_object_iterator_funcs, move_forward));
+    fprintf(layouts, ", \"rewind\": %zu", offsetof(zend_object_iterator_funcs, rewind));
+    fprintf(layouts, ", \"invalidate_current\": %zu", offsetof(zend_object_iterator_funcs, invalidate_current));
+    fprintf(layouts, ", \"get_gc\": %zu", offsetof(zend_object_iterator_funcs, get_gc));
     fputs("}},\n", layouts);
     fputs("        \"zend_ast\": {", layouts);
     fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_ast));

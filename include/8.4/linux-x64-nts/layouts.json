@@ -172,6 +172,32 @@
                 "hooks": 64
             }
         },
+        "zend_constant": {
+            "size": 24,
+            "fields": {
+                "value": 0,
+                "name": 16
+            }
+        },
+        "zend_attribute": {
+            "size": 56,
+            "fields": {
+                "name": 0,
+                "lcname": 8,
+                "flags": 16,
+                "lineno": 20,
+                "offset": 24,
+                "argc": 28,
+                "args": 32
+            }
+        },
+        "zend_attribute_arg": {
+            "size": 24,
+            "fields": {
+                "name": 0,
+                "value": 8
+            }
+        },
         "zend_op_array": {
             "size": 256,
             "fields": {
@@ -480,6 +506,28 @@
                 "do_operation": 176,
                 "compare": 184,
                 "get_properties_for": 192
+            }
+        },
+        "zend_object_iterator": {
+            "size": 88,
+            "fields": {
+                "std": 0,
+                "data": 56,
+                "funcs": 72,
+                "index": 80
+            }
+        },
+        "zend_object_iterator_funcs": {
+            "size": 64,
+            "fields": {
+                "dtor": 0,
+                "valid": 8,
+                "get_current_data": 16,
+                "get_current_key": 24,
+                "move_forward": 32,
+                "rewind": 40,
+                "invalidate_current": 48,
+                "get_gc": 56
             }
         },
         "zend_ast": {

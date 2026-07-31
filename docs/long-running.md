@@ -86,20 +86,53 @@ inactive during shutdown-phase object destructors, and installing a new hook thr
   engine field in such setups — stacked chains keep intermediate `proceed()` targets from
   the previous cycle.
 
+## Module lifecycle callbacks
+
+`AbstractModule::register()` wires FFI-closure trampolines into the module entry's
+`module_startup_func` / `module_shutdown_func` / `request_startup_func` /
+`request_shutdown_func` slots when the module class implements `ModuleLifecycleInterface`,
+and into `info_func` when it implements `ModuleInfoInterface`. Two hard rules shape the
+delivery semantics:
+
+1. **The trampolines follow the standard hook lifecycle.** `Core::shutdown()` restores the
+   NULL pointers while the trampolines are still alive, so the module entry — which the
+   persistent module registry references directly since PHP 8.4 — never points into freed
+   libffi memory (ext/ffi frees every callback trampoline at its own RSHUTDOWN). Every
+   trampoline additionally checks `Core::isShutdown()` and no-ops after shutdown.
+2. **Callbacks never throw across the FFI boundary** ([#50](https://github.com/lisachenko/z-engine/issues/50)):
+   ext/ffi aborts the process on an escaping exception, and a FAILURE result from MINIT
+   escalates to a fatal `E_CORE_ERROR`. Failures are contained and reported as
+   `E_USER_WARNING`; the engine always sees SUCCESS.
+
+Consequences — **only request-phase callbacks are guaranteed**:
+
+| Callback | Delivery |
+|----------|----------|
+| `moduleStartup()` | guaranteed: the engine calls the MINIT trampoline inside `AbstractModule::startup()` |
+| `requestStartup()` | guaranteed: delivered directly by `startup()` for the current request (dl() parity — the engine only activates modules at request start) |
+| `requestShutdown()` | guaranteed: delivered at request end by z-engine's own shutdown chain, immediately **after** `Core::shutdown()` (user shutdown functions run in registration order and `Core::init()` registered first). The engine's own RSHUTDOWN walk happens later, after the trampoline pointers were cleared. Engine writes are already forbidden inside this callback. |
+| `moduleShutdown()` | best-effort only: real MSHUTDOWN runs after the FFI bridge teardown (for temporary modules in `zend_post_deactivate_modules()`, for persistent ones at process shutdown), where no PHP callback can be reached. It fires only if the engine destroys the module while the request is still alive. |
+
+Runtime-registered modules are wired for the current request only: after `Core::shutdown()`
+the entry keeps no callback pointers, so subsequent requests of the same process (FPM,
+workers) see the module without lifecycle callbacks unless it is registered again.
+
 ## Immortal-by-design allocations
 
 The debug-build leak gate treats the following as expected, by design:
 
 | Allocation | Why it stays |
 |------------|--------------|
-| Module entries, module name/globals buffers (`AbstractModule`) | the engine module registry references them for the process lifetime |
+| Module entries, module name/globals buffers (`AbstractModule`) | since PHP 8.4 the engine module registry stores the registered `zend_module_entry` pointer directly (no copy), so the entry and its buffers must live for the process lifetime; all are malloc-backed |
+| Persistent `zend_module_dep[]` arrays and their name/rel/version strings (`AbstractModule::getModuleDependencies()`) | referenced from the registered module entry's `deps` field for the process lifetime; malloc-backed, bounded to one array per registered module |
 | One `zend_object_handlers` block per hooked class entry | objects still dereference `->handlers` after user shutdown functions ran, so freeing at shutdown would be a use-after-free; blocks are malloc-backed, keyed by class entry address, and bounded |
 | One live libffi trampoline per installed hook | owned by ext/ffi, freed by its RSHUTDOWN |
+| One `zend_object_iterator_funcs` vtable for the get-iterator bridge (`IteratorBridge`) | live engine iterators dereference `->funcs` for their whole lifetime; the block is a malloc-backed process-wide singleton filled with libffi trampolines (trampolines themselves owned by ext/ffi). The bridge registers in the Core hook registry, so `Core::shutdown()` neutralizes surviving iterators (drops their cached current-value reference, swaps their handlers to `std_object_handlers`) while trampolines are still alive, and `Core::reinstallHooks()` re-mints the vtable for cycling SAPIs |
 | Closures immortalized by `ReflectionClass::addMethod()` | the method table references the closure body for the rest of the request |
 | Previous function body after `redefine()` | the redefined entry keeps sharing the original `arg_info`/name, so the old opcodes/literals cannot be freed without exporting `destroy_op_array` and unsharing those pointers; bounded to one body per redefined function |
 | Engine-chained arena blocks for >32 KiB parses | allocated by the engine; z-engine never frees memory it did not allocate |
 | Refcount-0 persistent strings | never freed with the request allocator; bounded, reclaimed at process end |
-| Engine-original interface/trait buffers replaced by z-engine | possibly shared or in opcache SHM, never freed by z-engine; at most one per touched class |
+| Engine-original interface/trait buffers replaced by z-engine (including the trait alias/precedence lists replaced by `addTraitAlias()`/`addTraitPrecedence()` and their `remove*` counterparts) | possibly shared or in opcache SHM, never freed by z-engine; at most one per touched class |
 | Persistent interned strings (`StringEntry::persistentInterned`) | interned-style (immutable, non-refcounted) blocks referenced by persistent tables and object properties; bounded by the number of persisted keys/values, reclaimed at process end |
 | Persistent hashtables and their engine-grown data blocks (`PersistentHashTable`) | registries that must outlive the request by design; the engine resizes their data with the persistent allocator, nothing may free them mid-process |
 | The shared `uninitialized_bucket` sentinel block | one `uint32_t[2]` per process backing every uninitialized persistent table, mirroring the engine's static |

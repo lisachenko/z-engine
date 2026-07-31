@@ -37,11 +37,15 @@ return [
         'zend_class_constant',
         'zend_class_name',
         'zend_property_info',
+        'zend_attribute',
+        'zend_attribute_arg',
         'zend_function',
         'zend_op_array',
         'zend_internal_function',
         'zend_arg_info',
         'zend_internal_arg_info',
+        // Engine-level constants (EG(zend_constants) entries)
+        'zend_constant',
         // VM
         'zend_op',
         'zend_execute_data',
@@ -63,6 +67,9 @@ return [
         'zend_arena',
         // Object handlers
         'zend_object_handlers',
+        // Engine-level iterators (foreach over objects with ce->get_iterator)
+        'zend_object_iterator',
+        'zend_object_iterator_funcs',
         // Private engine structs injected via supplement.h (see Dockerfile)
         'zend_closure',
     ],
@@ -101,9 +108,16 @@ return [
         'zend_ast_create_4',
         'zend_ast_create_5',
         'zend_ast_create_decl',
+        // Iterator API (wraps a zend_object_iterator as an engine object)
+        'zend_iterator_init',
         // Module API
         'zend_register_module_ex',
         'zend_startup_module_ex',
+        // Constant API
+        'zend_register_constant',
+        // Exception API (clearing EG(exception) safely: releases the object and
+        // restores opline_before_exception, unlike a raw EG(exception) = NULL)
+        'zend_clear_exception',
         // Memory management API (the inline zend_string_init/release family is not linkable,
         // zend_string_concat2 is the pragmatic exported way to mint an owned zend_string)
         'zval_ptr_dtor',
@@ -157,6 +171,8 @@ return [
         'IS_STR_PERMANENT', 'IS_STR_VALID_UTF8',
         'IS_ARRAY_IMMUTABLE', 'IS_ARRAY_PERSISTENT',
         'IS_OBJ_WEAKLY_REFERENCED', 'IS_OBJ_DESTRUCTOR_CALLED', 'IS_OBJ_FREE_CALLED',
+        // Lazy objects (PHP 8.4, zend_types.h; tested against obj->extra_flags aka OBJ_EXTRA_FLAGS)
+        'IS_OBJ_LAZY_UNINITIALIZED', 'IS_OBJ_LAZY_PROXY',
         // HashTable flags (zend_hash.h / zend_types.h)
         'HASH_FLAG_CONSISTENCY', 'HASH_FLAG_PACKED', 'HASH_FLAG_UNINITIALIZED',
         'HASH_FLAG_STATIC_KEYS', 'HASH_FLAG_HAS_EMPTY_IND', 'HASH_FLAG_ALLOW_COW_VIOLATION',
@@ -164,6 +180,13 @@ return [
         'HT_MIN_MASK', 'HT_MIN_SIZE',
         // Module API (zend_modules.h)
         'ZEND_MODULE_API_NO', 'MODULE_PERSISTENT', 'MODULE_TEMPORARY',
+        // Constant flags (zend_constants.h); the flags and the module number are
+        // packed into zval.u2.constant_flags of zend_constant.value: the low byte
+        // holds CONST_* flags (ZEND_CONSTANT_FLAGS), the upper bits hold the
+        // module number (ZEND_CONSTANT_MODULE_NUMBER, PHP_USER_CONSTANT for
+        // userland define()d constants)
+        'CONST_CS', 'CONST_PERSISTENT', 'CONST_NO_FILE_CACHE', 'CONST_DEPRECATED',
+        'CONST_OWNED', 'CONST_RECURSIVE', 'PHP_USER_CONSTANT',
         // Engine build info
         'ZEND_DEBUG', 'ZEND_MM_ALIGNMENT', 'ZEND_MAX_RESERVED_RESOURCES',
         // Function kinds (zend_compile.h)
@@ -178,10 +201,17 @@ return [
         // Call frame (zend_compile.h)
         'ZEND_CALL_FUNCTION', 'ZEND_CALL_CODE', 'ZEND_CALL_NESTED', 'ZEND_CALL_TOP',
         'ZEND_CALL_HAS_THIS', 'ZEND_CALL_FAKE_CLOSURE', 'ZEND_CALL_CLOSURE',
+        // Attribute targets/flags (zend_attributes.h)
+        'ZEND_ATTRIBUTE_TARGET_CLASS', 'ZEND_ATTRIBUTE_TARGET_FUNCTION', 'ZEND_ATTRIBUTE_TARGET_METHOD',
+        'ZEND_ATTRIBUTE_TARGET_PROPERTY', 'ZEND_ATTRIBUTE_TARGET_CLASS_CONST', 'ZEND_ATTRIBUTE_TARGET_PARAMETER',
+        'ZEND_ATTRIBUTE_TARGET_CONST', 'ZEND_ATTRIBUTE_TARGET_ALL', 'ZEND_ATTRIBUTE_IS_REPEATABLE',
+        'ZEND_ATTRIBUTE_FLAGS',
     ],
 
     'enums' => [
         '_zend_ast_kind',
+        // Anonymous enum aliased by its typedef name (ZEND_PROPERTY_HOOK_GET/SET)
+        'zend_property_hook_kind',
     ],
 
     // System/libc types that z-engine only ever uses behind a pointer. Their
@@ -210,6 +240,9 @@ return [
         'zend_class_constant',
         'zend_class_name',
         'zend_property_info',
+        'zend_constant',
+        'zend_attribute',
+        'zend_attribute_arg',
         'zend_op_array',
         'zend_internal_function',
         'zend_op',
@@ -220,6 +253,8 @@ return [
         'zend_module_entry',
         'zend_module_dep',
         'zend_object_handlers',
+        'zend_object_iterator',
+        'zend_object_iterator_funcs',
         'zend_ast',
         'zend_ast_decl',
         'zend_ast_list',

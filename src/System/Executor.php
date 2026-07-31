@@ -36,6 +36,16 @@ class Executor
     public HashTable $functionTable;
 
     /**
+     * Contains a hashtable with all registered constants (EG(zend_constants))
+     *
+     * Bucket values are IS_PTR zvals pointing to zend_constant structures, keyed by the
+     * case-sensitive constant name (including persistent engine/extension constants).
+     *
+     * @var HashTable&iterable<string, ReflectionValue>
+     */
+    public HashTable $constantTable;
+
+    /**
      * Represents the global object storage
      *
      * @var ObjectStore|ObjectEntry[]
@@ -52,6 +62,9 @@ class Executor
         $this->pointer       = $pointer;
         $this->classTable    = new HashTable($pointer->class_table);
         $this->functionTable = new HashTable($pointer->function_table);
+        $zendConstants       = $pointer->zend_constants;
+        \assert($zendConstants instanceof CData);
+        $this->constantTable = new HashTable($zendConstants);
         $this->objectStore   = new ObjectStore($pointer->objects_store);
     }
 
@@ -112,6 +125,27 @@ class Executor
         $throwable = $entry->getNativeValue();
 
         return $throwable instanceof \Throwable ? $throwable : null;
+    }
+
+    /**
+     * Suppresses the exception the engine currently carries in EG(exception), if any
+     *
+     * Goes through zend_clear_exception(): the exception object (and a parked
+     * EG(prev_exception), if present) is properly released and the VM opline is restored
+     * from EG(opline_before_exception). A raw `EG(exception) = NULL` write would leak the
+     * object and desync opline_before_exception, so it is deliberately not offered.
+     *
+     * No-op when no exception is in flight. Only callable from a context where PHP code
+     * legitimately runs while EG(exception) is set (an engine-invoked callback that sets
+     * the exception itself); the body performs no internal engine calls before the clear,
+     * so the pending exception cannot be rethrown halfway through.
+     */
+    public function suppressCurrentException(): void
+    {
+        if ($this->pointer->exception === null) {
+            return;
+        }
+        Core::call('zend_clear_exception');
     }
 
     /**
@@ -254,6 +288,20 @@ class Executor
         \assert($includedFiles instanceof CData);
 
         return new HashTable(Core::addr($includedFiles));
+    }
+
+    /**
+     * Requests the full-table cleanup mode for the current request shutdown
+     *
+     * Mirrors what dl() does when it loads a temporary extension mid-request: with
+     * EG(full_tables_cleanup) set the engine walks the complete module registry at request
+     * shutdown instead of the handler lists precomputed at process startup, so modules
+     * registered at runtime are properly deactivated and temporary ones destroyed at
+     * request end.
+     */
+    public function enableFullTablesCleanup(): void
+    {
+        $this->pointer->full_tables_cleanup = 1;
     }
 
     /**

@@ -901,6 +901,23 @@ struct _zend_ini_parser_param {
  zend_ini_parser_cb_t ini_parser_cb;
  void *arg;
 };
+typedef struct _zend_constant {
+ zval value;
+ zend_string *name;
+} zend_constant;
+typedef struct {
+ zend_string *name;
+ zval value;
+} zend_attribute_arg;
+typedef struct _zend_attribute {
+ zend_string *name;
+ zend_string *lcname;
+ uint32_t flags;
+ uint32_t lineno;
+ uint32_t offset;
+ uint32_t argc;
+ zend_attribute_arg args[1];
+} zend_attribute;
 typedef struct _zend_lex_state {
  unsigned int yy_leng;
  unsigned char *yy_start;
@@ -966,8 +983,11 @@ extern zend_ast * zend_ast_create_3(zend_ast_kind, zend_ast *, zend_ast *, zend_
 extern zend_ast * zend_ast_create_4(zend_ast_kind, zend_ast *, zend_ast *, zend_ast *, zend_ast *);
 extern zend_ast * zend_ast_create_5(zend_ast_kind, zend_ast *, zend_ast *, zend_ast *, zend_ast *, zend_ast *);
 extern zend_ast * zend_ast_create_decl(zend_ast_kind, uint32_t, uint32_t, zend_string *, zend_string *, zend_ast *, zend_ast *, zend_ast *, zend_ast *, zend_ast *);
+extern void zend_iterator_init(zend_object_iterator *);
 extern zend_module_entry * zend_register_module_ex(zend_module_entry *, int);
 extern zend_result zend_startup_module_ex(zend_module_entry *);
+extern zend_result zend_register_constant(zend_constant *);
+extern void zend_clear_exception(void);
 extern void zval_ptr_dtor(zval *);
 extern void zval_add_ref(zval *);
 extern void rc_dtor_func(zend_refcounted *);

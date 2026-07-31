@@ -15,8 +15,12 @@ namespace ZEngine\Reflection;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Type\ArgumentEntry;
+use ZEngine\Type\HashTable;
+use ZEngine\Type\LiveRange;
 use ZEngine\Type\OpLine;
 use ZEngine\Type\StringEntry;
+use ZEngine\Type\TryCatchElement;
 
 trait FunctionLikeTrait
 {
@@ -181,6 +185,25 @@ trait FunctionLikeTrait
     }
 
     /**
+     * Returns the engine attributes table of this function or null if the function has no attributes
+     *
+     * Each element of the returned table is an IS_PTR value pointing to a zend_attribute:
+     * wrap it with ReflectionAttributeEntry::fromValueEntry() for structured access.
+     *
+     * @return HashTable|ReflectionValue[]|null
+     */
+    public function getAttributesTable(): ?HashTable
+    {
+        $attributes = $this->getCommonPointer()->attributes;
+        if ($attributes === null) {
+            return null;
+        }
+        assert($attributes instanceof CData);
+
+        return new HashTable($attributes);
+    }
+
+    /**
      * Returns the iterable generator of opcodes for this function
      *
      * @return iterable|OpLine[]
@@ -258,6 +281,182 @@ trait FunctionLikeTrait
         };
 
         return $literalValueGenerator();
+    }
+
+    /**
+     * Returns one argument info entry by its position
+     *
+     * Entry layout follows the engine: entries 0..N-1 describe the declared parameters,
+     * entry N (present only for variadic functions) describes the variadic parameter and
+     * entry -1 (present only for functions with a declared return type) holds the
+     * return-type information.
+     *
+     * Internal functions store zend_internal_arg_info entries whose names are plain
+     * C strings; the return-type entry of an internal function reuses the name field for
+     * the required-argument count, so the name of a return entry is always reported as
+     * null (user functions store no name there either).
+     */
+    public function getArgumentInfo(int $index): ArgumentEntry
+    {
+        $commonPointer = $this->getCommonPointer();
+        $functionFlags = $commonPointer->fn_flags;
+        $numberOfArgs  = $commonPointer->num_args;
+        assert(is_int($functionFlags) && is_int($numberOfArgs));
+        $isVariadic     = ($functionFlags & Core::ZEND_ACC_VARIADIC)        !== 0;
+        $hasReturnEntry = ($functionFlags & Core::ZEND_ACC_HAS_RETURN_TYPE) !== 0;
+        $minIndex       = $hasReturnEntry ? ArgumentEntry::RETURN_ENTRY_INDEX : 0;
+        $maxIndex       = $numberOfArgs - 1 + ($isVariadic ? 1 : 0);
+        if ($index < $minIndex || $index > $maxIndex) {
+            throw new \OutOfBoundsException(
+                "Argument info index {$index} is out of bounds, valid range is {$minIndex}..{$maxIndex}",
+            );
+        }
+        // For internal functions the same field is typed as zend_internal_arg_info *; both
+        // structures share size and field layout, only the name representation differs
+        $argInfoTable = $commonPointer->arg_info;
+        if ($argInfoTable === null) {
+            throw new \ReflectionException('Function does not provide argument info entries');
+        }
+        assert($argInfoTable instanceof CData);
+        // Explicit pointer arithmetic also resolves the -1 return entry; the view type
+        // selects the right name representation for the entry
+        $entryType = $this->isUserDefined() ? 'zend_arg_info' : 'zend_internal_arg_info';
+        $entry     = Core::pointerAtAddress(
+            "{$entryType} *",
+            Core::addressOf($argInfoTable) + $index * Core::sizeof(Core::type($entryType)),
+        );
+        $entryTypeStruct = $entry->type;
+        assert($entryTypeStruct instanceof CData);
+        $typeMask = $entryTypeStruct->type_mask;
+        assert(is_int($typeMask));
+
+        $name = null;
+        // The name of the -1 return entry is never read: user functions store NULL there
+        // and internal functions reuse the field for the required-argument count, so
+        // dereferencing it would interpret a small integer as a C string pointer
+        if ($index !== ArgumentEntry::RETURN_ENTRY_INDEX) {
+            $rawName = $entry->name;
+            if ($this->isUserDefined()) {
+                if ($rawName !== null) {
+                    assert($rawName instanceof CData);
+                    $name = StringEntry::fromCData($rawName)->getStringValue();
+                }
+            } else {
+                // FFI materializes const char* fields directly as PHP strings
+                assert($rawName === null || is_string($rawName));
+                $name = $rawName;
+            }
+        }
+
+        return new ArgumentEntry($index, $name, $typeMask);
+    }
+
+    /**
+     * Returns the static variables table of this function (borrowed engine view)
+     *
+     * On PHP 8.4 the engine keeps two tables: op_array.static_variables holds the default
+     * values from the declaration, while the map pointer static_variables_ptr points to
+     * the live table once it was materialized (on the first ZEND_BIND_STATIC execution,
+     * or already at creation time for closures). The live table is returned whenever it
+     * is materialized as a plain pointer; the default table is returned otherwise -
+     * including the map-ptr offset form (low bit set) used by opcache-shared immutable
+     * functions, whose per-request table is not directly addressable. Returns null when
+     * the function declares no static variables at all.
+     *
+     * Memory ownership contract (see docs/long-running.md): the returned HashTable is a
+     * BORROWED view over the engine-owned table - no addref is taken, the view stays
+     * valid only while the function entry is alive, and nothing on the PHP side may
+     * release the table or its buckets. Note that already-bound slots hold IS_REFERENCE
+     * zvals shared with the executing function: a value read from them (eg via
+     * ReflectionValue::getNativeValue()) is a live PHP reference, so writing through it
+     * changes the static variable itself.
+     *
+     * @return (HashTable&iterable<string|null, ReflectionValue>)|null
+     */
+    // @phpstan-ignore method.childReturnType (borrowed engine table view instead of the native value array)
+    #[\ReturnTypeWillChange]
+    public function getStaticVariables(): ?HashTable
+    {
+        if (!$this->isUserDefined()) {
+            throw new \LogicException('Static variables are available only for user-defined functions');
+        }
+        $opArray = $this->pointer->op_array;
+        assert($opArray instanceof CData);
+        $liveTable = $opArray->static_variables_ptr__ptr;
+        if ($liveTable !== null) {
+            assert($liveTable instanceof CData);
+            if ((Core::addressOf($liveTable) & 1) === 0) {
+                return new HashTable($liveTable);
+            }
+        }
+        $defaultTable = $opArray->static_variables;
+        if ($defaultTable === null) {
+            return null;
+        }
+        assert($defaultTable instanceof CData);
+
+        return new HashTable($defaultTable);
+    }
+
+    /**
+     * Returns the list of try/catch/finally regions of this function
+     *
+     * @return list<TryCatchElement>
+     */
+    public function getTryCatchElements(): array
+    {
+        if (!$this->isUserDefined()) {
+            throw new \LogicException('Try/catch elements are available only for user-defined functions');
+        }
+        $elements = [];
+        $opArray  = $this->pointer->op_array;
+        assert($opArray instanceof CData);
+        $totalElements = $opArray->last_try_catch;
+        assert(is_int($totalElements));
+        for ($index = 0; $index < $totalElements; $index++) {
+            $elementTable = $opArray->try_catch_array;
+            assert($elementTable instanceof CData);
+            $rawElement = $elementTable[$index];
+            assert($rawElement instanceof CData);
+            $tryOp      = $rawElement->try_op;
+            $catchOp    = $rawElement->catch_op;
+            $finallyOp  = $rawElement->finally_op;
+            $finallyEnd = $rawElement->finally_end;
+            assert(is_int($tryOp) && is_int($catchOp) && is_int($finallyOp) && is_int($finallyEnd));
+            $elements[] = new TryCatchElement($tryOp, $catchOp, $finallyOp, $finallyEnd);
+        }
+
+        return $elements;
+    }
+
+    /**
+     * Returns the list of temporary-variable live ranges of this function
+     *
+     * @return list<LiveRange>
+     */
+    public function getLiveRanges(): array
+    {
+        if (!$this->isUserDefined()) {
+            throw new \LogicException('Live ranges are available only for user-defined functions');
+        }
+        $liveRanges = [];
+        $opArray    = $this->pointer->op_array;
+        assert($opArray instanceof CData);
+        $totalRanges = $opArray->last_live_range;
+        assert(is_int($totalRanges));
+        for ($index = 0; $index < $totalRanges; $index++) {
+            $rangeTable = $opArray->live_range;
+            assert($rangeTable instanceof CData);
+            $rawRange = $rangeTable[$index];
+            assert($rawRange instanceof CData);
+            $var   = $rawRange->var;
+            $start = $rawRange->start;
+            $end   = $rawRange->end;
+            assert(is_int($var) && is_int($start) && is_int($end));
+            $liveRanges[] = new LiveRange($var, $start, $end);
+        }
+
+        return $liveRanges;
     }
 
     /**
