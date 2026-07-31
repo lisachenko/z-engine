@@ -173,8 +173,10 @@ class ObjectEntry implements ReferenceCountedInterface
         $this->assertObjectAlive();
         $lazyMask = Core::engineConstant('IS_OBJ_LAZY_UNINITIALIZED')
             | Core::engineConstant('IS_OBJ_LAZY_PROXY');
+        $extraFlags = $this->pointer->extra_flags;
+        assert(is_int($extraFlags));
 
-        return ($this->pointer->extra_flags & $lazyMask) !== 0;
+        return ($extraFlags & $lazyMask) !== 0;
     }
 
     /**
@@ -187,8 +189,10 @@ class ObjectEntry implements ReferenceCountedInterface
     public function isLazyProxy(): bool
     {
         $this->assertObjectAlive();
+        $extraFlags = $this->pointer->extra_flags;
+        assert(is_int($extraFlags));
 
-        return ($this->pointer->extra_flags & Core::engineConstant('IS_OBJ_LAZY_PROXY')) !== 0;
+        return ($extraFlags & Core::engineConstant('IS_OBJ_LAZY_PROXY')) !== 0;
     }
 
     /**
@@ -204,8 +208,10 @@ class ObjectEntry implements ReferenceCountedInterface
     public function isLazyInitialized(): bool
     {
         $this->assertObjectAlive();
+        $extraFlags = $this->pointer->extra_flags;
+        assert(is_int($extraFlags));
 
-        return ($this->pointer->extra_flags & Core::engineConstant('IS_OBJ_LAZY_UNINITIALIZED')) === 0;
+        return ($extraFlags & Core::engineConstant('IS_OBJ_LAZY_UNINITIALIZED')) === 0;
     }
 
     /**

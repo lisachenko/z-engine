@@ -71,7 +71,7 @@ class ObjectEntryLazyTest extends TestCase
     public function testUninitializedProxyReportsLazyProxy(): void
     {
         $reflector = new NativeReflectionClass(TestClass::class);
-        $proxy     = $reflector->newLazyProxy(static fn (): TestClass => new TestClass());
+        $proxy     = $reflector->newLazyProxy(static fn(): TestClass => new TestClass());
 
         $entry = new ObjectEntry($proxy);
 
@@ -84,7 +84,7 @@ class ObjectEntryLazyTest extends TestCase
     public function testInitializedProxyStaysLazyProxyButInitialized(): void
     {
         $reflector = new NativeReflectionClass(TestClass::class);
-        $proxy     = $reflector->newLazyProxy(static fn (): TestClass => new TestClass());
+        $proxy     = $reflector->newLazyProxy(static fn(): TestClass => new TestClass());
 
         $entry = new ObjectEntry($proxy);
         $reflector->initializeLazyObject($proxy);

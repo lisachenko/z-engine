@@ -23,6 +23,7 @@ use ZEngine\ClassExtension\Hook\CountElementsHook;
 use ZEngine\ClassExtension\Hook\CreateObjectHook;
 use ZEngine\ClassExtension\Hook\DoOperationHook;
 use ZEngine\ClassExtension\Hook\GetDebugInfoHook;
+use ZEngine\ClassExtension\Hook\GetIteratorHook;
 use ZEngine\ClassExtension\Hook\GetPropertiesForHook;
 use ZEngine\ClassExtension\Hook\GetPropertyPointerHook;
 use ZEngine\ClassExtension\Hook\HasDimensionHook;
@@ -41,6 +42,7 @@ use ZEngine\ClassExtension\ObjectCountElementsInterface;
 use ZEngine\ClassExtension\ObjectCreateInterface;
 use ZEngine\ClassExtension\ObjectDoOperationInterface;
 use ZEngine\ClassExtension\ObjectGetDebugInfoInterface;
+use ZEngine\ClassExtension\ObjectGetIteratorInterface;
 use ZEngine\ClassExtension\ObjectGetPropertiesForInterface;
 use ZEngine\ClassExtension\ObjectGetPropertyPointerInterface;
 use ZEngine\ClassExtension\ObjectHasDimensionInterface;
@@ -1365,6 +1367,11 @@ class ReflectionClass extends NativeReflectionClass
             $handler = parent::getMethod('__count')->getClosure();
             $this->setCountElementsHandler($handler);
         }
+
+        if ($this->implementsInterface(ObjectGetIteratorInterface::class)) {
+            $handler = parent::getMethod('__getIterator')->getClosure();
+            $this->setGetIteratorHandler($handler);
+        }
     }
 
     public function __debugInfo()
@@ -1662,6 +1669,26 @@ class ReflectionClass extends NativeReflectionClass
         self::getObjectHandlers($this->pointer);
 
         $hook = new CreateObjectHook($handler, $this->pointer);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs the "get_iterator" class-entry handler for the current class
+     *
+     * Unlike the zend_object_handlers family this slot lives on zend_class_entry itself
+     * (like create_object): once installed, foreach and every other engine iterator
+     * consumer drives the \Iterator returned by the handler through a native
+     * zend_object_iterator bridge. See GetIteratorHook for the exception/by-ref contract.
+     *
+     * @param Closure $handler Callback function (GetIteratorHook $hook): \Iterator;
+     *
+     * @see ObjectGetIteratorInterface
+     */
+    public function setGetIteratorHandler(Closure $handler): GetIteratorHook
+    {
+        $hook = new GetIteratorHook($handler, $this->pointer);
         $hook->install();
 
         return $hook;
