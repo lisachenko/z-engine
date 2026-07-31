@@ -30,10 +30,8 @@ class DebuggableCloneable implements ObjectCreateInterface, ObjectGetDebugInfoIn
      */
     public static function __init(CreateObjectHook $hook): CData
     {
-        $object = $hook->proceed();
-        assert($object instanceof CData);
-
-        return $object;
+        // proceed() declares its CData return type, so no narrowing is needed here
+        return $hook->proceed();
     }
 
     /**

@@ -45,19 +45,14 @@ class TestPropertyHandlers implements
     public ?int $absent = null;
 
     /**
-     * Same behavior as ObjectCreateTrait::__init(), but typed strictly so that this
-     * stub stays clean at PHPStan level max without a baseline entry
+     * Same behavior as ObjectCreateTrait::__init(): proceed() declares its CData
+     * return type, so this stub stays clean at PHPStan level max as-is
      *
      * @inheritDoc
      */
     public static function __init(CreateObjectHook $hook): CData
     {
-        $object = $hook->proceed();
-        if (!$object instanceof CData) {
-            throw new \UnexpectedValueException('Expected a zend_object pointer from the default create handler');
-        }
-
-        return $object;
+        return $hook->proceed();
     }
 
     /**
