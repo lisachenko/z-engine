@@ -223,6 +223,18 @@ class Core
     private static array $installedHooks = [];
 
     /**
+     * Names (lowercased) of global functions generated via ReflectionFunction::addFunction()
+     *
+     * These entries point at a zend_function embedded in an immortalized closure object, so the
+     * engine must not run its function-table destructor over them. shutdown() unpublishes each
+     * one (with the table destructor disabled) while engine writes are still safe, so the engine
+     * never walks a dangling entry or double-frees the payload at request end.
+     *
+     * @var array<string, true>
+     */
+    private static array $generatedFunctions = [];
+
+    /**
      * Whether Core::shutdown() has run: no engine pointers may be written anymore
      */
     private static bool $isShutdown = false;
@@ -628,6 +640,17 @@ class Core
     }
 
     /**
+     * Records a global function generated via ReflectionFunction::addFunction() so shutdown()
+     * can unpublish it from the engine function table before ext/ffi teardown
+     *
+     * @internal called by ReflectionFunction::addFunction()
+     */
+    public static function registerGeneratedFunction(string $functionName): void
+    {
+        self::$generatedFunctions[strtolower($functionName)] = true;
+    }
+
+    /**
      * Checks if Core::shutdown() has already run for this request
      */
     public static function isShutdown(): bool
@@ -657,6 +680,25 @@ class Core
             }
         }
         self::$installedHooks = [];
+
+        // Unpublish generated global functions while writing the engine is still safe. Their
+        // buckets point at a zend_function embedded in an immortalized closure object, so the
+        // table destructor (zend_function_dtor) must NOT run over them - delete each entry with
+        // the destructor disabled, exactly like ReflectionMethod::fromHookCData() does.
+        if (self::$generatedFunctions !== [] && isset(self::$executor)) {
+            $functionTable = self::$executor->functionTable;
+            $rawTable      = $functionTable->getRawValue();
+            $previousDtor  = $rawTable->pDestructor;
+
+            $rawTable->pDestructor = null;
+            foreach (array_keys(self::$generatedFunctions) as $functionName) {
+                if ($functionTable->find($functionName) !== null) {
+                    $functionTable->delete($functionName);
+                }
+            }
+            $rawTable->pDestructor = $previousDtor;
+        }
+        self::$generatedFunctions = [];
 
         // Tracked buffers referenced from engine structures stay allocated: the engine frees
         // request-lifetime ones when their owning structures die, persistent ones are process

@@ -180,6 +180,46 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
     }
 
     /**
+     * Publishes a zend_function pointer into this function table and returns the pointer
+     * that ends up stored in the freshly created bucket
+     *
+     * Both the class method table and the engine function table hold IS_PTR entries that
+     * point at a zend_function: this is the shared publish path for
+     * ReflectionClass::addMethod() and ReflectionFunction::addFunction(). The engine copies
+     * the temporary zval container into its own bucket, so the container is released here;
+     * pointer-level wrappers (ReflectionMethod/ReflectionFunction) must bind to the RETURNED
+     * pointer (the one owned by the table), not to the passed structure.
+     *
+     * Keys are stored (and looked up) lowercased, matching how the engine keys function and
+     * method tables - the declared function_name keeps its original case for display.
+     *
+     * @param string $key         Function/method name (any case)
+     * @param CData  $rawFunction zend_function pointer to publish
+     *
+     * @return CData The zend_function pointer stored in the table bucket
+     * @internal
+     */
+    public function addFunctionEntry(string $key, CData $rawFunction): CData
+    {
+        $lowerKey = strtolower($key);
+
+        // The engine hashtable copies the zval into its own bucket, so the temporary
+        // container exists only for the duration of this call and must be freed here
+        $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawFunction);
+        $this->add($lowerKey, $valueEntry);
+        $valueEntry->release();
+
+        // Return the pointer stored in the table (not the passed structure) so pointer-level
+        // wrapper APIs like redefine() operate on the entry the engine will actually dispatch
+        $storedEntry = $this->find($lowerKey);
+        if ($storedEntry === null) {
+            throw new \RuntimeException("Function {$key} was not published in the table");
+        }
+
+        return $storedEntry->getRawFunction();
+    }
+
+    /**
      * Performs search by integer key in the hashtable
      *
      * Same borrowing contract as find(): the returned wrapper is valid until the bucket

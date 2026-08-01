@@ -130,6 +130,26 @@ $method->setPublic();
 $method->redefine(fn() => 'patched');    // swap the method body
 ```
 
+### Generated functions — no FFI trampoline
+
+Turn a closure into a genuine engine function or method. Unlike a closure installed into an
+engine handler field (which ext/ffi calls back into through a slow libffi **trampoline**),
+a generated function is published straight into the engine's function table and afterwards
+dispatches through the normal Zend VM with **zero FFI at call time** — exactly as fast as
+any ordinary PHP function:
+
+```php
+use ZEngine\Reflection\ReflectionFunction;
+
+ReflectionFunction::addFunction('twice', fn (int $x): int => $x * 2);
+twice(21); // 42 — a real global function, no trampoline
+
+$class->addMethod('scale', fn (float $k) => ...); // same, as a method
+```
+
+See [docs/memory-model.md](docs/memory-model.md) for how PHP zvals, FFI trampolines and
+native C handlers map to memory, and why this path is fast.
+
 ### Operator overloading
 
 Give your value objects native arithmetic. Implement the extension interfaces and install the handlers with one call:
