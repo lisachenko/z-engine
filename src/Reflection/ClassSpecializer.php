@@ -638,7 +638,7 @@ class ClassSpecializer
     /**
      * Duplicates one own method into the new class (trait-clone model)
      *
-     * @param HashTable&iterable<string|null, ReflectionValue> $newTable Method table of the copy
+     * @param HashTable $newTable Method table of the copy
      */
     private function duplicateMethod(
         CData $sourceOpArray,
@@ -965,7 +965,7 @@ class ClassSpecializer
      * The passed pointer is dereferenced because ReflectionValue::newEntry() stores the
      * ADDRESS of the given structure view in the zval it builds.
      *
-     * @param HashTable&iterable<string|null, ReflectionValue> $table Table on the copy
+     * @param HashTable $table Table on the copy
      */
     private function publishPointerEntry(HashTable $table, string $key, CData $pointer): void
     {
@@ -1115,7 +1115,7 @@ class ClassSpecializer
     /**
      * Borrowed view over the source method table
      *
-     * @return HashTable&iterable<string|null, ReflectionValue>
+     * @return HashTable
      */
     private function methodTable(CData $classEntry): HashTable
     {
@@ -1128,7 +1128,7 @@ class ClassSpecializer
     /**
      * Borrowed view over the source properties-info table
      *
-     * @return HashTable&iterable<string|null, ReflectionValue>
+     * @return HashTable
      */
     private function propertiesTable(CData $classEntry): HashTable
     {
@@ -1141,7 +1141,7 @@ class ClassSpecializer
     /**
      * Borrowed view over the source constants table
      *
-     * @return HashTable&iterable<string|null, ReflectionValue>
+     * @return HashTable
      */
     private function constantsTable(CData $classEntry): HashTable
     {
