@@ -269,9 +269,17 @@ final class ClassDelta
      */
     public function isEmpty(): bool
     {
-        return $this->changedMethods       === [] && $this->addedMethods === [] && $this->removedMethods === []
-                                                  && $this->changedConstants     === [] && $this->addedConstants === []
-                                                  && $this->changedPropertySlots === [] && $this->changedStaticSlots === [];
+        $changeSets = [
+            $this->changedMethods,
+            $this->addedMethods,
+            $this->removedMethods,
+            $this->changedConstants,
+            $this->addedConstants,
+            $this->changedPropertySlots,
+            $this->changedStaticSlots,
+        ];
+
+        return array_filter($changeSets) === [];
     }
 
     /**
@@ -397,8 +405,12 @@ final class ClassDelta
                 $replacedValues[] = self::replaceZvalSlot($originalSlot, $donorSlot, $undoStack);
             }
 
-            $touchesClassConstants = $this->changedConstants !== [] || $this->addedConstants !== []
-                                                                    || $this->changedPropertySlots               !== [] || $this->changedStaticSlots !== [];
+            $touchesClassConstants = array_filter([
+                $this->changedConstants,
+                $this->addedConstants,
+                $this->changedPropertySlots,
+                $this->changedStaticSlots,
+            ]) !== [];
             if ($touchesClassConstants) {
                 self::injectApplyFailure('class.invalidate-constants');
                 // New values may be unevaluated constant expressions: drop the
