@@ -1032,6 +1032,7 @@ extern void zend_observer_add_end_handler(zend_function *, zend_observer_fcall_e
 extern _Bool zend_observer_remove_begin_handler(zend_function *, zend_observer_fcall_begin_handler, zend_observer_fcall_begin_handler *);
 extern _Bool zend_observer_remove_end_handler(zend_function *, zend_observer_fcall_end_handler, zend_observer_fcall_end_handler *);
 extern void zend_init_func_run_time_cache(zend_op_array *);
+extern size_t zend_internal_run_time_cache_reserved_size(void);
 extern void zend_do_inheritance_ex(zend_class_entry *, zend_class_entry *, _Bool);
 extern zend_object * zend_objects_new(zend_class_entry *);
 extern void zend_object_std_init(zend_object *, zend_class_entry *);
