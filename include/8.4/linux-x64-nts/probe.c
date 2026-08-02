@@ -177,6 +177,51 @@ int main(void) {
 #ifdef ZEND_ACC_HAS_UNRESOLVED_INITIALIZERS
     fprintf(constants, "    'ZEND_ACC_HAS_UNRESOLVED_INITIALIZERS' => %lld,\n", (long long)(ZEND_ACC_HAS_UNRESOLVED_INITIALIZERS));
 #endif
+#ifdef ZEND_ACC_CACHED
+    fprintf(constants, "    'ZEND_ACC_CACHED' => %lld,\n", (long long)(ZEND_ACC_CACHED));
+#endif
+#ifdef ZEND_ACC_FILE_CACHED
+    fprintf(constants, "    'ZEND_ACC_FILE_CACHED' => %lld,\n", (long long)(ZEND_ACC_FILE_CACHED));
+#endif
+#ifdef ZEND_ACC_ARENA_ALLOCATED
+    fprintf(constants, "    'ZEND_ACC_ARENA_ALLOCATED' => %lld,\n", (long long)(ZEND_ACC_ARENA_ALLOCATED));
+#endif
+#ifdef _ZEND_TYPE_EXTRA_FLAGS_SHIFT
+    fprintf(constants, "    '_ZEND_TYPE_EXTRA_FLAGS_SHIFT' => %lld,\n", (long long)(_ZEND_TYPE_EXTRA_FLAGS_SHIFT));
+#endif
+#ifdef _ZEND_TYPE_MASK
+    fprintf(constants, "    '_ZEND_TYPE_MASK' => %lld,\n", (long long)(_ZEND_TYPE_MASK));
+#endif
+#ifdef _ZEND_TYPE_NAME_BIT
+    fprintf(constants, "    '_ZEND_TYPE_NAME_BIT' => %lld,\n", (long long)(_ZEND_TYPE_NAME_BIT));
+#endif
+#ifdef _ZEND_TYPE_LITERAL_NAME_BIT
+    fprintf(constants, "    '_ZEND_TYPE_LITERAL_NAME_BIT' => %lld,\n", (long long)(_ZEND_TYPE_LITERAL_NAME_BIT));
+#endif
+#ifdef _ZEND_TYPE_LIST_BIT
+    fprintf(constants, "    '_ZEND_TYPE_LIST_BIT' => %lld,\n", (long long)(_ZEND_TYPE_LIST_BIT));
+#endif
+#ifdef _ZEND_TYPE_KIND_MASK
+    fprintf(constants, "    '_ZEND_TYPE_KIND_MASK' => %lld,\n", (long long)(_ZEND_TYPE_KIND_MASK));
+#endif
+#ifdef _ZEND_TYPE_ITERABLE_BIT
+    fprintf(constants, "    '_ZEND_TYPE_ITERABLE_BIT' => %lld,\n", (long long)(_ZEND_TYPE_ITERABLE_BIT));
+#endif
+#ifdef _ZEND_TYPE_ARENA_BIT
+    fprintf(constants, "    '_ZEND_TYPE_ARENA_BIT' => %lld,\n", (long long)(_ZEND_TYPE_ARENA_BIT));
+#endif
+#ifdef _ZEND_TYPE_INTERSECTION_BIT
+    fprintf(constants, "    '_ZEND_TYPE_INTERSECTION_BIT' => %lld,\n", (long long)(_ZEND_TYPE_INTERSECTION_BIT));
+#endif
+#ifdef _ZEND_TYPE_UNION_BIT
+    fprintf(constants, "    '_ZEND_TYPE_UNION_BIT' => %lld,\n", (long long)(_ZEND_TYPE_UNION_BIT));
+#endif
+#ifdef _ZEND_TYPE_NULLABLE_BIT
+    fprintf(constants, "    '_ZEND_TYPE_NULLABLE_BIT' => %lld,\n", (long long)(_ZEND_TYPE_NULLABLE_BIT));
+#endif
+#ifdef _ZEND_TYPE_MAY_BE_MASK
+    fprintf(constants, "    '_ZEND_TYPE_MAY_BE_MASK' => %lld,\n", (long long)(_ZEND_TYPE_MAY_BE_MASK));
+#endif
 #ifdef IS_UNDEF
     fprintf(constants, "    'IS_UNDEF' => %lld,\n", (long long)(IS_UNDEF));
 #endif
@@ -1014,6 +1059,11 @@ int main(void) {
     fprintf(layouts, ", \"type\": %zu", offsetof(zend_property_info, type));
     fprintf(layouts, ", \"prototype\": %zu", offsetof(zend_property_info, prototype));
     fprintf(layouts, ", \"hooks\": %zu", offsetof(zend_property_info, hooks));
+    fputs("}},\n", layouts);
+    fputs("        \"zend_type_list\": {", layouts);
+    fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_type_list));
+    fprintf(layouts, "\"num_types\": %zu", offsetof(zend_type_list, num_types));
+    fprintf(layouts, ", \"types\": %zu", offsetof(zend_type_list, types));
     fputs("}},\n", layouts);
     fputs("        \"zend_constant\": {", layouts);
     fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_constant));

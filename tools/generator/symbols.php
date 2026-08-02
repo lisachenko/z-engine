@@ -44,6 +44,7 @@ return [
         'zend_internal_function',
         'zend_arg_info',
         'zend_internal_arg_info',
+        'zend_type_list',
         // Engine-level constants (EG(zend_constants) entries)
         'zend_constant',
         // VM
@@ -162,6 +163,13 @@ return [
         'ZEND_ACC_HAS_FINALLY_BLOCK', 'ZEND_ACC_EARLY_BINDING', 'ZEND_ACC_USES_THIS',
         'ZEND_ACC_CTOR', 'ZEND_ACC_HAS_TYPE_HINTS', 'ZEND_ACC_HAS_RETURN_TYPE',
         'ZEND_ACC_VARIADIC', 'ZEND_ACC_HAS_UNRESOLVED_INITIALIZERS',
+        'ZEND_ACC_CACHED', 'ZEND_ACC_FILE_CACHED', 'ZEND_ACC_ARENA_ALLOCATED',
+        // zend_type representation (zend_types.h): kind/ownership bits packed into
+        // zend_type.type_mask next to the MAY_BE_* value mask
+        '_ZEND_TYPE_EXTRA_FLAGS_SHIFT', '_ZEND_TYPE_MASK', '_ZEND_TYPE_NAME_BIT',
+        '_ZEND_TYPE_LITERAL_NAME_BIT', '_ZEND_TYPE_LIST_BIT', '_ZEND_TYPE_KIND_MASK',
+        '_ZEND_TYPE_ITERABLE_BIT', '_ZEND_TYPE_ARENA_BIT', '_ZEND_TYPE_INTERSECTION_BIT',
+        '_ZEND_TYPE_UNION_BIT', '_ZEND_TYPE_NULLABLE_BIT', '_ZEND_TYPE_MAY_BE_MASK',
         // zval types (zend_types.h)
         'IS_UNDEF', 'IS_NULL', 'IS_FALSE', 'IS_TRUE', 'IS_LONG', 'IS_DOUBLE', 'IS_STRING',
         'IS_ARRAY', 'IS_OBJECT', 'IS_RESOURCE', 'IS_REFERENCE', 'IS_CONSTANT_AST',
@@ -247,6 +255,7 @@ return [
         'zend_class_constant',
         'zend_class_name',
         'zend_property_info',
+        'zend_type_list',
         'zend_constant',
         'zend_attribute',
         'zend_attribute_arg',
