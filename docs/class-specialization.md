@@ -96,6 +96,9 @@ gives every copy an independent scope, run-time cache and live static-variables 
 (correct `self::`/`static::`/inline-cache behavior) at the cost of ~`sizeof(zend_op_array)`
 per method instead of a full opcode copy, and it keeps teardown symmetric: each holder
 releases its own name reference and body reference, and the last one frees the body.
+Unlike real trait binding, the copies do NOT get `ZEND_ACC_TRAIT_CLONE`: the engine sets
+that flag only for methods materialized during trait binding, and regular own-method
+copies must not carry it (trait clones of the source keep the flag they already had).
 
 ## Memory ownership (per docs/memory-model.md and docs/long-running.md)
 
@@ -139,8 +142,12 @@ A template whose class entry lives in opcache shared memory is copied out fully:
 
 The copy reflects the template's *pristine* state: per-request `mutable_data`
 (evaluated constants, mutated defaults) of the immutable original is not carried over.
-This path follows the same invariants as the regular one but is not exercised by the
-default test suite (opcache is not active under CLI tests).
+This branch is covered by `ClassSpecializerShmTest`: a child PHP process preloads the
+template fixture (`opcache.preload` marks preloaded classes `ZEND_ACC_IMMUTABLE` even
+under CLI), verifies the flag, specializes the shared-memory template and asserts the
+copy works while the SHM original reads back unchanged. The test skips only when the
+opcache extension is unavailable; a preload setup that fails to produce an immutable
+template fails the test instead of passing silently.
 
 ## Support matrix
 
@@ -148,7 +155,7 @@ default test suite (opcache is not active under CLI tests).
 |--------|-----------|---------|
 | Plain userland class (linked), incl. abstract, readonly, with constructor, static members, constants, attributes, interfaces, traits-in-use | yes | — |
 | Class implementing `IteratorAggregate`/`Iterator`/`ArrayAccess`/`Countable` (internal interfaces) | yes | — |
-| Opcache-immutable userland class | best effort (see above) | — |
+| Opcache-immutable userland class (full copy-out of the SHM entry, see above) | yes | — |
 | Internal class | no | `ClassSpecializationException` |
 | Class with an internal ancestor | no | `ClassSpecializationException` |
 | Interface / trait / enum | no | `ClassSpecializationException` |

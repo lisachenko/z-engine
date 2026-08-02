@@ -105,3 +105,45 @@ class UnionCopy
 class CollectionCopy extends TestSpecializationCollection {}
 
 class TeardownCopy extends MethodSignatureCopy {}
+
+namespace ZEngine\StubShm;
+
+/**
+ * Placeholder type of the SHM preload fixture (tests/Stub/specializationShmPreload.php);
+ * intentionally undefined at runtime
+ */
+class TProbePlaceholder {}
+
+/**
+ * Runtime-generated specialization minted by tests/Stub/specializationShmProbe.php;
+ * mixed members on purpose - the probe asserts the engine-enforced substituted types
+ */
+class IntCopy
+{
+    public const TEMPLATE_CONST = 'template';
+
+    public static int $instances = 0;
+
+    public mixed $value;
+
+    public int $count = 5;
+
+    public function __construct(int $count = 1) {}
+
+    public function setValue(mixed $newValue): void {}
+
+    public function getValue(): mixed
+    {
+        return null;
+    }
+
+    public function describe(): string
+    {
+        return '';
+    }
+
+    public static function whoAmI(): string
+    {
+        return '';
+    }
+}
