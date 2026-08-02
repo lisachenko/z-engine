@@ -56,7 +56,7 @@ $baseline     = null;
 
 // Persistent structures are minted once at boot (immortal-by-design) and then
 // attached/detached every iteration like a per-request lifecycle would
-$persistentTable = PersistentHashTable::create();
+$persistentTable = new PersistentHashTable();
 $seedValue       = new ReflectionValue(42);
 $persistentTable->add('seed', $seedValue);
 $seedValue->release();
