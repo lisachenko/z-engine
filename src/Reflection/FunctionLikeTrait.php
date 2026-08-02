@@ -522,6 +522,22 @@ trait FunctionLikeTrait
     }
 
     /**
+     * Returns a pointer to the underlying zend_function structure
+     *
+     * Engine APIs that take a `zend_function *` (for example the zend_observer
+     * per-function handler attachers) need the address of the reflected entry,
+     * not a copy of it. The entry is referenced directly, so the caller writes
+     * through to the live engine structure.
+     *
+     * @internal
+     */
+    public function getRawFunctionPointer(): CData
+    {
+        // $this->pointer is already the zend_function* the reflection wraps
+        return $this->pointer;
+    }
+
+    /**
      * Returns a pointer to the common structure (to work natively with zend_function and zend_internal_function)
      */
     private function getCommonPointer(): CData

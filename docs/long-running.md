@@ -74,6 +74,11 @@ structures (class entries, handler blocks) never carry a pointer into the next r
 freed trampolines. After shutdown, z-engine performs no engine writes at all — hooks are
 inactive during shutdown-phase object destructors, and installing a new hook throws.
 
+`ObserverHook` (the `zend_observer` fcall bridge) follows this same lifecycle but has an extra
+boot-time constraint: it can only be installed from the `Core::preload()` path and only when a
+startup-time observer provider has enabled the engine observer machinery, otherwise it refuses with
+a typed exception rather than corrupting memory. See [observer-hook.md](observer-hook.md).
+
 ### Runtime models
 
 - **Worker loops** (RoadRunner, Swoole, ReactPHP, FrankenPHP worker mode): the whole worker
