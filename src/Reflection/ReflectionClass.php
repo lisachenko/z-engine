@@ -401,6 +401,25 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
+     * Deep-clones this (linked, userland) class under a new runtime name, applying the
+     * given type substitutions to the copy, and registers the result in the engine class
+     * table as a first-class, instantiable class.
+     *
+     * The specialized class is a SIBLING of this one (same parent, same interfaces), not
+     * a subclass: instances of the copy are not instanceof the template. See
+     * docs/class-specialization.md for the copy model, the support matrix and the
+     * memory-ownership contract; unsupported sources fail with
+     * ClassSpecializationException before any engine state is modified.
+     *
+     * @param string                   $newClassName  Fully-qualified name for the specialized copy
+     * @param TypeSubstitutionMap|null $substitutions Placeholder-to-type substitutions (optional)
+     */
+    public function specialize(string $newClassName, ?TypeSubstitutionMap $substitutions = null): ReflectionClass
+    {
+        return (new ClassSpecializer())->specialize($this->getName(), $newClassName, $substitutions);
+    }
+
+    /**
      * Selects the allocation class for buffers stored inside this class entry
      *
      * Internal classes are persistent engine structures (malloc), while user classes are

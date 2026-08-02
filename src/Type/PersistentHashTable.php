@@ -204,10 +204,16 @@ final class PersistentHashTable extends HashTable
     /**
      * Returns arData pointing right past the shared sentinel, as HT_SET_DATA_ADDR does
      *
+     * The sentinel block is shared by every table z-engine initializes in the
+     * HASH_FLAG_UNINITIALIZED state, persistent and request-lifetime alike: the engine
+     * never writes through (or frees) arData while the flag is set, so one immortal
+     * process-wide block safely backs them all.
+     *
      * @see zend_types.h:HT_SET_DATA_ADDR/HT_HASH_SIZE - for HT_MIN_MASK the hash part
      *      occupies two uint32_t slots, so arData points 8 bytes past the block start
+     * @internal also used by ClassSpecializer to initialize the class-entry tables
      */
-    private static function uninitializedBucketData(): CData
+    public static function uninitializedBucketData(): CData
     {
         if (self::$uninitializedBucket === null) {
             $sentinel    = Core::trackedNew('uint32_t[2]', true);
