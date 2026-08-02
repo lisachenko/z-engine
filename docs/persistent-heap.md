@@ -66,7 +66,7 @@ the already-recorded clone pointer instead of recursing — the map entry is rec
 | reference (`&`) in a property or array element | rejected | aliases a request-lifetime `zend_reference` container |
 | object of an **internal** class | rejected | custom handlers and engine-owned storage a byte clone cannot preserve |
 | object with a non-standard handlers block (hooked classes) | rejected | the handlers pointer would dangle in the next request |
-| enum case | rejected | engine-managed singleton; clone would break `===` identity |
+| enum case | rejected | engine-managed singleton; clone would break `===` identity. Re-attachment by case name (restoring identity instead of cloning) is possible future work |
 | lazy ghost / lazy proxy | rejected | references request-lifetime initializers |
 | object with dynamic properties | rejected | they live outside the fixed inline property table |
 | object of a class with magic property accessors (`__get`/`__set`/…) | rejected | `ZEND_ACC_USE_GUARDS` classes carry a request-lifetime guard slot |
@@ -186,6 +186,12 @@ Worker managers that cycle handled requests inside one live process-level reques
 `requestShutdown()` the heap additionally releases materialized property caches and
 returns its object-store slots, keeping the store and the request heap flat across
 cycles.
+
+**The invariant behind the split:** after a *real* engine shutdown (`Core::isShutdown()`
+is true) nothing engine-owned may be touched anymore — the heap drops only PHP-side
+state. In a *simulated* cycle the engine is still live and writable, so the heap may
+(and does) recycle store handles and release request-owned caches. The heap
+distinguishes the two cases by `Core::isShutdown()` at delivery time.
 
 `get()`/`put()`/`remove()` may be called at any point of a live request — including
 before the first hook delivery of a request; the heap re-attaches lazily per key.

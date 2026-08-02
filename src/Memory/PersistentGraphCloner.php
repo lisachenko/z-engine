@@ -177,7 +177,8 @@ final class PersistentGraphCloner
         if (!PersistentObjectFactory::usesStandardHandlers($rawObject)) {
             throw UnsupportedGraphElementException::customHandlers($className, $path);
         }
-        if (($rawObject->ce->ce_flags & Core::ZEND_ACC_USE_GUARDS) !== 0) {
+        $classEntry = self::asCData($rawObject->ce);
+        if ((self::asInt($classEntry->ce_flags) & Core::ZEND_ACC_USE_GUARDS) !== 0) {
             throw UnsupportedGraphElementException::propertyGuards($className, $path);
         }
         foreach ($native->getProperties() as $property) {
@@ -186,10 +187,10 @@ final class PersistentGraphCloner
             }
         }
 
-        $slotCount = $rawObject->ce->default_properties_count;
-        $tableBase = Core::cast('zval *', Core::addr($rawObject->properties_table[0]));
+        $slotCount = self::asInt($classEntry->default_properties_count);
+        $tableBase = Core::cast('zval *', Core::addr(self::asCData(self::asCData($rawObject->properties_table)[0])));
         for ($index = 0; $index < $slotCount; $index++) {
-            $this->validateValue(Core::addr($tableBase[$index]), "{$path}({$className})->slot#{$index}");
+            $this->validateValue(Core::addr(self::asCData($tableBase[$index])), "{$path}({$className})->slot#{$index}");
         }
     }
 
@@ -198,7 +199,7 @@ final class PersistentGraphCloner
      */
     private function validateValue(CData $zval, string $path): void
     {
-        $type = $zval->u1->v->type;
+        $type = self::zvalType($zval);
         switch ($type) {
             case ReflectionValue::IS_UNDEF:
             case ReflectionValue::IS_NULL:
@@ -210,7 +211,7 @@ final class PersistentGraphCloner
                 return;
 
             case ReflectionValue::IS_ARRAY:
-                $this->validateArray($zval->value->arr, $path);
+                $this->validateArray(self::asCData(self::asCData($zval->value)->arr), $path);
 
                 return;
 
@@ -270,18 +271,18 @@ final class PersistentGraphCloner
 
         $this->objectMap[$address] = $clone;
 
-        $classEntry = $sourceObject->ce;
+        $classEntry = self::asCData($sourceObject->ce);
         $objectSize = ReflectionClass::getObjectSize($classEntry);
 
         $this->objects[]    = $clone;
-        $this->classNames[] = strtolower(StringEntry::fromCData($classEntry->name)->getStringValue());
+        $this->classNames[] = strtolower(StringEntry::fromCData(self::asCData($classEntry->name))->getStringValue());
         $this->classSizes[] = $objectSize;
         $this->bytes += $objectSize;
 
-        $slotCount = $classEntry->default_properties_count;
-        $tableBase = Core::cast('zval *', Core::addr($clone->properties_table[0]));
+        $slotCount = self::asInt($classEntry->default_properties_count);
+        $tableBase = Core::cast('zval *', Core::addr(self::asCData(self::asCData($clone->properties_table)[0])));
         for ($index = 0; $index < $slotCount; $index++) {
-            $this->rewriteValue(Core::addr($tableBase[$index]));
+            $this->rewriteValue(Core::addr(self::asCData($tableBase[$index])));
         }
 
         return $clone;
@@ -293,22 +294,24 @@ final class PersistentGraphCloner
      */
     private function rewriteValue(CData $zval): void
     {
-        $type = $zval->u1->v->type;
+        $type      = self::zvalType($zval);
+        $zvalValue = self::asCData($zval->value);
+        $zvalTyped = self::asCData($zval->u1);
         if ($type === ReflectionValue::IS_STRING) {
-            $content = StringEntry::fromCData($zval->value->str)->getStringValue();
+            $content = StringEntry::fromCData(self::asCData($zvalValue->str))->getStringValue();
 
-            $zval->value->str = $this->persistString($content)->getRawValue();
+            $zvalValue->str = $this->persistString($content)->getRawValue();
             // Interned-style payload: consumers copy the pointer without refcounting
-            $zval->u1->type_info = ReflectionValue::IS_STRING;
+            $zvalTyped->type_info = ReflectionValue::IS_STRING;
         } elseif ($type === ReflectionValue::IS_ARRAY) {
-            $zval->value->arr = $this->cloneArray($zval->value->arr);
+            $zvalValue->arr = $this->cloneArray(self::asCData($zvalValue->arr));
             // Immutable payload: copy-on-write into request memory on mutation
-            $zval->u1->type_info = ReflectionValue::IS_ARRAY;
+            $zvalTyped->type_info = ReflectionValue::IS_ARRAY;
         } elseif ($type === ReflectionValue::IS_OBJECT) {
-            $zval->value->obj = $this->cloneObject($zval->value->obj);
+            $zvalValue->obj = $this->cloneObject(self::asCData($zvalValue->obj));
             // Standard refcounted object shape: alias churn lands on the pinned counter,
             // and GC_NOT_COLLECTABLE in the clone header keeps the collector away
-            $zval->u1->type_info = ReflectionValue::IS_OBJECT | $this->objectTypeFlags;
+            $zvalTyped->type_info = ReflectionValue::IS_OBJECT | $this->objectTypeFlags;
         }
     }
 
@@ -383,27 +386,60 @@ final class PersistentGraphCloner
      */
     private function walkArray(CData $sourceArray, \Closure $visitor): void
     {
-        $isPacked = ($sourceArray->u->flags & Core::engineConstant('HASH_FLAG_PACKED')) !== 0;
-        $numUsed  = $sourceArray->nNumUsed;
+        $isPacked = (self::asInt(self::asCData($sourceArray->u)->flags) & Core::engineConstant('HASH_FLAG_PACKED')) !== 0;
+        $numUsed  = self::asInt($sourceArray->nNumUsed);
 
         for ($index = 0; $index < $numUsed; $index++) {
             if ($isPacked) {
-                $value = Core::addr($sourceArray->arPacked[$index]);
-                if ($value->u1->v->type === ReflectionValue::IS_UNDEF) {
+                $value = Core::addr(self::asCData(self::asCData($sourceArray->arPacked)[$index]));
+                if (self::zvalType($value) === ReflectionValue::IS_UNDEF) {
                     continue;
                 }
                 $visitor($index, $value);
             } else {
-                $bucket = Core::addr($sourceArray->arData[$index]);
-                $value  = Core::addr($bucket->val);
-                if ($value->u1->v->type === ReflectionValue::IS_UNDEF) {
+                $bucket = Core::addr(self::asCData(self::asCData($sourceArray->arData)[$index]));
+                $value  = Core::addr(self::asCData($bucket->val));
+                if (self::zvalType($value) === ReflectionValue::IS_UNDEF) {
                     continue;
                 }
-                $key = $bucket->key !== null
-                    ? StringEntry::fromCData($bucket->key)->getStringValue()
-                    : $bucket->h;
+                $rawKey = $bucket->key;
+                $key    = $rawKey !== null
+                    ? StringEntry::fromCData(self::asCData($rawKey))->getStringValue()
+                    : self::asInt($bucket->h);
                 $visitor($key, $value);
             }
         }
+    }
+
+    /**
+     * Reads the base type byte of a zval (given as zval*)
+     */
+    private static function zvalType(CData $zval): int
+    {
+        return self::asInt(self::asCData(self::asCData($zval->u1)->v)->type);
+    }
+
+    /**
+     * Narrows a dynamically typed FFI read to CData
+     *
+     * Engine struct members read through ext/ffi carry no static type information; the
+     * generated header is the runtime ground truth, so the narrowing can never fail on
+     * a verified layout (ZENGINE_STRICT_LAYOUT_CHECK).
+     */
+    private static function asCData(mixed $value): CData
+    {
+        assert($value instanceof CData);
+
+        return $value;
+    }
+
+    /**
+     * Narrows a dynamically typed FFI read to int (see asCData)
+     */
+    private static function asInt(mixed $value): int
+    {
+        assert(is_int($value));
+
+        return $value;
     }
 }

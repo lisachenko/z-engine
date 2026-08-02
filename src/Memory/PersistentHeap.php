@@ -137,16 +137,18 @@ final class PersistentHeap
             $module->startup();
         }
 
-        $anchor = $module->anchorSlot();
-        if ($anchor->u1->v->type === ReflectionValue::IS_PTR) {
-            $registry = PersistentHashTable::fromCData(Core::cast('HashTable *', $anchor->value->ptr));
+        $anchor      = $module->anchorSlot();
+        $anchorTyped = self::asCData($anchor->u1);
+        $anchorValue = self::asCData($anchor->value);
+        if (self::asInt(self::asCData($anchorTyped->v)->type) === ReflectionValue::IS_PTR) {
+            $registry = PersistentHashTable::fromCData(Core::cast('HashTable *', self::asCData($anchorValue->ptr)));
         } else {
             $registry = PersistentHashTable::create();
 
             // Store through the typed union member (zend_array*): void* CData round trips
             // are unreliable for address identity (see addressSet)
-            $anchor->value->arr    = $registry->getRawValue();
-            $anchor->u1->type_info = ReflectionValue::IS_PTR;
+            $anchorValue->arr       = $registry->getRawValue();
+            $anchorTyped->type_info = ReflectionValue::IS_PTR;
         }
 
         return self::$instance = new self($registry, $module);
@@ -227,7 +229,7 @@ final class PersistentHeap
         $this->addPointerEntry($descriptor, self::SLOT_ARRAYS, $arraysTable->getRawValue());
         $this->addLongEntry($descriptor, self::SLOT_BYTES, $graph->bytes);
 
-        $descriptorValue = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $descriptor->getRawValue()[0]);
+        $descriptorValue = ReflectionValue::newEntry(ReflectionValue::IS_PTR, self::asCData($descriptor->getRawValue()[0]));
         $this->registry->addInterned($keyEntry, $descriptorValue);
         $descriptorValue->release();
     }
@@ -256,7 +258,7 @@ final class PersistentHeap
 
         $rootPointer = $this->pointerSlot($descriptor, self::SLOT_ROOT, 'zend_object *');
 
-        $entry = ReflectionValue::newEntry(ReflectionValue::IS_OBJECT, $rootPointer[0]);
+        $entry = ReflectionValue::newEntry(ReflectionValue::IS_OBJECT, self::asCData($rootPointer[0]));
         $entry->getNativeValue($alias);
         $entry->release();
         assert(is_object($alias));
@@ -304,9 +306,9 @@ final class PersistentHeap
             $descriptor = PersistentHashTable::fromCData(Core::cast('HashTable *', $value->getRawPointer()));
 
             $keyStats = [
-                'objects' => (int) $this->tableSlot($descriptor, self::SLOT_OBJECTS)->getRawValue()->nNumOfElements,
-                'strings' => (int) $this->tableSlot($descriptor, self::SLOT_STRINGS)->getRawValue()->nNumOfElements,
-                'arrays'  => (int) $this->tableSlot($descriptor, self::SLOT_ARRAYS)->getRawValue()->nNumOfElements,
+                'objects' => self::asInt($this->tableSlot($descriptor, self::SLOT_OBJECTS)->getRawValue()->nNumOfElements),
+                'strings' => self::asInt($this->tableSlot($descriptor, self::SLOT_STRINGS)->getRawValue()->nNumOfElements),
+                'arrays'  => self::asInt($this->tableSlot($descriptor, self::SLOT_ARRAYS)->getRawValue()->nNumOfElements),
                 'bytes'   => $this->longSlot($descriptor, self::SLOT_BYTES),
             ];
 
@@ -355,7 +357,7 @@ final class PersistentHeap
 
         if ($this->module !== null) {
             // Reset the anchor so the next global() mints a fresh registry
-            $this->module->anchorSlot()->u1->type_info = ReflectionValue::IS_UNDEF;
+            self::asCData($this->module->anchorSlot()->u1)->type_info = ReflectionValue::IS_UNDEF;
         }
 
         $this->destroyed = true;
@@ -426,7 +428,7 @@ final class PersistentHeap
         $classesTable = $this->tableSlot($descriptor, self::SLOT_OBJECT_CLASSES);
         $sizesTable   = $this->tableSlot($descriptor, self::SLOT_OBJECT_SIZES);
 
-        $objectCount = (int) $objectsTable->getRawValue()->nNumOfElements;
+        $objectCount = self::asInt($objectsTable->getRawValue()->nNumOfElements);
 
         // Pass 1: resolve every recorded class in the current request and verify layout
         $objects    = [];
@@ -463,16 +465,17 @@ final class PersistentHeap
         $arrayAddresses  = $this->addressSet($this->tableSlot($descriptor, self::SLOT_ARRAYS));
 
         foreach ($objects as $index => $objectPointer) {
-            $slotCount = $resolved[$index]->default_properties_count;
-            $tableBase = Core::cast('zval *', Core::addr($objectPointer->properties_table[0]));
+            $slotCount = self::asInt($resolved[$index]->default_properties_count);
+            $tableBase = Core::cast('zval *', Core::addr(self::asCData(self::asCData($objectPointer->properties_table)[0])));
             for ($slot = 0; $slot < $slotCount; $slot++) {
-                $zval = Core::addr($tableBase[$slot]);
-                $type = $zval->u1->v->type;
+                $zval      = Core::addr(self::asCData($tableBase[$slot]));
+                $type      = self::asInt(self::asCData(self::asCData($zval->u1)->v)->type);
+                $zvalValue = self::asCData($zval->value);
 
                 $intact = match ($type) {
-                    ReflectionValue::IS_STRING => isset($stringAddresses[Core::addressOf($zval->value->str)]),
-                    ReflectionValue::IS_ARRAY  => isset($arrayAddresses[Core::addressOf($zval->value->arr)]),
-                    ReflectionValue::IS_OBJECT => isset($objectAddresses[Core::addressOf($zval->value->obj)]),
+                    ReflectionValue::IS_STRING => isset($stringAddresses[Core::addressOf(self::asCData($zvalValue->str))]),
+                    ReflectionValue::IS_ARRAY  => isset($arrayAddresses[Core::addressOf(self::asCData($zvalValue->arr))]),
+                    ReflectionValue::IS_OBJECT => isset($objectAddresses[Core::addressOf(self::asCData($zvalValue->obj))]),
                     ReflectionValue::IS_RESOURCE,
                     ReflectionValue::IS_REFERENCE => false,
                     default                       => true,
@@ -514,7 +517,7 @@ final class PersistentHeap
         $stringsTable = $this->tableSlot($descriptor, self::SLOT_STRINGS);
         $arraysTable  = $this->tableSlot($descriptor, self::SLOT_ARRAYS);
 
-        $objectCount = (int) $objectsTable->getRawValue()->nNumOfElements;
+        $objectCount = self::asInt($objectsTable->getRawValue()->nNumOfElements);
         $objects     = [];
         for ($index = 0; $index < $objectCount; $index++) {
             $objects[$index] = $this->pointerEntry($objectsTable, $index, 'zend_object *');
@@ -527,7 +530,7 @@ final class PersistentHeap
         }
 
         foreach ($objects as $objectPointer) {
-            if ($objectPointer->gc->refcount !== PersistentObjectFactory::PIN_BASELINE) {
+            if (self::asInt(self::asCData($objectPointer->gc)->refcount) !== PersistentObjectFactory::PIN_BASELINE) {
                 throw HeapInUseException::forKey($key);
             }
         }
@@ -584,7 +587,7 @@ final class PersistentHeap
                 continue;
             }
             $objectsTable = $this->tableSlot($descriptor, self::SLOT_OBJECTS);
-            $objectCount  = (int) $objectsTable->getRawValue()->nNumOfElements;
+            $objectCount  = self::asInt($objectsTable->getRawValue()->nNumOfElements);
             for ($index = 0; $index < $objectCount; $index++) {
                 $this->releasePropertiesCache($this->pointerEntry($objectsTable, $index, 'zend_object *'));
             }
@@ -599,10 +602,11 @@ final class PersistentHeap
      */
     private function releasePropertiesCache(CData $objectPointer): void
     {
-        if ($objectPointer->properties === null) {
+        $properties = $objectPointer->properties;
+        if ($properties === null) {
             return;
         }
-        (new HashTable($objectPointer->properties))->releaseReference();
+        (new HashTable(self::asCData($properties)))->releaseReference();
         $objectPointer->properties = null;
     }
 
@@ -630,7 +634,8 @@ final class PersistentHeap
     private function currentValidHandle(ObjectStore $store, CData $objectPointer): ?int
     {
         $handle = $objectPointer->handle;
-        if (!is_int($handle) || $handle < 1 || !isset($store[$handle])) {
+        // Valid handles are 1..top-1 == 1..count($store); anything else is out of range
+        if (!is_int($handle) || $handle < 1 || $handle > count($store)) {
             return null;
         }
         $bucket = $store[$handle];
@@ -667,7 +672,7 @@ final class PersistentHeap
     private function addPointerEntry(PersistentHashTable $table, int $index, CData $pointer): void
     {
         // newEntry() stores the ADDRESS of the passed (dereferenced) struct view
-        $entry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $pointer[0]);
+        $entry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, self::asCData($pointer[0]));
         $table->addIndex($index, $entry);
         $entry->release();
     }
@@ -734,7 +739,7 @@ final class PersistentHeap
     private function pointerList(PersistentHashTable $table, string $type): array
     {
         $pointers = [];
-        $count    = (int) $table->getRawValue()->nNumOfElements;
+        $count    = self::asInt($table->getRawValue()->nNumOfElements);
         for ($index = 0; $index < $count; $index++) {
             $pointers[] = $this->pointerEntry($table, $index, $type);
         }
@@ -750,7 +755,7 @@ final class PersistentHeap
     private function addressSet(PersistentHashTable $table): array
     {
         $addresses = [];
-        $count     = (int) $table->getRawValue()->nNumOfElements;
+        $count     = self::asInt($table->getRawValue()->nNumOfElements);
         for ($index = 0; $index < $count; $index++) {
             // A TYPED pointer view is required: addressOf() over a bare void* CData
             // reinterprets the pointee bytes instead of the pointer value
@@ -758,5 +763,29 @@ final class PersistentHeap
         }
 
         return $addresses;
+    }
+
+    /**
+     * Narrows a dynamically typed FFI read to CData
+     *
+     * Engine struct members read through ext/ffi carry no static type information; the
+     * generated header is the runtime ground truth, so the narrowing can never fail on
+     * a verified layout (ZENGINE_STRICT_LAYOUT_CHECK).
+     */
+    private static function asCData(mixed $value): CData
+    {
+        assert($value instanceof CData);
+
+        return $value;
+    }
+
+    /**
+     * Narrows a dynamically typed FFI read to int (see asCData)
+     */
+    private static function asInt(mixed $value): int
+    {
+        assert(is_int($value));
+
+        return $value;
     }
 }

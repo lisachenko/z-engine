@@ -194,7 +194,6 @@ class GetPropertiesHook extends AbstractHook
         $table      = new HashTable($rawArray);
         $properties = [];
         foreach ($table as $key => $refValue) {
-            assert($refValue instanceof ReflectionValue);
             if ($refValue->getType() === ReflectionValue::IS_INDIRECT) {
                 $refValue = $refValue->getIndirectValue();
                 if ($refValue->getType() === ReflectionValue::IS_UNDEF) {

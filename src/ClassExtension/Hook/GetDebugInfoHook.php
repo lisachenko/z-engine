@@ -122,7 +122,6 @@ class GetDebugInfoHook extends AbstractHook
         $table     = new HashTable($rawArray);
         $debugInfo = [];
         foreach ($table as $key => $refValue) {
-            assert($refValue instanceof ReflectionValue);
             // Property tables store declared properties as IS_INDIRECT slots pointing into
             // the object: follow them (skipping uninitialized ones), because a userland
             // array must contain only plain values

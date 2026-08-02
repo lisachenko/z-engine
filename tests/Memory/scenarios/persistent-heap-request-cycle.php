@@ -109,24 +109,33 @@ unset($heap);
 
 $module->requestStartup();
 
-$heapB = PersistentHeap::global();
-$rootB = $heapB->get('cycle-graph');
+$heapB  = PersistentHeap::global();
+$aliasB = $heapB->get('cycle-graph');
 
-$expect($rootB instanceof RequestCycleNode, 'readable-after-rinit');
+$expect($aliasB instanceof RequestCycleNode, 'readable-after-rinit');
+assert($aliasB instanceof RequestCycleNode);
+$rootB = $aliasB;
+$leftB = $rootB->left;
+assert($leftB instanceof RequestCycleNode);
+$rightB = $rootB->right;
+assert($rightB instanceof RequestCycleNode);
+$sharedB = $leftB->shared;
+assert($sharedB instanceof RequestCycleNode);
+
 $expect($rootB->describe() === 'root:1', 'method-dispatch-works');
-$expect($rootB->left->parent === $rootB, 'cycle-back-edge-intact');
-$expect($rootB->left->shared === $rootB->right->shared, 'dag-share-intact');
-$expect($rootB->left->shared->label === 'shared-leaf' && $rootB->left->shared->hits === 7, 'shared-leaf-data-intact');
+$expect($leftB->parent === $rootB, 'cycle-back-edge-intact');
+$expect($sharedB === $rightB->shared, 'dag-share-intact');
+$expect($sharedB->label === 'shared-leaf' && $sharedB->hits === 7, 'shared-leaf-data-intact');
 $expect($rootB->config === ['mode' => 'worker', 'limits' => [10, 20], 42 => 'answer'], 'array-data-intact');
 $expect($rootB === $heapB->get('cycle-graph'), 'alias-identity-within-request');
-$expect(spl_object_id($rootB) !== spl_object_id($rootB->left), 'fresh-distinct-handles');
+$expect(spl_object_id($rootB) !== spl_object_id($leftB), 'fresh-distinct-handles');
 
 // The collector must neither crash on nor reclaim the persistent region
 gc_collect_cycles();
-$expect($rootB->left->parent === $rootB, 'graph-survives-gc');
+$expect($leftB->parent === $rootB, 'graph-survives-gc');
 
-// Eviction still works in the later request
-unset($rootB);
+// Eviction still works in the later request; every alias must be released first
+unset($rootB, $leftB, $rightB, $sharedB, $aliasB);
 gc_collect_cycles();
 $heapB->remove('cycle-graph');
 $expect($heapB->stats()['keys'] === 0, 'evicted-in-request-b');

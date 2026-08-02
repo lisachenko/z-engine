@@ -54,6 +54,8 @@ use ZEngine\Reflection\ReflectionValue;
  *     zend_long         nNextFreeElement;
  *     dtor_func_t       pDestructor;
  * };
+ *
+ * @implements IteratorAggregate<int|string|null, ReflectionValue>
  */
 class HashTable implements IteratorAggregate, ReferenceCountedInterface
 {
@@ -80,7 +82,7 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
     /**
      * Retrieve an external iterator
      *
-     * @return Traversable An instance of an object implementing <b>Iterator</b> or <b>Traversable</b>
+     * @return Traversable<int|string|null, ReflectionValue> Borrowed views over the bucket zvals
      */
     public function getIterator(): Traversable
     {

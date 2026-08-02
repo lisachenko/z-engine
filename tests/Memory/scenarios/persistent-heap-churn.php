@@ -36,6 +36,16 @@ class ChurnNode
     public array $items = [];
 }
 
+/**
+ * Narrows a nullable heap result (or graph edge) to a live ChurnNode
+ */
+function churnNode(?object $value): ChurnNode
+{
+    assert($value instanceof ChurnNode);
+
+    return $value;
+}
+
 // Whole put/get/remove lifecycle on a detached registry: on a debug build the leak gate
 // fails on any request-allocator block left behind (materialized property caches, zval
 // containers, temporary strings)
@@ -57,8 +67,9 @@ for ($cycle = 0; $cycle < 50; $cycle++) {
     unset($root, $shared);
     gc_collect_cycles();
 
-    $alias = $heap->get('churn');
-    if ($alias->left->right !== $alias->right || $alias->left->parent !== $alias) {
+    $alias = churnNode($heap->get('churn'));
+    $left  = churnNode($alias->left);
+    if ($left->right !== $alias->right || $left->parent !== $alias) {
         throw new RuntimeException('Graph topology lost during churn');
     }
     if ($alias->items !== ['limits' => [10, 20], 42 => 'answer']) {
@@ -68,7 +79,8 @@ for ($cycle = 0; $cycle < 50; $cycle++) {
     // Materialize the per-request properties cache on purpose: eviction must release it
     get_object_vars($alias);
 
-    unset($alias);
+    // Every alias (the root AND the narrowed edge) must be gone before eviction
+    unset($alias, $left);
     gc_collect_cycles();
 
     $heap->remove('churn');

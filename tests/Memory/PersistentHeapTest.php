@@ -103,23 +103,24 @@ class PersistentHeapTest extends TestCase
         unset($root, $shared);
         gc_collect_cycles();
 
-        $alias = $this->heap->get('dag');
+        $alias = self::graphNode($this->heap->get('dag'));
+        $left  = self::graphNode($alias->left);
+        $right = self::graphNode($alias->right);
 
-        $this->assertInstanceOf(TestGraphNode::class, $alias);
-        $this->assertSame($alias, $alias->left->parent);
-        $this->assertSame($alias, $alias->right->parent);
+        $this->assertSame($alias, $left->parent);
+        $this->assertSame($alias, $right->parent);
         $this->assertSame($alias, $alias->payload);
-        $this->assertSame($alias->left->right, $alias->right->right);
-        $this->assertSame('shared', $alias->left->right->name);
+        $this->assertSame($left->right, $right->right);
+        $this->assertSame('shared', self::graphNode($left->right)->name);
 
         // Shared nodes are cloned exactly once: root, left, right, shared
         $this->assertSame(4, $this->heap->stats()['perKey']['dag']['objects']);
 
         // The collector must not traverse (or reclaim) the persistent region
         gc_collect_cycles();
-        $this->assertSame($alias, $alias->left->parent);
+        $this->assertSame($alias, $left->parent);
 
-        unset($alias);
+        unset($alias, $left, $right);
         gc_collect_cycles();
         $this->heap->remove('dag');
     }
@@ -136,7 +137,7 @@ class PersistentHeapTest extends TestCase
 
         $this->assertSame(1, $this->heap->stats()['perKey']['shared-array']['arrays']);
 
-        $alias = $this->heap->get('shared-array');
+        $alias = self::graphNode($this->heap->get('shared-array'));
         $this->assertSame(['config' => 'value'], $alias->items);
         $this->assertSame(['config' => 'value'], $alias->payload);
 
@@ -158,7 +159,7 @@ class PersistentHeapTest extends TestCase
         $this->assertNotSame($source, $first);
         // The source object is untouched and stays a normal request object
         $source->name = 'still-mutable';
-        $this->assertSame('identity', $first->name);
+        $this->assertSame('identity', self::graphNode($first)->name);
 
         unset($first, $second);
         $this->heap->remove('identity');
@@ -182,7 +183,7 @@ class PersistentHeapTest extends TestCase
         $second->rank = 2;
         $this->heap->put('overwrite', $second);
 
-        $alias = $this->heap->get('overwrite');
+        $alias = self::graphNode($this->heap->get('overwrite'));
         $this->assertSame(2, $alias->rank);
         $this->assertSame(1, $this->heap->stats()['keys']);
 
@@ -256,7 +257,7 @@ class PersistentHeapTest extends TestCase
         $node->rank = 1;
         $this->heap->put('scalar-mutation', $node);
 
-        $alias         = $this->heap->get('scalar-mutation');
+        $alias         = self::graphNode($this->heap->get('scalar-mutation'));
         $alias->rank   = 99;          // self-contained bytes: legal cross-request mutation
         $alias->weight = 0.5;
         unset($alias);
@@ -264,7 +265,7 @@ class PersistentHeapTest extends TestCase
         // A fresh heap wrapper over the same registry re-attaches from scratch,
         // exactly like the next request would
         $nextRequest = new PersistentHeap($this->registry);
-        $reattached  = $nextRequest->get('scalar-mutation');
+        $reattached  = self::graphNode($nextRequest->get('scalar-mutation'));
 
         $this->assertSame(99, $reattached->rank);
         $this->assertSame(0.5, $reattached->weight);
@@ -279,7 +280,7 @@ class PersistentHeapTest extends TestCase
         $node->name = 'pristine';
         $this->heap->put('mutated', $node);
 
-        $alias       = $this->heap->get('mutated');
+        $alias       = self::graphNode($this->heap->get('mutated'));
         $alias->name = 'request-lifetime-' . uniqid(); // writes a REQUEST string into the persistent slot
         unset($alias);
 
@@ -306,7 +307,9 @@ class PersistentHeapTest extends TestCase
         $bogusName    = StringEntry::persistentInterned('zengine\stub\class_that_does_not_exist');
         $bogusRaw     = $bogusName->getRawValue();
         $this->assertNotNull($bogusRaw);
-        $entry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $bogusRaw[0]);
+        $bogusView = $bogusRaw[0];
+        assert($bogusView instanceof \FFI\CData);
+        $entry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $bogusView);
         $classesTable->addIndex(0, $entry);
         $entry->release();
 
@@ -322,7 +325,9 @@ class PersistentHeapTest extends TestCase
         $realName = StringEntry::persistentInterned(strtolower(TestGraphNode::class));
         $realRaw  = $realName->getRawValue();
         $this->assertNotNull($realRaw);
-        $entry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $realRaw[0]);
+        $realView = $realRaw[0];
+        assert($realView instanceof \FFI\CData);
+        $entry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $realView);
         $classesTable->addIndex(0, $entry);
         $entry->release();
 
@@ -395,8 +400,8 @@ class PersistentHeapTest extends TestCase
 
                 $this->heap->put('churn', $root);
 
-                $alias = $this->heap->get('churn');
-                if ($alias->left->right !== $alias->right) {
+                $alias = self::graphNode($this->heap->get('churn'));
+                if (self::graphNode($alias->left)->right !== $alias->right) {
                     throw new \RuntimeException('DAG share lost during churn');
                 }
                 unset($alias);
@@ -579,6 +584,16 @@ class PersistentHeapTest extends TestCase
 
         $this->assertNull($this->heap->get('rejected'));
         $this->assertSame(0, $this->heap->stats()['keys']);
+    }
+
+    /**
+     * Narrows a nullable heap result (or graph edge) to a live TestGraphNode
+     */
+    private static function graphNode(?object $value): TestGraphNode
+    {
+        assert($value instanceof TestGraphNode);
+
+        return $value;
     }
 
     /**

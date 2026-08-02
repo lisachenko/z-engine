@@ -40,8 +40,6 @@ class Executor
      *
      * Bucket values are IS_PTR zvals pointing to zend_constant structures, keyed by the
      * case-sensitive constant name (including persistent engine/extension constants).
-     *
-     * @var HashTable&iterable<string, ReflectionValue>
      */
     public HashTable $constantTable;
 

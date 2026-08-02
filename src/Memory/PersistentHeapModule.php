@@ -54,7 +54,7 @@ final class PersistentHeapModule extends AbstractModule implements ModuleLifecyc
         return ZEND_THREAD_SAFE;
     }
 
-    public static function globalType(): ?string
+    public static function globalType(): string
     {
         // One zval-sized persistent slot: the heap registry anchor
         return 'zval';
@@ -85,6 +85,11 @@ final class PersistentHeapModule extends AbstractModule implements ModuleLifecyc
      *
      * Bypasses AbstractModule::getGlobals(), whose cast targets the globals STRUCT type;
      * the anchor is addressed as a zval pointer instead.
+     *
+     * @todo AbstractModule::getGlobals() cannot cast a raw globals pointer to a
+     *       zval-sized type ("attempt to cast to larger type" - FFI casts reinterpret
+     *       the 8-byte pointer variable, they do not dereference); once the base class
+     *       casts through a pointer type, this bypass can delegate to it.
      */
     public function anchorSlot(): CData
     {

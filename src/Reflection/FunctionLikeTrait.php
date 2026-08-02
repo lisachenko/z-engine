@@ -371,7 +371,7 @@ trait FunctionLikeTrait
      * ReflectionValue::getNativeValue()) is a live PHP reference, so writing through it
      * changes the static variable itself.
      *
-     * @return (HashTable&iterable<string|null, ReflectionValue>)|null
+     * @return (HashTable&iterable<int|string|null, ReflectionValue>)|null
      */
     // @phpstan-ignore method.childReturnType (borrowed engine table view instead of the native value array)
     #[\ReturnTypeWillChange]
