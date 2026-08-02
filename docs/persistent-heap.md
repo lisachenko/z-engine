@@ -8,9 +8,16 @@ in-process registry that stores whole object graphs in malloc memory, where they
 request shutdown in an NTS worker process and can be re-attached by a later request.
 
 ```php
+use ZEngine\EngineExtension\ExtensionManager;
+use ZEngine\EngineExtension\ZEngineModule;
 use ZEngine\Memory\PersistentHeap;
 
-$heap = PersistentHeap::global();
+// Explicit bootstrap, once per request, after Core::init(): the framework module is
+// constructed by YOU and registered in the typed extension registry - the heap never
+// boots anything behind your back (ExtensionNotRegisteredException otherwise)
+ExtensionManager::register(new ZEngineModule());
+
+$heap = PersistentHeap::global();        // = ExtensionManager::get(ZEngineModule::class)->heap()
 
 $heap->put('routing-tree', $rootObject); // deep persistent clone of the reachable graph
 $root = $heap->get('routing-tree');      // this or a later request: live, usable alias
@@ -108,14 +115,21 @@ PHP statics die with the request and are only used for per-request state:
   recorded object sizes, all minted strings and all minted array tables. The inventory
   lists every malloc block of the graph exactly once (shared DAG nodes appear once),
   which is what makes eviction exact and re-attachment verifiable;
-- the registry address is anchored in the globals slot of the persistent engine module
-  **`persistent_heap`** (`PersistentHeapModule`, registered by the first
-  `PersistentHeap::global()` call of the process). Since PHP 8.4 the module registry
-  stores the registered `zend_module_entry` directly, so the entry and its globals block
-  live for the whole process — the one address a later request can always find again.
+- the registry address is anchored in the globals slot of **`zengine`**
+  (`ZEngineModule`), the single framework-wide engine module of the process. Since
+  PHP 8.4 the module registry stores the registered `zend_module_entry` directly, so
+  the entry and its globals block live for the whole process — the one address a later
+  request can always find again. The module also declares a required dependency on
+  `ext/ffi` and renders the live `stats()` figures into its `phpinfo()` section.
 
-`new PersistentHeap($registryTable)` binds a heap to a caller-provided registry instead
-(no module anchor); the caller then owns discovery of the registry address.
+Storage is always **injected**: `ZEngineModule::heap()` recovers (or mints) the registry
+from its anchor and hands it to the `PersistentHeap` constructor; tests and embedders
+that manage their own anchor construct `new PersistentHeap($registryTable)` directly and
+then own discovery of the registry address. The heap never creates storage silently.
+
+A planned follow-up (tracked by the maintainer) is a Composer-level mechanism for
+userland extensions to declare their modules so `ExtensionManager` registration happens
+automatically at bootstrap, including user-supplied module configuration.
 
 ## Re-attachment semantics (first get() of a request)
 
@@ -210,9 +224,9 @@ Guards:
   eviction refuses; release the aliases first. `put()` on an existing key evicts the old
   graph first and follows the same rule.
 
-`destroy()` evicts every key and dismantles the registry table itself; the next
-`global()` call mints a fresh registry. The module entry stays registered — module
-entries are immortal by design.
+`destroy()` evicts every key and dismantles the registry table itself; the module
+clears its anchor, so the next `heap()`/`global()` call mints a fresh registry. The
+module entry stays registered — module entries are immortal by design.
 
 ### What stays immortal
 
@@ -220,7 +234,7 @@ The heap's graphs are *droppable*, not immortal: `remove()` returns their memory
 allocator (verified by the leak-plateau test — repeated put/get/remove cycles keep
 process RSS flat). The immortal remainder is bounded and listed in the
 [immortal-allocations table](long-running.md#immortal-by-design-allocations): the
-`persistent_heap` module entry with its globals anchor, the registry table while the heap
+`zengine` module entry with its globals anchor, the registry table while the heap
 exists, and the process-wide `uninitialized_bucket` sentinel.
 
 One debug-build caveat: reading operations that materialize an object's property cache
