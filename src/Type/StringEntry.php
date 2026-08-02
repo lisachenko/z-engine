@@ -194,7 +194,7 @@ class StringEntry implements ReferenceCountedInterface
      */
     public function getStringValue(): string
     {
-        $entry = ReflectionValue::newEntry(ReflectionValue::IS_STRING, $this->pointer);
+        $entry = ReflectionValue::newEntry(ReflectionValue::IS_STRING, $this->pointer[0]);
         $entry->getNativeValue($realString);
         $entry->release();
 

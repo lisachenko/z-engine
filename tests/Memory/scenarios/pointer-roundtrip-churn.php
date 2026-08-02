@@ -36,7 +36,7 @@ for ($index = 0; $index < 500; $index++) {
     $object->index = $index;
 
     $entry = new ObjectEntry($object);
-    $entry->getNativeValue($native);
+    $native = $entry->getNativeValue();
     if (!($native instanceof stdClass) || $native->index !== $index) {
         throw new RuntimeException('Object round-trip failed');
     }

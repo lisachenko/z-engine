@@ -276,7 +276,7 @@ class Compiler
         // inside and replace it with a padded copy, so the container must hold its own
         // reference - release() then drops whichever string ends up inside
         $sourceValue = new StringEntry($source);
-        $sourceEntry = ReflectionValue::newEntry(ReflectionValue::IS_STRING, $sourceValue->getRawValue())
+        $sourceEntry = ReflectionValue::newEntry(ReflectionValue::IS_STRING, $sourceValue->getRawValue()[0])
             ->acquireReference();
         $rawSourceVal = $sourceEntry->getRawValue();
 
