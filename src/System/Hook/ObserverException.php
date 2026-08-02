@@ -41,6 +41,18 @@ final class ObserverException extends RuntimeException
     }
 
     /**
+     * A z-engine observer hook is already attached to the target function
+     */
+    public static function alreadyObserved(): self
+    {
+        return new self(
+            'An ObserverHook is already attached to this function. The engine reserves exactly one '
+            . 'begin/end handler pair per registered observer, and z-engine cannot prove a second '
+            . 'pair would fit - uninstall the existing hook first.',
+        );
+    }
+
+    /**
      * The engine's fcall-observer machinery is not enabled on this build
      */
     public static function observersDisabled(): self
