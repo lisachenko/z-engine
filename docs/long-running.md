@@ -137,6 +137,7 @@ The debug-build leak gate treats the following as expected, by design:
 | Persistent hashtables and their engine-grown data blocks (`PersistentHashTable`) | registries that must outlive the request by design; the engine resizes their data with the persistent allocator, so only `PersistentHashTable::destroy()` may release them (see below) |
 | The shared `uninitialized_bucket` sentinel block | one `uint32_t[2]` per process backing every uninitialized persistent table, mirroring the engine's static |
 | Persistent object clones (`PersistentObjectFactory::persistentClone`) | refcount-pinned malloc objects designed to survive the request boundary; detached from the object store before teardown so no engine path ever frees them |
+| Arena-mimicking blocks of specialized classes (`ClassSpecializer`, see docs/class-specialization.md) | the class entry struct, property-info/class-constant blocks, `properties_info_table`, iterator/arrayaccess caches, duplicated `arg_info` blocks and duplicated type lists are structures the engine never frees for userland classes (they live in the compiler arena for a compiled class); the specializer allocates them as request memory reclaimed by the allocator at request end — request-lifetime by design, bounded per specialized class |
 
 Everything else is a bug: the test suite runs with `report_memleaks=1` on a debug build and
 fails on any leak report.
