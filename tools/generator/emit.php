@@ -134,6 +134,7 @@ if ($emitHeader) {
     #include "zend_modules.h"
     #include "zend_arena.h"
     #include "zend_exceptions.h"
+    #include "zend_extensions.h"
     #include "zend_observer.h"
     #include "supplement.h"
     C;

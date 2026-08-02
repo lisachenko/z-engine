@@ -99,6 +99,12 @@ return [
         // Allocates a user function's run_time_cache without executing it, so the
         // observer handler slot can be initialised before the first call.
         'zend_init_func_run_time_cache',
+        // Total internal-function extension slot bytes (handles * sizeof(void*)).
+        // The observer block is always the LAST internal-handle reservation
+        // (zend_observer_post_startup runs after every MINIT), so the number of
+        // registered fcall observers is derivable as
+        // (reserved_size/sizeof(void*) - internal observer slot) / 2.
+        'zend_internal_run_time_cache_reserved_size',
         // Inheritance / object API
         'zend_do_inheritance_ex',
         'zend_objects_new',
