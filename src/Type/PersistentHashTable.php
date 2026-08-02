@@ -103,16 +103,32 @@ final class PersistentHashTable extends HashTable
      */
     public function add(string $key, ReflectionValue $value): void
     {
-        $stringEntry = StringEntry::persistentInterned($key);
-        $result      = Core::call(
+        $this->addInterned(StringEntry::persistentInterned($key), $value);
+    }
+
+    /**
+     * Upserts a value under a CALLER-OWNED persistent interned string key
+     *
+     * Same engine semantics as add(), but the key entry is provided by the caller instead
+     * of being minted internally. This is the building block for registries that must be
+     * able to release their key strings later (eg on eviction): interned keys are never
+     * freed by the engine, so a registry that mints keys it cannot enumerate would leak
+     * one malloc block per insert. The caller keeps full ownership of the key block and
+     * must keep it alive for as long as the bucket exists.
+     *
+     * @param StringEntry $key Persistent interned string minted via StringEntry::persistentInterned()
+     */
+    public function addInterned(StringEntry $key, ReflectionValue $value): void
+    {
+        $result = Core::call(
             'zend_hash_add_or_update',
             $this->pointer,
-            $stringEntry->getRawValue(),
+            $key->getRawValue(),
             $value->getRawValue(),
             self::HASH_UPDATE,
         );
         if ($result === null) {
-            throw new \RuntimeException("Can not store an item with key {$key}");
+            throw new \RuntimeException('Can not store an item with key ' . $key->getStringValue());
         }
     }
 

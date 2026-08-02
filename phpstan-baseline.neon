@@ -3971,3 +3971,418 @@ parameters:
 			identifier: offsetAccess.nonOffsetAccessible
 			count: 2
 			path: tools/generator/lib/HeaderEmitter.php
+		-
+			message: '#^Binary operation "&" between mixed and 2048 results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Binary operation "&" between mixed and int results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Cannot access offset 0 on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Cannot access offset int\<0, max\> on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 2
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Cannot access property \$arr on mixed\.$#'
+			identifier: property.nonObject
+			count: 3
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Cannot access property \$ce_flags on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Cannot access property \$default_properties_count on mixed\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Cannot access property \$flags on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Cannot access property \$name on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Cannot access property \$obj on mixed\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Cannot access property \$str on mixed\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Cannot access property \$type on mixed\.$#'
+			identifier: property.nonObject
+			count: 4
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Cannot access property \$type_info on mixed\.$#'
+			identifier: property.nonObject
+			count: 3
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Cannot access property \$v on mixed\.$#'
+			identifier: property.nonObject
+			count: 4
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Parameter \#1 \$classType of static method ZEngine\\Reflection\\ReflectionClass\:\:getObjectSize\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Parameter \#1 \$sourceArray of method ZEngine\\Memory\\PersistentGraphCloner\:\:cloneArray\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Parameter \#1 \$sourceArray of method ZEngine\\Memory\\PersistentGraphCloner\:\:validateArray\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Parameter \#1 \$sourceObject of method ZEngine\\Memory\\PersistentGraphCloner\:\:cloneObject\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Parameter \#1 \$stringPointer of static method ZEngine\\Type\\StringEntry\:\:fromCData\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 3
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Parameter \#1 \$valueCode of static method ZEngine\\Reflection\\ReflectionValue\:\:name\(\) expects int, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Parameter \#1 \$variable of static method ZEngine\\Core\:\:addr\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 7
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Parameter \#1 of closure expects int\|string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Memory/PersistentGraphCloner.php
+		-
+			message: '#^Cannot access offset 0 on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Cannot access property \$arr on mixed\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Cannot access property \$obj on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Cannot access property \$ptr on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Cannot access property \$refcount on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Cannot access property \$str on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Cannot access property \$type on mixed\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Cannot access property \$type_info on mixed\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Cannot access property \$v on mixed\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Cannot call method getRawPointer\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Cannot cast mixed to int\.$#'
+			identifier: cast.int
+			count: 8
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Method ZEngine\\Memory\\PersistentHeap\:\:__construct\(\) has parameter \$registry with no value type specified in iterable type ZEngine\\Type\\PersistentHashTable\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Method ZEngine\\Memory\\PersistentHeap\:\:addLongEntry\(\) has parameter \$table with no value type specified in iterable type ZEngine\\Type\\PersistentHashTable\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Method ZEngine\\Memory\\PersistentHeap\:\:addPointerEntry\(\) has parameter \$table with no value type specified in iterable type ZEngine\\Type\\PersistentHashTable\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Method ZEngine\\Memory\\PersistentHeap\:\:addressSet\(\) has parameter \$table with no value type specified in iterable type ZEngine\\Type\\PersistentHashTable\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Method ZEngine\\Memory\\PersistentHeap\:\:attach\(\) has parameter \$descriptor with no value type specified in iterable type ZEngine\\Type\\PersistentHashTable\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Method ZEngine\\Memory\\PersistentHeap\:\:evict\(\) has parameter \$descriptor with no value type specified in iterable type ZEngine\\Type\\PersistentHashTable\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Method ZEngine\\Memory\\PersistentHeap\:\:findDescriptor\(\) return type has no value type specified in iterable type ZEngine\\Type\\PersistentHashTable\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Method ZEngine\\Memory\\PersistentHeap\:\:longSlot\(\) has parameter \$table with no value type specified in iterable type ZEngine\\Type\\PersistentHashTable\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Method ZEngine\\Memory\\PersistentHeap\:\:pointerEntry\(\) has parameter \$table with no value type specified in iterable type ZEngine\\Type\\PersistentHashTable\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Method ZEngine\\Memory\\PersistentHeap\:\:pointerList\(\) has parameter \$table with no value type specified in iterable type ZEngine\\Type\\PersistentHashTable\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Method ZEngine\\Memory\\PersistentHeap\:\:pointerSlot\(\) has parameter \$descriptor with no value type specified in iterable type ZEngine\\Type\\PersistentHashTable\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Method ZEngine\\Memory\\PersistentHeap\:\:tableSlot\(\) has parameter \$descriptor with no value type specified in iterable type ZEngine\\Type\\PersistentHashTable\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Method ZEngine\\Memory\\PersistentHeap\:\:tableSlot\(\) return type has no value type specified in iterable type ZEngine\\Type\\PersistentHashTable\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Parameter \#1 \$hashInstance of class ZEngine\\Type\\HashTable constructor expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Parameter \#1 \$pointer of static method ZEngine\\Core\:\:addressOf\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 3
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Parameter \#1 \$variable of static method ZEngine\\Core\:\:addr\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 2
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Parameter \#2 \$pointer of static method ZEngine\\Core\:\:cast\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 2
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Parameter \#2 \$value of static method ZEngine\\Reflection\\ReflectionValue\:\:newEntry\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 3
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Strict comparison using \=\=\= between ZEngine\\Type\\ObjectEntry and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/Memory/PersistentHeap.php
+		-
+			message: '#^Method ZEngine\\Memory\\PersistentHeapModule\:\:globalType\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: src/Memory/PersistentHeapModule.php
+		-
+			message: '#^Cannot access property \$items on object\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Memory/PersistentHeapTest.php
+		-
+			message: '#^Cannot access property \$left on object\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Memory/PersistentHeapTest.php
+		-
+			message: '#^Cannot access property \$name on ZEngine\\Stub\\TestGraphNode\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Memory/PersistentHeapTest.php
+		-
+			message: '#^Cannot access property \$name on object\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: tests/Memory/PersistentHeapTest.php
+		-
+			message: '#^Cannot access property \$parent on ZEngine\\Stub\\TestGraphNode\|null\.$#'
+			identifier: property.nonObject
+			count: 3
+			path: tests/Memory/PersistentHeapTest.php
+		-
+			message: '#^Cannot access property \$payload on object\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Memory/PersistentHeapTest.php
+		-
+			message: '#^Cannot access property \$rank on object\|null\.$#'
+			identifier: property.nonObject
+			count: 3
+			path: tests/Memory/PersistentHeapTest.php
+		-
+			message: '#^Cannot access property \$right on ZEngine\\Stub\\TestGraphNode\|null\.$#'
+			identifier: property.nonObject
+			count: 3
+			path: tests/Memory/PersistentHeapTest.php
+		-
+			message: '#^Cannot access property \$right on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Memory/PersistentHeapTest.php
+		-
+			message: '#^Cannot access property \$right on object\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Memory/PersistentHeapTest.php
+		-
+			message: '#^Cannot access property \$weight on object\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: tests/Memory/PersistentHeapTest.php
+		-
+			message: '#^Method ZEngine\\Memory\\PersistentHeapTest\:\:descriptorTable\(\) return type has no value type specified in iterable type ZEngine\\Type\\PersistentHashTable\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Memory/PersistentHeapTest.php
+		-
+			message: '#^Parameter \#2 \$value of static method ZEngine\\Reflection\\ReflectionValue\:\:newEntry\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tests/Memory/PersistentHeapTest.php
+		-
+			message: '#^Property ZEngine\\Memory\\PersistentHeapTest\:\:\$registry type has no value type specified in iterable type ZEngine\\Type\\PersistentHashTable\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Memory/PersistentHeapTest.php
+		-
+			message: '#^Cannot access property \$items on object\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Memory/scenarios/persistent-heap-churn.php
+		-
+			message: '#^Cannot access property \$left on object\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: tests/Memory/scenarios/persistent-heap-churn.php
+		-
+			message: '#^Cannot access property \$parent on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Memory/scenarios/persistent-heap-churn.php
+		-
+			message: '#^Cannot access property \$right on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Memory/scenarios/persistent-heap-churn.php
+		-
+			message: '#^Cannot access property \$right on object\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Memory/scenarios/persistent-heap-churn.php
+		-
+			message: '#^Parameter \#1 \$object of function get_object_vars expects object, object\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Memory/scenarios/persistent-heap-churn.php
+		-
+			message: '#^Cannot access property \$config on object\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Memory/scenarios/persistent-heap-request-cycle.php
+		-
+			message: '#^Cannot access property \$hits on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Memory/scenarios/persistent-heap-request-cycle.php
+		-
+			message: '#^Cannot access property \$label on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Memory/scenarios/persistent-heap-request-cycle.php
+		-
+			message: '#^Cannot access property \$left on object\|null\.$#'
+			identifier: property.nonObject
+			count: 6
+			path: tests/Memory/scenarios/persistent-heap-request-cycle.php
+		-
+			message: '#^Cannot access property \$parent on mixed\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: tests/Memory/scenarios/persistent-heap-request-cycle.php
+		-
+			message: '#^Cannot access property \$right on object\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Memory/scenarios/persistent-heap-request-cycle.php
+		-
+			message: '#^Cannot access property \$shared on mixed\.$#'
+			identifier: property.nonObject
+			count: 4
+			path: tests/Memory/scenarios/persistent-heap-request-cycle.php
+		-
+			message: '#^Cannot call method describe\(\) on object\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/Memory/scenarios/persistent-heap-request-cycle.php
+		-
+			message: '#^Parameter \#1 \$object of function spl_object_id expects object, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Memory/scenarios/persistent-heap-request-cycle.php
+		-
+			message: '#^Parameter \#1 \$object of function spl_object_id expects object, object\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Memory/scenarios/persistent-heap-request-cycle.php
