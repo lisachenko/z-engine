@@ -143,7 +143,7 @@ final class PersistentHeap
         if (self::asInt(self::asCData($anchorTyped->v)->type) === ReflectionValue::IS_PTR) {
             $registry = PersistentHashTable::fromCData(Core::cast('HashTable *', self::asCData($anchorValue->ptr)));
         } else {
-            $registry = PersistentHashTable::create();
+            $registry = new PersistentHashTable();
 
             // Store through the typed union member (zend_array*): void* CData round trips
             // are unreliable for address identity (see addressSet)
@@ -180,34 +180,30 @@ final class PersistentHeap
         // eviction releases them together with the graph.
         $stringBlocks = $graph->strings;
 
+        /** @var array<string, StringEntry> $classNamePool One interned block per distinct class name */
         $classNamePool = [];
         foreach ($graph->classNames as $className) {
             if (!isset($classNamePool[$className])) {
-                $entry    = StringEntry::persistentInterned($className);
-                $rawValue = $entry->getRawValue();
-                assert($rawValue instanceof CData);
+                $entry = StringEntry::persistentInterned($className);
 
                 $classNamePool[$className] = $entry;
-                $stringBlocks[]            = $rawValue;
+                $stringBlocks[]            = $entry->getRawValue();
             }
         }
 
-        $keyEntry    = StringEntry::persistentInterned($key);
-        $rawKeyValue = $keyEntry->getRawValue();
-        assert($rawKeyValue instanceof CData);
-        $stringBlocks[] = $rawKeyValue;
+        $keyEntry       = StringEntry::persistentInterned($key);
+        $stringBlocks[] = $keyEntry->getRawValue();
 
         // All inventory tables are integer-keyed on purpose: no hidden interned-string
         // keys are minted, so the strings inventory above stays the complete list
-        $objectsTable = PersistentHashTable::create();
-        $classesTable = PersistentHashTable::create();
-        $sizesTable   = PersistentHashTable::create();
-        $stringsTable = PersistentHashTable::create();
-        $arraysTable  = PersistentHashTable::create();
+        $objectsTable = new PersistentHashTable();
+        $classesTable = new PersistentHashTable();
+        $sizesTable   = new PersistentHashTable();
+        $stringsTable = new PersistentHashTable();
+        $arraysTable  = new PersistentHashTable();
 
         foreach ($graph->objects as $index => $objectPointer) {
             $classEntry = $classNamePool[$graph->classNames[$index]]->getRawValue();
-            assert($classEntry instanceof CData);
 
             $this->addPointerEntry($objectsTable, $index, $objectPointer);
             $this->addPointerEntry($classesTable, $index, $classEntry);
@@ -220,7 +216,7 @@ final class PersistentHeap
             $this->addPointerEntry($arraysTable, $index, $arrayPointer);
         }
 
-        $descriptor = PersistentHashTable::create();
+        $descriptor = new PersistentHashTable();
         $this->addPointerEntry($descriptor, self::SLOT_ROOT, $graph->root);
         $this->addPointerEntry($descriptor, self::SLOT_OBJECTS, $objectsTable->getRawValue());
         $this->addPointerEntry($descriptor, self::SLOT_OBJECT_CLASSES, $classesTable->getRawValue());
@@ -606,7 +602,7 @@ final class PersistentHeap
         if ($properties === null) {
             return;
         }
-        (new HashTable(self::asCData($properties)))->releaseReference();
+        (HashTable::fromCData(self::asCData($properties)))->releaseReference();
         $objectPointer->properties = null;
     }
 

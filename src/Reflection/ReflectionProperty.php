@@ -48,7 +48,7 @@ class ReflectionProperty extends NativeReflectionProperty
             throw new \ReflectionException("Class {$className} should be in the engine.");
         }
         $classEntry      = $classEntryValue->getRawClass();
-        $propertiesTable = new HashTable(Core::addr($classEntry->properties_info));
+        $propertiesTable = HashTable::fromCData(Core::addr($classEntry->properties_info));
 
         $propertyEntry = $propertiesTable->find(strtolower($propertyName));
         if ($propertyEntry === null) {
@@ -149,7 +149,7 @@ class ReflectionProperty extends NativeReflectionProperty
         }
         assert($attributes instanceof CData);
 
-        return new HashTable($attributes);
+        return HashTable::fromCData($attributes);
     }
 
     /**

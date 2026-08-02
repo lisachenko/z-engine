@@ -309,9 +309,7 @@ class ClassSpecializer
             $classFlags &= ~Core::engineConstant($storageFlag);
         }
         $newEntry->ce_flags = $classFlags;
-        $newClassNameValue  = StringEntry::fromString($newClassName)->transferReferenceOwnership()->getRawValue();
-        assert($newClassNameValue instanceof CData);
-        $newEntry->name = $newClassNameValue;
+        $newEntry->name     = StringEntry::fromString($newClassName)->transferReferenceOwnership()->getRawValue();
 
         // Per-class engine caches must start empty on the copy
         $newEntry->static_members_table__ptr = null;
@@ -610,7 +608,7 @@ class ClassSpecializer
         $sourceAddress    = Core::addressOf($sourceEntry);
         $newFunctionTable = $newEntry->function_table;
         assert($newFunctionTable instanceof CData);
-        $newTable    = new HashTable(Core::addr($newFunctionTable));
+        $newTable    = HashTable::fromCData(Core::addr($newFunctionTable));
         $functionMap = [];
 
         foreach ($this->methodTable($sourceEntry) as $methodName => $methodValue) {
@@ -769,7 +767,7 @@ class ClassSpecializer
         $sourceAddress      = Core::addressOf($sourceEntry);
         $newPropertiesTable = $newEntry->properties_info;
         assert($newPropertiesTable instanceof CData);
-        $newTable    = new HashTable(Core::addr($newPropertiesTable));
+        $newTable    = HashTable::fromCData(Core::addr($newPropertiesTable));
         $propertyMap = [];
         $ownCopies   = [];
 
@@ -867,7 +865,7 @@ class ClassSpecializer
         $sourceAddress     = Core::addressOf($sourceEntry);
         $newConstantsTable = $newEntry->constants_table;
         assert($newConstantsTable instanceof CData);
-        $newTable = new HashTable(Core::addr($newConstantsTable));
+        $newTable = HashTable::fromCData(Core::addr($newConstantsTable));
 
         foreach ($this->constantsTable($sourceEntry) as $constantName => $constantValue) {
             assert(is_string($constantName));
@@ -1018,8 +1016,7 @@ class ClassSpecializer
         }
         // Placeholder becomes another class-like type: owned name, refcount 1
         $replacementName = StringEntry::fromString($replacement)->transferReferenceOwnership()->getRawValue();
-        assert($replacementName instanceof CData);
-        $type->ptr = Core::cast('void *', $replacementName);
+        $type->ptr       = Core::cast('void *', $replacementName);
     }
 
     /**
@@ -1106,7 +1103,7 @@ class ClassSpecializer
      */
     private static function addHashTableReference(CData $tablePointer): void
     {
-        $table = new HashTable($tablePointer);
+        $table = HashTable::fromCData($tablePointer);
         if (!$table->isImmutable()) {
             $table->incrementReferenceCount();
         }
@@ -1122,7 +1119,7 @@ class ClassSpecializer
         $tableStruct = $classEntry->function_table;
         assert($tableStruct instanceof CData);
 
-        return new HashTable(Core::addr($tableStruct));
+        return HashTable::fromCData(Core::addr($tableStruct));
     }
 
     /**
@@ -1135,7 +1132,7 @@ class ClassSpecializer
         $tableStruct = $classEntry->properties_info;
         assert($tableStruct instanceof CData);
 
-        return new HashTable(Core::addr($tableStruct));
+        return HashTable::fromCData(Core::addr($tableStruct));
     }
 
     /**
@@ -1148,7 +1145,7 @@ class ClassSpecializer
         $tableStruct = $classEntry->constants_table;
         assert($tableStruct instanceof CData);
 
-        return new HashTable(Core::addr($tableStruct));
+        return HashTable::fromCData(Core::addr($tableStruct));
     }
 
     /**

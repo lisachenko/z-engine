@@ -21,7 +21,7 @@ Core::init();
 
 // The persistent tables themselves are immortal-by-design malloc blocks; the gate
 // verifies that no REQUEST memory leaks while feeding and reading them
-$registry = PersistentHashTable::create();
+$registry = new PersistentHashTable();
 
 for ($index = 0; $index < 200; $index++) {
     $value = new ReflectionValue($index);

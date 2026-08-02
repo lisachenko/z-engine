@@ -325,7 +325,7 @@ final class PersistentGraphCloner
             return $this->arrayMap[$address];
         }
 
-        $table    = PersistentHashTable::create();
+        $table    = new PersistentHashTable();
         $rawTable = $table->getRawValue();
 
         // Record the mapping before filling: an element may reach this very array again
@@ -367,12 +367,10 @@ final class PersistentGraphCloner
             return $this->stringPool[$content];
         }
 
-        $entry    = StringEntry::persistentInterned($content);
-        $rawValue = $entry->getRawValue();
-        assert($rawValue instanceof CData);
+        $entry = StringEntry::persistentInterned($content);
 
         $this->stringPool[$content] = $entry;
-        $this->strings[]            = $rawValue;
+        $this->strings[]            = $entry->getRawValue();
         $this->bytes += Core::type('zend_string')->getStructFieldOffset('val') + strlen($content) + 1;
 
         return $entry;

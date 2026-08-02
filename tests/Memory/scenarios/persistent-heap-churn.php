@@ -49,7 +49,7 @@ function churnNode(?object $value): ChurnNode
 // Whole put/get/remove lifecycle on a detached registry: on a debug build the leak gate
 // fails on any request-allocator block left behind (materialized property caches, zval
 // containers, temporary strings)
-$heap = new PersistentHeap(PersistentHashTable::create());
+$heap = new PersistentHeap(new PersistentHashTable());
 
 for ($cycle = 0; $cycle < 50; $cycle++) {
     $shared        = new ChurnNode();

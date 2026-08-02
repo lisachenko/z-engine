@@ -152,7 +152,7 @@ class GetPropertiesHook extends AbstractHook
         // shared empty array stay untouched), the new one is owned by the object and is
         // released by zend_object_std_dtor together with it
         if ($previousTable !== null) {
-            (new HashTable($previousTable))->releaseReference();
+            (HashTable::fromCData($previousTable))->releaseReference();
         }
         $object->properties = $rawArray;
 
@@ -191,7 +191,7 @@ class GetPropertiesHook extends AbstractHook
         }
         assert($rawArray instanceof CData);
 
-        $table      = new HashTable($rawArray);
+        $table      = HashTable::fromCData($rawArray);
         $properties = [];
         foreach ($table as $key => $refValue) {
             if ($refValue->getType() === ReflectionValue::IS_INDIRECT) {
@@ -203,11 +203,7 @@ class GetPropertiesHook extends AbstractHook
             // Each value is materialized with its own reference owned by the built array;
             // the engine table itself stays borrowed from the object and is not released
             $refValue->getNativeValue($value);
-            if (is_string($key) || is_int($key)) {
-                $properties[$key] = $value;
-            } else {
-                $properties[] = $value;
-            }
+            $properties[$key] = $value;
         }
 
         return $properties;
