@@ -15,6 +15,8 @@ namespace ZEngine\Memory;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\EngineExtension\ExtensionManager;
+use ZEngine\EngineExtension\ZEngineModule;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\System\ObjectStore;
@@ -35,7 +37,7 @@ use ZEngine\Type\StringEntry;
  * persistent memory, never in PHP state (PHP statics die with the request):
  *
  *  - the ROOT REGISTRY is a PersistentHashTable mapping heap key => descriptor table;
- *    its address is anchored in the PersistentHeapModule globals slot, which the
+ *    its address is anchored in the ZEngineModule globals slot, which the
  *    persistent module registry keeps for the process lifetime;
  *  - one DESCRIPTOR table per key holds the root object pointer, the graph byte count
  *    and five integer-keyed inventory tables: cloned objects, their class names, their
@@ -79,11 +81,6 @@ final class PersistentHeap
     private const SLOT_BYTES          = 6;
 
     /**
-     * The process-global heap bound to the module-globals anchor
-     */
-    private static ?self $instance = null;
-
-    /**
      * Keys re-attached in the current request (per-request state, reset by the hooks)
      *
      * @var array<string, true>
@@ -108,50 +105,27 @@ final class PersistentHeap
     private bool $destroyed = false;
 
     /**
-     * @internal Use global() for the process heap. Direct construction binds the heap to
-     *           a caller-provided registry table (used by tests and embedders that manage
-     *           their own anchor); such a heap has no module anchor and is only
-     *           discoverable through this wrapper.
+     * The registry table is INJECTED - the heap never creates its own storage. The
+     * process heap receives the anchor-recovered registry from ZEngineModule::heap();
+     * tests and embedders that manage their own anchor inject a table directly.
      */
     public function __construct(
         private readonly PersistentHashTable $registry,
-        private readonly ?PersistentHeapModule $module = null,
+        private readonly ?ZEngineModule $module = null,
     ) {}
 
     /**
-     * Returns the process-global heap, creating or re-attaching its anchor as needed
+     * Returns the process-global heap anchored in the zengine module
      *
-     * The first call of a process registers the persistent heap module and mints the
-     * root registry; later requests of the same process (fresh PHP state, same engine
-     * registries) recover the registry from the module-globals anchor.
+     * Pure convenience over the typed module registry - no hidden bootstrap happens
+     * here: the module must have been registered explicitly
+     * (ExtensionManager::register(new ZEngineModule())) during application startup.
+     *
+     * @throws \ZEngine\EngineExtension\ExtensionNotRegisteredException when it was not
      */
     public static function global(): self
     {
-        if (self::$instance !== null && !self::$instance->destroyed) {
-            return self::$instance;
-        }
-
-        $module = new PersistentHeapModule();
-        if (!$module->isModuleRegistered()) {
-            $module->register();
-            $module->startup();
-        }
-
-        $anchor      = $module->anchorSlot();
-        $anchorTyped = self::asCData($anchor->u1);
-        $anchorValue = self::asCData($anchor->value);
-        if (self::asInt(self::asCData($anchorTyped->v)->type) === ReflectionValue::IS_PTR) {
-            $registry = PersistentHashTable::fromCData(Core::cast('HashTable *', self::asCData($anchorValue->ptr)));
-        } else {
-            $registry = new PersistentHashTable();
-
-            // Store through the typed union member (zend_array*): void* CData round trips
-            // are unreliable for address identity (see addressSet)
-            $anchorValue->arr       = $registry->getRawValue();
-            $anchorTyped->type_info = ReflectionValue::IS_PTR;
-        }
-
-        return self::$instance = new self($registry, $module);
+        return ExtensionManager::get(ZEngineModule::class)->heap();
     }
 
     /**
@@ -252,7 +226,7 @@ final class PersistentHeap
 
         $this->attach($key, $descriptor);
 
-        $rootPointer = $this->pointerSlot($descriptor, self::SLOT_ROOT, 'zend_object *');
+        $rootPointer = Core::cast('zend_object *', $this->requireEntry($descriptor, self::SLOT_ROOT)->getRawPointer());
 
         $entry = ReflectionValue::newEntry(ReflectionValue::IS_OBJECT, self::asCData($rootPointer[0]));
         $entry->getNativeValue($alias);
@@ -305,7 +279,7 @@ final class PersistentHeap
                 'objects' => self::asInt($this->tableSlot($descriptor, self::SLOT_OBJECTS)->getRawValue()->nNumOfElements),
                 'strings' => self::asInt($this->tableSlot($descriptor, self::SLOT_STRINGS)->getRawValue()->nNumOfElements),
                 'arrays'  => self::asInt($this->tableSlot($descriptor, self::SLOT_ARRAYS)->getRawValue()->nNumOfElements),
-                'bytes'   => $this->longSlot($descriptor, self::SLOT_BYTES),
+                'bytes'   => $this->byteCount($descriptor),
             ];
 
             $perKey[$key] = $keyStats;
@@ -351,35 +325,26 @@ final class PersistentHeap
 
         $this->registry->destroy();
 
-        if ($this->module !== null) {
-            // Reset the anchor so the next global() mints a fresh registry
-            self::asCData($this->module->anchorSlot()->u1)->type_info = ReflectionValue::IS_UNDEF;
-        }
+        // The module clears its anchor so the next heap() call mints a fresh registry
+        $this->module?->onHeapDestroyed();
 
         $this->destroyed = true;
-        if (self::$instance === $this) {
-            self::$instance = null;
-        }
     }
 
     /**
-     * Request-startup delivery (PersistentHeapModule::requestStartup): heap operational
+     * Request-startup delivery (ZEngineModule::requestStartup): heap operational
      *
      * @internal
      */
-    public static function onRequestStartup(): void
+    public function onRequestStartup(): void
     {
-        $heap = self::$instance;
-        if ($heap === null) {
-            return;
-        }
-        $heap->inert             = false;
-        $heap->attachedKeys      = [];
-        $heap->registeredHandles = [];
+        $this->inert             = false;
+        $this->attachedKeys      = [];
+        $this->registeredHandles = [];
     }
 
     /**
-     * Request-shutdown delivery (PersistentHeapModule::requestShutdown): heap goes inert
+     * Request-shutdown delivery (ZEngineModule::requestShutdown): heap goes inert
      *
      * Delivered right after Core::shutdown() at real request end - engine writes are
      * forbidden then, so only PHP state is dropped. In a simulated cycle (the hooks are
@@ -389,22 +354,15 @@ final class PersistentHeap
      *
      * @internal
      */
-    public static function onRequestShutdown(): void
+    public function onRequestShutdown(): void
     {
-        $heap = self::$instance;
-        if ($heap === null) {
-            return;
-        }
         if (!Core::isShutdown()) {
-            $heap->releaseMaterializedCaches();
-            $heap->recycleRegisteredHandles();
+            $this->releaseMaterializedCaches();
+            $this->recycleRegisteredHandles();
         }
-        $heap->inert             = true;
-        $heap->attachedKeys      = [];
-        $heap->registeredHandles = [];
-
-        // The next request must re-attach from the anchor instead of trusting PHP state
-        self::$instance = null;
+        $this->inert             = true;
+        $this->attachedKeys      = [];
+        $this->registeredHandles = [];
     }
 
     /**
@@ -431,10 +389,10 @@ final class PersistentHeap
         $classNames = [];
         $resolved   = [];
         for ($index = 0; $index < $objectCount; $index++) {
-            $objects[$index] = $this->pointerEntry($objectsTable, $index, 'zend_object *');
+            $objects[$index] = Core::cast('zend_object *', $this->requireEntry($objectsTable, $index)->getRawPointer());
 
             $classNames[$index] = StringEntry::fromCData(
-                $this->pointerEntry($classesTable, $index, 'zend_string *'),
+                Core::cast('zend_string *', $this->requireEntry($classesTable, $index)->getRawPointer()),
             )->getStringValue();
 
             $classValue = Core::$executor->classTable->find($classNames[$index]);
@@ -443,8 +401,9 @@ final class PersistentHeap
             }
             $classEntry = $classValue->getRawClass();
 
-            $expectedSize = $this->longSlot($sizesTable, $index);
-            $actualSize   = ReflectionClass::getObjectSize($classEntry);
+            $this->requireEntry($sizesTable, $index)->getNativeValue($expectedSize);
+            assert(is_int($expectedSize));
+            $actualSize = ReflectionClass::getObjectSize($classEntry);
             if ($actualSize !== $expectedSize) {
                 throw ClassLayoutChangedException::forClass($key, $classNames[$index], $expectedSize, $actualSize);
             }
@@ -516,7 +475,7 @@ final class PersistentHeap
         $objectCount = self::asInt($objectsTable->getRawValue()->nNumOfElements);
         $objects     = [];
         for ($index = 0; $index < $objectCount; $index++) {
-            $objects[$index] = $this->pointerEntry($objectsTable, $index, 'zend_object *');
+            $objects[$index] = Core::cast('zend_object *', $this->requireEntry($objectsTable, $index)->getRawPointer());
         }
 
         // Materialized property caches hold references on child objects: release them
@@ -585,7 +544,9 @@ final class PersistentHeap
             $objectsTable = $this->tableSlot($descriptor, self::SLOT_OBJECTS);
             $objectCount  = self::asInt($objectsTable->getRawValue()->nNumOfElements);
             for ($index = 0; $index < $objectCount; $index++) {
-                $this->releasePropertiesCache($this->pointerEntry($objectsTable, $index, 'zend_object *'));
+                $this->releasePropertiesCache(
+                    Core::cast('zend_object *', $this->requireEntry($objectsTable, $index)->getRawPointer()),
+                );
             }
         }
     }
@@ -684,31 +645,26 @@ final class PersistentHeap
     }
 
     /**
-     * Reads a typed pointer stored as an IS_PTR entry under an integer key
+     * Reads a mandatory inventory entry as a ReflectionValue (borrowed bucket view)
+     *
+     * All typed extraction happens through the ReflectionValue getters at the call
+     * sites (getRawPointer() for IS_PTR entries, getNativeValue() for scalars).
      */
-    private function pointerEntry(PersistentHashTable $table, int $index, string $type): CData
+    private function requireEntry(PersistentHashTable $table, int $index): ReflectionValue
     {
-        $value = $table->findIndex($index);
-        if ($value === null) {
-            throw new PersistentHeapException("Corrupt heap metadata: missing pointer entry #{$index}");
-        }
-
-        return Core::cast($type, $value->getRawPointer());
+        return $table->findIndex($index)
+            ?? throw new PersistentHeapException("Corrupt heap metadata: missing entry #{$index}");
     }
 
     /**
-     * Reads an IS_LONG entry under an integer key
+     * Reads the recorded payload byte count of one descriptor
      */
-    private function longSlot(PersistentHashTable $table, int $index): int
+    private function byteCount(PersistentHashTable $descriptor): int
     {
-        $value = $table->findIndex($index);
-        if ($value === null) {
-            throw new PersistentHeapException("Corrupt heap metadata: missing long entry #{$index}");
-        }
-        $value->getNativeValue($native);
-        assert(is_int($native));
+        $this->requireEntry($descriptor, self::SLOT_BYTES)->getNativeValue($bytes);
+        assert(is_int($bytes));
 
-        return $native;
+        return $bytes;
     }
 
     /**
@@ -716,15 +672,9 @@ final class PersistentHeap
      */
     private function tableSlot(PersistentHashTable $descriptor, int $slot): PersistentHashTable
     {
-        return PersistentHashTable::fromCData($this->pointerEntry($descriptor, $slot, 'HashTable *'));
-    }
-
-    /**
-     * Reads a typed pointer stored in a descriptor slot
-     */
-    private function pointerSlot(PersistentHashTable $descriptor, int $slot, string $type): CData
-    {
-        return $this->pointerEntry($descriptor, $slot, $type);
+        return PersistentHashTable::fromCData(
+            Core::cast('HashTable *', $this->requireEntry($descriptor, $slot)->getRawPointer()),
+        );
     }
 
     /**
@@ -737,7 +687,7 @@ final class PersistentHeap
         $pointers = [];
         $count    = self::asInt($table->getRawValue()->nNumOfElements);
         for ($index = 0; $index < $count; $index++) {
-            $pointers[] = $this->pointerEntry($table, $index, $type);
+            $pointers[] = Core::cast($type, $this->requireEntry($table, $index)->getRawPointer());
         }
 
         return $pointers;
@@ -755,7 +705,7 @@ final class PersistentHeap
         for ($index = 0; $index < $count; $index++) {
             // A TYPED pointer view is required: addressOf() over a bare void* CData
             // reinterprets the pointee bytes instead of the pointer value
-            $addresses[Core::addressOf($this->pointerEntry($table, $index, 'char *'))] = true;
+            $addresses[Core::addressOf(Core::cast('char *', $this->requireEntry($table, $index)->getRawPointer()))] = true;
         }
 
         return $addresses;

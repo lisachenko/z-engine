@@ -12,9 +12,11 @@
 declare(strict_types=1);
 
 use ZEngine\Core;
+use ZEngine\EngineExtension\ExtensionManager;
+use ZEngine\EngineExtension\ExtensionNotRegisteredException;
+use ZEngine\EngineExtension\ZEngineModule;
 use ZEngine\Memory\HeapInertException;
 use ZEngine\Memory\PersistentHeap;
-use ZEngine\Memory\PersistentHeapModule;
 
 require __DIR__ . '/../../../vendor/autoload.php';
 
@@ -55,9 +57,25 @@ $expect = static function (bool $condition, string $marker): void {
 };
 
 // ---------------------------------------------------------------------------------------
-// "Request A": register the heap module, persist a graph with DAG shares and a cycle
+// "Request A": explicit bootstrap of the single z-engine module, then persist a graph
+// with DAG shares and a cycle. No hidden initialization: before the module is
+// registered, the global heap accessor must refuse.
 // ---------------------------------------------------------------------------------------
+try {
+    PersistentHeap::global();
+    fwrite(STDERR, "FAILED: global() must refuse before the module is registered\n");
+    exit(1);
+} catch (ExtensionNotRegisteredException) {
+    echo 'no-silent-bootstrap', PHP_EOL;
+}
+
+$module = ExtensionManager::register(new ZEngineModule());
+$expect(ExtensionManager::has(ZEngineModule::class), 'module-registered');
+$expect(ExtensionManager::get(ZEngineModule::class) === $module, 'module-is-singleton');
+$expect(extension_loaded('zengine'), 'engine-entry-visible');
+
 $heap = PersistentHeap::global();
+$expect($heap === $module->heap(), 'global-is-module-heap');
 
 $sharedLeaf        = new RequestCycleNode();
 $sharedLeaf->label = 'shared-leaf';
@@ -95,7 +113,6 @@ gc_collect_cycles();
 // The REAL request-end ordering (Core::shutdown() first, then the requestShutdown
 // delivery) is exercised by this very process exiting at the end of the fixture.
 // ---------------------------------------------------------------------------------------
-$module = new PersistentHeapModule();
 $module->requestShutdown();
 
 try {
@@ -139,5 +156,15 @@ unset($rootB, $leftB, $rightB, $sharedB, $aliasB);
 gc_collect_cycles();
 $heapB->remove('cycle-graph');
 $expect($heapB->stats()['keys'] === 0, 'evicted-in-request-b');
+
+// The module section of phpinfo() reports the live heap statistics (info_func wiring)
+$heapB->put('info-graph', new RequestCycleNode());
+ob_start();
+phpinfo(INFO_MODULES);
+$info = (string) ob_get_clean();
+$expect(str_contains($info, 'zengine'), 'phpinfo-has-module-section');
+$expect(str_contains($info, 'Persistent heap => active'), 'phpinfo-heap-active');
+$expect(str_contains($info, 'Persistent heap keys => 1'), 'phpinfo-heap-stats');
+$heapB->remove('info-graph');
 
 echo 'SCENARIO OK', PHP_EOL;

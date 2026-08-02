@@ -53,6 +53,11 @@ class PersistentHeapRequestCycleTest extends TestCase
         $this->assertSame(0, $exitCode, "Request-cycle scenario exited with code {$exitCode}\n{$report}");
 
         $expectedMarkers = [
+            'no-silent-bootstrap',
+            'module-registered',
+            'module-is-singleton',
+            'engine-entry-visible',
+            'global-is-module-heap',
             'put-in-request-a',
             'get-in-request-a',
             'clone-is-not-the-source',
@@ -67,6 +72,9 @@ class PersistentHeapRequestCycleTest extends TestCase
             'fresh-distinct-handles',
             'graph-survives-gc',
             'evicted-in-request-b',
+            'phpinfo-has-module-section',
+            'phpinfo-heap-active',
+            'phpinfo-heap-stats',
             'SCENARIO OK',
         ];
         $offset = 0;

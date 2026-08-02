@@ -36,16 +36,6 @@ class ChurnNode
     public array $items = [];
 }
 
-/**
- * Narrows a nullable heap result (or graph edge) to a live ChurnNode
- */
-function churnNode(?object $value): ChurnNode
-{
-    assert($value instanceof ChurnNode);
-
-    return $value;
-}
-
 // Whole put/get/remove lifecycle on a detached registry: on a debug build the leak gate
 // fails on any request-allocator block left behind (materialized property caches, zval
 // containers, temporary strings)
@@ -67,8 +57,10 @@ for ($cycle = 0; $cycle < 50; $cycle++) {
     unset($root, $shared);
     gc_collect_cycles();
 
-    $alias = churnNode($heap->get('churn'));
-    $left  = churnNode($alias->left);
+    $alias = $heap->get('churn');
+    assert($alias instanceof ChurnNode);
+    $left = $alias->left;
+    assert($left instanceof ChurnNode);
     if ($left->right !== $alias->right || $left->parent !== $alias) {
         throw new RuntimeException('Graph topology lost during churn');
     }
