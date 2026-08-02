@@ -86,6 +86,19 @@ return [
         // Opcode API
         'zend_set_user_opcode_handler',
         'zend_get_user_opcode_handler',
+        // Observer API (zend_observer.h). Registration (zend_observer_fcall_register)
+        // is only honoured before zend_observer_post_startup(); the per-function
+        // add/remove handlers attach begin/end callbacks at runtime. See
+        // src/System/Hook/ObserverHook.php and docs/observer-hook.md for the timing
+        // and memory-safety boundary that governs their use from z-engine.
+        'zend_observer_fcall_register',
+        'zend_observer_add_begin_handler',
+        'zend_observer_add_end_handler',
+        'zend_observer_remove_begin_handler',
+        'zend_observer_remove_end_handler',
+        // Allocates a user function's run_time_cache without executing it, so the
+        // observer handler slot can be initialised before the first call.
+        'zend_init_func_run_time_cache',
         // Inheritance / object API
         'zend_do_inheritance_ex',
         'zend_objects_new',
@@ -140,6 +153,12 @@ return [
         'module_registry',
         'std_object_handlers',
         'zend_ast_process',
+        // Observer extension slots. Reading them tells z-engine whether the engine's
+        // fcall-observer machinery was enabled by a startup-time (MINIT) provider:
+        // op_array_extension == -1 means observers are disabled (ZEND_OBSERVER_ENABLED
+        // is false) and no user function reserves an observer handler slot.
+        'zend_observer_fcall_op_array_extension',
+        'zend_observer_fcall_internal_function_extension',
     ],
 
     'defines' => [
