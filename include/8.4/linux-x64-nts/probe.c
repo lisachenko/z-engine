@@ -72,6 +72,9 @@ int main(void) {
 #ifdef ZEND_ACC_HAS_STATIC_IN_METHODS
     fprintf(constants, "    'ZEND_ACC_HAS_STATIC_IN_METHODS' => %lld,\n", (long long)(ZEND_ACC_HAS_STATIC_IN_METHODS));
 #endif
+#ifdef ZEND_HAS_STATIC_IN_METHODS
+    fprintf(constants, "    'ZEND_HAS_STATIC_IN_METHODS' => %lld,\n", (long long)(ZEND_HAS_STATIC_IN_METHODS));
+#endif
 #ifdef ZEND_ACC_TOP_LEVEL
     fprintf(constants, "    'ZEND_ACC_TOP_LEVEL' => %lld,\n", (long long)(ZEND_ACC_TOP_LEVEL));
 #endif
