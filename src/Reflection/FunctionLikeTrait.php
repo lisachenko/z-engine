@@ -15,6 +15,8 @@ namespace ZEngine\Reflection;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\System\SharedMemory;
+use ZEngine\System\SharedMemoryException;
 use ZEngine\Type\ArgumentEntry;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\LiveRange;
@@ -108,25 +110,16 @@ trait FunctionLikeTrait
     }
 
     /**
-     * Function flags that describe the body of the function (as opposed to its declaration):
-     * they must always travel together with the op_array they were compiled for.
-     *
-     * ZEND_ACC_HEAP_RT_CACHE and the run_time_cache/T fields live in zend_function.common
-     * since PHP 8.2, so a whole-common copy from the previous entry would graft a run-time
-     * cache and a temporaries count sized for the OLD opcodes onto the new body - the VM
-     * then reads cache slots out of bounds and crashes.
-     */
-    private const BODY_LEVEL_FUNCTION_FLAGS = Core::ZEND_ACC_HEAP_RT_CACHE
-        | Core::ZEND_ACC_GENERATOR
-        | Core::ZEND_ACC_VARIADIC
-        | Core::ZEND_ACC_RETURN_REFERENCE
-        | Core::ZEND_ACC_HAS_RETURN_TYPE
-        | Core::ZEND_ACC_HAS_TYPE_HINTS
-        | Core::ZEND_ACC_STRICT_TYPES
-        | Core::ZEND_ACC_IMMUTABLE;
-
-    /**
      * Redefines an existing method in the class with closure
+     *
+     * The previous function body is destroyed with engine semantics (the entry keeps
+     * one owned share of the new closure body instead) - repeated redefinitions of
+     * the same entry are memory-flat, see FunctionBodySwap. An opcache-shared
+     * (ZEND_ACC_IMMUTABLE) global function is first copied out of shared memory into
+     * a writable entry (its SHM body stays allocated, never freed); a method of an
+     * opcache-shared class cannot be redefined at all, because its method table
+     * lives inside the SHM class entry - see docs/hot-swap.md for the matrix.
+     *
      * @internal
      */
     public function redefine(\Closure $newCode): void
@@ -137,34 +130,38 @@ trait FunctionLikeTrait
             $selfExecutionState = Core::$executor->getExecutionState();
             $newCodeEntry       = $selfExecutionState->getArgument(0)->getRawObject();
             $newCodeEntry       = Core::cast('zend_closure *', $newCodeEntry);
+            $newFunction        = $newCodeEntry->func;
+            assert($newFunction instanceof CData);
 
-            // Remember the declaration identity of the redefined entry: it survives the
-            // body replacement, while everything executor-related (opcodes, literals,
-            // run-time cache, temporaries count) comes from the new closure body
-            $targetCommon  = $this->getCommonPointer();
-            $previousName  = $targetCommon->function_name;
-            $previousScope = $targetCommon->scope;
-            $previousProto = $targetCommon->prototype;
-            $previousFlags = $targetCommon->fn_flags;
-            $newFunction   = $newCodeEntry->func;
-            assert(is_int($previousFlags) && $newFunction instanceof CData);
-            $newFunctionCommon = $newFunction->common;
-            assert($newFunctionCommon instanceof CData);
-            $newBodyFlags = $newFunctionCommon->fn_flags;
-            assert(is_int($newBodyFlags));
+            $isSharedMemoryEntry = SharedMemory::isImmutableFunctionEntry($this->pointer);
+            if ($isSharedMemoryEntry) {
+                if ($this->getCommonPointer()->scope !== null) {
+                    throw new SharedMemoryException(
+                        'Cannot redefine a method of an immutable (opcache shared-memory) class: '
+                        . 'its method table lives inside the shared class entry',
+                    );
+                }
+                // Copy the entry out of SHM: the per-process function-table bucket is
+                // repointed at a writable container, the SHM original stays untouched
+                $this->pointer = SharedMemory::copyOutFunctionEntry(
+                    $this->pointer,
+                    Core::$executor->functionTable,
+                    strtolower($this->getName()),
+                );
+            }
 
-            // Replace the whole function with the closure-backed one (the donor closure
-            // object itself stays untouched - it keeps sole ownership of its own fields)
-            Core::memcpy($this->pointer, Core::addr($newFunction), Core::sizeof($newFunction));
-
-            // Restore the declaration identity: the single owned reference on the previous
-            // name stays with this entry, declaration-level flags (visibility, static,
-            // final, closure bit) are kept while body-level flags follow the new op_array
-            $targetCommon->function_name = $previousName;
-            $targetCommon->scope         = $previousScope;
-            $targetCommon->prototype     = $previousProto;
-            $targetCommon->fn_flags      = ($previousFlags & ~self::BODY_LEVEL_FUNCTION_FLAGS)
-                | ($newBodyFlags & self::BODY_LEVEL_FUNCTION_FLAGS);
+            FunctionBodySwap::swapUserFunctionBody(
+                $this->pointer,
+                Core::addr($newFunction),
+                preserveDeclaration: true,
+                // The donor closure owns (and destroys) its static-variables table
+                duplicateStatics: true,
+                // A shared-memory body is immortal by definition and must not be freed
+                destroyPrevious: !$isSharedMemoryEntry,
+                // Subclass method tables may share this very structure - every such
+                // bucket releases one body reference when the engine destroys it
+                publishedShares: FunctionBodySwap::countPublishedShares($this->pointer),
+            )->commit();
         } else {
             // For internal function we can simply adjust a handler
             $this->pointer->handler = function (CData $executeData, CData $returnValue) use ($newCode): void {

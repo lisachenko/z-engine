@@ -64,6 +64,7 @@ use ZEngine\ClassExtension\ObjectUnsetPropertyInterface;
 use ZEngine\ClassExtension\ObjectWriteDimensionInterface;
 use ZEngine\ClassExtension\ObjectWritePropertyInterface;
 use ZEngine\Core;
+use ZEngine\System\SharedMemory;
 use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
@@ -374,10 +375,16 @@ class ReflectionClass extends NativeReflectionClass
 
     /**
      * Adds a new method to the class in runtime
+     *
+     * Rejected for opcache-shared (immutable) classes: the method table lives inside
+     * the SHM class entry and cannot be written per-process (see docs/hot-swap.md).
+     *
      * @internal
      */
     public function addMethod(string $methodName, \Closure $method): ReflectionMethod
     {
+        SharedMemory::assertMutableClassEntry($this->pointer, 'add a method');
+
         $closureEntry = new ClosureEntry($method);
         // This line will make this closure live until the end of script/request
         $closureEntry->getClosureObjectEntry()->incrementReferenceCount();
@@ -464,6 +471,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function removeMethods(string ...$methodNames): void
     {
+        SharedMemory::assertMutableClassEntry($this->pointer, 'remove methods');
         foreach ($methodNames as $methodName) {
             $this->methodTable->delete(strtolower($methodName));
         }
@@ -909,13 +917,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     private function assertTraitConfigurationIsMutable(): void
     {
-        $classFlags = $this->pointer->ce_flags;
-        assert(is_int($classFlags));
-        if (($classFlags & Core::ZEND_ACC_IMMUTABLE) !== 0) {
-            throw new \ReflectionException(
-                'Cannot modify the trait configuration of an immutable (opcache-shared) class',
-            );
-        }
+        SharedMemory::assertMutableClassEntry($this->pointer, 'modify the trait configuration');
     }
 
     /**

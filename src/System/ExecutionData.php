@@ -122,6 +122,23 @@ class ExecutionData
     }
 
     /**
+     * Returns the numeric address of the zend_function this frame executes
+     * (null for frames without a function entry, eg top-level pseudo frames)
+     *
+     * @internal used by FunctionBodySwap to detect entries with live frames
+     */
+    public function getFunctionEntryAddress(): ?int
+    {
+        $rawFunction = $this->pointer->func;
+        if ($rawFunction === null) {
+            return null;
+        }
+        assert($rawFunction instanceof CData);
+
+        return Core::addressOf($rawFunction);
+    }
+
+    /**
      * Returns the current object scope
      *
      * This contains following: this + call_info + num_args
