@@ -40,8 +40,6 @@ class Executor
      *
      * Bucket values are IS_PTR zvals pointing to zend_constant structures, keyed by the
      * case-sensitive constant name (including persistent engine/extension constants).
-     *
-     * @var HashTable&iterable<string, ReflectionValue>
      */
     public HashTable $constantTable;
 
@@ -59,12 +57,18 @@ class Executor
 
     public function __construct(CData $pointer)
     {
-        $this->pointer       = $pointer;
-        $this->classTable    = new HashTable($pointer->class_table);
-        $this->functionTable = new HashTable($pointer->function_table);
+        $this->pointer = $pointer;
+
+        $classTable = $pointer->class_table;
+        \assert($classTable instanceof CData);
+        $functionTable = $pointer->function_table;
+        \assert($functionTable instanceof CData);
+
+        $this->classTable    = HashTable::fromCData($classTable);
+        $this->functionTable = HashTable::fromCData($functionTable);
         $zendConstants       = $pointer->zend_constants;
         \assert($zendConstants instanceof CData);
-        $this->constantTable = new HashTable($zendConstants);
+        $this->constantTable = HashTable::fromCData($zendConstants);
         $this->objectStore   = new ObjectStore($pointer->objects_store);
     }
 
@@ -262,14 +266,14 @@ class Executor
      * transferred, nothing on the PHP side may destroy it, and it stays valid for the
      * whole request lifetime.
      *
-     * @return HashTable&iterable<int|string|null, ReflectionValue>
+     * @return HashTable&iterable<int|string, ReflectionValue>
      */
     public function getGlobalSymbolTable(): HashTable
     {
         $symbolTable = $this->pointer->symbol_table;
         \assert($symbolTable instanceof CData);
 
-        return new HashTable(Core::addr($symbolTable));
+        return HashTable::fromCData(Core::addr($symbolTable));
     }
 
     /**
@@ -280,14 +284,14 @@ class Executor
      * returned HashTable is a BORROWED view over engine-owned storage: no ownership is
      * transferred and nothing on the PHP side may destroy it.
      *
-     * @return HashTable&iterable<int|string|null, ReflectionValue>
+     * @return HashTable&iterable<int|string, ReflectionValue>
      */
     public function getIncludedFiles(): HashTable
     {
         $includedFiles = $this->pointer->included_files;
         \assert($includedFiles instanceof CData);
 
-        return new HashTable(Core::addr($includedFiles));
+        return HashTable::fromCData(Core::addr($includedFiles));
     }
 
     /**

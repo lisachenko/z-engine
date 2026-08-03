@@ -456,7 +456,7 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see zend_enum.c:zend_enum_build_backed_enum_table() for the table layout and laziness
      *
-     * @return (HashTable&iterable<int|string|null, ReflectionValue>)|null Borrowed table for backed enums
+     * @return (HashTable&iterable<int|string, ReflectionValue>)|null Borrowed table for backed enums
      *         (once materialized), null for pure enums, non-enum classes and unmaterialized tables
      */
     public function getBackedEnumTable(): ?HashTable
@@ -472,7 +472,7 @@ class ReflectionClass extends NativeReflectionClass
             return null;
         }
 
-        return new HashTable($rawTable);
+        return HashTable::fromCData($rawTable);
     }
 
     /**
@@ -944,10 +944,8 @@ class ReflectionClass extends NativeReflectionClass
     private function newOwnedNamePointer(string $name, bool $isPersistent): CData
     {
         $stringEntry = $isPersistent ? StringEntry::persistent($name) : StringEntry::fromString($name);
-        $rawValue    = $stringEntry->transferReferenceOwnership()->getRawValue();
-        assert($rawValue instanceof CData);
 
-        return $rawValue;
+        return $stringEntry->transferReferenceOwnership()->getRawValue();
     }
 
     /**
@@ -2388,14 +2386,14 @@ class ReflectionClass extends NativeReflectionClass
     private function initLowLevelStructures(CData $classEntry): void
     {
         $this->pointer         = $classEntry;
-        $this->methodTable     = new HashTable(Core::addr($classEntry->function_table));
-        $this->propertiesTable = new HashTable(Core::addr($classEntry->properties_info));
-        $this->constantsTable  = new HashTable(Core::addr($classEntry->constants_table));
+        $this->methodTable     = HashTable::fromCData(Core::addr($classEntry->function_table));
+        $this->propertiesTable = HashTable::fromCData(Core::addr($classEntry->properties_info));
+        $this->constantsTable  = HashTable::fromCData(Core::addr($classEntry->constants_table));
 
         $classAttributes = $classEntry->attributes;
         if ($classAttributes !== null) {
             assert($classAttributes instanceof CData);
-            $this->attributesTable = new HashTable($classAttributes);
+            $this->attributesTable = HashTable::fromCData($classAttributes);
         } else {
             $this->attributesTable = null;
         }

@@ -34,7 +34,7 @@ class ReflectionMethod extends NativeReflectionMethod
             throw new \ReflectionException("Class {$className} should be in the engine.");
         }
         $classEntry  = $classEntryValue->getRawClass();
-        $methodTable = new HashTable(Core::addr($classEntry->function_table));
+        $methodTable = HashTable::fromCData(Core::addr($classEntry->function_table));
 
         $methodEntryValue = $methodTable->find(strtolower($methodName));
         if ($methodEntryValue === null) {
@@ -116,7 +116,7 @@ class ReflectionMethod extends NativeReflectionMethod
         $scope = $commonPointer->scope;
         assert($scope instanceof CData);
         $functionTable = Core::addr($scope->function_table);
-        $methodTable   = new HashTable($functionTable);
+        $methodTable   = HashTable::fromCData($functionTable);
         if ($methodTable->find($lowerName) !== null) {
             // Already published (eg by a future engine version) - use the regular path
             return static::fromCData($functionEntry);

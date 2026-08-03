@@ -147,6 +147,7 @@ takeaway:
 | Generated function name | Owned `zend_string`, assigned with release-old/own-new semantics | `FunctionLikeTrait::setFunctionName()` |
 | Generated global function | Unpublished at `Core::shutdown()` with the table destructor disabled | `Core::shutdown()` |
 | Trampolines (Path A) | Kept alive by the `Core` hook registry; restored at shutdown before ext/ffi frees them | `AbstractHook`, `Core::shutdown()` |
+| Object graphs that must outlive the request | Store them in the persistent heap: deep malloc clone at `put()`, verified re-attachment at `get()`, exact eviction at `remove()` | `PersistentHeap`, [`persistent-heap.md`](persistent-heap.md) |
 
 ## Speed model
 

@@ -107,9 +107,15 @@ class Compiler
 
     public function __construct(CData $pointer)
     {
-        $this->pointer       = $pointer;
-        $this->classTable    = new HashTable($pointer->class_table);
-        $this->functionTable = new HashTable($pointer->function_table);
+        $this->pointer = $pointer;
+
+        $classTable = $pointer->class_table;
+        assert($classTable instanceof CData);
+        $functionTable = $pointer->function_table;
+        assert($functionTable instanceof CData);
+
+        $this->classTable    = HashTable::fromCData($classTable);
+        $this->functionTable = HashTable::fromCData($functionTable);
     }
 
     /**
@@ -228,7 +234,7 @@ class Compiler
         $autoGlobals = $this->pointer->auto_globals;
         assert($autoGlobals instanceof CData);
 
-        return new HashTable($autoGlobals);
+        return HashTable::fromCData($autoGlobals);
     }
 
     /**

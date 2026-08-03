@@ -15,6 +15,7 @@ namespace ZEngine\Type;
 
 use FFI\CData;
 use IteratorAggregate;
+use ReflectionClass as NativeReflectionClass;
 use Traversable;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionValue;
@@ -54,6 +55,8 @@ use ZEngine\Reflection\ReflectionValue;
  *     zend_long         nNextFreeElement;
  *     dtor_func_t       pDestructor;
  * };
+ *
+ * @implements IteratorAggregate<int|string, ReflectionValue>
  */
 class HashTable implements IteratorAggregate, ReferenceCountedInterface
 {
@@ -70,17 +73,135 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
      */
     protected const HASH_FLAG_PACKED = (1 << 2);
 
+    /**
+     * @see zend_hash.c:uninitialized_bucket - two uint32_t slots holding HT_INVALID_IDX
+     */
+    private const HT_INVALID_IDX = 0xFFFFFFFF;
+
+    /**
+     * Process-lifetime stand-in for the engine's static uninitialized_bucket
+     */
+    private static ?CData $uninitializedBucket = null;
+
     protected CData $pointer;
 
-    public function __construct(CData $hashInstance)
+    /**
+     * Creates a NEW empty engine-compatible hashtable OWNED by this wrapper
+     *
+     * Field-for-field port of zend_hash.c:_zend_hash_init_int(ht, HT_MIN_SIZE, NULL,
+     * persistent): the struct starts HASH_FLAG_UNINITIALIZED and the engine real-inits
+     * it on the first insert, choosing the data allocator from the GC flags (request
+     * memory here, malloc for the PersistentHashTable subclass). pDestructor is NULL:
+     * the writer owns every stored payload. Release the table via destroy(); a table
+     * never destroyed is reclaimed by the request allocator at request end (and reported
+     * by the debug-build leak gate).
+     *
+     * A BORROWED view over an engine-owned table is a different construction: fromCData().
+     */
+    public function __construct()
     {
-        $this->pointer = $hashInstance;
+        $memory  = Core::trackedNew('HashTable', static::isPersistentAllocation());
+        $pointer = Core::cast('HashTable *', Core::addr($memory));
+
+        $gcHeader = $pointer->gc;
+        assert($gcHeader instanceof CData);
+        $gcInfo = $gcHeader->u;
+        assert($gcInfo instanceof CData);
+        $flagsUnion = $pointer->u;
+        assert($flagsUnion instanceof CData);
+
+        $gcHeader->refcount        = 1;
+        $gcInfo->type_info         = static::gcTypeInfo();
+        $flagsUnion->flags         = Core::engineConstant('HASH_FLAG_UNINITIALIZED');
+        $pointer->nTableMask       = Core::engineConstant('HT_MIN_MASK');
+        $pointer->arData           = self::uninitializedBucketData();
+        $pointer->nNumUsed         = 0;
+        $pointer->nNumOfElements   = 0;
+        $pointer->nTableSize       = Core::engineConstant('HT_MIN_SIZE');
+        $pointer->nInternalPointer = 0;
+        $pointer->nNextFreeElement = PHP_INT_MIN;
+        $pointer->pDestructor      = null;
+
+        $this->pointer = $pointer;
+    }
+
+    /**
+     * Wraps an existing engine-owned hashtable (BORROWED, never released by the wrapper)
+     *
+     * The caller guarantees the pointed table stays alive for the wrapper lifetime -
+     * the standard borrowed construction of the framework (docs/long-running.md).
+     */
+    public static function fromCData(CData $hashInstance): static
+    {
+        $table = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
+        \assert($table instanceof static);
+        $table->pointer = $hashInstance;
+
+        return $table;
+    }
+
+    /**
+     * Dismantles an OWNED table completely: engine data block first, then the struct
+     *
+     * Only for tables minted by the constructor - never call it on a borrowed fromCData()
+     * view. Stored payloads are not touched (pDestructor is NULL by construction), so
+     * whoever wrote a value into the table still owns it. Sealed persistent tables are
+     * handled by the PersistentHashTable override.
+     */
+    public function destroy(): void
+    {
+        Core::call('zend_hash_destroy', $this->pointer);
+
+        // The engine-grown data block is gone; release the struct through the
+        // tracked-block registry so the right allocator is guaranteed
+        Core::untrackAndFree($this->pointer);
+    }
+
+    /**
+     * Allocation class for the constructor: request memory for plain owned tables
+     */
+    protected static function isPersistentAllocation(): bool
+    {
+        return false;
+    }
+
+    /**
+     * GC header for the constructor: an ordinary collectable request array
+     */
+    protected static function gcTypeInfo(): int
+    {
+        return Core::engineConstant('GC_ARRAY');
+    }
+
+    /**
+     * Returns arData pointing right past the shared sentinel, as HT_SET_DATA_ADDR does
+     *
+     * The sentinel block is shared by every table z-engine initializes in the
+     * HASH_FLAG_UNINITIALIZED state, persistent and request-lifetime alike: the engine
+     * never writes through (or frees) arData while the flag is set, so one immortal
+     * process-wide block safely backs them all.
+     *
+     * @see zend_types.h:HT_SET_DATA_ADDR/HT_HASH_SIZE - for HT_MIN_MASK the hash part
+     *      occupies two uint32_t slots, so arData points 8 bytes past the block start
+     * @internal also used by ClassSpecializer to initialize the class-entry tables
+     */
+    public static function uninitializedBucketData(): CData
+    {
+        if (self::$uninitializedBucket === null) {
+            $block = Core::trackedNew('uint32_t[2]', true);
+            // Both slots hold HT_INVALID_IDX, written as one machine-order byte image
+            Core::memcpy($block, pack('L2', self::HT_INVALID_IDX, self::HT_INVALID_IDX), 8);
+
+            self::$uninitializedBucket = $block;
+        }
+
+        return Core::pointerAtAddress('Bucket *', Core::addressOf(self::$uninitializedBucket) + 8);
     }
 
     /**
      * Retrieve an external iterator
      *
-     * @return Traversable An instance of an object implementing <b>Iterator</b> or <b>Traversable</b>
+     * @return Traversable<int|string, ReflectionValue> Borrowed views over the bucket zvals
      */
     public function getIterator(): Traversable
     {
@@ -98,10 +219,17 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
                     yield $index => ReflectionValue::fromValueEntry($value);
                 } else {
                     $item = $this->pointer->arData[$index];
+                    assert($item instanceof CData);
                     if ($item->val->u1->v->type === ReflectionValue::IS_UNDEF) {
                         continue;
                     }
-                    $key = $item->key !== null ? StringEntry::fromCData($item->key)->getStringValue() : null;
+                    if ($item->key !== null) {
+                        $key = StringEntry::fromCData($item->key)->getStringValue();
+                    } else {
+                        // Integer-keyed bucket: the numeric key lives in the hash field
+                        $key = $item->h;
+                        assert(is_int($key));
+                    }
                     yield $key => ReflectionValue::fromValueEntry($item->val);
                 }
             }

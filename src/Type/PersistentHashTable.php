@@ -13,7 +13,6 @@ declare(strict_types=1);
 
 namespace ZEngine\Type;
 
-use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionValue;
 
@@ -29,8 +28,10 @@ use ZEngine\Reflection\ReflectionValue;
  *
  * Memory ownership contract (extends the HashTable one, see docs/long-running.md):
  *
- *  - create() mints an immortal-by-design block: nothing releases the struct or the
- *    engine-grown data block before process end.
+ *  - the constructor mints an immortal-by-design block: nothing releases the struct or
+ *    the engine-grown data block before process end (destroy() is the explicit
+ *    cross-request release); fromCData() wraps an existing persistent table, eg one
+ *    recovered from module globals.
  *  - pDestructor is NULL: deleting or overwriting a bucket never releases the payload;
  *    the writer owns every value stored here and any replaced block stays allocated
  *    (bounded, reclaimed at process end).
@@ -42,56 +43,27 @@ use ZEngine\Reflection\ReflectionValue;
  *    engine copies it into zvals without refcounting and copy-on-writes into request
  *    memory on mutation, which is the only safe shape for a persistent array reachable
  *    from userland values.
- *
- * The per-process sentinel block stands in for the engine's non-exported
- * uninitialized_bucket constant (two HT_INVALID_IDX slots); it is shared by every
- * uninitialized persistent table and never freed.
  */
 final class PersistentHashTable extends HashTable
 {
     /**
-     * @see zend_hash.c:uninitialized_bucket - two uint32_t slots holding HT_INVALID_IDX
+     * Allocation class for the inherited constructor: malloc-backed, outlives the request
      */
-    private const HT_INVALID_IDX = 0xFFFFFFFF;
-
-    /**
-     * Process-lifetime stand-in for the engine's static uninitialized_bucket
-     */
-    private static ?CData $uninitializedBucket = null;
-
-    /**
-     * Mints a new empty persistent hashtable (mutable, engine-compatible)
-     *
-     * Field-for-field port of zend_hash.c:_zend_hash_init_int(ht, HT_MIN_SIZE, NULL, true).
-     */
-    public static function create(): self
+    protected static function isPersistentAllocation(): bool
     {
-        $table   = Core::trackedNew('HashTable', true);
-        $pointer = Core::cast('HashTable *', Core::addr($table));
-
-        $pointer->gc->refcount     = 1;
-        $pointer->gc->u->type_info = Core::engineConstant('GC_ARRAY')
-            | Core::engineConstant('GC_PERSISTENT')
-            | Core::engineConstant('GC_NOT_COLLECTABLE');
-        $pointer->u->flags         = Core::engineConstant('HASH_FLAG_UNINITIALIZED');
-        $pointer->nTableMask       = Core::engineConstant('HT_MIN_MASK');
-        $pointer->arData           = self::uninitializedBucketData();
-        $pointer->nNumUsed         = 0;
-        $pointer->nNumOfElements   = 0;
-        $pointer->nTableSize       = Core::engineConstant('HT_MIN_SIZE');
-        $pointer->nInternalPointer = 0;
-        $pointer->nNextFreeElement = PHP_INT_MIN;
-        $pointer->pDestructor      = null;
-
-        return new self($pointer);
+        return true;
     }
 
     /**
-     * Wraps an existing persistent hashtable, eg one recovered from module globals
+     * GC header for the inherited constructor: the cycle collector must never buffer or
+     * scan a persistent table, and every engine (re)allocation of the data block must go
+     * through pemalloc(..., 1)
      */
-    public static function fromCData(CData $pointer): self
+    protected static function gcTypeInfo(): int
     {
-        return new self($pointer);
+        return Core::engineConstant('GC_ARRAY')
+            | Core::engineConstant('GC_PERSISTENT')
+            | Core::engineConstant('GC_NOT_COLLECTABLE');
     }
 
     /**
@@ -103,16 +75,32 @@ final class PersistentHashTable extends HashTable
      */
     public function add(string $key, ReflectionValue $value): void
     {
-        $stringEntry = StringEntry::persistentInterned($key);
-        $result      = Core::call(
+        $this->addInterned(StringEntry::persistentInterned($key), $value);
+    }
+
+    /**
+     * Upserts a value under a CALLER-OWNED persistent interned string key
+     *
+     * Same engine semantics as add(), but the key entry is provided by the caller instead
+     * of being minted internally. This is the building block for registries that must be
+     * able to release their key strings later (eg on eviction): interned keys are never
+     * freed by the engine, so a registry that mints keys it cannot enumerate would leak
+     * one malloc block per insert. The caller keeps full ownership of the key block and
+     * must keep it alive for as long as the bucket exists.
+     *
+     * @param StringEntry $key Persistent interned string minted via StringEntry::persistentInterned()
+     */
+    public function addInterned(StringEntry $key, ReflectionValue $value): void
+    {
+        $result = Core::call(
             'zend_hash_add_or_update',
             $this->pointer,
-            $stringEntry->getRawValue(),
+            $key->getRawValue(),
             $value->getRawValue(),
             self::HASH_UPDATE,
         );
         if ($result === null) {
-            throw new \RuntimeException("Can not store an item with key {$key}");
+            throw new \RuntimeException('Can not store an item with key ' . $key->getStringValue());
         }
     }
 
@@ -149,7 +137,7 @@ final class PersistentHashTable extends HashTable
     /**
      * Dismantles the table completely: engine data block first, then the struct itself
      *
-     * The counterpart of create(): it turns an "immortal by design" persistent table back
+     * The counterpart of the constructor: it turns an "immortal by design" persistent table back
      * into free memory, which is what makes persistent registries droppable instead of
      * process-lifetime only.
      *
@@ -185,28 +173,4 @@ final class PersistentHashTable extends HashTable
         Core::persistentFree($this->pointer);
     }
 
-    /**
-     * Returns arData pointing right past the shared sentinel, as HT_SET_DATA_ADDR does
-     *
-     * The sentinel block is shared by every table z-engine initializes in the
-     * HASH_FLAG_UNINITIALIZED state, persistent and request-lifetime alike: the engine
-     * never writes through (or frees) arData while the flag is set, so one immortal
-     * process-wide block safely backs them all.
-     *
-     * @see zend_types.h:HT_SET_DATA_ADDR/HT_HASH_SIZE - for HT_MIN_MASK the hash part
-     *      occupies two uint32_t slots, so arData points 8 bytes past the block start
-     * @internal also used by ClassSpecializer to initialize the class-entry tables
-     */
-    public static function uninitializedBucketData(): CData
-    {
-        if (self::$uninitializedBucket === null) {
-            $sentinel    = Core::trackedNew('uint32_t[2]', true);
-            $sentinel[0] = self::HT_INVALID_IDX;
-            $sentinel[1] = self::HT_INVALID_IDX;
-
-            self::$uninitializedBucket = $sentinel;
-        }
-
-        return Core::cast('Bucket *', Core::cast('char *', self::$uninitializedBucket) + 8);
-    }
 }

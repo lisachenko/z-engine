@@ -36,7 +36,7 @@ $residentKiloBytes = static function (): int {
 };
 
 $cycle = static function (bool $sealed): void {
-    $table = PersistentHashTable::create();
+    $table = new PersistentHashTable();
 
     for ($index = 0; $index < 64; $index++) {
         $value = new ReflectionValue($index);
@@ -65,7 +65,7 @@ $cycle = static function (bool $sealed): void {
 };
 
 // An empty table keeps the shared sentinel: destroy() must free the struct only
-PersistentHashTable::create()->destroy();
+new PersistentHashTable()->destroy();
 
 for ($iteration = 0; $iteration < 100; $iteration++) {
     $cycle($iteration % 2 === 0);

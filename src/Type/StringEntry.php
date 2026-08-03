@@ -168,7 +168,7 @@ class StringEntry implements ReferenceCountedInterface
     /**
      * Returns raw C value entry
      */
-    public function getRawValue(): ?CData
+    public function getRawValue(): CData
     {
         return $this->pointer;
     }

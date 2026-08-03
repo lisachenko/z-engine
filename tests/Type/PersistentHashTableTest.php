@@ -20,7 +20,7 @@ class PersistentHashTableTest extends TestCase
 {
     public function testCreateMintsPersistentNonCollectableTable(): void
     {
-        $table = PersistentHashTable::create();
+        $table = new PersistentHashTable();
 
         $this->assertTrue($table->isPersistent());
         $this->assertFalse($table->isImmutable());
@@ -30,7 +30,7 @@ class PersistentHashTableTest extends TestCase
 
     public function testStringKeyUpsertAndFind(): void
     {
-        $table = PersistentHashTable::create();
+        $table = new PersistentHashTable();
 
         $value = new ReflectionValue(42);
         $table->add('answer', $value);
@@ -53,7 +53,7 @@ class PersistentHashTableTest extends TestCase
 
     public function testIndexKeyUpsertAndFind(): void
     {
-        $table = PersistentHashTable::create();
+        $table = new PersistentHashTable();
 
         $value = new ReflectionValue(100);
         $table->addIndex(7, $value);
@@ -75,7 +75,7 @@ class PersistentHashTableTest extends TestCase
 
     public function testSealedTableMaterializesAndCopiesOnWrite(): void
     {
-        $table = PersistentHashTable::create();
+        $table = new PersistentHashTable();
 
         $value = new ReflectionValue(42);
         $table->add('answer', $value);
@@ -105,7 +105,7 @@ class PersistentHashTableTest extends TestCase
 
     public function testDeleteIndexRemovesTheBucket(): void
     {
-        $table = PersistentHashTable::create();
+        $table = new PersistentHashTable();
 
         foreach ([1, 2, 3] as $index) {
             $value = new ReflectionValue($index * 10);
@@ -133,9 +133,9 @@ class PersistentHashTableTest extends TestCase
         // zend_hash_destroy() must NOT free - only the struct block goes away here. The
         // sentinel is shared process-wide, so the next table minted after the drop proves
         // it survived (freeing it would have taken every other persistent table with it)
-        PersistentHashTable::create()->destroy();
+        new PersistentHashTable()->destroy();
 
-        $survivor = PersistentHashTable::create();
+        $survivor = new PersistentHashTable();
         $value    = new ReflectionValue('still alive');
         $survivor->add('probe', $value);
         $value->release();
@@ -150,7 +150,7 @@ class PersistentHashTableTest extends TestCase
     {
         $handles = 0;
         foreach ([false, true] as $sealed) {
-            $table = PersistentHashTable::create();
+            $table = new PersistentHashTable();
 
             $value = new ReflectionValue(1);
             $table->add('interned-key', $value);
@@ -186,7 +186,7 @@ class PersistentHashTableTest extends TestCase
 
         $churn = static function (int $cycles): void {
             for ($cycle = 0; $cycle < $cycles; $cycle++) {
-                $table = PersistentHashTable::create();
+                $table = new PersistentHashTable();
                 for ($index = 0; $index < 64; $index++) {
                     $value = new ReflectionValue($index);
                     $table->addIndex($index, $value);
@@ -214,7 +214,7 @@ class PersistentHashTableTest extends TestCase
 
     public function testStringKeysAreStoredAsPersistentInterned(): void
     {
-        $table = PersistentHashTable::create();
+        $table = new PersistentHashTable();
 
         $value = new ReflectionValue(1);
         $table->add('registry-key', $value);

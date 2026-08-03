@@ -125,6 +125,18 @@ FFI `CData` access is dynamically typed and cannot be statically resolved;
 those violations are captured in `phpstan-baseline.neon`. New code must be
 clean at level max — do not add to the baseline without good reason.
 
+## Public APIs never leak CData
+
+Only the z-engine core layer (`Core`, the `Type\*`/`Reflection\*` wrappers) deals in
+`FFI\CData` and raw zval pointers. Modules and extensions (`EngineExtension\*` and
+anything built on it) must expose **pure PHP-native interfaces**: no public method of a
+module may return `CData` or require callers to handle engine structures. Internal
+engine knowledge — anchor slots, registry recovery, struct layouts — stays encapsulated
+inside the module; consumers see plain PHP values and framework wrapper objects
+(`ReflectionValue`, `PersistentHeap`, …). When a value crosses a public boundary, wrap
+it or convert it. This is what keeps the FFI blast radius confined to code that is
+audited for it.
+
 ## Conventional commits
 
 Use [Conventional Commits](https://www.conventionalcommits.org/):
