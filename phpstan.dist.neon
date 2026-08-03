@@ -11,6 +11,12 @@ parameters:
         - tools/generator/emit.php
         - tools/generator/generate.php
         - tools/generator/validate.php
+    excludePaths:
+        - tests/phpstan/specialization-class-stubs.php
+    # Analysis-only declarations of the runtime-generated specialized classes and the
+    # deliberately-undefined placeholder type (see the file header for the rationale)
+    scanFiles:
+        - tests/phpstan/specialization-class-stubs.php
     # FFI\CData is dynamically typed - the engine structs it wraps are only
     # known at runtime from the loaded header, so field/method access on CData
     # cannot be statically resolved. Scope the unavoidable ignores tightly to
@@ -25,6 +31,10 @@ parameters:
         -
             identifier: property.nonObject
             message: '#Cannot access property \S+ on FFI\\CData#'
+        # C arrays and pointers are indexed through the same CData handles
+        -
+            identifier: offsetAccess.nonOffsetAccessible
+            message: '#Cannot access offset .+ on FFI\\CData#'
         # Core::call()/Core::new() proxy arbitrary engine functions via __call
         -
             identifier: method.notFound

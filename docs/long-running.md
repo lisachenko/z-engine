@@ -140,7 +140,10 @@ The debug-build leak gate treats the following as expected, by design:
 | Persistent interned strings (`StringEntry::persistentInterned`) | interned-style (immutable, non-refcounted) blocks referenced by persistent tables and object properties; bounded by the number of persisted keys/values, reclaimed at process end |
 | Persistent hashtables and their engine-grown data blocks (`PersistentHashTable`) | registries that must outlive the request by design; the engine resizes their data with the persistent allocator, so only `PersistentHashTable::destroy()` may release them (see below) |
 | The shared `uninitialized_bucket` sentinel block | one `uint32_t[2]` per process backing every uninitialized persistent table, mirroring the engine's static |
-| Persistent object clones (`PersistentObjectFactory::persistentClone`) | refcount-pinned malloc objects designed to survive the request boundary; detached from the object store before teardown so no engine path ever frees them |
+| Persistent object clones (`PersistentObjectFactory::persistentClone`) | refcount-pinned malloc objects designed to survive the request boundary; detached from the object store before teardown so no engine path ever frees them. Clones managed by the persistent heap are the exception: `PersistentHeap::remove()` releases them exactly once through the graph inventory (see below) |
+| The `zengine` module entry and its zval-sized globals anchor (`ZEngineModule`) | the single framework-wide module: the anchor is the one address a later request can use to rediscover the heap registry; covered by the module-entry rows above, bounded to one module per process |
+| The persistent-heap root registry table (`PersistentHeap`) | maps heap keys to graph descriptors for the lifetime of the heap; released only by `PersistentHeap::destroy()`. Stored graphs themselves are droppable via `remove()`, not immortal (docs/persistent-heap.md) |
+| Arena-mimicking blocks of specialized classes (`ClassSpecializer`, see docs/class-specialization.md) | the class entry struct, property-info/class-constant blocks, `properties_info_table`, iterator/arrayaccess caches, duplicated `arg_info` blocks and duplicated type lists are structures the engine never frees for userland classes (they live in the compiler arena for a compiled class); the specializer allocates them as request memory reclaimed by the allocator at request end — request-lifetime by design, bounded per specialized class |
 
 Everything else is a bug: the test suite runs with `report_memleaks=1` on a debug build and
 fails on any leak report.
@@ -157,6 +160,7 @@ the engine cannot help with.
 | `Core::untrackAndFree($ptr)` | a block **allocated in this same request**, through the owning CData in the tracked-block registry (right allocator guaranteed, no-op for engine-original buffers) |
 | `Core::persistentFree($ptr)` | any malloc-backed block, through libc `free()`, with no bookkeeping at all |
 | `PersistentHashTable::destroy()` | one persistent table: `zend_hash_destroy()` for the engine-grown data block, then the struct itself |
+| `PersistentHeap::remove($key)` / `PersistentHeap::destroy()` | one stored object graph (or the whole heap): every cloned object, minted string and persistent table of the graph, exactly once, driven by the per-key inventory (docs/persistent-heap.md) |
 
 `Core::persistentFree()` exists because the tracked-block registry is a PHP static: it dies
 with the request that filled it. A block persisted by request *N* can only be dropped by

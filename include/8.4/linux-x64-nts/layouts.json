@@ -172,6 +172,13 @@
                 "hooks": 64
             }
         },
+        "zend_type_list": {
+            "size": 24,
+            "fields": {
+                "num_types": 0,
+                "types": 8
+            }
+        },
         "zend_constant": {
             "size": 24,
             "fields": {

@@ -56,10 +56,7 @@ class GetClassNameHook extends AbstractHook
         assert(is_string($result));
 
         // Exactly one owned reference on a fresh string is handed over to the engine caller
-        $rawName = StringEntry::fromString($result)->transferReferenceOwnership()->getRawValue();
-        assert($rawName instanceof CData);
-
-        return $rawName;
+        return StringEntry::fromString($result)->transferReferenceOwnership()->getRawValue();
     }
 
     /**

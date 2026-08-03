@@ -43,7 +43,7 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
             throw new \ReflectionException("Class {$className} should be in the engine.");
         }
         $classEntry     = $classEntryValue->getRawClass();
-        $constantsTable = new HashTable(Core::addr($classEntry->constants_table));
+        $constantsTable = HashTable::fromCData(Core::addr($classEntry->constants_table));
 
         $constantEntry = $constantsTable->find($constantName);
         if ($constantEntry === null) {
@@ -152,7 +152,7 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
         }
         assert($attributes instanceof CData);
 
-        return new HashTable($attributes);
+        return HashTable::fromCData($attributes);
     }
 
     /**

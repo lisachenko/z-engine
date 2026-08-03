@@ -360,8 +360,10 @@ class ObjectEntry implements ReferenceCountedInterface
     private function initLowLevelStructures(CData $pointer): void
     {
         $this->pointer = $pointer;
-        if ($this->pointer->properties !== null) {
-            $this->properties = new HashTable($this->pointer->properties);
+        $properties    = $this->pointer->properties;
+        if ($properties !== null) {
+            assert($properties instanceof CData);
+            $this->properties = HashTable::fromCData($properties);
         }
     }
 

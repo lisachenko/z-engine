@@ -119,10 +119,9 @@ class GetDebugInfoHook extends AbstractHook
         }
         assert($rawArray instanceof CData);
 
-        $table     = new HashTable($rawArray);
+        $table     = HashTable::fromCData($rawArray);
         $debugInfo = [];
         foreach ($table as $key => $refValue) {
-            assert($refValue instanceof ReflectionValue);
             // Property tables store declared properties as IS_INDIRECT slots pointing into
             // the object: follow them (skipping uninitialized ones), because a userland
             // array must contain only plain values
@@ -134,11 +133,7 @@ class GetDebugInfoHook extends AbstractHook
             }
             // Each value is materialized with its own reference owned by the built array
             $refValue->getNativeValue($value);
-            if (is_string($key) || is_int($key)) {
-                $debugInfo[$key] = $value;
-            } else {
-                $debugInfo[] = $value;
-            }
+            $debugInfo[$key] = $value;
         }
 
         // A temporary table comes with the only reference handed over to us: release it

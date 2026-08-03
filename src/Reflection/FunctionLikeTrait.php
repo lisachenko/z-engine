@@ -197,7 +197,7 @@ trait FunctionLikeTrait
         }
         assert($attributes instanceof CData);
 
-        return new HashTable($attributes);
+        return HashTable::fromCData($attributes);
     }
 
     /**
@@ -368,7 +368,7 @@ trait FunctionLikeTrait
      * ReflectionValue::getNativeValue()) is a live PHP reference, so writing through it
      * changes the static variable itself.
      *
-     * @return (HashTable&iterable<string|null, ReflectionValue>)|null
+     * @return (HashTable&iterable<int|string, ReflectionValue>)|null
      */
     // @phpstan-ignore method.childReturnType (borrowed engine table view instead of the native value array)
     #[\ReturnTypeWillChange]
@@ -383,7 +383,7 @@ trait FunctionLikeTrait
         if ($liveTable !== null) {
             assert($liveTable instanceof CData);
             if ((Core::addressOf($liveTable) & 1) === 0) {
-                return new HashTable($liveTable);
+                return HashTable::fromCData($liveTable);
             }
         }
         $defaultTable = $opArray->static_variables;
@@ -392,7 +392,7 @@ trait FunctionLikeTrait
         }
         assert($defaultTable instanceof CData);
 
-        return new HashTable($defaultTable);
+        return HashTable::fromCData($defaultTable);
     }
 
     /**

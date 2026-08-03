@@ -112,7 +112,7 @@ class ReflectionClassEnumTest extends TestCase
     /**
      * Collects a borrowed backed-enum table into a plain [backing value => case name] array
      *
-     * @param HashTable&iterable<int|string|null, ReflectionValue> $table
+     * @param HashTable&iterable<int|string, ReflectionValue> $table
      *
      * @return array<int|string, string>
      */
@@ -120,9 +120,6 @@ class ReflectionClassEnumTest extends TestCase
     {
         $cases = [];
         foreach ($table as $backingValue => $entry) {
-            if (!is_int($backingValue) && !is_string($backingValue)) {
-                self::fail('Backed-enum table keys should be backing values');
-            }
             $entry->getNativeValue($caseName);
             if (!is_string($caseName)) {
                 self::fail('Backed-enum table values should hold the case name');

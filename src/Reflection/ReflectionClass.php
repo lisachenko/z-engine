@@ -408,6 +408,25 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
+     * Deep-clones this (linked, userland) class under a new runtime name, applying the
+     * given type substitutions to the copy, and registers the result in the engine class
+     * table as a first-class, instantiable class.
+     *
+     * The specialized class is a SIBLING of this one (same parent, same interfaces), not
+     * a subclass: instances of the copy are not instanceof the template. See
+     * docs/class-specialization.md for the copy model, the support matrix and the
+     * memory-ownership contract; unsupported sources fail with
+     * ClassSpecializationException before any engine state is modified.
+     *
+     * @param string                   $newClassName  Fully-qualified name for the specialized copy
+     * @param TypeSubstitutionMap|null $substitutions Placeholder-to-type substitutions (optional)
+     */
+    public function specialize(string $newClassName, ?TypeSubstitutionMap $substitutions = null): ReflectionClass
+    {
+        return (new ClassSpecializer())->specialize($this->getName(), $newClassName, $substitutions);
+    }
+
+    /**
      * Selects the allocation class for buffers stored inside this class entry
      *
      * Internal classes are persistent engine structures (malloc), while user classes are
@@ -444,7 +463,7 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @see zend_enum.c:zend_enum_build_backed_enum_table() for the table layout and laziness
      *
-     * @return (HashTable&iterable<int|string|null, ReflectionValue>)|null Borrowed table for backed enums
+     * @return (HashTable&iterable<int|string, ReflectionValue>)|null Borrowed table for backed enums
      *         (once materialized), null for pure enums, non-enum classes and unmaterialized tables
      */
     public function getBackedEnumTable(): ?HashTable
@@ -460,7 +479,7 @@ class ReflectionClass extends NativeReflectionClass
             return null;
         }
 
-        return new HashTable($rawTable);
+        return HashTable::fromCData($rawTable);
     }
 
     /**
@@ -927,10 +946,8 @@ class ReflectionClass extends NativeReflectionClass
     private function newOwnedNamePointer(string $name, bool $isPersistent): CData
     {
         $stringEntry = $isPersistent ? StringEntry::persistent($name) : StringEntry::fromString($name);
-        $rawValue    = $stringEntry->transferReferenceOwnership()->getRawValue();
-        assert($rawValue instanceof CData);
 
-        return $rawValue;
+        return $stringEntry->transferReferenceOwnership()->getRawValue();
     }
 
     /**
@@ -2371,14 +2388,14 @@ class ReflectionClass extends NativeReflectionClass
     private function initLowLevelStructures(CData $classEntry): void
     {
         $this->pointer         = $classEntry;
-        $this->methodTable     = new HashTable(Core::addr($classEntry->function_table));
-        $this->propertiesTable = new HashTable(Core::addr($classEntry->properties_info));
-        $this->constantsTable  = new HashTable(Core::addr($classEntry->constants_table));
+        $this->methodTable     = HashTable::fromCData(Core::addr($classEntry->function_table));
+        $this->propertiesTable = HashTable::fromCData(Core::addr($classEntry->properties_info));
+        $this->constantsTable  = HashTable::fromCData(Core::addr($classEntry->constants_table));
 
         $classAttributes = $classEntry->attributes;
         if ($classAttributes !== null) {
             assert($classAttributes instanceof CData);
-            $this->attributesTable = new HashTable($classAttributes);
+            $this->attributesTable = HashTable::fromCData($classAttributes);
         } else {
             $this->attributesTable = null;
         }

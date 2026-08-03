@@ -272,7 +272,7 @@ class Core
 
         self::$executor = new Executor($engine->executor_globals);
         self::$compiler = new Compiler($engine->compiler_globals);
-        self::$modules  = new HashTable(Core::addr($engine->module_registry));
+        self::$modules  = HashTable::fromCData(Core::addr($engine->module_registry));
 
         // Deterministic teardown: user shutdown functions run before object destructors and
         // before ext/ffi RSHUTDOWN frees the callback trampolines, so every hooked engine

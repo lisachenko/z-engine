@@ -34,6 +34,10 @@ typedef struct {
  void *ptr;
  uint32_t type_mask;
 } zend_type;
+typedef struct {
+ uint32_t num_types;
+ zend_type types[1];
+} zend_type_list;
 typedef union _zend_value {
  zend_long lval;
  double dval;

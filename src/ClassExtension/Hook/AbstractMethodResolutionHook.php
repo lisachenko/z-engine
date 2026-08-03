@@ -79,7 +79,7 @@ abstract class AbstractMethodResolutionHook extends AbstractHook
         }
         $functionTable = $classEntryValue->getRawClass()->function_table;
         assert($functionTable instanceof CData);
-        $methodTable      = new HashTable(Core::addr($functionTable));
+        $methodTable      = HashTable::fromCData(Core::addr($functionTable));
         $methodEntryValue = $methodTable->find(strtolower($method->name));
         if ($methodEntryValue === null) {
             throw new \ReflectionException("Method {$className}::{$method->name} was not found in the class");

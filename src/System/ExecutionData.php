@@ -222,7 +222,10 @@ class ExecutionData
      */
     public function getSymbolTable(): HashTable
     {
-        return new HashTable($this->pointer->symbol_table);
+        $symbolTable = $this->pointer->symbol_table;
+        assert($symbolTable instanceof CData);
+
+        return HashTable::fromCData($symbolTable);
     }
 
     /**
