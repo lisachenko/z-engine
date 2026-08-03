@@ -519,7 +519,7 @@ final class ClassDelta
     {
         assert($rawTable instanceof CData);
 
-        return new HashTable(Core::addr($rawTable));
+        return HashTable::fromCData(Core::addr($rawTable));
     }
 
     /**
@@ -533,7 +533,7 @@ final class ClassDelta
         $classAddress    = Core::addressOf($classEntry);
         $methodTable     = self::embeddedTable($classEntry->function_table);
         foreach ($methodTable as $methodName => $methodValue) {
-            assert(is_string($methodName) && $methodValue instanceof ReflectionValue);
+            assert(is_string($methodName));
             $functionEntry = $methodValue->getRawFunction();
             $entryType     = $functionEntry->type;
             assert(is_int($entryType));
@@ -567,7 +567,7 @@ final class ClassDelta
         $classAddress      = Core::addressOf($classEntry);
         $constantsTable    = self::embeddedTable($classEntry->constants_table);
         foreach ($constantsTable as $constantName => $constantValue) {
-            assert(is_string($constantName) && $constantValue instanceof ReflectionValue);
+            assert(is_string($constantName));
             $rawConstant    = Core::cast('zend_class_constant *', $constantValue->getRawPointer());
             $declaringClass = $rawConstant->ce;
             assert($declaringClass instanceof CData);
@@ -734,7 +734,6 @@ final class ClassDelta
         $classAddress         = Core::addressOf($classEntry);
         $propertiesInfo       = self::embeddedTable($classEntry->properties_info);
         foreach ($propertiesInfo as $propertyValue) {
-            assert($propertyValue instanceof ReflectionValue);
             $rawInfo        = Core::cast('zend_property_info *', $propertyValue->getRawPointer());
             $declaringClass = $rawInfo->ce;
             $flags          = $rawInfo->flags;

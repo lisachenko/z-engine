@@ -332,9 +332,8 @@ final class HotSwap
         $classAddress  = Core::addressOf($classEntry);
         $rawProperties = $classEntry->properties_info;
         assert($rawProperties instanceof CData);
-        $propertiesInfo = new HashTable(Core::addr($rawProperties));
+        $propertiesInfo = HashTable::fromCData(Core::addr($rawProperties));
         foreach ($propertiesInfo as $propertyName => $propertyValue) {
-            assert($propertyValue instanceof ReflectionValue);
             $rawInfo        = Core::cast('zend_property_info *', $propertyValue->getRawPointer());
             $declaringClass = $rawInfo->ce;
             assert(is_string($propertyName) && $declaringClass instanceof CData);

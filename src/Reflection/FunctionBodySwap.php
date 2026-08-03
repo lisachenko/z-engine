@@ -209,7 +209,6 @@ final class FunctionBodySwap
         $shares      = 0;
         $seenClasses = [];
         foreach (Core::$executor->classTable as $classValue) {
-            assert($classValue instanceof ReflectionValue);
             try {
                 $classEntry = $classValue->getRawClass();
             } catch (\UnexpectedValueException $e) {
@@ -229,7 +228,7 @@ final class FunctionBodySwap
 
             $functionTable = $classEntry->function_table;
             assert($functionTable instanceof CData);
-            $methodTable = new HashTable(Core::addr($functionTable));
+            $methodTable = HashTable::fromCData(Core::addr($functionTable));
             $bucketValue = $methodTable->find($lowerName);
             if ($bucketValue !== null && Core::addressOf($bucketValue->getRawFunction()) === $entryAddress) {
                 $shares++;
