@@ -421,8 +421,11 @@ class PersistentHeapTest extends TestCase
         // malloc traffic: without exact eviction, RSS climbs way past the threshold
         $churn(1_000);
 
+        // RSS moves in 2 MiB transparent-hugepage quanta, so allocator-layout shifts
+        // (e.g. a larger combined suite) can map one extra quantum without any leak;
+        // a real per-cycle leak over 1000 graph cycles lands in the tens of MiB
         $this->assertLessThan(
-            2_048,
+            4_096,
             $residentKiloBytes() - $baseline,
             'Repeated put/get/remove cycles must keep process memory flat',
         );
