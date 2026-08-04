@@ -20,6 +20,7 @@ use ZEngine\Reflection\PendingBodySwap;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionClassConstant;
 use ZEngine\Reflection\ReflectionFunction;
+use ZEngine\Reflection\ReflectionMethod;
 use ZEngine\Reflection\ReflectionProperty;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\HashTable;
@@ -29,56 +30,40 @@ use ZEngine\Type\StructArray;
 /**
  * A staged, atomically applicable difference between a live class and its new source
  *
- * Computed by HotSwap::prepare() against a hidden donor class entry compiled from
- * the new source. apply() executes the operations in a stage-then-commit protocol:
- * every step records an undo action, nothing from the previous class state is
- * destroyed before all steps succeeded, and any failure rolls the class back to its
- * exact previous state - no half-swapped class is ever observable. Installed
- * z-engine object handlers and hooks are never touched: the class entry pointer,
- * its handler fields and the handler block cache all stay as they are.
+ * Computed by HotSwap::prepare() against a hidden donor class (compiled from the new
+ * source) and consumed entirely through the high-level reflection API: the delta
+ * operates on ReflectionMethod / ReflectionClassConstant / ReflectionProperty /
+ * ReflectionValue objects, never on raw engine structures. apply() executes the
+ * operations in a stage-then-commit protocol: every step records an undo action,
+ * nothing from the previous class state is destroyed before all steps succeeded, and
+ * any failure rolls the class back to its exact previous state - no half-swapped class
+ * is ever observable. Installed z-engine object handlers and hooks are never touched:
+ * the class entry pointer, its handler fields and the handler block cache all stay.
  *
  * Operation semantics (support matrix and memory rules in docs/hot-swap.md):
  *
  *  - changed method: in-place body swap of the published zend_function (pointer
  *    identity preserved, so warmed-up inline caches, subclass method buckets and
- *    prototype links stay valid); the new source's declaration is authoritative
- *    (signature, visibility and other declaration flags follow the donor).
- *  - added method: a writable immortal container adopting the donor body is
- *    published in the method table. Subclasses linked before the swap do not
- *    inherit it (inheritance is materialized at link time).
- *  - removed method: the bucket is unpublished but the zend_function structure and
- *    its body stay allocated for the rest of the request - warmed-up inline caches
- *    and subclass buckets may still reference them. New lookups fail with the
- *    ordinary "undefined method" error; if the class inherited a method of the same
- *    name from an ancestor, that ancestor entry becomes visible again.
- *  - changed constant / added constant: the constant value zval is replaced (or a
- *    new immortal zend_class_constant container is published); constant ASTs are
- *    re-evaluated lazily by the engine.
- *  - changed default property values (instance and static declarations): the
- *    default table slot is replaced; live objects and already-materialized static
- *    property values keep their current state by design.
+ *    prototype links stay valid); the new source's declaration is authoritative.
+ *  - added method: a writable immortal container adopting the donor body is published
+ *    in the method table. Subclasses linked before the swap do not inherit it.
+ *  - removed method: the bucket is unpublished but the zend_function structure and its
+ *    body stay allocated for the rest of the request; if the class inherited a method
+ *    of the same name from an ancestor, that ancestor entry becomes visible again.
+ *  - changed/added constant: the constant value is replaced (or a new immortal
+ *    container is published); constant ASTs are re-evaluated lazily by the engine.
+ *  - changed default property/static value: the default slot is replaced; live objects
+ *    and already-materialized static values keep their current state by design.
  */
 final class ClassDelta
 {
     /**
-     * Test-only failure injection point for the apply protocol
-     *
-     * When set, the closure is invoked with each operation label (eg
-     * "method.change:greet") right before the operation executes; a throw from it
-     * exercises the rollback path.
-     *
-     * @internal
+     * Method names the class entry may keep a direct magic-shortcut pointer for
      */
-    public static ?\Closure $applyFailureInjector = null;
-
-    /**
-     * zend_class_entry function pointer fields that shortcut magic methods: removing
-     * or adding those requires field surgery this delta engine does not perform
-     */
-    private const MAGIC_POINTER_FIELDS = [
-        'constructor',
-        'destructor',
-        'clone',
+    private const MAGIC_METHOD_NAMES = [
+        '__construct',
+        '__destruct',
+        '__clone',
         '__get',
         '__set',
         '__unset',
@@ -86,7 +71,7 @@ final class ClassDelta
         '__call',
         '__callstatic',
         '__tostring',
-        '__debugInfo',
+        '__debuginfo',
         '__serialize',
         '__unserialize',
     ];
@@ -96,26 +81,25 @@ final class ClassDelta
     private bool $donorReleased = false;
 
     /**
-     * @param array<string, CData> $changedMethods       Lowercased name => donor zend_function*
-     * @param array<string, CData> $addedMethods         Lowercased name => donor zend_function*
-     * @param array<string, ?CData> $removedMethods      Lowercased name => inherited ancestor
-     *                                                   zend_function* that becomes visible again, or null
-     * @param array<string, CData> $changedConstants     Constant name => donor zend_class_constant*
-     * @param array<string, CData> $addedConstants       Constant name => donor zend_class_constant*
-     * @param list<int>            $changedPropertySlots Instance default table slots to update
-     * @param list<int>            $changedStaticSlots   Static default table slots to update
+     * @param array<string, ReflectionMethod>         $changedMethods      Lc name => donor method to swap in
+     * @param array<string, ReflectionMethod>         $addedMethods        Lc name => donor method to publish
+     * @param array<string, ?ReflectionMethod>        $removedMethods      Lc name => ancestor fallback or null
+     * @param array<string, ReflectionClassConstant>  $changedConstants    Name => donor constant
+     * @param array<string, ReflectionClassConstant>  $addedConstants      Name => donor constant
+     * @param array<string, ReflectionProperty> $changedProperties  Name => live instance property
+     * @param array<string, ReflectionProperty> $changedStatics     Name => live static property
      */
     private function __construct(
         private string $className,
-        private CData $classEntry,
-        private CData $donorEntry,
+        private ReflectionClass $liveClass,
+        private ReflectionClass $donorClass,
         private array $changedMethods,
         private array $addedMethods,
         private array $removedMethods,
         private array $changedConstants,
         private array $addedConstants,
-        private array $changedPropertySlots,
-        private array $changedStaticSlots,
+        private array $changedProperties,
+        private array $changedStatics,
     ) {}
 
     public function __destruct()
@@ -126,57 +110,49 @@ final class ClassDelta
     }
 
     /**
-     * Computes the delta between the live class entry and the donor entry
+     * Computes the delta between the live class and the donor class
      *
      * @internal called by HotSwap::prepare(); the donor ownership moves to the delta
      */
-    public static function fromDiff(string $className, CData $classEntry, CData $donorEntry): self
+    public static function fromDiff(string $className, ReflectionClass $liveClass, ReflectionClass $donorClass): self
     {
-        $originalMethods = self::declaredMethods($classEntry);
-        $donorMethods    = self::declaredMethods($donorEntry);
+        $originalMethods = $liveClass->getDeclaredMethods();
+        $donorMethods    = $donorClass->getDeclaredMethods();
 
         $changedMethods = [];
         $addedMethods   = [];
         $removedMethods = [];
-        $methodTable    = ReflectionClass::fromCData($classEntry)->getMethodTable();
-        foreach ($donorMethods as $lowerName => $donorFunction) {
+        foreach ($donorMethods as $lowerName => $donorMethod) {
             if (isset($originalMethods[$lowerName])) {
-                if (self::functionBodyDiffers($originalMethods[$lowerName], $donorFunction)) {
-                    $changedMethods[$lowerName] = $donorFunction;
+                if (!$originalMethods[$lowerName]->equals($donorMethod)) {
+                    $changedMethods[$lowerName] = $donorMethod;
                 }
                 continue;
             }
-            if ($methodTable->find($lowerName) !== null) {
-                throw new HotSwapException(
-                    "Hot-swap source for {$className} overrides the inherited method {$lowerName}() - "
-                    . 'adding an override of an inherited method is not supported',
-                );
+            if ($liveClass->findMethod($lowerName) !== null) {
+                throw HotSwapException::inheritedMethodOverride($className, $lowerName);
             }
-            if (in_array($lowerName, self::MAGIC_POINTER_FIELDS, true) || str_starts_with($lowerName, '__')) {
-                throw new HotSwapException(
-                    "Hot-swap source for {$className} adds the magic method {$lowerName}() - "
-                    . 'adding or removing magic methods and constructors is not supported',
-                );
+            if (in_array($lowerName, self::MAGIC_METHOD_NAMES, true) || str_starts_with($lowerName, '__')) {
+                throw HotSwapException::magicMethodAdded($className, $lowerName);
             }
-            $addedMethods[$lowerName] = $donorFunction;
+            $addedMethods[$lowerName] = $donorMethod;
         }
-        $donorMethodTable = ReflectionClass::fromCData($donorEntry)->getMethodTable();
-        foreach ($originalMethods as $lowerName => $originalFunction) {
+        foreach ($originalMethods as $lowerName => $originalMethod) {
             if (isset($donorMethods[$lowerName])) {
                 continue;
             }
-            self::assertRemovableMethod($className, $classEntry, $lowerName, $originalFunction);
+            if (!$originalMethod->isRemovable()) {
+                throw HotSwapException::magicMethodRemoved($className, $lowerName);
+            }
             // If an ancestor declares the same method, the donor inherited it during
             // linking: republishing that ancestor entry restores plain inheritance
-            $fallbackValue              = $donorMethodTable->find($lowerName);
-            $fallbackEntry              = $fallbackValue !== null ? $fallbackValue->getRawFunction() : null;
-            $removedMethods[$lowerName] = $fallbackEntry;
+            $removedMethods[$lowerName] = $donorClass->findMethod($lowerName);
         }
 
-        // Constants: only values (and their access flags) may change; the constant
-        // set may grow, removal is not supported (see docs/hot-swap.md)
-        $originalConstants = self::declaredConstants($classEntry);
-        $donorConstants    = self::declaredConstants($donorEntry);
+        // Constants: only values (and their access flags) may change; the constant set
+        // may grow, removal is not supported (see docs/hot-swap.md)
+        $originalConstants = $liveClass->getDeclaredConstants();
+        $donorConstants    = $donorClass->getDeclaredConstants();
         $changedConstants  = [];
         $addedConstants    = [];
         foreach ($donorConstants as $constantName => $donorConstant) {
@@ -184,32 +160,50 @@ final class ClassDelta
                 $addedConstants[$constantName] = $donorConstant;
                 continue;
             }
-            if (self::classConstantDiffers($originalConstants[$constantName], $donorConstant)) {
+            if (!$originalConstants[$constantName]->equals($donorConstant)) {
                 $changedConstants[$constantName] = $donorConstant;
             }
         }
         foreach ($originalConstants as $constantName => $originalConstant) {
             if (!isset($donorConstants[$constantName])) {
-                throw new HotSwapException(
-                    "Hot-swap source for {$className} removes the constant {$constantName} - "
-                    . 'constant removal is not supported',
-                );
+                throw HotSwapException::constantRemoved($className, $constantName);
             }
         }
 
-        [$changedPropertySlots, $changedStaticSlots] = self::changedDefaultSlots($classEntry, $donorEntry);
+        // Default property/static values (the surfaces are proven identical by
+        // HotSwap::prepare(), so the donor slot of the same property lines up)
+        $changedProperties = [];
+        $changedStatics    = [];
+        foreach ($liveClass->getDeclaredProperties() as $propertyName => $property) {
+            if ($property->isVirtual()) {
+                continue;
+            }
+            if ($property->isStatic()) {
+                $liveValue  = $liveClass->getDefaultStaticValueOf($property);
+                $donorValue = $donorClass->getDefaultStaticValueOf($property);
+                if (!$liveValue->equals($donorValue)) {
+                    $changedStatics[$propertyName] = $property;
+                }
+                continue;
+            }
+            $liveValue  = $liveClass->getDefaultPropertyValueOf($property);
+            $donorValue = $donorClass->getDefaultPropertyValueOf($property);
+            if (!$liveValue->equals($donorValue)) {
+                $changedProperties[$propertyName] = $property;
+            }
+        }
 
         return new self(
             $className,
-            $classEntry,
-            $donorEntry,
+            $liveClass,
+            $donorClass,
             $changedMethods,
             $addedMethods,
             $removedMethods,
             $changedConstants,
             $addedConstants,
-            $changedPropertySlots,
-            $changedStaticSlots,
+            $changedProperties,
+            $changedStatics,
         );
     }
 
@@ -254,19 +248,19 @@ final class ClassDelta
     }
 
     /**
-     * @return list<int> Instance default-property table slots that will be updated
+     * @return list<string> Names of instance properties whose default value will change
      */
-    public function getChangedPropertySlots(): array
+    public function getChangedProperties(): array
     {
-        return $this->changedPropertySlots;
+        return array_keys($this->changedProperties);
     }
 
     /**
-     * @return list<int> Static default-member table slots that will be updated
+     * @return list<string> Names of static properties whose default value will change
      */
-    public function getChangedStaticSlots(): array
+    public function getStaticChangedProperties(): array
     {
-        return $this->changedStaticSlots;
+        return array_keys($this->changedStatics);
     }
 
     /**
@@ -274,17 +268,9 @@ final class ClassDelta
      */
     public function isEmpty(): bool
     {
-        $changeSets = [
-            $this->changedMethods,
-            $this->addedMethods,
-            $this->removedMethods,
-            $this->changedConstants,
-            $this->addedConstants,
-            $this->changedPropertySlots,
-            $this->changedStaticSlots,
-        ];
-
-        return array_filter($changeSets) === [];
+        return $this->changedMethods    === [] && $this->addedMethods === [] && $this->removedMethods === []
+                                               && $this->changedConstants  === [] && $this->addedConstants === []
+                                               && $this->changedProperties === [] && $this->changedStatics === [];
     }
 
     /**
@@ -299,29 +285,25 @@ final class ClassDelta
     {
         $this->assertUsable();
         if (Core::isShutdown()) {
-            throw new HotSwapException('Cannot apply a class delta after Core::shutdown()');
+            throw HotSwapException::shutdown();
         }
 
-        $liveClass   = ReflectionClass::fromCData($this->classEntry);
-        $liveEntry   = $liveClass->getClassEntry();
-        $donorEntry  = ReflectionClass::fromCData($this->donorEntry)->getClassEntry();
-        $methodTable = $liveClass->getMethodTable();
+        $methodTable    = $this->liveClass->getMethodTable();
+        $constantsTable = $this->liveClass->getConstantsTable();
         /** @var list<PendingBodySwap> $pendingSwaps */
         $pendingSwaps = [];
-        /** @var list<CData> $replacedValues zval snapshots of the values being replaced */
-        $replacedValues = [];
+        /** @var list<ReflectionValue> $replacedSnapshots values replaced in place, released on commit */
+        $replacedSnapshots = [];
         /** @var list<\Closure> $undoStack */
         $undoStack = [];
 
         try {
-            foreach ($this->changedMethods as $lowerName => $donorFunction) {
-                self::injectApplyFailure("method.change:{$lowerName}");
-                $entryValue = $methodTable->find($lowerName);
-                assert($entryValue !== null);
-                $entry   = $entryValue->getRawFunction();
+            foreach ($this->changedMethods as $lowerName => $donorMethod) {
+                $entry = $this->liveClass->findMethod($lowerName);
+                assert($entry !== null);
                 $pending = FunctionBodySwap::swapUserFunctionBody(
                     $entry,
-                    $donorFunction,
+                    $donorMethod,
                     // The new source is authoritative for the declaration as well
                     preserveDeclaration: false,
                     // The donor body refcount guards the statics defaults table
@@ -335,105 +317,82 @@ final class ClassDelta
                 };
             }
 
-            foreach ($this->addedMethods as $lowerName => $donorFunction) {
-                self::injectApplyFailure("method.add:{$lowerName}");
+            foreach ($this->addedMethods as $lowerName => $donorMethod) {
                 // Immortal-by-design container: the engine destroys the body it carries
                 // but never frees user zend_function containers (see docs/hot-swap.md)
                 $container = Core::trackedNew('zend_function', true);
-                FunctionBodySwap::adoptFunctionForPublishing($container, $donorFunction, $this->classEntry);
+                FunctionBodySwap::adoptFunctionForPublishing($container, $donorMethod, $this->liveClass);
                 $methodTable->addFunctionEntry($lowerName, $container);
                 $undoStack[] = function () use ($methodTable, $lowerName, $container): void {
-                    self::unpublishFunctionBucket($methodTable, $lowerName);
+                    $methodTable->deleteWithoutDestructor($lowerName);
                     self::releaseAdoptedContainer($container);
                 };
             }
 
-            foreach ($this->removedMethods as $lowerName => $fallbackEntry) {
-                self::injectApplyFailure("method.remove:{$lowerName}");
-                $entryValue = $methodTable->find($lowerName);
-                assert($entryValue !== null);
-                $previousEntry = $entryValue->getRawFunction();
-                self::unpublishFunctionBucket($methodTable, $lowerName);
-                if ($fallbackEntry !== null) {
+            foreach ($this->removedMethods as $lowerName => $fallbackMethod) {
+                $previousMethod = $this->liveClass->findMethod($lowerName);
+                assert($previousMethod !== null);
+                $methodTable->deleteWithoutDestructor($lowerName);
+                if ($fallbackMethod !== null) {
                     // Restore plain inheritance: the bucket owns one name reference and
                     // one body share, exactly like zend_duplicate_function takes
-                    FunctionBodySwap::acquireBucketOwnership($fallbackEntry);
-                    self::publishFunctionPointer($methodTable, $lowerName, $fallbackEntry);
+                    FunctionBodySwap::acquireBucketOwnership($fallbackMethod);
+                    self::publishMethodPointer($methodTable, $lowerName, $fallbackMethod);
                 }
-                $undoStack[] = function () use ($methodTable, $lowerName, $previousEntry, $fallbackEntry): void {
-                    if ($fallbackEntry !== null) {
-                        self::unpublishFunctionBucket($methodTable, $lowerName);
-                        FunctionBodySwap::releaseBucketOwnership($fallbackEntry);
+                $undoStack[] = function () use ($methodTable, $lowerName, $previousMethod, $fallbackMethod): void {
+                    if ($fallbackMethod !== null) {
+                        $methodTable->deleteWithoutDestructor($lowerName);
+                        FunctionBodySwap::releaseBucketOwnership($fallbackMethod);
                     }
-                    self::publishFunctionPointer($methodTable, $lowerName, $previousEntry);
+                    self::publishMethodPointer($methodTable, $lowerName, $previousMethod);
                 };
             }
 
-            $constantsTable = $liveClass->getConstantsTable();
             foreach ($this->changedConstants as $constantName => $donorConstant) {
-                self::injectApplyFailure("constant.change:{$constantName}");
-                $constantValue = $constantsTable->find($constantName);
-                assert($constantValue !== null);
-                $originalConstant = ReflectionClassConstant::viewConstantEntry(
-                    Core::cast('zend_class_constant *', $constantValue->getRawPointer()),
-                );
-                $replacedValues[] = self::replaceZvalSlot(
-                    $originalConstant->value,
-                    ReflectionClassConstant::viewConstantEntry($donorConstant)->value,
-                    $undoStack,
-                );
+                $liveConstant = $this->liveClass->findConstant($constantName);
+                assert($liveConstant !== null);
+                $liveValue           = $liveConstant->getReflectionValue();
+                $snapshot            = $liveValue->replaceWith($donorConstant->getReflectionValue());
+                $replacedSnapshots[] = $snapshot;
+                $undoStack[]         = static function () use ($liveValue, $snapshot): void {
+                    $liveValue->restoreFrom($snapshot);
+                };
             }
 
             foreach ($this->addedConstants as $constantName => $donorConstant) {
-                self::injectApplyFailure("constant.add:{$constantName}");
-                $container = self::mintConstantContainer($donorConstant, $this->classEntry);
-                self::publishConstantPointer($constantsTable, $constantName, $container);
-                $undoStack[] = function () use ($constantsTable, $constantName, $container): void {
-                    self::unpublishFunctionBucket($constantsTable, $constantName);
-                    self::releaseConstantContainer($container);
+                $adopted = $donorConstant->adoptForClass($this->liveClass);
+                self::publishConstantPointer($constantsTable, $constantName, $adopted);
+                $undoStack[] = function () use ($constantsTable, $constantName, $adopted): void {
+                    $constantsTable->deleteWithoutDestructor($constantName);
+                    $adopted->releaseContainer();
                 };
             }
 
-            foreach ($this->changedPropertySlots as $slot) {
-                self::injectApplyFailure("property.default:{$slot}");
-                $originalTable = $liveEntry->default_properties_table;
-                $donorTable    = $donorEntry->default_properties_table;
-                // A computed slot guarantees both classes carry the default table
-                assert($originalTable !== null && $donorTable !== null);
-                $replacedValues[] = self::replaceZvalSlot(
-                    StructArray::ofZvals($originalTable, self::slotCount($liveEntry->default_properties_count))->rawAt($slot),
-                    StructArray::ofZvals($donorTable, self::slotCount($donorEntry->default_properties_count))->rawAt($slot),
-                    $undoStack,
-                );
+            foreach ($this->changedProperties as $property) {
+                $liveValue           = $this->liveClass->getDefaultPropertyValueOf($property);
+                $snapshot            = $liveValue->replaceWith($this->donorClass->getDefaultPropertyValueOf($property));
+                $replacedSnapshots[] = $snapshot;
+                $undoStack[]         = static function () use ($liveValue, $snapshot): void {
+                    $liveValue->restoreFrom($snapshot);
+                };
             }
 
-            foreach ($this->changedStaticSlots as $slot) {
-                self::injectApplyFailure("static.default:{$slot}");
-                $originalTable = $liveEntry->default_static_members_table;
-                $donorTable    = $donorEntry->default_static_members_table;
-                // A computed slot guarantees both classes carry the static table
-                assert($originalTable !== null && $donorTable !== null);
-                $replacedValues[] = self::replaceZvalSlot(
-                    StructArray::ofZvals($originalTable, self::slotCount($liveEntry->default_static_members_count))->rawAt($slot),
-                    StructArray::ofZvals($donorTable, self::slotCount($donorEntry->default_static_members_count))->rawAt($slot),
-                    $undoStack,
-                );
+            foreach ($this->changedStatics as $property) {
+                $liveValue           = $this->liveClass->getDefaultStaticValueOf($property);
+                $snapshot            = $liveValue->replaceWith($this->donorClass->getDefaultStaticValueOf($property));
+                $replacedSnapshots[] = $snapshot;
+                $undoStack[]         = static function () use ($liveValue, $snapshot): void {
+                    $liveValue->restoreFrom($snapshot);
+                };
             }
 
-            $touchesClassConstants = array_filter([
-                $this->changedConstants,
-                $this->addedConstants,
-                $this->changedPropertySlots,
-                $this->changedStaticSlots,
-            ]) !== [];
-            if ($touchesClassConstants) {
-                self::injectApplyFailure('class.invalidate-constants');
+            if ($this->touchesClassConstants()) {
                 // New values may be unevaluated constant expressions: drop the
                 // "all constants updated" shortcut so the engine re-evaluates lazily
-                $previousFlags       = $liveEntry->ce_flags;
-                $liveEntry->ce_flags = $previousFlags & ~Core::ZEND_ACC_CONSTANTS_UPDATED;
-                $undoStack[]         = static function () use ($liveEntry, $previousFlags): void {
-                    $liveEntry->ce_flags = $previousFlags;
+                $liveClass     = $this->liveClass;
+                $previousFlags = $liveClass->invalidateConstants();
+                $undoStack[]   = static function () use ($liveClass, $previousFlags): void {
+                    $liveClass->restoreFlags($previousFlags);
                 };
             }
         } catch (\Throwable $error) {
@@ -445,11 +404,7 @@ final class ClassDelta
             if ($error instanceof HotSwapException) {
                 throw $error;
             }
-            throw new HotSwapException(
-                "Hot-swap of {$this->className} failed and was rolled back: {$error->getMessage()}",
-                0,
-                $error,
-            );
+            throw HotSwapException::applyFailedAndRolledBack($this->className, $error);
         }
 
         // Commit: from here on nothing can fail - release everything the class
@@ -457,8 +412,8 @@ final class ClassDelta
         foreach ($pendingSwaps as $pending) {
             $pending->commit();
         }
-        foreach ($replacedValues as $valueSnapshot) {
-            Core::call('zval_ptr_dtor', Core::addr($valueSnapshot));
+        foreach ($replacedSnapshots as $snapshot) {
+            $snapshot->destroy();
         }
         $this->isApplied = true;
         $this->releaseDonor();
@@ -481,17 +436,23 @@ final class ClassDelta
      *
      * @internal shared with HotSwap::prepare() error paths
      */
-    public static function destroyClassEntry(CData $classEntry): void
+    public static function destroyClassEntry(ReflectionClass $reflectionClass): void
     {
         if (Core::isShutdown()) {
             // Engine writes are forbidden after shutdown: the unpublished entry leaks
             // (bounded - it is unreachable and carries no trampolines)
             return;
         }
-        $rawClass   = StructArray::ofStructs($classEntry, 1)->rawAt(0);
+        $rawClass   = (new StructArray($reflectionClass->getRawValue(), 1))->rawAt(0);
         $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawClass);
         Core::call('destroy_zend_class', $valueEntry->getRawValue());
         $valueEntry->release();
+    }
+
+    private function touchesClassConstants(): bool
+    {
+        return $this->changedConstants  !== [] || $this->addedConstants !== []
+                                               || $this->changedProperties !== [] || $this->changedStatics !== [];
     }
 
     private function releaseDonor(): void
@@ -500,334 +461,43 @@ final class ClassDelta
             return;
         }
         $this->donorReleased = true;
-        self::destroyClassEntry($this->donorEntry);
+        self::destroyClassEntry($this->donorClass);
     }
 
     private function assertUsable(): void
     {
         if ($this->isApplied) {
-            throw new HotSwapException('This class delta has already been applied');
+            throw HotSwapException::alreadyApplied();
         }
         if ($this->isDiscarded) {
-            throw new HotSwapException('This class delta has been discarded');
-        }
-    }
-
-    private static function injectApplyFailure(string $operationLabel): void
-    {
-        if (self::$applyFailureInjector !== null) {
-            (self::$applyFailureInjector)($operationLabel);
+            throw HotSwapException::discarded();
         }
     }
 
     /**
-     * Bounds a raw engine counter for struct-array view construction
-     *
-     * @return int<0, max>
-     */
-    private static function slotCount(int $count): int
-    {
-        assert($count >= 0);
-
-        return $count;
-    }
-
-    /**
-     * Returns the shaped zval view of a class constant value
-     *
-     * @return ZvalShape
-     */
-    private static function constantValueShape(CData $constantEntry): object
-    {
-        $rawValue = ReflectionClassConstant::viewConstantEntry($constantEntry)->value;
-
-        return ReflectionValue::fromValueEntry(Core::addr($rawValue))->getZvalShape();
-    }
-
-    /**
-     * Returns the user methods the class itself declares, keyed by lowercased name
-     *
-     * @return array<string, CData> Lowercased method name => zend_function*
-     */
-    private static function declaredMethods(CData $classEntry): array
-    {
-        $declaredMethods = [];
-        $classAddress    = Core::addressOf($classEntry);
-        $methodTable     = ReflectionClass::fromCData($classEntry)->getMethodTable();
-        foreach ($methodTable as $methodName => $methodValue) {
-            assert(is_string($methodName));
-            $rawFunction    = $methodValue->getRawFunction();
-            $methodFunction = ReflectionFunction::fromCData($rawFunction);
-            if (!$methodFunction->isUserDefined()) {
-                continue;
-            }
-            $methodScope = $methodFunction->getCommonPointer()->scope;
-            if ($methodScope === null || Core::addressOf($methodScope) !== $classAddress) {
-                continue;
-            }
-            $declaredMethods[$methodName] = $rawFunction;
-        }
-
-        return $declaredMethods;
-    }
-
-    /**
-     * Returns the constants the class itself declares, keyed by name
-     *
-     * @return array<string, CData> Constant name => zend_class_constant*
-     */
-    private static function declaredConstants(CData $classEntry): array
-    {
-        $declaredConstants = [];
-        $classAddress      = Core::addressOf($classEntry);
-        $constantsTable    = ReflectionClass::fromCData($classEntry)->getConstantsTable();
-        foreach ($constantsTable as $constantName => $constantValue) {
-            assert(is_string($constantName));
-            $rawConstant = Core::cast('zend_class_constant *', $constantValue->getRawPointer());
-            if (Core::addressOf(ReflectionClassConstant::viewConstantEntry($rawConstant)->ce) === $classAddress) {
-                $declaredConstants[$constantName] = $rawConstant;
-            }
-        }
-
-        return $declaredConstants;
-    }
-
-    /**
-     * Conservative comparison of two compiled function bodies
-     *
-     * Anything that cannot be proven identical counts as changed: a spurious swap is
-     * merely redundant work, while a missed change would keep stale code running.
-     */
-    private static function functionBodyDiffers(CData $originalFunction, CData $donorFunction): bool
-    {
-        $originalOpArray = ReflectionFunction::fromCData($originalFunction)->getOpArrayPointer();
-        $donorOpArray    = ReflectionFunction::fromCData($donorFunction)->getOpArrayPointer();
-
-        $bodyMetrics = ['last', 'last_var', 'last_literal', 'T', 'num_args', 'required_num_args', 'fn_flags'];
-        foreach ($bodyMetrics as $field) {
-            if ($originalOpArray->{$field} !== $donorOpArray->{$field}) {
-                return true;
-            }
-        }
-        $opcodesSize = $originalOpArray->last * Core::sizeof(Core::type('zend_op'));
-        if ($opcodesSize > 0 && \FFI::memcmp($originalOpArray->opcodes, $donorOpArray->opcodes, $opcodesSize) !== 0) {
-            return true;
-        }
-        $totalLiterals    = self::slotCount($originalOpArray->last_literal);
-        $originalLiterals = $originalOpArray->literals;
-        $donorLiterals    = $donorOpArray->literals;
-        if ($totalLiterals > 0) {
-            // A non-zero literal count guarantees both literal tables are present
-            assert($originalLiterals !== null && $donorLiterals !== null);
-            $originalView = StructArray::ofZvals($originalLiterals, $totalLiterals);
-            $donorView    = StructArray::ofZvals($donorLiterals, $totalLiterals);
-            for ($index = 0; $index < $totalLiterals; $index++) {
-                if (self::zvalDiffers($originalView->at($index), $donorView->at($index))) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Conservative comparison of two class constants (value and access flags)
-     */
-    private static function classConstantDiffers(CData $originalConstant, CData $donorConstant): bool
-    {
-        $originalValue = self::constantValueShape($originalConstant);
-        $donorValue    = self::constantValueShape($donorConstant);
-        if ($originalValue->u2->constant_flags !== $donorValue->u2->constant_flags) {
-            return true;
-        }
-
-        return self::zvalDiffers($originalValue, $donorValue);
-    }
-
-    /**
-     * Conservative scalar zval comparison: non-scalar payloads always count as different
-     *
-     * @param ZvalShape $firstValue
-     * @param ZvalShape $secondValue
-     */
-    private static function zvalDiffers(object $firstValue, object $secondValue): bool
-    {
-        $firstType = $firstValue->u1->v->type;
-        if ($firstType !== $secondValue->u1->v->type) {
-            return true;
-        }
-        $firstPayload  = $firstValue->value;
-        $secondPayload = $secondValue->value;
-        switch ($firstType) {
-            case ReflectionValue::IS_UNDEF:
-            case ReflectionValue::IS_NULL:
-            case ReflectionValue::IS_FALSE:
-            case ReflectionValue::IS_TRUE:
-                return false;
-            case ReflectionValue::IS_LONG:
-                return $firstPayload->lval !== $secondPayload->lval;
-            case ReflectionValue::IS_DOUBLE:
-                return $firstPayload->dval !== $secondPayload->dval;
-            case ReflectionValue::IS_STRING:
-                return StringEntry::fromCData($firstPayload->str)->getStringValue()
-                    !== StringEntry::fromCData($secondPayload->str)->getStringValue();
-            default:
-                // Arrays, objects and constant expressions: conservatively different
-                return true;
-        }
-    }
-
-    /**
-     * Rejects removals the class entry keeps direct function pointers for
-     */
-    private static function assertRemovableMethod(
-        string $className,
-        CData $classEntry,
-        string $lowerName,
-        CData $originalFunction,
-    ): void {
-        $entryAddress = Core::addressOf($originalFunction);
-        foreach (self::MAGIC_POINTER_FIELDS as $fieldName) {
-            $fieldFunction = $classEntry->{$fieldName};
-            if ($fieldFunction === null) {
-                continue;
-            }
-            assert($fieldFunction instanceof CData);
-            if (Core::addressOf($fieldFunction) === $entryAddress) {
-                throw new HotSwapException(
-                    "Hot-swap source for {$className} removes {$lowerName}() which the class entry "
-                    . "references as its {$fieldName} - adding or removing magic methods and "
-                    . 'constructors is not supported',
-                );
-            }
-        }
-    }
-
-    /**
-     * Computes the default-table slots whose values differ between the two entries
-     *
-     * The property surfaces are already proven identical, so slot numbers translate
-     * one-to-one. Virtual (hooked, no backing storage) properties have no slots.
-     *
-     * @return array{list<int>, list<int>} Instance slots and static slots
-     */
-    private static function changedDefaultSlots(CData $classEntry, CData $donorEntry): array
-    {
-        $changedPropertySlots = [];
-        $changedStaticSlots   = [];
-        $zvalSize             = Core::sizeof(Core::type('zval'));
-        $slotBase             = Core::type('zend_object')->getStructFieldOffset('properties_table');
-        $liveClass            = ReflectionClass::fromCData($classEntry);
-        $liveEntry            = $liveClass->getClassEntry();
-        $donorClassEntry      = ReflectionClass::fromCData($donorEntry)->getClassEntry();
-        $classAddress         = Core::addressOf($classEntry);
-        foreach ($liveClass->getPropertiesTable() as $propertyValue) {
-            $rawInfo = ReflectionProperty::viewPropertyInfo(
-                Core::cast('zend_property_info *', $propertyValue->getRawPointer()),
-            );
-            $flags  = $rawInfo->flags;
-            $offset = $rawInfo->offset;
-            if (Core::addressOf($rawInfo->ce) !== $classAddress) {
-                continue;
-            }
-            if (($flags & Core::ZEND_ACC_VIRTUAL) !== 0) {
-                continue;
-            }
-            if (($flags & Core::ZEND_ACC_STATIC) !== 0) {
-                $originalTable = $liveEntry->default_static_members_table;
-                $donorTable    = $donorClassEntry->default_static_members_table;
-                // A declared static member guarantees both classes carry the table
-                assert($originalTable !== null && $donorTable !== null);
-                $originalView = StructArray::ofZvals($originalTable, self::slotCount($liveEntry->default_static_members_count));
-                $donorView    = StructArray::ofZvals($donorTable, self::slotCount($donorClassEntry->default_static_members_count));
-                if (self::zvalDiffers($originalView->at($offset), $donorView->at($offset))) {
-                    $changedStaticSlots[] = $offset;
-                }
-                continue;
-            }
-            $slot          = intdiv($offset - $slotBase, $zvalSize);
-            $originalTable = $liveEntry->default_properties_table;
-            $donorTable    = $donorClassEntry->default_properties_table;
-            // A declared instance property guarantees both classes carry the table
-            assert($originalTable !== null && $donorTable !== null);
-            $originalView = StructArray::ofZvals($originalTable, self::slotCount($liveEntry->default_properties_count));
-            $donorView    = StructArray::ofZvals($donorTable, self::slotCount($donorClassEntry->default_properties_count));
-            if (self::zvalDiffers($originalView->at($slot), $donorView->at($slot))) {
-                $changedPropertySlots[] = $slot;
-            }
-        }
-        sort($changedPropertySlots);
-        sort($changedStaticSlots);
-
-        return [$changedPropertySlots, $changedStaticSlots];
-    }
-
-    /**
-     * Replaces a zval slot with the donor's value (donor keeps its own reference)
-     *
-     * The previous value is NOT released here: its snapshot is returned and the
-     * caller releases it at commit time, so a rollback can restore it byte-exact.
-     *
-     * @param list<\Closure> $undoStack Undo action list of the running apply
-     *
-     * @return CData Snapshot of the previous slot value (a zval container)
-     */
-    private static function replaceZvalSlot(CData $targetSlot, CData $donorSlot, array &$undoStack): CData
-    {
-        $zvalSize = Core::sizeof(Core::type('zval'));
-        $snapshot = Core::new('zval');
-        Core::memcpy($snapshot, $targetSlot, $zvalSize);
-        Core::memcpy($targetSlot, $donorSlot, $zvalSize);
-        // The slot now holds its own reference on the (possibly shared) payload
-        Core::call('zval_add_ref', Core::addr($targetSlot));
-        $undoStack[] = static function () use ($targetSlot, $snapshot, $zvalSize): void {
-            Core::call('zval_ptr_dtor', Core::addr($targetSlot));
-            Core::memcpy($targetSlot, Core::addr($snapshot), $zvalSize);
-        };
-
-        return $snapshot;
-    }
-
-    /**
-     * Removes a table bucket without running the table destructor over its payload
+     * Publishes a method entry pointer into a method table bucket (shared structure)
      *
      * @param HashTable|ReflectionValue[] $table
      */
-    private static function unpublishFunctionBucket(HashTable $table, string $lowerKey): void
+    private static function publishMethodPointer(HashTable $table, string $lowerName, ReflectionMethod $method): void
     {
-        $rawTable              = $table->getRawValue();
-        $previousDestructor    = $rawTable->pDestructor;
-        $rawTable->pDestructor = null;
-        try {
-            $table->delete($lowerKey);
-        } finally {
-            $rawTable->pDestructor = $previousDestructor;
-        }
-    }
-
-    /**
-     * Publishes a zend_function pointer into a method table bucket
-     *
-     * @param HashTable|ReflectionValue[] $table
-     */
-    private static function publishFunctionPointer(HashTable $table, string $lowerKey, CData $functionEntry): void
-    {
-        $rawFunction = StructArray::ofStructs(Core::cast('zend_function *', $functionEntry), 1)->rawAt(0);
+        // newEntry(IS_PTR) stores the ADDRESS of the CData it receives, so it needs the
+        // dereferenced zend_function struct, not the 8-byte pointer variable (which FFI
+        // refuses to reinterpret as a larger zval - "attempt to cast to larger type")
+        $rawFunction = (new StructArray($method->getEntryPointer(), 1))->rawAt(0);
         $valueEntry  = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawFunction);
-        $table->add($lowerKey, $valueEntry);
+        $table->add($lowerName, $valueEntry);
         $valueEntry->release();
     }
 
     /**
-     * Publishes a zend_class_constant pointer into the constants table
+     * Publishes an adopted class-constant container into the constants table
      *
      * @param HashTable|ReflectionValue[] $table
      */
-    private static function publishConstantPointer(HashTable $table, string $constantName, CData $constant): void
+    private static function publishConstantPointer(HashTable $table, string $constantName, ReflectionClassConstant $constant): void
     {
-        $rawConstant = StructArray::ofStructs(Core::cast('zend_class_constant *', Core::addr($constant)), 1)->rawAt(0);
-        $valueEntry  = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawConstant);
+        $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $constant->getRawValue());
         $table->add($constantName, $valueEntry);
         $valueEntry->release();
     }
@@ -837,75 +507,18 @@ final class ClassDelta
      */
     private static function releaseAdoptedContainer(CData $container): void
     {
-        $containerPointer = Core::cast('zend_function *', Core::addr($container));
-        $namePointer      = ReflectionFunction::fromCData($containerPointer)->getCommonPointer()->function_name;
+        $containerFunction = ReflectionFunction::fromCData(Core::cast('zend_function *', Core::addr($container)));
+        $namePointer       = $containerFunction->getCommonPointer()->function_name;
         assert($namePointer instanceof CData);
         StringEntry::fromCData($namePointer)->releaseReference();
 
         FunctionBodySwap::releaseSwappedInBody(
-            $containerPointer,
-            Core::addressOf($containerPointer),
+            $containerFunction,
+            $containerFunction->getAddress(),
             1,
             false,
             null,
         );
-        Core::untrackAndFree(Core::addr($container));
-    }
-
-    /**
-     * Mints an immortal zend_class_constant container adopting the donor's constant
-     *
-     * @param CData $declaringClass Target class entry the constant will belong to
-     */
-    private static function mintConstantContainer(CData $donorConstant, CData $declaringClass): CData
-    {
-        $container = Core::trackedNew('zend_class_constant', true);
-        Core::memcpy($container, $donorConstant, Core::sizeof($container));
-        $shapedContainer = ReflectionClassConstant::viewConstantEntry($container);
-        // The engine releases the payload of constants whose ce matches the class
-        // being destroyed - the adopted constant belongs to the target class now
-        $shapedContainer->ce = $declaringClass;
-
-        // The container owns its own payload references: the engine releases the
-        // value, doc comment and attributes when the declaring class is destroyed
-        Core::call('zval_add_ref', Core::addr($shapedContainer->value));
-        $docComment = $shapedContainer->doc_comment;
-        if ($docComment !== null) {
-            StringEntry::fromCData($docComment)->copy();
-        }
-        $attributes = $shapedContainer->attributes;
-        if ($attributes !== null) {
-            // The attributes table is refcounted: take the container's own reference
-            // through the HashTable wrapper (no-op equivalent for immutable tables)
-            $attributesTable = HashTable::fromCData($attributes);
-            if (!$attributesTable->isImmutable()) {
-                $attributesTable->incrementReferenceCount();
-            }
-        }
-
-        return $container;
-    }
-
-    /**
-     * Releases everything an added-constant container took (rollback path only)
-     */
-    private static function releaseConstantContainer(CData $container): void
-    {
-        $shapedContainer = ReflectionClassConstant::viewConstantEntry($container);
-        Core::call('zval_ptr_dtor', Core::addr($shapedContainer->value));
-        $docComment = $shapedContainer->doc_comment;
-        if ($docComment !== null) {
-            StringEntry::fromCData($docComment)->releaseReference();
-        }
-        $attributes = $shapedContainer->attributes;
-        if ($attributes !== null) {
-            // Return the reference the container took at mint time (other holders
-            // provably remain; immutable tables were never referenced)
-            $attributesTable = HashTable::fromCData($attributes);
-            if (!$attributesTable->isImmutable()) {
-                $attributesTable->decrementReferenceCount();
-            }
-        }
         Core::untrackAndFree(Core::addr($container));
     }
 }

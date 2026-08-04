@@ -12,7 +12,6 @@
 declare(strict_types=1);
 
 use ZEngine\Core;
-use ZEngine\HotSwap\ClassDelta;
 use ZEngine\HotSwap\HotSwap;
 use ZEngine\HotSwap\HotSwapException;
 use ZEngine\Reflection\ReflectionClass as ZEngineReflectionClass;
@@ -65,21 +64,28 @@ for ($index = 1; $index <= 100; $index++) {
 // A discarded delta must release its donor completely
 HotSwap::prepare($className, sprintf($template, 999, 999, 999, 999))->discard();
 
-// A failed apply must roll back without losing any staged resource
-ClassDelta::$applyFailureInjector = static function (string $operationLabel): void {
-    if (str_starts_with($operationLabel, 'property.default:')) {
-        throw new RuntimeException("injected failure at {$operationLabel}");
-    }
-};
+// A failed apply must roll back without losing any staged resource. The failure is
+// genuine: a delta that adds a method is applied twice against the same class, so the
+// second apply hits a duplicate table key at publish time and rolls back everything
+// it staged before that point.
+eval('class HotChurnRollback { public function base(): int { return 1; } }');
+$rollbackDelta1 = HotSwap::prepare(
+    'HotChurnRollback',
+    'class HotChurnRollback { public function base(): int { return 2; } public function extra(): int { return 3; } }',
+);
+$rollbackDelta2 = HotSwap::prepare(
+    'HotChurnRollback',
+    'class HotChurnRollback { public function base(): int { return 4; } public function extra(): int { return 5; } }',
+);
+$rollbackDelta1->apply();
 try {
-    HotSwap::prepare($className, sprintf($template, 1000, 1000, 1000, 1000))->apply();
-    throw new RuntimeException('Apply was expected to fail through the injector');
+    $rollbackDelta2->apply();
+    throw new RuntimeException('Apply was expected to fail on the duplicate method publish');
 } catch (HotSwapException $exception) {
-    // expected: rolled back
-} finally {
-    ClassDelta::$applyFailureInjector = null;
+    // expected: staged operations rolled back, donor released
 }
-if ($callMethod($makeInstance(), 'greet') !== 'hello 100') {
+$rollbackInstance = (new ZEngineReflectionClass('HotChurnRollback'))->newInstance();
+if ($callMethod($rollbackInstance, 'base') !== 2) {
     throw new RuntimeException('Rollback did not restore the previous body');
 }
 

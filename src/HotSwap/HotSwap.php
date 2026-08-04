@@ -13,13 +13,11 @@ declare(strict_types=1);
 
 namespace ZEngine\HotSwap;
 
-use FFI\CData;
 use ZEngine\AbstractSyntaxTree\NodeInterface;
 use ZEngine\AbstractSyntaxTree\NodeKind;
 use ZEngine\Core;
-use ZEngine\Memory\SharedMemory;
+use ZEngine\Memory\SharedMemoryException;
 use ZEngine\Reflection\ReflectionClass;
-use ZEngine\Reflection\ReflectionProperty;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\StructArray;
 
@@ -51,6 +49,11 @@ final class HotSwap
     /**
      * Prepares an atomic delta between a loaded class and its freshly rewritten source
      *
+     * INTERIM SECURITY NOTE: the donor class is currently compiled by eval()-ing the
+     * source, which executes it at compile time. Replacing this with a pure
+     * parse/AST/compile path that never runs the source body is tracked as issue #110
+     * (Refs #110); until then callers must only pass trusted source.
+     *
      * @param string $className  Name of the loaded class to hot-swap
      * @param string $sourceCode Full new source of the class declaration (with <?php-less
      *                           plain PHP statements, exactly what eval() accepts)
@@ -66,23 +69,25 @@ final class HotSwap
         $classTable      = Core::$executor->classTable;
         $classEntryValue = $classTable->find($lowerName);
         if ($classEntryValue === null) {
-            throw new HotSwapException("Class {$normalizedName} is not loaded, nothing to hot-swap");
+            throw HotSwapException::classNotLoaded($normalizedName);
         }
-        $classEntry = $classEntryValue->getRawClass();
-        SharedMemory::assertMutableClassEntry($classEntry, 'hot-swap');
-        self::assertPlainLinkedUserClass($classEntry, $normalizedName);
+        $liveClass = ReflectionClass::fromCData($classEntryValue->getRawClass());
+        if ($liveClass->isImmutable()) {
+            throw SharedMemoryException::immutableClassMutation('hot-swap');
+        }
+        self::assertPlainLinkedUserClass($liveClass, $normalizedName);
 
         // Validation pass: the source must parse and declare the target class
         self::assertSourceDeclaresClass($normalizedName, $sourceCode);
 
-        $donorEntry = self::compileDonorClass($lowerName, $normalizedName, $classEntry, $sourceCode);
+        $donorClass = self::compileDonorClass($lowerName, $normalizedName, $liveClass, $sourceCode);
 
         try {
-            self::assertCompatibleShape($classEntry, $donorEntry, $normalizedName);
+            self::assertCompatibleShape($liveClass, $donorClass, $normalizedName);
 
-            return ClassDelta::fromDiff($normalizedName, $classEntry, $donorEntry);
+            return ClassDelta::fromDiff($normalizedName, $liveClass, $donorClass);
         } catch (\Throwable $error) {
-            ClassDelta::destroyClassEntry($donorEntry);
+            ClassDelta::destroyClassEntry($donorClass);
             throw $error;
         }
     }
@@ -90,22 +95,18 @@ final class HotSwap
     /**
      * Rejects target classes the delta engine has no defined semantics for
      */
-    private static function assertPlainLinkedUserClass(CData $classEntry, string $className): void
+    private static function assertPlainLinkedUserClass(ReflectionClass $liveClass, string $className): void
     {
-        $reflectionClass = ReflectionClass::fromCData($classEntry);
-        $isUserClass     = $reflectionClass->isUserDefined();
-        $classFlags      = $reflectionClass->getClassEntry()->ce_flags;
-        if (!$isUserClass) {
-            throw new HotSwapException("Cannot hot-swap internal class {$className}");
+        if (!$liveClass->isUserDefined()) {
+            throw HotSwapException::internalClass($className);
         }
+        $classFlags = $liveClass->getFlags();
         if (($classFlags & Core::ZEND_ACC_LINKED) === 0) {
-            throw new HotSwapException("Cannot hot-swap class {$className}: it is not linked yet");
+            throw HotSwapException::notLinked($className);
         }
         $specialMask = Core::ZEND_ACC_INTERFACE | Core::ZEND_ACC_TRAIT | Core::ZEND_ACC_ENUM;
         if (($classFlags & $specialMask) !== 0) {
-            throw new HotSwapException(
-                "Cannot hot-swap {$className}: interfaces, traits and enums are not supported",
-            );
+            throw HotSwapException::unsupportedKind($className);
         }
     }
 
@@ -120,11 +121,7 @@ final class HotSwap
         try {
             $tree = Core::$compiler->parseString($sourceCode, "hot-swap of {$className}");
         } catch (\Throwable $error) {
-            throw new HotSwapException(
-                "Hot-swap source for {$className} does not parse: {$error->getMessage()}",
-                0,
-                $error,
-            );
+            throw HotSwapException::sourceDoesNotParse($className, $error);
         }
 
         $declaredNames = [];
@@ -138,9 +135,9 @@ final class HotSwap
             }
         }
 
-        throw new HotSwapException(
-            "Hot-swap source must declare class {$shortName}, found: "
-            . ($declaredNames === [] ? '(no class declaration)' : join(', ', $declaredNames)),
+        throw HotSwapException::sourceMissingClass(
+            $shortName,
+            $declaredNames === [] ? '(no class declaration)' : join(', ', $declaredNames),
         );
     }
 
@@ -172,18 +169,21 @@ final class HotSwap
      * live entry is republished - both moves with the table destructor disabled, so
      * no class entry is ever destroyed by the shuffle.
      *
-     * @return CData Donor zend_class_entry pointer (linked, refcount 1, unpublished)
+     * @return ReflectionClass Donor class (linked, refcount 1, unpublished)
      */
     private static function compileDonorClass(
         string $lowerName,
         string $className,
-        CData $classEntry,
+        ReflectionClass $liveClass,
         string $sourceCode,
-    ): CData {
+    ): ReflectionClass {
         $classTable = Core::$executor->classTable;
 
+        // INTERIM: the donor is compiled with eval() of the source. This executes the
+        // source at compile time; replacing it with a pure parse/AST/compile path that
+        // never runs the body is tracked as issue #110 (Refs #110). See HotSwap::prepare().
         self::unpublishClassEntry($lowerName);
-        $donorEntry   = null;
+        $donorClass   = null;
         $compileError = null;
         try {
             try {
@@ -195,33 +195,26 @@ final class HotSwap
             // throwing - always check, so the live entry can be republished safely
             $donorEntryValue = $classTable->find($lowerName);
             if ($donorEntryValue !== null) {
-                $donorEntry = $donorEntryValue->getRawClass();
+                $donorClass = ReflectionClass::fromCData($donorEntryValue->getRawClass());
             }
         } finally {
-            if ($donorEntry !== null) {
+            if ($donorClass !== null) {
                 self::unpublishClassEntry($lowerName);
             }
-            self::publishClassEntry($lowerName, $classEntry);
+            self::publishClassEntry($lowerName, $liveClass);
         }
 
         if ($compileError !== null) {
-            if ($donorEntry !== null) {
-                ClassDelta::destroyClassEntry($donorEntry);
+            if ($donorClass !== null) {
+                ClassDelta::destroyClassEntry($donorClass);
             }
-            throw new HotSwapException(
-                "Hot-swap source for {$className} failed to compile: {$compileError->getMessage()}",
-                0,
-                $compileError,
-            );
+            throw HotSwapException::sourceDidNotCompile($className, $compileError);
         }
-        if ($donorEntry === null) {
-            throw new HotSwapException(
-                "Hot-swap source for {$className} compiled, but did not declare the class "
-                . 'under its fully-qualified name (check the namespace statement)',
-            );
+        if ($donorClass === null) {
+            throw HotSwapException::classNotDeclared($className);
         }
 
-        return $donorEntry;
+        return $donorClass;
     }
 
     /**
@@ -244,9 +237,9 @@ final class HotSwap
     /**
      * Publishes a class entry pointer into the class table under the given key
      */
-    private static function publishClassEntry(string $lowerName, CData $classEntry): void
+    private static function publishClassEntry(string $lowerName, ReflectionClass $reflectionClass): void
     {
-        $rawClass   = StructArray::ofStructs(Core::cast('zend_class_entry *', $classEntry), 1)->rawAt(0);
+        $rawClass   = (new StructArray($reflectionClass->getRawValue(), 1))->rawAt(0);
         $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawClass);
         Core::$executor->classTable->add($lowerName, $valueEntry);
         $valueEntry->release();
@@ -260,86 +253,38 @@ final class HotSwap
      * corrupt live instances, and hierarchy changes would invalidate variance and
      * every inherited structure. See docs/hot-swap.md.
      */
-    private static function assertCompatibleShape(CData $classEntry, CData $donorEntry, string $className): void
-    {
+    private static function assertCompatibleShape(
+        ReflectionClass $liveClass,
+        ReflectionClass $donorClass,
+        string $className,
+    ): void {
         // Parent must be the same linked class entry
-        $originalParent = ReflectionClass::fromCData($classEntry)->getClassEntry()->parent;
-        $donorParent    = ReflectionClass::fromCData($donorEntry)->getClassEntry()->parent;
-        $sameParent     = ($originalParent === null && $donorParent === null)
-            || ($originalParent !== null && $donorParent !== null
-                                         && Core::addressOf($originalParent) === Core::addressOf($donorParent));
-        if (!$sameParent) {
-            throw new HotSwapException(
-                "Hot-swap source for {$className} changes the parent class - hierarchy changes are not supported",
-            );
+        if ($liveClass->getParentAddress() !== $donorClass->getParentAddress()) {
+            throw HotSwapException::parentChanged($className);
         }
 
         // Interface sets must match (both classes are linked, so the resolved list is present)
-        $originalInterfaces = self::interfaceAddressSet($classEntry);
-        $donorInterfaces    = self::interfaceAddressSet($donorEntry);
-        if ($originalInterfaces !== $donorInterfaces) {
-            throw new HotSwapException(
-                "Hot-swap source for {$className} changes the implemented interfaces - "
-                . 'hierarchy changes are not supported',
-            );
+        if ($liveClass->getInterfaceAddresses() !== $donorClass->getInterfaceAddresses()) {
+            throw HotSwapException::interfacesChanged($className);
         }
 
         // The own property surface must be identical: layout changes cannot be applied
         // to a class with live instances
-        $originalProperties = self::ownPropertySurface($classEntry);
-        $donorProperties    = self::ownPropertySurface($donorEntry);
-        if ($originalProperties !== $donorProperties) {
-            throw new HotSwapException(
-                "Hot-swap source for {$className} changes the property surface "
-                . '(added/removed/reordered/retyped properties) - only default value changes are supported',
-            );
+        if (self::ownPropertySurface($liveClass) !== self::ownPropertySurface($donorClass)) {
+            throw HotSwapException::propertySurfaceChanged($className);
         }
     }
 
     /**
-     * Returns the sorted list of implemented interface entry addresses
-     *
-     * @return list<int>
-     */
-    private static function interfaceAddressSet(CData $classEntry): array
-    {
-        $addresses       = [];
-        $shapedEntry     = ReflectionClass::fromCData($classEntry)->getClassEntry();
-        $totalInterfaces = $shapedEntry->num_interfaces;
-        $interfaceList   = $shapedEntry->interfaces;
-        assert($totalInterfaces >= 0);
-        if ($totalInterfaces > 0) {
-            // A non-zero interface count guarantees the resolved list is present
-            assert($interfaceList !== null);
-            $interfaces = StructArray::ofStructs($interfaceList, $totalInterfaces);
-            foreach ($interfaces as $interfaceEntry) {
-                $addresses[] = Core::addressOf($interfaceEntry);
-            }
-        }
-        sort($addresses);
-
-        return $addresses;
-    }
-
-    /**
-     * Returns the comparable shape of every property the class declares itself
+     * Returns the comparable declaration surface of every property the class declares
      *
      * @return array<string, array{int, int, int}> Property name => [flags, offset, type mask]
      */
-    private static function ownPropertySurface(CData $classEntry): array
+    private static function ownPropertySurface(ReflectionClass $reflectionClass): array
     {
-        $surface        = [];
-        $classAddress   = Core::addressOf($classEntry);
-        $propertiesInfo = ReflectionClass::fromCData($classEntry)->getPropertiesTable();
-        foreach ($propertiesInfo as $propertyName => $propertyValue) {
-            assert(is_string($propertyName));
-            $rawInfo = ReflectionProperty::viewPropertyInfo(
-                Core::cast('zend_property_info *', $propertyValue->getRawPointer()),
-            );
-            if (Core::addressOf($rawInfo->ce) !== $classAddress) {
-                continue;
-            }
-            $surface[$propertyName] = [$rawInfo->flags, $rawInfo->offset, $rawInfo->type->type_mask];
+        $surface = [];
+        foreach ($reflectionClass->getDeclaredProperties() as $propertyName => $property) {
+            $surface[$propertyName] = $property->getSurface();
         }
         ksort($surface);
 

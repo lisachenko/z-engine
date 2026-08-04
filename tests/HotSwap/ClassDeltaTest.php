@@ -165,8 +165,8 @@ class ClassDeltaTest extends TestCase
             $className,
             "class {$className} { public int \$counter = 42; public static string \$mode = \"hot\"; }",
         );
-        $this->assertCount(1, $delta->getChangedPropertySlots());
-        $this->assertCount(1, $delta->getChangedStaticSlots());
+        $this->assertSame(['counter'], $delta->getChangedProperties());
+        $this->assertSame(['mode'], $delta->getStaticChangedProperties());
         $delta->apply();
 
         // New instances see the new default, live instances keep their state
@@ -177,70 +177,49 @@ class ClassDeltaTest extends TestCase
         $this->assertSame('hot', (new \ReflectionProperty($className, 'mode'))->getValue());
     }
 
-    public function testFailureRollsBackAtomically(): void
+    public function testGenuineFailureRollsBackStagedOperations(): void
     {
         $className = $this->declareClass(
             'Rollback',
             '{ public const K = 1; public int $value = 5; public function a(): int { return 1; } }',
         );
 
+        // The delta plans to change a()'s body AND add a new method b(); it is computed
+        // while b() does not exist yet
         $delta = HotSwap::prepare(
             $className,
             "class {$className} { public const K = 2; public int \$value = 7; "
             . 'public function a(): int { return 10; } public function b(): int { return 20; } }',
         );
-        // Fail late in the protocol: the method swap and addition already happened
-        // and must be rolled back together with everything else
-        ClassDelta::$applyFailureInjector = static function (string $operationLabel): void {
-            if (str_starts_with($operationLabel, 'property.default:')) {
-                throw new \RuntimeException("injected failure at {$operationLabel}");
-            }
-        };
-        try {
-            $this->expectException(HotSwapException::class);
-            $this->expectExceptionMessage('rolled back');
-            $delta->apply();
-        } finally {
-            ClassDelta::$applyFailureInjector = null;
-        }
-    }
+        $this->assertSame(['a'], $delta->getChangedMethods());
+        $this->assertSame(['b'], $delta->getAddedMethods());
 
-    public function testRolledBackClassKeepsPreviousState(): void
-    {
-        $className = $this->declareClass(
-            'RollbackState',
-            '{ public const K = 1; public int $value = 5; public function a(): int { return 1; } }',
-        );
-        $delta = HotSwap::prepare(
-            $className,
-            "class {$className} { public const K = 2; public int \$value = 7; "
-            . 'public function a(): int { return 10; } public function b(): int { return 20; } }',
-        );
-        ClassDelta::$applyFailureInjector = static function (string $operationLabel): void {
-            if (str_starts_with($operationLabel, 'property.default:')) {
-                throw new \RuntimeException("injected failure at {$operationLabel}");
-            }
-        };
+        // Genuinely make the added-method publish fail: install b() out of band between
+        // prepare() and apply(), so the engine refuses the duplicate table key. apply()
+        // has already staged the a() body swap by then, which the rollback must revert.
+        $reflectionClass = new ReflectionClass($className);
+        $reflectionClass->addMethod('b', static fn(): int => 99);
+
         try {
             $delta->apply();
-            $this->fail('Apply must fail through the injected error');
+            $this->fail('Apply must fail on the duplicate method publish');
         } catch (HotSwapException $exception) {
-            // expected: rolled back
-        } finally {
-            ClassDelta::$applyFailureInjector = null;
+            $this->assertStringContainsString('rolled back', $exception->getMessage());
         }
 
-        // No half-swapped state is observable: body, constant, defaults and the
-        // method table all read exactly like before the failed apply
+        // No half-swapped state is observable: the a() body swap was rolled back, the
+        // constant/default changes (staged after the failing add) were never applied
         $this->assertSame(1, self::callMethod(self::newInstance($className), 'a'));
-        $this->assertFalse(method_exists($className, 'b'));
         $this->assertSame(1, constant("{$className}::K"));
         $this->assertSame(5, self::readProperty(self::newInstance($className), 'value'));
+        // The out-of-band b() the failure was triggered with is still the live one
+        $this->assertSame(99, self::callMethod(self::newInstance($className), 'b'));
 
         // The class stays fully functional for a subsequent successful swap
         HotSwap::prepare(
             $className,
-            "class {$className} { public const K = 3; public int \$value = 5; public function a(): int { return 30; } }",
+            "class {$className} { public const K = 3; public int \$value = 5; "
+            . 'public function a(): int { return 30; } public function b(): int { return 99; } }',
         )->apply();
         $this->assertSame(30, self::callMethod(self::newInstance($className), 'a'));
         $this->assertSame(3, constant("{$className}::K"));
@@ -333,8 +312,8 @@ class ClassDeltaTest extends TestCase
         $this->assertSame([], $delta->getRemovedMethods());
         $this->assertSame([], $delta->getChangedConstants());
         $this->assertSame([], $delta->getAddedConstants());
-        $this->assertSame([], $delta->getChangedPropertySlots());
-        $this->assertSame([], $delta->getChangedStaticSlots());
+        $this->assertSame([], $delta->getChangedProperties());
+        $this->assertSame([], $delta->getStaticChangedProperties());
         $delta->apply();
         $this->assertSame(5, self::callMethod(self::newInstance($className), 'm'));
     }
