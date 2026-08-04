@@ -328,10 +328,18 @@ final class ClassDelta
                 // but never frees user zend_function containers (see docs/hot-swap.md)
                 $container = Core::trackedNew('zend_function', true);
                 FunctionBodySwap::adoptFunctionForPublishing($container, $donorMethod, $this->liveClass);
-                $methodTable->addFunctionEntry($lowerName, $container);
-                $undoStack[] = function () use ($methodTable, $lowerName, $container): void {
-                    $methodTable->deleteWithoutDestructor($lowerName);
+                // Release the adopted body/name references on rollback even when the
+                // publish below throws on a duplicate table key: the container is already
+                // holding them by now, so its cleanup is staged BEFORE the throwing call.
+                // The bucket delete is a separate, later undo entry pushed only once the
+                // publish actually succeeded, so rollback (reverse order) unpublishes the
+                // bucket before freeing the container it points at.
+                $undoStack[] = static function () use ($container): void {
                     self::releaseAdoptedContainer($container);
+                };
+                $methodTable->addFunctionEntry($lowerName, $container);
+                $undoStack[] = static function () use ($methodTable, $lowerName): void {
+                    $methodTable->deleteWithoutDestructor($lowerName);
                 };
             }
 
@@ -367,10 +375,15 @@ final class ClassDelta
 
             foreach ($this->addedConstants as $constantName => $donorConstant) {
                 $adopted = $donorConstant->adoptForClass($this->liveClass);
-                self::publishConstantPointer($constantsTable, $constantName, $adopted);
-                $undoStack[] = function () use ($constantsTable, $constantName, $adopted): void {
-                    $constantsTable->deleteWithoutDestructor($constantName);
+                // Same staging as added methods: release the adopted container on rollback
+                // even if the publish throws on a duplicate key, deleting the bucket only
+                // once it was actually published (a separate, later-reversed undo entry).
+                $undoStack[] = static function () use ($adopted): void {
                     $adopted->releaseContainer();
+                };
+                self::publishConstantPointer($constantsTable, $constantName, $adopted);
+                $undoStack[] = static function () use ($constantsTable, $constantName): void {
+                    $constantsTable->deleteWithoutDestructor($constantName);
                 };
             }
 
