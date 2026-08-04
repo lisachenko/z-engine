@@ -15,8 +15,9 @@ namespace ZEngine\Reflection;
 
 use FFI\CData;
 use ZEngine\Core;
-use ZEngine\System\SharedMemory;
-use ZEngine\System\SharedMemoryException;
+use ZEngine\Memory\SharedMemory;
+use ZEngine\Memory\SharedMemoryException;
+use ZEngine\System\EngineStructs;
 use ZEngine\Type\ArgumentEntry;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\LiveRange;
@@ -41,7 +42,6 @@ trait FunctionLikeTrait
         $commonPointer = $this->getCommonPointer();
         $previousName  = $commonPointer->function_name;
         if ($previousName !== null) {
-            assert($previousName instanceof CData);
             StringEntry::fromCData($previousName)->releaseReference();
         }
         $commonPointer->function_name = StringEntry::fromString($newName)
@@ -59,7 +59,6 @@ trait FunctionLikeTrait
     {
         $commonPointer = $this->getCommonPointer();
         $flags         = $commonPointer->fn_flags;
-        assert(is_int($flags));
         if ($isClosure) {
             $commonPointer->fn_flags = $flags | Core::ZEND_ACC_CLOSURE;
         } else {
@@ -129,17 +128,13 @@ trait FunctionLikeTrait
         if (!$this->isInternal()) {
             $selfExecutionState = Core::$executor->getExecutionState();
             $newCodeEntry       = $selfExecutionState->getArgument(0)->getRawObject();
-            $newCodeEntry       = Core::cast('zend_closure *', $newCodeEntry);
+            $newCodeEntry       = EngineStructs::closure(Core::cast('zend_closure *', $newCodeEntry));
             $newFunction        = $newCodeEntry->func;
-            assert($newFunction instanceof CData);
 
-            $isSharedMemoryEntry = SharedMemory::isImmutableFunctionEntry($this->pointer);
+            $isSharedMemoryEntry = $this->isImmutable();
             if ($isSharedMemoryEntry) {
                 if ($this->getCommonPointer()->scope !== null) {
-                    throw new SharedMemoryException(
-                        'Cannot redefine a method of an immutable (opcache shared-memory) class: '
-                        . 'its method table lives inside the shared class entry',
-                    );
+                    throw SharedMemoryException::immutableMethodTable();
                 }
                 // Copy the entry out of SHM: the per-process function-table bucket is
                 // repointed at a writable container, the SHM original stays untouched
@@ -182,6 +177,24 @@ trait FunctionLikeTrait
     }
 
     /**
+     * Checks if this function entry lives in opcache shared memory (ZEND_ACC_IMMUTABLE)
+     *
+     * Opcache marks every function it publishes from its shared memory as immutable:
+     * such an entry is visible to all worker processes and must never be written or
+     * freed in place - redefine() copies immutable global functions out of SHM first
+     * (see docs/hot-swap.md). Only user functions can be opcache-shared; internal
+     * functions are persistent process memory, a different lifetime class entirely.
+     */
+    public function isImmutable(): bool
+    {
+        if (!$this->isUserDefined()) {
+            return false;
+        }
+
+        return ($this->getCommonPointer()->fn_flags & Core::ZEND_ACC_IMMUTABLE) !== 0;
+    }
+
+    /**
      * Returns the engine attributes table of this function or null if the function has no attributes
      *
      * Each element of the returned table is an IS_PTR value pointing to a zend_attribute:
@@ -195,7 +208,6 @@ trait FunctionLikeTrait
         if ($attributes === null) {
             return null;
         }
-        assert($attributes instanceof CData);
 
         return HashTable::fromCData($attributes);
     }
@@ -295,10 +307,9 @@ trait FunctionLikeTrait
      */
     public function getArgumentInfo(int $index): ArgumentEntry
     {
-        $commonPointer = $this->getCommonPointer();
-        $functionFlags = $commonPointer->fn_flags;
-        $numberOfArgs  = $commonPointer->num_args;
-        assert(is_int($functionFlags) && is_int($numberOfArgs));
+        $commonPointer  = $this->getCommonPointer();
+        $functionFlags  = $commonPointer->fn_flags;
+        $numberOfArgs   = $commonPointer->num_args;
         $isVariadic     = ($functionFlags & Core::ZEND_ACC_VARIADIC)        !== 0;
         $hasReturnEntry = ($functionFlags & Core::ZEND_ACC_HAS_RETURN_TYPE) !== 0;
         $minIndex       = $hasReturnEntry ? ArgumentEntry::RETURN_ENTRY_INDEX : 0;
@@ -314,7 +325,6 @@ trait FunctionLikeTrait
         if ($argInfoTable === null) {
             throw new \ReflectionException('Function does not provide argument info entries');
         }
-        assert($argInfoTable instanceof CData);
         // Explicit pointer arithmetic also resolves the -1 return entry; the view type
         // selects the right name representation for the entry
         $entryType = $this->isUserDefined() ? 'zend_arg_info' : 'zend_internal_arg_info';
@@ -520,8 +530,13 @@ trait FunctionLikeTrait
 
     /**
      * Returns a pointer to the common structure (to work natively with zend_function and zend_internal_function)
+     *
+     * The declared shape (see phpstan.dist.neon typeAliases and AGENTS.md) is the
+     * single narrowing point for every common-struct field this trait touches.
+     *
+     * @return ZendFunctionCommonShape
      */
-    private function getCommonPointer(): CData
+    private function getCommonPointer(): object
     {
         // For zend_internal_function we have same fields directly in current structure.
         // The check goes through the low-level structure (not native isInternal()) so it
@@ -533,6 +548,7 @@ trait FunctionLikeTrait
             $pointer = $this->pointer->common;
         }
 
+        /** @var ZendFunctionCommonShape $pointer */
         return $pointer;
     }
 }

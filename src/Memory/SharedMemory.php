@@ -11,15 +11,15 @@
  */
 declare(strict_types=1);
 
-namespace ZEngine\System;
+namespace ZEngine\Memory;
 
 use FFI\CData;
 use ZEngine\Core;
-use ZEngine\Reflection\ReflectionValue;
+use ZEngine\System\EngineStructs;
 use ZEngine\Type\HashTable;
 
 /**
- * Central authority for opcache shared-memory (SHM) detection and copy-out
+ * Shared detection and copy-out mechanics for opcache shared memory (SHM)
  *
  * Opcache stores cached scripts in shared memory and marks every class entry and
  * function it publishes from there with ZEND_ACC_IMMUTABLE. Two hard rules follow
@@ -28,12 +28,15 @@ use ZEngine\Type\HashTable;
  *  1. SHM structures are never written: they are shared by all worker processes.
  *  2. SHM structures are never freed: they belong to the opcache, not the request.
  *
- * Where the engine keeps a writable per-process indirection, a mutation can proceed
- * after copying the structure out of SHM: the global function table buckets are
- * per-process, so an immutable function entry can be repointed at a writable copy
- * (copyOutFunctionEntry()). A class method table, however, lives inside the SHM
- * class entry itself - there is no writable slot to repoint, so class-level
- * mutations on immutable classes are rejected with SharedMemoryException.
+ * The reflection wrappers expose the detection as ReflectionClass::isImmutable()
+ * and ReflectionFunction/ReflectionMethod::isImmutable(); both delegate to the
+ * mechanics kept here. Where the engine keeps a writable per-process indirection,
+ * a mutation can proceed after copying the structure out of SHM: the global
+ * function table buckets are per-process, so an immutable function entry can be
+ * repointed at a writable copy (copyOutFunctionEntry()). A class method table,
+ * however, lives inside the SHM class entry itself - there is no writable slot to
+ * repoint, so class-level mutations on immutable classes are rejected with
+ * SharedMemoryException.
  */
 final class SharedMemory
 {
@@ -47,31 +50,9 @@ final class SharedMemory
      */
     public static function isImmutableClassEntry(CData $classEntry): bool
     {
-        $classFlags = $classEntry->ce_flags;
-        assert(is_int($classFlags));
+        $classFlags = EngineStructs::classEntry($classEntry)->ce_flags;
 
         return ($classFlags & Core::ZEND_ACC_IMMUTABLE) !== 0;
-    }
-
-    /**
-     * Checks if the given zend_function entry lives in opcache shared memory
-     *
-     * Only user functions can be opcache-shared; internal functions are persistent
-     * process memory, which is a different lifetime class entirely.
-     */
-    public static function isImmutableFunctionEntry(CData $functionEntry): bool
-    {
-        $entryType = $functionEntry->type;
-        assert(is_int($entryType));
-        if (($entryType & Core::ZEND_USER_FUNCTION) === 0) {
-            return false;
-        }
-        $commonPointer = $functionEntry->common;
-        assert($commonPointer instanceof CData);
-        $functionFlags = $commonPointer->fn_flags;
-        assert(is_int($functionFlags));
-
-        return ($functionFlags & Core::ZEND_ACC_IMMUTABLE) !== 0;
     }
 
     /**
@@ -84,10 +65,7 @@ final class SharedMemory
     public static function assertMutableClassEntry(CData $classEntry, string $operation): void
     {
         if (self::isImmutableClassEntry($classEntry)) {
-            throw new SharedMemoryException(
-                "Cannot {$operation} on an immutable (opcache shared-memory) class: "
-                . 'the class entry is shared by all worker processes and cannot be modified in place',
-            );
+            throw SharedMemoryException::immutableClassMutation($operation);
         }
     }
 
@@ -102,9 +80,9 @@ final class SharedMemory
      * and a request-lifetime block would dangle if the engine walked it after the
      * FFI request memory was reclaimed.
      *
-     * @param CData                        $functionEntry zend_function pointer into SHM
-     * @param HashTable|ReflectionValue[]  $table         Function table whose bucket should be repointed
-     * @param string                       $lowerKey      Lowercased bucket key of the entry
+     * @param CData     $functionEntry zend_function pointer into SHM
+     * @param HashTable $table         Function table whose bucket should be repointed
+     * @param string    $lowerKey      Lowercased bucket key of the entry
      *
      * @return CData Writable zend_function pointer now published in the table
      */
@@ -112,9 +90,7 @@ final class SharedMemory
     {
         $bucketValue = $table->find($lowerKey);
         if ($bucketValue === null) {
-            throw new SharedMemoryException(
-                "Cannot copy out function {$lowerKey}: it is not published in the given table",
-            );
+            throw SharedMemoryException::functionNotPublished($lowerKey);
         }
 
         $writableEntry = Core::trackedNew('zend_function', true);
@@ -122,18 +98,14 @@ final class SharedMemory
 
         // The writable copy is not opcache-shared anymore; everything it points at
         // still is, so the body must be replaced (not freed) by the caller
-        $commonPointer = $writableEntry->common;
-        assert($commonPointer instanceof CData);
-        $entryFlags = $commonPointer->fn_flags;
-        assert(is_int($entryFlags));
-        $commonPointer->fn_flags = $entryFlags & (~Core::ZEND_ACC_IMMUTABLE);
+        $writablePointer = Core::cast('zend_function *', Core::addr($writableEntry));
+        $commonPointer   = EngineStructs::functionEntry($writablePointer)->common;
+        $commonPointer->fn_flags &= (~Core::ZEND_ACC_IMMUTABLE);
 
         // Repoint the per-process bucket: the zval value is an IS_PTR payload
-        $rawBucketZval  = $bucketValue->getRawValue();
-        $rawBucketValue = $rawBucketZval->value;
-        assert($rawBucketValue instanceof CData);
-        $rawBucketValue->ptr = Core::cast('void *', Core::addr($writableEntry));
+        $rawBucketZval             = EngineStructs::zval($bucketValue->getRawValue());
+        $rawBucketZval->value->ptr = Core::cast('void *', Core::addr($writableEntry));
 
-        return Core::cast('zend_function *', Core::addr($writableEntry));
+        return $writablePointer;
     }
 }

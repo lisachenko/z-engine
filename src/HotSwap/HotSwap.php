@@ -17,8 +17,9 @@ use FFI\CData;
 use ZEngine\AbstractSyntaxTree\NodeInterface;
 use ZEngine\AbstractSyntaxTree\NodeKind;
 use ZEngine\Core;
+use ZEngine\Memory\SharedMemory;
 use ZEngine\Reflection\ReflectionValue;
-use ZEngine\System\SharedMemory;
+use ZEngine\System\EngineStructs;
 use ZEngine\Type\HashTable;
 
 /**
@@ -90,11 +91,9 @@ final class HotSwap
      */
     private static function assertPlainLinkedUserClass(CData $classEntry, string $className): void
     {
-        $classType = $classEntry->type;
-        assert(is_string($classType));
-        $isUserClass = ord($classType) === Core::ZEND_USER_CLASS;
-        $classFlags  = $classEntry->ce_flags;
-        assert(is_int($classFlags));
+        $shapedEntry = EngineStructs::classEntry($classEntry);
+        $isUserClass = ord($shapedEntry->type) === Core::ZEND_USER_CLASS;
+        $classFlags  = $shapedEntry->ce_flags;
         if (!$isUserClass) {
             throw new HotSwapException("Cannot hot-swap internal class {$className}");
         }
@@ -246,8 +245,7 @@ final class HotSwap
      */
     private static function publishClassEntry(string $lowerName, CData $classEntry): void
     {
-        $rawClass = Core::cast('zend_class_entry *', $classEntry)[0];
-        assert($rawClass instanceof CData);
+        $rawClass   = EngineStructs::cdataAt(Core::cast('zend_class_entry *', $classEntry), 0);
         $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawClass);
         Core::$executor->classTable->add($lowerName, $valueEntry);
         $valueEntry->release();
@@ -264,11 +262,9 @@ final class HotSwap
     private static function assertCompatibleShape(CData $classEntry, CData $donorEntry, string $className): void
     {
         // Parent must be the same linked class entry
-        $originalParent = $classEntry->parent;
-        $donorParent    = $donorEntry->parent;
-        assert($originalParent === null || $originalParent instanceof CData);
-        assert($donorParent === null || $donorParent instanceof CData);
-        $sameParent = ($originalParent === null && $donorParent === null)
+        $originalParent = EngineStructs::classEntry($classEntry)->parent;
+        $donorParent    = EngineStructs::classEntry($donorEntry)->parent;
+        $sameParent     = ($originalParent === null && $donorParent === null)
             || ($originalParent !== null && $donorParent !== null
                                          && Core::addressOf($originalParent) === Core::addressOf($donorParent));
         if (!$sameParent) {
@@ -307,14 +303,13 @@ final class HotSwap
     private static function interfaceAddressSet(CData $classEntry): array
     {
         $addresses       = [];
-        $totalInterfaces = $classEntry->num_interfaces;
-        assert(is_int($totalInterfaces));
-        $interfaceList = $classEntry->interfaces;
+        $shapedEntry     = EngineStructs::classEntry($classEntry);
+        $totalInterfaces = $shapedEntry->num_interfaces;
+        $interfaceList   = $shapedEntry->interfaces;
         for ($index = 0; $index < $totalInterfaces; $index++) {
-            assert($interfaceList instanceof CData);
-            $interfaceEntry = $interfaceList[$index];
-            assert($interfaceEntry instanceof CData);
-            $addresses[] = Core::addressOf($interfaceEntry);
+            // A non-zero interface count guarantees the resolved list is present
+            assert($interfaceList !== null);
+            $addresses[] = Core::addressOf(EngineStructs::cdataAt($interfaceList, $index));
         }
         sort($addresses);
 
@@ -328,25 +323,19 @@ final class HotSwap
      */
     private static function ownPropertySurface(CData $classEntry): array
     {
-        $surface       = [];
-        $classAddress  = Core::addressOf($classEntry);
-        $rawProperties = $classEntry->properties_info;
-        assert($rawProperties instanceof CData);
+        $surface        = [];
+        $classAddress   = Core::addressOf($classEntry);
+        $rawProperties  = EngineStructs::classEntry($classEntry)->properties_info;
         $propertiesInfo = HashTable::fromCData(Core::addr($rawProperties));
         foreach ($propertiesInfo as $propertyName => $propertyValue) {
-            $rawInfo        = Core::cast('zend_property_info *', $propertyValue->getRawPointer());
-            $declaringClass = $rawInfo->ce;
-            assert(is_string($propertyName) && $declaringClass instanceof CData);
-            if (Core::addressOf($declaringClass) !== $classAddress) {
+            assert(is_string($propertyName));
+            $rawInfo = EngineStructs::propertyInfo(
+                Core::cast('zend_property_info *', $propertyValue->getRawPointer()),
+            );
+            if (Core::addressOf($rawInfo->ce) !== $classAddress) {
                 continue;
             }
-            $flags    = $rawInfo->flags;
-            $offset   = $rawInfo->offset;
-            $typeInfo = $rawInfo->type;
-            assert(is_int($flags) && is_int($offset) && $typeInfo instanceof CData);
-            $typeMask = $typeInfo->type_mask;
-            assert(is_int($typeMask));
-            $surface[$propertyName] = [$flags, $offset, $typeMask];
+            $surface[$propertyName] = [$rawInfo->flags, $rawInfo->offset, $rawInfo->type->type_mask];
         }
         ksort($surface);
 

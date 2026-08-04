@@ -64,7 +64,7 @@ use ZEngine\ClassExtension\ObjectUnsetPropertyInterface;
 use ZEngine\ClassExtension\ObjectWriteDimensionInterface;
 use ZEngine\ClassExtension\ObjectWritePropertyInterface;
 use ZEngine\Core;
-use ZEngine\System\SharedMemory;
+use ZEngine\Memory\SharedMemory;
 use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
@@ -442,6 +442,19 @@ class ReflectionClass extends NativeReflectionClass
     public function isUserDefined()
     {
         return ord($this->pointer->type) === Core::ZEND_USER_CLASS;
+    }
+
+    /**
+     * Checks if this class entry lives in opcache shared memory (ZEND_ACC_IMMUTABLE)
+     *
+     * Opcache marks every class it publishes from its shared memory as immutable:
+     * such an entry is visible to all worker processes and must never be written or
+     * freed in place, so every class-level mutation API rejects it (see the support
+     * matrix in docs/hot-swap.md).
+     */
+    public function isImmutable(): bool
+    {
+        return SharedMemory::isImmutableClassEntry($this->pointer);
     }
 
     /**

@@ -18,8 +18,8 @@ use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use ZEngine\ClassExtension\Hook\CompareValuesHook;
 use ZEngine\ClassExtension\ObjectCreateTrait;
+use ZEngine\Memory\SharedMemoryException;
 use ZEngine\Reflection\ReflectionClass;
-use ZEngine\System\SharedMemoryException;
 
 class ClassDeltaTest extends TestCase
 {

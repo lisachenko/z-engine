@@ -15,6 +15,7 @@ namespace ZEngine\Reflection;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\System\EngineStructs;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
 
@@ -132,17 +133,12 @@ final class FunctionBodySwap
         // Remember the declaration identity of the entry: it survives the body
         // replacement, while everything executor-related (opcodes, literals, run-time
         // cache, temporaries count) comes from the donor body
-        $entryCommon = $entry->common;
-        assert($entryCommon instanceof CData);
+        $entryCommon   = EngineStructs::functionEntry($entry)->common;
         $previousName  = $entryCommon->function_name;
         $previousScope = $entryCommon->scope;
         $previousProto = $entryCommon->prototype;
         $previousFlags = $entryCommon->fn_flags;
-        assert(is_int($previousFlags));
-        $donorCommon = $donor->common;
-        assert($donorCommon instanceof CData);
-        $donorFlags = $donorCommon->fn_flags;
-        assert(is_int($donorFlags));
+        $donorFlags    = EngineStructs::functionEntry($donor)->common->fn_flags;
 
         // Replace the whole function with the donor-backed one (the donor structure
         // itself stays untouched - it keeps sole ownership of its own fields)
@@ -196,8 +192,7 @@ final class FunctionBodySwap
      */
     public static function countPublishedShares(CData $entry): int
     {
-        $entryCommon = $entry->common;
-        assert($entryCommon instanceof CData);
+        $entryCommon = EngineStructs::functionEntry($entry)->common;
         if ($entryCommon->scope === null) {
             return 1;
         }
@@ -210,25 +205,22 @@ final class FunctionBodySwap
         $seenClasses = [];
         foreach (Core::$executor->classTable as $classValue) {
             try {
-                $classEntry = $classValue->getRawClass();
+                $rawClass = $classValue->getRawClass();
             } catch (\UnexpectedValueException $e) {
                 // Class alias buckets (IS_ALIAS_PTR) resolve to an already-counted entry
                 continue;
             }
-            $classType = $classEntry->type;
-            assert(is_string($classType));
-            if (ord($classType) !== Core::ZEND_USER_CLASS) {
+            $classEntry = EngineStructs::classEntry($rawClass);
+            if (ord($classEntry->type) !== Core::ZEND_USER_CLASS) {
                 continue;
             }
-            $classAddress = Core::addressOf($classEntry);
+            $classAddress = Core::addressOf($rawClass);
             if (isset($seenClasses[$classAddress])) {
                 continue;
             }
             $seenClasses[$classAddress] = true;
 
-            $functionTable = $classEntry->function_table;
-            assert($functionTable instanceof CData);
-            $methodTable = HashTable::fromCData(Core::addr($functionTable));
+            $methodTable = HashTable::fromCData(Core::addr($classEntry->function_table));
             $bucketValue = $methodTable->find($lowerName);
             if ($bucketValue !== null && Core::addressOf($bucketValue->getRawFunction()) === $entryAddress) {
                 $shares++;
@@ -257,8 +249,7 @@ final class FunctionBodySwap
     {
         Core::memcpy($container, $donor, Core::sizeof(Core::type('zend_function')));
 
-        $containerCommon = $container->common;
-        assert($containerCommon instanceof CData);
+        $containerCommon        = EngineStructs::functionEntry($container)->common;
         $containerCommon->scope = $newScope;
 
         // The published bucket owns one reference on the name and one body share
@@ -280,14 +271,9 @@ final class FunctionBodySwap
      */
     private static function addBodyReference(CData $entry): void
     {
-        $opArray = $entry->op_array;
-        assert($opArray instanceof CData);
-        $refCountPointer = $opArray->refcount;
+        $refCountPointer = EngineStructs::functionEntry($entry)->op_array->refcount;
         if ($refCountPointer !== null) {
-            assert($refCountPointer instanceof CData);
-            $referenceCount = $refCountPointer[0];
-            assert(is_int($referenceCount));
-            $refCountPointer[0] = $referenceCount + 1;
+            $refCountPointer[0] = EngineStructs::counterValue($refCountPointer) + 1;
         }
     }
 
@@ -298,13 +284,10 @@ final class FunctionBodySwap
      */
     private static function dropBodyReferences(CData $entry, int $count): void
     {
-        $opArray = $entry->op_array;
-        assert($opArray instanceof CData);
-        $refCountPointer = $opArray->refcount;
+        $refCountPointer = EngineStructs::functionEntry($entry)->op_array->refcount;
         if ($refCountPointer !== null) {
-            assert($refCountPointer instanceof CData);
-            $referenceCount = $refCountPointer[0];
-            assert(is_int($referenceCount) && $referenceCount > $count);
+            $referenceCount = EngineStructs::counterValue($refCountPointer);
+            assert($referenceCount > $count);
             $refCountPointer[0] = $referenceCount - $count;
         }
     }
@@ -320,23 +303,19 @@ final class FunctionBodySwap
      */
     private static function installFreshRunTimeCache(CData $entry): void
     {
-        $opArray = $entry->op_array;
-        assert($opArray instanceof CData);
-        $cacheSize = $opArray->cache_size;
-        assert(is_int($cacheSize));
-        $entryCommon = $entry->common;
-        assert($entryCommon instanceof CData);
-        $entryFlags = $entryCommon->fn_flags;
-        assert(is_int($entryFlags));
+        $functionEntry = EngineStructs::functionEntry($entry);
+        $opArray       = $functionEntry->op_array;
+        $entryCommon   = $functionEntry->common;
+        $cacheSize     = $opArray->cache_size;
         if ($cacheSize > 0) {
             // Request-allocator block handed over to the engine: destroy_op_array
             // releases it through efree, matching the allocation exactly
             $cache                        = Core::new("char[{$cacheSize}]", false);
             $opArray->run_time_cache__ptr = Core::cast('void **', $cache);
-            $entryCommon->fn_flags        = $entryFlags | Core::ZEND_ACC_HEAP_RT_CACHE;
+            $entryCommon->fn_flags |= Core::ZEND_ACC_HEAP_RT_CACHE;
         } else {
             $opArray->run_time_cache__ptr = null;
-            $entryCommon->fn_flags        = $entryFlags & (~Core::ZEND_ACC_HEAP_RT_CACHE);
+            $entryCommon->fn_flags &= (~Core::ZEND_ACC_HEAP_RT_CACHE);
         }
     }
 
@@ -353,8 +332,8 @@ final class FunctionBodySwap
      */
     private static function unshareStaticVariables(CData $entry, bool $duplicateStatics, int $entryAddress): bool
     {
-        $opArray = $entry->op_array;
-        assert($opArray instanceof CData);
+        $functionEntry                      = EngineStructs::functionEntry($entry);
+        $opArray                            = $functionEntry->op_array;
         $opArray->static_variables_ptr__ptr = null;
 
         $defaultsTable = $opArray->static_variables;
@@ -362,20 +341,15 @@ final class FunctionBodySwap
             // The engine's shutdown walk destroys per-method live static tables only
             // for classes flagged as having statics - a swapped-in body with statics
             // must set the flag or its materialized table leaks at request end
-            $entryCommon = $entry->common;
-            assert($entryCommon instanceof CData);
-            $entryScope = $entryCommon->scope;
+            $entryScope = $functionEntry->common->scope;
             if ($entryScope !== null) {
-                assert($entryScope instanceof CData);
-                $scopeFlags = $entryScope->ce_flags;
-                assert(is_int($scopeFlags));
-                $entryScope->ce_flags = $scopeFlags | Core::engineConstant('ZEND_HAS_STATIC_IN_METHODS');
+                EngineStructs::classEntry($entryScope)->ce_flags |= Core::engineConstant('ZEND_HAS_STATIC_IN_METHODS');
             }
         }
         if ($defaultsTable === null || !$duplicateStatics) {
             return false;
         }
-        assert($defaultsTable instanceof CData);
+        // Core::call() proxies a variadic engine symbol, its result stays untyped
         $ownDefaults = Core::call('zend_array_dup', $defaultsTable);
         assert($ownDefaults instanceof CData);
         $opArray->static_variables = $ownDefaults;
@@ -401,7 +375,8 @@ final class FunctionBodySwap
      */
     public static function destroyPreviousBody(CData $previousBody, int $entryAddress, int $releasedShares): void
     {
-        $refCountPointer = $previousBody->refcount;
+        $previousOpArray = EngineStructs::opArray($previousBody);
+        $refCountPointer = $previousOpArray->refcount;
         if ($refCountPointer === null) {
             // No refcount means an opcache-shared body: never destroyed (and the swap
             // paths never destroy SHM bodies in the first place)
@@ -416,12 +391,10 @@ final class FunctionBodySwap
             // redefinition, see docs/hot-swap.md.
             return;
         }
-        assert($refCountPointer instanceof CData);
 
         // All bucket shares move to the new body: drop every previous share except the
         // one that destroy_op_array below releases itself
-        $referenceCount = $refCountPointer[0];
-        assert(is_int($referenceCount));
+        $referenceCount = EngineStructs::counterValue($refCountPointer);
         if ($releasedShares > 1) {
             assert($referenceCount >= $releasedShares);
             $referenceCount     = $referenceCount - ($releasedShares - 1);
@@ -438,14 +411,13 @@ final class FunctionBodySwap
 
         // A minted defaults duplicate belongs exclusively to this entry: release it
         // eagerly when the shared body arrays themselves are not freed below
-        $defaultsTable = $previousBody->static_variables;
+        $defaultsTable = $previousOpArray->static_variables;
         if ($defaultsTable !== null) {
-            assert($defaultsTable instanceof CData);
             $isMintedTable = (self::$mintedStaticDefaults[$entryAddress] ?? null) === Core::addressOf($defaultsTable);
             if ($isMintedTable) {
                 if (!$isLastHolder) {
                     Core::call('rc_dtor_func', Core::cast('zend_refcounted *', $defaultsTable));
-                    $previousBody->static_variables = null;
+                    $previousOpArray->static_variables = null;
                 }
                 unset(self::$mintedStaticDefaults[$entryAddress]);
             }
@@ -453,7 +425,7 @@ final class FunctionBodySwap
 
         // The entry keeps the single owned reference on the name - the snapshot must
         // not release it
-        $previousBody->function_name = null;
+        $previousOpArray->function_name = null;
         Core::call('destroy_op_array', Core::addr($previousBody));
     }
 
@@ -490,21 +462,17 @@ final class FunctionBodySwap
         ?int $previousMintedRecord,
     ): void {
         // The fresh run-time cache was installed by the swap and is not published anywhere
-        $entryCommon = $entry->common;
-        $opArray     = $entry->op_array;
-        assert($entryCommon instanceof CData && $opArray instanceof CData);
-        $entryFlags = $entryCommon->fn_flags;
-        assert(is_int($entryFlags));
-        $cachePointer = $opArray->run_time_cache__ptr;
+        $functionEntry = EngineStructs::functionEntry($entry);
+        $opArray       = $functionEntry->op_array;
+        $entryFlags    = $functionEntry->common->fn_flags;
+        $cachePointer  = $opArray->run_time_cache__ptr;
         if (($entryFlags & Core::ZEND_ACC_HEAP_RT_CACHE) !== 0 && $cachePointer !== null) {
-            assert($cachePointer instanceof CData);
             Core::free($cachePointer);
         }
 
         if ($mintedDefaults) {
             $defaultsTable = $opArray->static_variables;
             if ($defaultsTable !== null) {
-                assert($defaultsTable instanceof CData);
                 Core::call('rc_dtor_func', Core::cast('zend_refcounted *', $defaultsTable));
             }
             // Restore the bookkeeping of the previous (still committed) swap, if any

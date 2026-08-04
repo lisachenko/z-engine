@@ -14,10 +14,10 @@ declare(strict_types=1);
 use ReflectionMethod as NativeReflectionMethod;
 use ZEngine\Core;
 use ZEngine\HotSwap\HotSwap;
+use ZEngine\Memory\SharedMemoryException;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionFunction;
 use ZEngine\Reflection\ReflectionMethod;
-use ZEngine\System\SharedMemoryException;
 
 require __DIR__ . '/../../../vendor/autoload.php';
 
