@@ -109,8 +109,10 @@ engine's fatal error, which is not catchable - validate such sources upstream.
 
 Opcache publishes cached scripts from shared memory and marks their class
 entries and functions `ZEND_ACC_IMMUTABLE`. SHM is visible to every worker
-process, so z-engine never writes it and never frees it. All detection and
-copy-out logic is centralized in `ZEngine\System\SharedMemory`.
+process, so z-engine never writes it and never frees it. The wrappers expose
+the detection as `ReflectionClass::isImmutable()` and
+`ReflectionFunction`/`ReflectionMethod::isImmutable()`; the shared detection
+and copy-out mechanics both delegate to live in `ZEngine\Memory\SharedMemory`.
 
 | Target | Behaviour |
 |--------|-----------|

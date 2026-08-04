@@ -137,6 +137,21 @@ inside the module; consumers see plain PHP values and framework wrapper objects
 it or convert it. This is what keeps the FFI blast radius confined to code that is
 audited for it.
 
+## Engine structs are typed by shape, not by call-site asserts
+
+Inside the core layer, internal helpers that return `CData` engine structures declare
+[PHPStan object shapes](https://phpstan.org/writing-php-code/phpdoc-types#object-shapes)
+on their **return type**, using the named aliases from `parameters.typeAliases` in
+`phpstan.dist.neon` (`ZendFunctionShape`, `ZendClassEntryShape`, `ZvalShape`, …). The
+`System\EngineStructs` accessors are the single narrowing point between raw FFI handles
+and those shapes. Call sites must not re-assert (`assert($x instanceof CData)`,
+`assert(is_int($x))`) or inline-`@var` what the return shape already states — if a field
+you need is missing from a shape, extend the alias in the config instead. New shapes are
+added to the config, never spelled out inline in a docblock. Runtime guards that check
+actual engine invariants (refcount floors, table consistency) are not static noise and
+stay. Property names on shaped values are checked against the alias, so a typo fails
+`composer phpstan` instead of reading garbage memory.
+
 ## Conventional commits
 
 Use [Conventional Commits](https://www.conventionalcommits.org/):
