@@ -137,27 +137,48 @@ inside the module; consumers see plain PHP values and framework wrapper objects
 it or convert it. This is what keeps the FFI blast radius confined to code that is
 audited for it.
 
-## Engine structs are typed by shape, not by call-site asserts
+## Engine structs are owned by their reflection/type class, never poked from call sites
 
-Inside the core layer, engine structs are described ONCE as named
-[PHPStan object shapes](https://phpstan.org/writing-php-code/phpdoc-types#object-shapes)
-via `parameters.typeAliases` in `phpstan.dist.neon` (`ZendFunctionCommonShape`,
-`ZendClassEntryShape`, `ZvalShape`, ...). The shaped accessor lives on the
-reflection/type class that OWNS the struct - never in a standalone helper class:
-`FunctionLikeTrait::getCommonPointer()/getOpArrayPointer()` for zend_function,
-`ReflectionClass::getClassEntry()` (plus its table accessors) for zend_class_entry,
-`ReflectionValue::getZvalShape()` for zvals, the static views on
-`ReflectionProperty`/`ReflectionClassConstant` for their structs. Contiguous
-in-memory arrays of engine structs (zval tables, pointer lists) go through the
-generic `Type\StructArray` view (`@template T` of the element shape) instead of
-loose offset reads. Call sites must not re-assert (`assert($x instanceof CData)`,
-`assert(is_int($x))`) or inline-`@var` what an accessor's return shape already
-states - if a field you need is missing from a shape, extend the alias in the
-config instead; new shapes are added to the config, never spelled out inline.
-Runtime guards that check actual engine invariants (refcount floors, table
-consistency) are not static noise and stay. Property names on shaped values are
-checked against the alias, so a typo fails `composer phpstan` instead of reading
-garbage memory.
+Every raw engine struct is reached through the ONE reflection/type class that owns it,
+never from a caller reaching into a `CData`. The owning class exposes typed accessors -
+`ReflectionMethod::equals()`, `ReflectionClassConstant::getAccessFlags()`,
+`ReflectionProperty::getOffset()/getFlags()/getSurface()`,
+`ReflectionValue::getBaseType()/equals()/replaceWith()`, `ReflectionClass::getFlags()/
+getParentAddress()/getInterfaceAddresses()/isImmutable()` - and the field pokes
+(`$this->pointer->...`) plus their single-hop narrowing `assert()`s live INSIDE those
+methods. Consumers (`HotSwap`, `ClassDelta`, `FunctionBodySwap`) operate on
+`Reflection*` objects and pass/return those, not structs. The escape hatch is a single
+`getRawValue()` / `getRawData()` returning the bare `CData` for the low-level machinery
+that genuinely needs it (the body-swap surgery); prefer a typed accessor over calling it.
+
+Two conventions back this up:
+
+- **Named shapes for the two big function structs.** `zend_function.common` and its
+  `op_array` are described once as PHPStan object shapes (`ZendFunctionCommonShape`,
+  `ZendOpArrayShape`) via `parameters.typeAliases` in `phpstan.dist.neon`, surfaced by
+  `FunctionLikeTrait::getCommonPointer()/getOpArrayPointer()` (a nested-field read the
+  analyser infers statically). `FFI\CData` is `final`, so a shape can NOT be attached to
+  a plain `: CData` return and there is no runtime `asStructView()` wrapper - the shape is
+  a return annotation only. If a field is missing from a shape, extend the alias in the
+  config; never spell a shape out inline.
+- **Contiguous struct arrays go through `Type\StructArray`.** zval tables (op_array
+  literals, class default property/static tables), pointer lists (resolved interfaces)
+  and single-struct dereferences use the `ArrayAccess`/`Countable` `StructArray` view
+  (`replace()` for in-place slot overwrite) instead of hand-rolled pointer arithmetic.
+  `newEntry(IS_PTR, ...)` stores the ADDRESS of the CData it is handed, so it needs the
+  dereferenced struct (`StructArray(..., 1)->rawAt(0)`), never the 8-byte pointer.
+
+Runtime guards that check actual engine invariants (refcount floors, table consistency)
+are not static noise and stay.
+
+## Exceptions are raised through static named constructors
+
+Domain exceptions (`HotSwapException`, `SharedMemoryException`, ...) are never thrown with
+a hand-written message at the call site. Each failure mode is a `public static` factory on
+the exception class (`HotSwapException::inheritedMethodOverride($class, $method)`,
+`SharedMemoryException::immutableClassMutation($operation)`) that owns its message text, so
+wording stays in one place and call sites read as intent. Add a new factory rather than a
+new inline `throw new SomeException("...")`.
 
 ## Conventional commits
 
