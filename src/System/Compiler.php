@@ -299,6 +299,13 @@ class Compiler
         // Returns void since PHP 8.0, scanning problems surface via zendparse instead
         Core::call('zend_prepare_string_for_scanning', $rawSourceVal, $fileNameValue->getRawValue());
 
+        // zend_prepare_string_for_scanning extends the source into a fresh, padded rc=1
+        // zend_string and stores it back in the zval - even when the original was an
+        // interned literal. Claim that fresh reference so release() frees it in every case;
+        // acquireReference() above only marked ownership for a refcounted (non-interned)
+        // source, so an interned source would otherwise leak the padded scanner copy.
+        $sourceEntry->claimReference();
+
         [$arena, $arenaBuffer] = $this->createArena(1024 * 32);
 
         $this->pointer->ast       = null;

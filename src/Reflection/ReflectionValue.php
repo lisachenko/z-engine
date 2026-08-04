@@ -657,6 +657,27 @@ class ReflectionValue implements ReferenceCountedInterface
     }
 
     /**
+     * Records that this wrapper now owns the reference sitting in its zval, without taking
+     * a new one
+     *
+     * Used after an engine call replaces the payload in place with a FRESH refcounted value
+     * the wrapper must release exactly once - eg zend_prepare_string_for_scanning(), which
+     * swaps the source string for a padded scanner copy (a brand new rc=1 zend_string).
+     * Unlike acquireReference() this adds no reference: the engine already produced the
+     * fresh value. It exists because acquireReference() leaves ownsReference false when the
+     * ORIGINAL payload was interned (non-refcounted), which would leak the fresh copy the
+     * engine put in its place.
+     */
+    public function claimReference(): self
+    {
+        $this->assertNotReleased();
+        assert($this->isTypeInfoRefCounted($this->getType()));
+        $this->ownsReference = true;
+
+        return $this;
+    }
+
+    /**
      * @inheritDoc
      */
     protected function doRelease(bool $ownsReference, bool $ownsContainer): void
