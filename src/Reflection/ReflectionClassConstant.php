@@ -77,6 +77,40 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
     }
 
     /**
+     * Returns the shaped view of a raw zend_class_constant structure
+     *
+     * The declared shape (see phpstan.dist.neon typeAliases and AGENTS.md) is the
+     * single narrowing point for class-constant field access. This is a static view:
+     * constants of classes that are not published under their own name (eg hot-swap
+     * donor entries) cannot be wrapped through fromCData(), which resolves the
+     * native reflection state by name.
+     *
+     * @param CData $constantEntry zend_class_constant pointer
+     *
+     * @return ZendClassConstantShape
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta)
+     */
+    public static function viewConstantEntry(CData $constantEntry): object
+    {
+        /** @var ZendClassConstantShape $shapedEntry */
+        $shapedEntry = self::asStructView($constantEntry);
+
+        return $shapedEntry;
+    }
+
+    /**
+     * Widens a CData handle to plain `object` so a shape @var can be declared on it
+     *
+     * FFI\CData is final: a shape alias (stdClass&object{...}) is not a subtype of
+     * the CData native type, so the narrowing must go through the object supertype.
+     */
+    private static function asStructView(CData $struct): object
+    {
+        return $struct;
+    }
+
+    /**
      * Declares constant as public
      */
     public function setPublic(): void

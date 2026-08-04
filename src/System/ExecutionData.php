@@ -122,12 +122,17 @@ class ExecutionData
     }
 
     /**
-     * Returns the numeric address of the zend_function this frame executes
+     * Returns the pointer-level reflection of the zend_function this frame executes
      * (null for frames without a function entry, eg top-level pseudo frames)
+     *
+     * Unlike getFunction() this never resolves methods through their class and works
+     * for every frame kind (closures, trampolines, internal functions): the wrapper
+     * is a BORROWED pointer-level view, taking no ownership of the frame function.
+     * Callers needing the entry identity compare ReflectionFunction::getAddress().
      *
      * @internal used by FunctionBodySwap to detect entries with live frames
      */
-    public function getFunctionEntryAddress(): ?int
+    public function getFunctionEntry(): ?ReflectionFunction
     {
         $rawFunction = $this->pointer->func;
         if ($rawFunction === null) {
@@ -135,7 +140,7 @@ class ExecutionData
         }
         assert($rawFunction instanceof CData);
 
-        return Core::addressOf($rawFunction);
+        return ReflectionFunction::fromCData($rawFunction);
     }
 
     /**

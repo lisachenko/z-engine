@@ -36,7 +36,7 @@ final class PendingBodySwap
 
     /**
      * @param CData $entry                zend_function pointer of the swapped entry
-     * @param CData $previousBody         zend_op_array snapshot of the previous body
+     * @param CData $previousBody         zend_function snapshot of the previous body
      * @param int   $entryAddress         Numeric identity of the entry
      * @param int   $publishedShares      Bucket shares held on both the previous and the new body
      * @param bool  $destroyPrevious      False for shared-memory previous bodies (never freed)

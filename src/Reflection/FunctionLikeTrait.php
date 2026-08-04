@@ -17,8 +17,8 @@ use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Memory\SharedMemory;
 use ZEngine\Memory\SharedMemoryException;
-use ZEngine\System\EngineStructs;
 use ZEngine\Type\ArgumentEntry;
+use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\LiveRange;
 use ZEngine\Type\OpLine;
@@ -128,8 +128,8 @@ trait FunctionLikeTrait
         if (!$this->isInternal()) {
             $selfExecutionState = Core::$executor->getExecutionState();
             $newCodeEntry       = $selfExecutionState->getArgument(0)->getRawObject();
-            $newCodeEntry       = EngineStructs::closure(Core::cast('zend_closure *', $newCodeEntry));
-            $newFunction        = $newCodeEntry->func;
+            $closureEntry       = ClosureEntry::fromCData(Core::cast('zend_closure *', $newCodeEntry));
+            $newFunction        = $closureEntry->getRawFunction();
 
             $isSharedMemoryEntry = $this->isImmutable();
             if ($isSharedMemoryEntry) {
@@ -535,8 +535,10 @@ trait FunctionLikeTrait
      * single narrowing point for every common-struct field this trait touches.
      *
      * @return ZendFunctionCommonShape
+     *
+     * @internal shared with the body-swap machinery (FunctionBodySwap)
      */
-    private function getCommonPointer(): object
+    public function getCommonPointer(): object
     {
         // For zend_internal_function we have same fields directly in current structure.
         // The check goes through the low-level structure (not native isInternal()) so it
@@ -550,5 +552,39 @@ trait FunctionLikeTrait
 
         /** @var ZendFunctionCommonShape $pointer */
         return $pointer;
+    }
+
+    /**
+     * Returns the shaped view of the op_array this user function executes
+     *
+     * The declared shape (see phpstan.dist.neon typeAliases and AGENTS.md) is the
+     * single narrowing point for the op_array fields the swap machinery touches.
+     * Only user-defined functions carry an op_array.
+     *
+     * @return ZendOpArrayShape
+     *
+     * @internal shared with the body-swap machinery (FunctionBodySwap)
+     */
+    public function getOpArrayPointer(): object
+    {
+        if (!$this->isUserDefined()) {
+            throw new \LogicException('op_array is available only for user-defined functions');
+        }
+        $opArray = $this->pointer->op_array;
+
+        /** @var ZendOpArrayShape $opArray */
+        return $opArray;
+    }
+
+    /**
+     * Returns the numeric address of the underlying zend_function entry
+     *
+     * The address is the identity of the published entry: warmed-up caches, method
+     * table buckets and VM frames reference the entry by this pointer, so callers
+     * compare addresses instead of poking the raw CData handle.
+     */
+    public function getAddress(): int
+    {
+        return Core::addressOf($this->pointer);
     }
 }

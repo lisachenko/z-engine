@@ -17,10 +17,14 @@ use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Reflection\FunctionBodySwap;
 use ZEngine\Reflection\PendingBodySwap;
+use ZEngine\Reflection\ReflectionClass;
+use ZEngine\Reflection\ReflectionClassConstant;
+use ZEngine\Reflection\ReflectionFunction;
+use ZEngine\Reflection\ReflectionProperty;
 use ZEngine\Reflection\ReflectionValue;
-use ZEngine\System\EngineStructs;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
+use ZEngine\Type\StructArray;
 
 /**
  * A staged, atomically applicable difference between a live class and its new source
@@ -134,7 +138,7 @@ final class ClassDelta
         $changedMethods = [];
         $addedMethods   = [];
         $removedMethods = [];
-        $methodTable    = self::embeddedTable(EngineStructs::classEntry($classEntry)->function_table);
+        $methodTable    = ReflectionClass::fromCData($classEntry)->getMethodTable();
         foreach ($donorMethods as $lowerName => $donorFunction) {
             if (isset($originalMethods[$lowerName])) {
                 if (self::functionBodyDiffers($originalMethods[$lowerName], $donorFunction)) {
@@ -156,7 +160,7 @@ final class ClassDelta
             }
             $addedMethods[$lowerName] = $donorFunction;
         }
-        $donorMethodTable = self::embeddedTable(EngineStructs::classEntry($donorEntry)->function_table);
+        $donorMethodTable = ReflectionClass::fromCData($donorEntry)->getMethodTable();
         foreach ($originalMethods as $lowerName => $originalFunction) {
             if (isset($donorMethods[$lowerName])) {
                 continue;
@@ -298,9 +302,10 @@ final class ClassDelta
             throw new HotSwapException('Cannot apply a class delta after Core::shutdown()');
         }
 
-        $liveEntry   = EngineStructs::classEntry($this->classEntry);
-        $donorEntry  = EngineStructs::classEntry($this->donorEntry);
-        $methodTable = self::embeddedTable($liveEntry->function_table);
+        $liveClass   = ReflectionClass::fromCData($this->classEntry);
+        $liveEntry   = $liveClass->getClassEntry();
+        $donorEntry  = ReflectionClass::fromCData($this->donorEntry)->getClassEntry();
+        $methodTable = $liveClass->getMethodTable();
         /** @var list<PendingBodySwap> $pendingSwaps */
         $pendingSwaps = [];
         /** @var list<CData> $replacedValues zval snapshots of the values being replaced */
@@ -352,29 +357,29 @@ final class ClassDelta
                 if ($fallbackEntry !== null) {
                     // Restore plain inheritance: the bucket owns one name reference and
                     // one body share, exactly like zend_duplicate_function takes
-                    self::acquireBucketOwnership($fallbackEntry);
+                    FunctionBodySwap::acquireBucketOwnership($fallbackEntry);
                     self::publishFunctionPointer($methodTable, $lowerName, $fallbackEntry);
                 }
                 $undoStack[] = function () use ($methodTable, $lowerName, $previousEntry, $fallbackEntry): void {
                     if ($fallbackEntry !== null) {
                         self::unpublishFunctionBucket($methodTable, $lowerName);
-                        self::releaseBucketOwnership($fallbackEntry);
+                        FunctionBodySwap::releaseBucketOwnership($fallbackEntry);
                     }
                     self::publishFunctionPointer($methodTable, $lowerName, $previousEntry);
                 };
             }
 
-            $constantsTable = self::embeddedTable($liveEntry->constants_table);
+            $constantsTable = $liveClass->getConstantsTable();
             foreach ($this->changedConstants as $constantName => $donorConstant) {
                 self::injectApplyFailure("constant.change:{$constantName}");
                 $constantValue = $constantsTable->find($constantName);
                 assert($constantValue !== null);
-                $originalConstant = EngineStructs::classConstant(
+                $originalConstant = ReflectionClassConstant::viewConstantEntry(
                     Core::cast('zend_class_constant *', $constantValue->getRawPointer()),
                 );
                 $replacedValues[] = self::replaceZvalSlot(
                     $originalConstant->value,
-                    EngineStructs::classConstant($donorConstant)->value,
+                    ReflectionClassConstant::viewConstantEntry($donorConstant)->value,
                     $undoStack,
                 );
             }
@@ -396,8 +401,8 @@ final class ClassDelta
                 // A computed slot guarantees both classes carry the default table
                 assert($originalTable !== null && $donorTable !== null);
                 $replacedValues[] = self::replaceZvalSlot(
-                    EngineStructs::zvalAt($originalTable, $slot),
-                    EngineStructs::zvalAt($donorTable, $slot),
+                    StructArray::ofZvals($originalTable, self::slotCount($liveEntry->default_properties_count))->rawAt($slot),
+                    StructArray::ofZvals($donorTable, self::slotCount($donorEntry->default_properties_count))->rawAt($slot),
                     $undoStack,
                 );
             }
@@ -409,8 +414,8 @@ final class ClassDelta
                 // A computed slot guarantees both classes carry the static table
                 assert($originalTable !== null && $donorTable !== null);
                 $replacedValues[] = self::replaceZvalSlot(
-                    EngineStructs::zvalAt($originalTable, $slot),
-                    EngineStructs::zvalAt($donorTable, $slot),
+                    StructArray::ofZvals($originalTable, self::slotCount($liveEntry->default_static_members_count))->rawAt($slot),
+                    StructArray::ofZvals($donorTable, self::slotCount($donorEntry->default_static_members_count))->rawAt($slot),
                     $undoStack,
                 );
             }
@@ -483,7 +488,7 @@ final class ClassDelta
             // (bounded - it is unreachable and carries no trampolines)
             return;
         }
-        $rawClass   = EngineStructs::cdataAt($classEntry, 0);
+        $rawClass   = StructArray::ofStructs($classEntry, 1)->rawAt(0);
         $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawClass);
         Core::call('destroy_zend_class', $valueEntry->getRawValue());
         $valueEntry->release();
@@ -516,11 +521,27 @@ final class ClassDelta
     }
 
     /**
-     * Wraps an embedded engine hashtable (a struct field, not a pointer) in a view
+     * Bounds a raw engine counter for struct-array view construction
+     *
+     * @return int<0, max>
      */
-    private static function embeddedTable(CData $rawTable): HashTable
+    private static function slotCount(int $count): int
     {
-        return HashTable::fromCData(Core::addr($rawTable));
+        assert($count >= 0);
+
+        return $count;
+    }
+
+    /**
+     * Returns the shaped zval view of a class constant value
+     *
+     * @return ZvalShape
+     */
+    private static function constantValueShape(CData $constantEntry): object
+    {
+        $rawValue = ReflectionClassConstant::viewConstantEntry($constantEntry)->value;
+
+        return ReflectionValue::fromValueEntry(Core::addr($rawValue))->getZvalShape();
     }
 
     /**
@@ -532,15 +553,15 @@ final class ClassDelta
     {
         $declaredMethods = [];
         $classAddress    = Core::addressOf($classEntry);
-        $methodTable     = self::embeddedTable(EngineStructs::classEntry($classEntry)->function_table);
+        $methodTable     = ReflectionClass::fromCData($classEntry)->getMethodTable();
         foreach ($methodTable as $methodName => $methodValue) {
             assert(is_string($methodName));
-            $rawFunction   = $methodValue->getRawFunction();
-            $functionEntry = EngineStructs::functionEntry($rawFunction);
-            if (($functionEntry->type & Core::ZEND_USER_FUNCTION) === 0) {
+            $rawFunction    = $methodValue->getRawFunction();
+            $methodFunction = ReflectionFunction::fromCData($rawFunction);
+            if (!$methodFunction->isUserDefined()) {
                 continue;
             }
-            $methodScope = $functionEntry->common->scope;
+            $methodScope = $methodFunction->getCommonPointer()->scope;
             if ($methodScope === null || Core::addressOf($methodScope) !== $classAddress) {
                 continue;
             }
@@ -559,11 +580,11 @@ final class ClassDelta
     {
         $declaredConstants = [];
         $classAddress      = Core::addressOf($classEntry);
-        $constantsTable    = self::embeddedTable(EngineStructs::classEntry($classEntry)->constants_table);
+        $constantsTable    = ReflectionClass::fromCData($classEntry)->getConstantsTable();
         foreach ($constantsTable as $constantName => $constantValue) {
             assert(is_string($constantName));
             $rawConstant = Core::cast('zend_class_constant *', $constantValue->getRawPointer());
-            if (Core::addressOf(EngineStructs::classConstant($rawConstant)->ce) === $classAddress) {
+            if (Core::addressOf(ReflectionClassConstant::viewConstantEntry($rawConstant)->ce) === $classAddress) {
                 $declaredConstants[$constantName] = $rawConstant;
             }
         }
@@ -579,8 +600,8 @@ final class ClassDelta
      */
     private static function functionBodyDiffers(CData $originalFunction, CData $donorFunction): bool
     {
-        $originalOpArray = EngineStructs::functionEntry($originalFunction)->op_array;
-        $donorOpArray    = EngineStructs::functionEntry($donorFunction)->op_array;
+        $originalOpArray = ReflectionFunction::fromCData($originalFunction)->getOpArrayPointer();
+        $donorOpArray    = ReflectionFunction::fromCData($donorFunction)->getOpArrayPointer();
 
         $bodyMetrics = ['last', 'last_var', 'last_literal', 'T', 'num_args', 'required_num_args', 'fn_flags'];
         foreach ($bodyMetrics as $field) {
@@ -592,16 +613,18 @@ final class ClassDelta
         if ($opcodesSize > 0 && \FFI::memcmp($originalOpArray->opcodes, $donorOpArray->opcodes, $opcodesSize) !== 0) {
             return true;
         }
-        $totalLiterals    = $originalOpArray->last_literal;
+        $totalLiterals    = self::slotCount($originalOpArray->last_literal);
         $originalLiterals = $originalOpArray->literals;
         $donorLiterals    = $donorOpArray->literals;
-        for ($index = 0; $index < $totalLiterals; $index++) {
+        if ($totalLiterals > 0) {
             // A non-zero literal count guarantees both literal tables are present
             assert($originalLiterals !== null && $donorLiterals !== null);
-            $originalLiteral = EngineStructs::zvalAt($originalLiterals, $index);
-            $donorLiteral    = EngineStructs::zvalAt($donorLiterals, $index);
-            if (self::zvalDiffers($originalLiteral, $donorLiteral)) {
-                return true;
+            $originalView = StructArray::ofZvals($originalLiterals, $totalLiterals);
+            $donorView    = StructArray::ofZvals($donorLiterals, $totalLiterals);
+            for ($index = 0; $index < $totalLiterals; $index++) {
+                if (self::zvalDiffers($originalView->at($index), $donorView->at($index))) {
+                    return true;
+                }
             }
         }
 
@@ -613,10 +636,9 @@ final class ClassDelta
      */
     private static function classConstantDiffers(CData $originalConstant, CData $donorConstant): bool
     {
-        $originalValue = EngineStructs::classConstant($originalConstant)->value;
-        $donorValue    = EngineStructs::classConstant($donorConstant)->value;
-        $originalFlags = EngineStructs::zval($originalValue)->u2->constant_flags;
-        if ($originalFlags !== EngineStructs::zval($donorValue)->u2->constant_flags) {
+        $originalValue = self::constantValueShape($originalConstant);
+        $donorValue    = self::constantValueShape($donorConstant);
+        if ($originalValue->u2->constant_flags !== $donorValue->u2->constant_flags) {
             return true;
         }
 
@@ -625,17 +647,18 @@ final class ClassDelta
 
     /**
      * Conservative scalar zval comparison: non-scalar payloads always count as different
+     *
+     * @param ZvalShape $firstValue
+     * @param ZvalShape $secondValue
      */
-    private static function zvalDiffers(CData $firstValue, CData $secondValue): bool
+    private static function zvalDiffers(object $firstValue, object $secondValue): bool
     {
-        $firstEntry  = EngineStructs::zval($firstValue);
-        $secondEntry = EngineStructs::zval($secondValue);
-        $firstType   = $firstEntry->u1->v->type;
-        if ($firstType !== $secondEntry->u1->v->type) {
+        $firstType = $firstValue->u1->v->type;
+        if ($firstType !== $secondValue->u1->v->type) {
             return true;
         }
-        $firstPayload  = $firstEntry->value;
-        $secondPayload = $secondEntry->value;
+        $firstPayload  = $firstValue->value;
+        $secondPayload = $secondValue->value;
         switch ($firstType) {
             case ReflectionValue::IS_UNDEF:
             case ReflectionValue::IS_NULL:
@@ -695,12 +718,12 @@ final class ClassDelta
         $changedStaticSlots   = [];
         $zvalSize             = Core::sizeof(Core::type('zval'));
         $slotBase             = Core::type('zend_object')->getStructFieldOffset('properties_table');
-        $liveEntry            = EngineStructs::classEntry($classEntry);
-        $donorClassEntry      = EngineStructs::classEntry($donorEntry);
+        $liveClass            = ReflectionClass::fromCData($classEntry);
+        $liveEntry            = $liveClass->getClassEntry();
+        $donorClassEntry      = ReflectionClass::fromCData($donorEntry)->getClassEntry();
         $classAddress         = Core::addressOf($classEntry);
-        $propertiesInfo       = self::embeddedTable($liveEntry->properties_info);
-        foreach ($propertiesInfo as $propertyValue) {
-            $rawInfo = EngineStructs::propertyInfo(
+        foreach ($liveClass->getPropertiesTable() as $propertyValue) {
+            $rawInfo = ReflectionProperty::viewPropertyInfo(
                 Core::cast('zend_property_info *', $propertyValue->getRawPointer()),
             );
             $flags  = $rawInfo->flags;
@@ -716,9 +739,9 @@ final class ClassDelta
                 $donorTable    = $donorClassEntry->default_static_members_table;
                 // A declared static member guarantees both classes carry the table
                 assert($originalTable !== null && $donorTable !== null);
-                $originalSlot = EngineStructs::zvalAt($originalTable, $offset);
-                $donorSlot    = EngineStructs::zvalAt($donorTable, $offset);
-                if (self::zvalDiffers($originalSlot, $donorSlot)) {
+                $originalView = StructArray::ofZvals($originalTable, self::slotCount($liveEntry->default_static_members_count));
+                $donorView    = StructArray::ofZvals($donorTable, self::slotCount($donorClassEntry->default_static_members_count));
+                if (self::zvalDiffers($originalView->at($offset), $donorView->at($offset))) {
                     $changedStaticSlots[] = $offset;
                 }
                 continue;
@@ -728,9 +751,9 @@ final class ClassDelta
             $donorTable    = $donorClassEntry->default_properties_table;
             // A declared instance property guarantees both classes carry the table
             assert($originalTable !== null && $donorTable !== null);
-            $originalSlot = EngineStructs::zvalAt($originalTable, $slot);
-            $donorSlot    = EngineStructs::zvalAt($donorTable, $slot);
-            if (self::zvalDiffers($originalSlot, $donorSlot)) {
+            $originalView = StructArray::ofZvals($originalTable, self::slotCount($liveEntry->default_properties_count));
+            $donorView    = StructArray::ofZvals($donorTable, self::slotCount($donorClassEntry->default_properties_count));
+            if (self::zvalDiffers($originalView->at($slot), $donorView->at($slot))) {
                 $changedPropertySlots[] = $slot;
             }
         }
@@ -790,7 +813,7 @@ final class ClassDelta
      */
     private static function publishFunctionPointer(HashTable $table, string $lowerKey, CData $functionEntry): void
     {
-        $rawFunction = EngineStructs::cdataAt(Core::cast('zend_function *', $functionEntry), 0);
+        $rawFunction = StructArray::ofStructs(Core::cast('zend_function *', $functionEntry), 1)->rawAt(0);
         $valueEntry  = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawFunction);
         $table->add($lowerKey, $valueEntry);
         $valueEntry->release();
@@ -803,46 +826,10 @@ final class ClassDelta
      */
     private static function publishConstantPointer(HashTable $table, string $constantName, CData $constant): void
     {
-        $rawConstant = EngineStructs::cdataAt(Core::cast('zend_class_constant *', Core::addr($constant)), 0);
+        $rawConstant = StructArray::ofStructs(Core::cast('zend_class_constant *', Core::addr($constant)), 1)->rawAt(0);
         $valueEntry  = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawConstant);
         $table->add($constantName, $valueEntry);
         $valueEntry->release();
-    }
-
-    /**
-     * Takes the ownership a published method bucket holds: one name reference and
-     * one body share (mirrors zend_duplicate_function)
-     */
-    private static function acquireBucketOwnership(CData $functionEntry): void
-    {
-        $sharedEntry = EngineStructs::functionEntry($functionEntry);
-        $namePointer = $sharedEntry->common->function_name;
-        assert($namePointer instanceof CData);
-        StringEntry::fromCData($namePointer)->copy();
-
-        $refCountPointer = $sharedEntry->op_array->refcount;
-        if ($refCountPointer !== null) {
-            $refCountPointer[0] = EngineStructs::counterValue($refCountPointer) + 1;
-        }
-    }
-
-    /**
-     * Returns the ownership taken by acquireBucketOwnership (rollback path only:
-     * other holders provably keep the name and the body alive)
-     */
-    private static function releaseBucketOwnership(CData $functionEntry): void
-    {
-        $sharedEntry     = EngineStructs::functionEntry($functionEntry);
-        $refCountPointer = $sharedEntry->op_array->refcount;
-        if ($refCountPointer !== null) {
-            $referenceCount = EngineStructs::counterValue($refCountPointer);
-            assert($referenceCount > 1);
-            $refCountPointer[0] = $referenceCount - 1;
-        }
-
-        $namePointer = $sharedEntry->common->function_name;
-        assert($namePointer instanceof CData);
-        StringEntry::fromCData($namePointer)->releaseReference();
     }
 
     /**
@@ -851,7 +838,7 @@ final class ClassDelta
     private static function releaseAdoptedContainer(CData $container): void
     {
         $containerPointer = Core::cast('zend_function *', Core::addr($container));
-        $namePointer      = EngineStructs::functionEntry($containerPointer)->common->function_name;
+        $namePointer      = ReflectionFunction::fromCData($containerPointer)->getCommonPointer()->function_name;
         assert($namePointer instanceof CData);
         StringEntry::fromCData($namePointer)->releaseReference();
 
@@ -874,7 +861,7 @@ final class ClassDelta
     {
         $container = Core::trackedNew('zend_class_constant', true);
         Core::memcpy($container, $donorConstant, Core::sizeof($container));
-        $shapedContainer = EngineStructs::classConstant($container);
+        $shapedContainer = ReflectionClassConstant::viewConstantEntry($container);
         // The engine releases the payload of constants whose ce matches the class
         // being destroyed - the adopted constant belongs to the target class now
         $shapedContainer->ce = $declaringClass;
@@ -888,7 +875,12 @@ final class ClassDelta
         }
         $attributes = $shapedContainer->attributes;
         if ($attributes !== null) {
-            self::addHashTableReference($attributes);
+            // The attributes table is refcounted: take the container's own reference
+            // through the HashTable wrapper (no-op equivalent for immutable tables)
+            $attributesTable = HashTable::fromCData($attributes);
+            if (!$attributesTable->isImmutable()) {
+                $attributesTable->incrementReferenceCount();
+            }
         }
 
         return $container;
@@ -899,7 +891,7 @@ final class ClassDelta
      */
     private static function releaseConstantContainer(CData $container): void
     {
-        $shapedContainer = EngineStructs::classConstant($container);
+        $shapedContainer = ReflectionClassConstant::viewConstantEntry($container);
         Core::call('zval_ptr_dtor', Core::addr($shapedContainer->value));
         $docComment = $shapedContainer->doc_comment;
         if ($docComment !== null) {
@@ -907,33 +899,13 @@ final class ClassDelta
         }
         $attributes = $shapedContainer->attributes;
         if ($attributes !== null) {
-            self::dropHashTableReference($attributes);
+            // Return the reference the container took at mint time (other holders
+            // provably remain; immutable tables were never referenced)
+            $attributesTable = HashTable::fromCData($attributes);
+            if (!$attributesTable->isImmutable()) {
+                $attributesTable->decrementReferenceCount();
+            }
         }
         Core::untrackAndFree(Core::addr($container));
-    }
-
-    /**
-     * Takes one reference on an engine hashtable (no-op for immutable tables)
-     */
-    private static function addHashTableReference(CData $table): void
-    {
-        $gcHeader = EngineStructs::hashTable($table)->gc;
-        if (($gcHeader->u->type_info & Core::engineConstant('GC_IMMUTABLE')) !== 0) {
-            return;
-        }
-        $gcHeader->refcount += 1;
-    }
-
-    /**
-     * Returns a reference taken by addHashTableReference (other holders remain)
-     */
-    private static function dropHashTableReference(CData $table): void
-    {
-        $gcHeader = EngineStructs::hashTable($table)->gc;
-        if (($gcHeader->u->type_info & Core::engineConstant('GC_IMMUTABLE')) !== 0) {
-            return;
-        }
-        assert($gcHeader->refcount > 1);
-        $gcHeader->refcount -= 1;
     }
 }

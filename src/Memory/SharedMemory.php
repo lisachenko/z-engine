@@ -15,7 +15,8 @@ namespace ZEngine\Memory;
 
 use FFI\CData;
 use ZEngine\Core;
-use ZEngine\System\EngineStructs;
+use ZEngine\Reflection\ReflectionClass;
+use ZEngine\Reflection\ReflectionFunction;
 use ZEngine\Type\HashTable;
 
 /**
@@ -50,9 +51,7 @@ final class SharedMemory
      */
     public static function isImmutableClassEntry(CData $classEntry): bool
     {
-        $classFlags = EngineStructs::classEntry($classEntry)->ce_flags;
-
-        return ($classFlags & Core::ZEND_ACC_IMMUTABLE) !== 0;
+        return ReflectionClass::fromCData($classEntry)->isImmutable();
     }
 
     /**
@@ -99,12 +98,11 @@ final class SharedMemory
         // The writable copy is not opcache-shared anymore; everything it points at
         // still is, so the body must be replaced (not freed) by the caller
         $writablePointer = Core::cast('zend_function *', Core::addr($writableEntry));
-        $commonPointer   = EngineStructs::functionEntry($writablePointer)->common;
+        $commonPointer   = ReflectionFunction::fromCData($writablePointer)->getCommonPointer();
         $commonPointer->fn_flags &= (~Core::ZEND_ACC_IMMUTABLE);
 
         // Repoint the per-process bucket: the zval value is an IS_PTR payload
-        $rawBucketZval             = EngineStructs::zval($bucketValue->getRawValue());
-        $rawBucketZval->value->ptr = Core::cast('void *', Core::addr($writableEntry));
+        $bucketValue->getZvalShape()->value->ptr = Core::cast('void *', Core::addr($writableEntry));
 
         return $writablePointer;
     }

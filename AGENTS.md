@@ -139,18 +139,25 @@ audited for it.
 
 ## Engine structs are typed by shape, not by call-site asserts
 
-Inside the core layer, internal helpers that return `CData` engine structures declare
+Inside the core layer, engine structs are described ONCE as named
 [PHPStan object shapes](https://phpstan.org/writing-php-code/phpdoc-types#object-shapes)
-on their **return type**, using the named aliases from `parameters.typeAliases` in
-`phpstan.dist.neon` (`ZendFunctionShape`, `ZendClassEntryShape`, `ZvalShape`, …). The
-`System\EngineStructs` accessors are the single narrowing point between raw FFI handles
-and those shapes. Call sites must not re-assert (`assert($x instanceof CData)`,
-`assert(is_int($x))`) or inline-`@var` what the return shape already states — if a field
-you need is missing from a shape, extend the alias in the config instead. New shapes are
-added to the config, never spelled out inline in a docblock. Runtime guards that check
-actual engine invariants (refcount floors, table consistency) are not static noise and
-stay. Property names on shaped values are checked against the alias, so a typo fails
-`composer phpstan` instead of reading garbage memory.
+via `parameters.typeAliases` in `phpstan.dist.neon` (`ZendFunctionCommonShape`,
+`ZendClassEntryShape`, `ZvalShape`, ...). The shaped accessor lives on the
+reflection/type class that OWNS the struct - never in a standalone helper class:
+`FunctionLikeTrait::getCommonPointer()/getOpArrayPointer()` for zend_function,
+`ReflectionClass::getClassEntry()` (plus its table accessors) for zend_class_entry,
+`ReflectionValue::getZvalShape()` for zvals, the static views on
+`ReflectionProperty`/`ReflectionClassConstant` for their structs. Contiguous
+in-memory arrays of engine structs (zval tables, pointer lists) go through the
+generic `Type\StructArray` view (`@template T` of the element shape) instead of
+loose offset reads. Call sites must not re-assert (`assert($x instanceof CData)`,
+`assert(is_int($x))`) or inline-`@var` what an accessor's return shape already
+states - if a field you need is missing from a shape, extend the alias in the
+config instead; new shapes are added to the config, never spelled out inline.
+Runtime guards that check actual engine invariants (refcount floors, table
+consistency) are not static noise and stay. Property names on shaped values are
+checked against the alias, so a typo fails `composer phpstan` instead of reading
+garbage memory.
 
 ## Conventional commits
 

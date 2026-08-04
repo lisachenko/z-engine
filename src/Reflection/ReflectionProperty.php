@@ -79,6 +79,40 @@ class ReflectionProperty extends NativeReflectionProperty
     }
 
     /**
+     * Returns the shaped view of a raw zend_property_info structure
+     *
+     * The declared shape (see phpstan.dist.neon typeAliases and AGENTS.md) is the
+     * single narrowing point for property-info field access. This is a static view:
+     * property infos of classes that are not published under their own name (eg
+     * hot-swap donor entries) cannot be wrapped through fromCData(), which resolves
+     * the native reflection state by name.
+     *
+     * @param CData $propertyInfo zend_property_info pointer
+     *
+     * @return ZendPropertyInfoShape
+     *
+     * @internal shared with the hot-swap machinery (HotSwap/ClassDelta)
+     */
+    public static function viewPropertyInfo(CData $propertyInfo): object
+    {
+        /** @var ZendPropertyInfoShape $shapedInfo */
+        $shapedInfo = self::asStructView($propertyInfo);
+
+        return $shapedInfo;
+    }
+
+    /**
+     * Widens a CData handle to plain `object` so a shape @var can be declared on it
+     *
+     * FFI\CData is final: a shape alias (stdClass&object{...}) is not a subtype of
+     * the CData native type, so the narrowing must go through the object supertype.
+     */
+    private static function asStructView(CData $struct): object
+    {
+        return $struct;
+    }
+
+    /**
      * Returns an offset of this property
      */
     public function getOffset(): int

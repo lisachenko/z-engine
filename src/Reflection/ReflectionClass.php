@@ -454,7 +454,74 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function isImmutable(): bool
     {
-        return SharedMemory::isImmutableClassEntry($this->pointer);
+        return ($this->getClassEntry()->ce_flags & Core::ZEND_ACC_IMMUTABLE) !== 0;
+    }
+
+    /**
+     * Returns the shaped view of the underlying zend_class_entry
+     *
+     * The declared shape (see phpstan.dist.neon typeAliases and AGENTS.md) is the
+     * single narrowing point for the class-entry fields the runtime mutation
+     * machinery touches. Keep the raw pointer for FFI hand-offs; this view serves
+     * the field access.
+     *
+     * @return ZendClassEntryShape
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta/HotSwap)
+     */
+    public function getClassEntry(): object
+    {
+        /** @var ZendClassEntryShape $classEntry */
+        $classEntry = self::asStructView($this->pointer);
+
+        return $classEntry;
+    }
+
+    /**
+     * Widens a CData handle to plain `object` so a shape @var can be declared on it
+     *
+     * FFI\CData is final: a shape alias (stdClass&object{...}) is not a subtype of
+     * the CData native type, so the narrowing must go through the object supertype.
+     */
+    private static function asStructView(CData $struct): object
+    {
+        return $struct;
+    }
+
+    /**
+     * Returns the borrowed view of this class method table (zend_function entries)
+     *
+     * @return HashTable|ReflectionValue[]
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta/FunctionBodySwap)
+     */
+    public function getMethodTable(): HashTable
+    {
+        return $this->methodTable;
+    }
+
+    /**
+     * Returns the borrowed view of this class constants table (zend_class_constant entries)
+     *
+     * @return HashTable|ReflectionValue[]
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta)
+     */
+    public function getConstantsTable(): HashTable
+    {
+        return $this->constantsTable;
+    }
+
+    /**
+     * Returns the borrowed view of this class properties_info table (zend_property_info entries)
+     *
+     * @return HashTable|ReflectionValue[]
+     *
+     * @internal shared with the hot-swap machinery (HotSwap/ClassDelta)
+     */
+    public function getPropertiesTable(): HashTable
+    {
+        return $this->propertiesTable;
     }
 
     /**

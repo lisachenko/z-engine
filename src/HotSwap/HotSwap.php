@@ -18,9 +18,10 @@ use ZEngine\AbstractSyntaxTree\NodeInterface;
 use ZEngine\AbstractSyntaxTree\NodeKind;
 use ZEngine\Core;
 use ZEngine\Memory\SharedMemory;
+use ZEngine\Reflection\ReflectionClass;
+use ZEngine\Reflection\ReflectionProperty;
 use ZEngine\Reflection\ReflectionValue;
-use ZEngine\System\EngineStructs;
-use ZEngine\Type\HashTable;
+use ZEngine\Type\StructArray;
 
 /**
  * Entry point of the atomic runtime class hot-swap API
@@ -91,9 +92,9 @@ final class HotSwap
      */
     private static function assertPlainLinkedUserClass(CData $classEntry, string $className): void
     {
-        $shapedEntry = EngineStructs::classEntry($classEntry);
-        $isUserClass = ord($shapedEntry->type) === Core::ZEND_USER_CLASS;
-        $classFlags  = $shapedEntry->ce_flags;
+        $reflectionClass = ReflectionClass::fromCData($classEntry);
+        $isUserClass     = $reflectionClass->isUserDefined();
+        $classFlags      = $reflectionClass->getClassEntry()->ce_flags;
         if (!$isUserClass) {
             throw new HotSwapException("Cannot hot-swap internal class {$className}");
         }
@@ -245,7 +246,7 @@ final class HotSwap
      */
     private static function publishClassEntry(string $lowerName, CData $classEntry): void
     {
-        $rawClass   = EngineStructs::cdataAt(Core::cast('zend_class_entry *', $classEntry), 0);
+        $rawClass   = StructArray::ofStructs(Core::cast('zend_class_entry *', $classEntry), 1)->rawAt(0);
         $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawClass);
         Core::$executor->classTable->add($lowerName, $valueEntry);
         $valueEntry->release();
@@ -262,8 +263,8 @@ final class HotSwap
     private static function assertCompatibleShape(CData $classEntry, CData $donorEntry, string $className): void
     {
         // Parent must be the same linked class entry
-        $originalParent = EngineStructs::classEntry($classEntry)->parent;
-        $donorParent    = EngineStructs::classEntry($donorEntry)->parent;
+        $originalParent = ReflectionClass::fromCData($classEntry)->getClassEntry()->parent;
+        $donorParent    = ReflectionClass::fromCData($donorEntry)->getClassEntry()->parent;
         $sameParent     = ($originalParent === null && $donorParent === null)
             || ($originalParent !== null && $donorParent !== null
                                          && Core::addressOf($originalParent) === Core::addressOf($donorParent));
@@ -303,13 +304,17 @@ final class HotSwap
     private static function interfaceAddressSet(CData $classEntry): array
     {
         $addresses       = [];
-        $shapedEntry     = EngineStructs::classEntry($classEntry);
+        $shapedEntry     = ReflectionClass::fromCData($classEntry)->getClassEntry();
         $totalInterfaces = $shapedEntry->num_interfaces;
         $interfaceList   = $shapedEntry->interfaces;
-        for ($index = 0; $index < $totalInterfaces; $index++) {
+        assert($totalInterfaces >= 0);
+        if ($totalInterfaces > 0) {
             // A non-zero interface count guarantees the resolved list is present
             assert($interfaceList !== null);
-            $addresses[] = Core::addressOf(EngineStructs::cdataAt($interfaceList, $index));
+            $interfaces = StructArray::ofStructs($interfaceList, $totalInterfaces);
+            foreach ($interfaces as $interfaceEntry) {
+                $addresses[] = Core::addressOf($interfaceEntry);
+            }
         }
         sort($addresses);
 
@@ -325,11 +330,10 @@ final class HotSwap
     {
         $surface        = [];
         $classAddress   = Core::addressOf($classEntry);
-        $rawProperties  = EngineStructs::classEntry($classEntry)->properties_info;
-        $propertiesInfo = HashTable::fromCData(Core::addr($rawProperties));
+        $propertiesInfo = ReflectionClass::fromCData($classEntry)->getPropertiesTable();
         foreach ($propertiesInfo as $propertyName => $propertyValue) {
             assert(is_string($propertyName));
-            $rawInfo = EngineStructs::propertyInfo(
+            $rawInfo = ReflectionProperty::viewPropertyInfo(
                 Core::cast('zend_property_info *', $propertyValue->getRawPointer()),
             );
             if (Core::addressOf($rawInfo->ce) !== $classAddress) {

@@ -465,6 +465,39 @@ class ReflectionValue implements ReferenceCountedInterface
     }
 
     /**
+     * Returns the shaped view of the underlying zval structure
+     *
+     * The declared shape (see phpstan.dist.neon typeAliases and AGENTS.md) is the
+     * single narrowing point for raw zval field access (type byte, payload union,
+     * extra word). Keep getRawValue() for FFI hand-offs; this view serves the
+     * field access.
+     *
+     * @return ZvalShape
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta/SharedMemory)
+     */
+    public function getZvalShape(): object
+    {
+        $this->assertNotReleased();
+
+        /** @var ZvalShape $valueEntry */
+        $valueEntry = self::asStructView($this->pointer);
+
+        return $valueEntry;
+    }
+
+    /**
+     * Widens a CData handle to plain `object` so a shape @var can be declared on it
+     *
+     * FFI\CData is final: a shape alias (stdClass&object{...}) is not a subtype of
+     * the CData native type, so the narrowing must go through the object supertype.
+     */
+    private static function asStructView(CData $struct): object
+    {
+        return $struct;
+    }
+
+    /**
      * Takes an own reference on the payload, making this wrapper responsible for one release
      *
      * Required when the zval is handed to an engine function with ownership semantics (one
