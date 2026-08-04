@@ -13,103 +13,92 @@ declare(strict_types=1);
 
 namespace ZEngine\Type;
 
+use ArrayAccess;
 use Countable;
 use FFI\CData;
 use IteratorAggregate;
 use Traversable;
+use ZEngine\Core;
 
 /**
- * Typed view over a contiguous in-memory array of engine structures
+ * Typed, bounds-checked view over a contiguous in-memory array of engine structures
  *
- * The engine stores many sequences as plain C arrays rather than HashTables:
- * zval tables (op_array literals, class default property/static tables), pointer
- * lists (resolved interfaces) and single-struct dereferences. Element access on
- * such arrays through raw CData is untyped; this view centralizes the bounds
- * check and resolves every element to the named object shape given by the
- * factory (see AGENTS.md "Engine structs are typed by shape"), so PHPStan works
- * with raw struct arrays in memory without call-site assertions.
+ * The engine stores many sequences as plain C arrays rather than HashTables: zval
+ * tables (op_array literals, class default property/static tables), pointer lists
+ * (resolved interfaces) and single-struct dereferences. This view owns all the
+ * size-related machinery (bounds checking, iteration, replace) so callers reach the
+ * elements through ordinary array access instead of hand-rolled pointer arithmetic
+ * (see AGENTS.md "Engine structs are typed by shape"). Each element is returned as a
+ * raw CData handle - wrap it in the owning reflection/type object (eg
+ * ReflectionValue::fromValueEntry()) for typed access.
  *
- * The view is BORROWED: the base pointer stays owned by the engine structure it
- * was read from and must outlive the view. Element pointer arithmetic follows
- * the FFI type of the base pointer, so the base must be a correctly typed CData
- * (eg `zval *` or `zend_class_entry **`).
+ * The view is BORROWED: the base pointer stays owned by the engine structure it was
+ * read from and must outlive the view. Element pointer arithmetic follows the FFI
+ * type of the base pointer, so the base must be a correctly typed CData (eg `zval *`
+ * or `zend_class_entry **`).
  *
  * @internal
  *
- * @template T of object
- * @implements IteratorAggregate<int, T>
+ * @implements IteratorAggregate<int, CData>
+ * @implements ArrayAccess<int, CData>
  */
-final class StructArray implements Countable, IteratorAggregate
+final class StructArray implements ArrayAccess, Countable, IteratorAggregate
 {
     /**
-     * @param CData       $baseAddress Typed pointer to the first element
-     * @param int<0, max> $count       Number of elements behind the pointer
+     * @param CData $baseAddress Typed pointer to the first element
+     * @param int   $count       Number of elements behind the pointer (negatives read as empty)
      */
-    private function __construct(
+    public function __construct(
         private CData $baseAddress,
         private int $count,
     ) {}
 
-    /**
-     * Typed view over an engine zval table (literals, default property tables)
-     *
-     * @param CData       $zvalTable zval* base pointer
-     * @param int<0, max> $count     Number of zval slots
-     *
-     * @return self<ZvalShape>
-     */
-    public static function ofZvals(CData $zvalTable, int $count): self
+    public function offsetExists(mixed $offset): bool
     {
-        /** @var self<ZvalShape> $view */
-        $view = new self($zvalTable, $count);
+        return is_int($offset) && $offset >= 0 && $offset < $this->count;
+    }
 
-        return $view;
+    public function offsetGet(mixed $offset): CData
+    {
+        assert(is_int($offset));
+
+        return $this->rawAt($offset);
     }
 
     /**
-     * Raw view over an array of structures or pointers (interface lists, single
-     * struct dereferences): elements stay plain CData handles
-     *
-     * @param CData       $structTable Typed base pointer
-     * @param int<0, max> $count       Number of elements behind the pointer
-     *
-     * @return self<CData>
+     * Overwrites the element at the given index, dropping the previous value
      */
-    public static function ofStructs(CData $structTable, int $count): self
+    public function offsetSet(mixed $offset, mixed $value): void
     {
-        /** @var self<CData> $view */
-        $view = new self($structTable, $count);
+        assert(is_int($offset) && $value instanceof CData);
+        $this->replace($offset, $value);
+    }
 
-        return $view;
+    public function offsetUnset(mixed $offset): never
+    {
+        throw new \LogicException('Struct-array elements live in engine memory and cannot be unset');
     }
 
     /**
-     * Returns the element at the given index, resolved to the element shape
+     * Replaces the element at the given position with a new value and returns a
+     * detached byte-exact copy of the previous one
      *
-     * @return T
+     * This is a raw slot overwrite: engine reference semantics (if any) are the
+     * caller's responsibility.
      */
-    public function at(int $index): object
+    public function replace(int $position, CData $value): CData
     {
-        /** @var T $element */
-        $element = $this->asStructView($this->rawAt($index));
+        $previous     = $this->rawAt($position);
+        $elementSize  = Core::sizeof($previous);
+        $previousCopy = Core::new("char[{$elementSize}]");
+        Core::memcpy($previousCopy, $previous, $elementSize);
+        Core::memcpy($previous, $value, $elementSize);
 
-        return $element;
-    }
-
-    /**
-     * Widens a CData handle to plain `object` so the element shape @var can be
-     * declared on it (FFI\CData is final and cannot intersect object shapes)
-     */
-    private function asStructView(CData $element): object
-    {
-        return $element;
+        return $previousCopy;
     }
 
     /**
      * Returns the element at the given index as the raw CData handle
-     *
-     * Use this form when the element travels into FFI primitives that require
-     * CData arguments (Core::addr()/memcpy()/cast()).
      */
     public function rawAt(int $index): CData
     {
@@ -126,16 +115,16 @@ final class StructArray implements Countable, IteratorAggregate
 
     public function count(): int
     {
-        return $this->count;
+        return max($this->count, 0);
     }
 
     /**
-     * @return Traversable<int, T>
+     * @return Traversable<int, CData>
      */
     public function getIterator(): Traversable
     {
         for ($index = 0; $index < $this->count; $index++) {
-            yield $index => $this->at($index);
+            yield $index => $this->rawAt($index);
         }
     }
 }

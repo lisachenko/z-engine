@@ -42,22 +42,12 @@ parameters:
     reportUnmatchedIgnoredErrors: false
     treatPhpDocTypesAsCertain: false
     # Named engine-struct shapes (see AGENTS.md "Engine structs are typed by shape").
-    # The reflection/type class that owns a struct declares the matching alias on the
-    # @return of its shaped accessor (FunctionLikeTrait::getCommonPointer(),
-    # ReflectionClass::getClassEntry(), ReflectionValue::getZvalShape(), the static
-    # views on ReflectionProperty/ReflectionClassConstant, Type\StructArray element
-    # factories), so the narrowing lives with the owner instead of per call site.
-    # FFI\CData is final, so the aliases cannot intersect it: they intersect stdClass
-    # instead, which keeps every shape property readable AND writable for the analysis
-    # while the runtime value stays the CData handle. Keep the raw handle in scope for
-    # FFI hand-offs (Core::addr()/memcpy()/cast()); use the shaped view for field
-    # access. Each alias lists exactly the properties z-engine reads or writes through
-    # FFI; pointer-to-struct fields stay plain `FFI\CData|null` and are re-shaped at
-    # their read sites.
+    # A shaped accessor lives on the reflection/type class that owns the struct and
+    # declares the matching alias on its @return (FunctionLikeTrait::getCommonPointer()
+    # and getOpArrayPointer()). FFI\CData is final, so the aliases intersect stdClass
+    # instead of CData, which keeps every shape property readable AND writable for the
+    # analysis while the runtime value stays the CData handle; the accessor narrows a
+    # nested field read (already `mixed` via the CData ignores below) to the shape.
     typeAliases:
         ZendFunctionCommonShape: 'stdClass&object{function_name: FFI\CData|null, scope: FFI\CData|null, prototype: FFI\CData|null, fn_flags: int, num_args: int, arg_info: FFI\CData|null, attributes: FFI\CData|null}'
         ZendOpArrayShape: 'stdClass&object{fn_flags: int, refcount: FFI\CData|null, cache_size: int, run_time_cache__ptr: FFI\CData|null, static_variables: FFI\CData|null, static_variables_ptr__ptr: FFI\CData|null, function_name: FFI\CData|null, opcodes: FFI\CData, literals: FFI\CData|null, last: int, last_var: int, last_literal: int, T: int, num_args: int, required_num_args: int}'
-        ZendClassEntryShape: 'stdClass&object{ce_flags: int, parent: FFI\CData|null, num_interfaces: int, interfaces: FFI\CData|null, default_properties_table: FFI\CData|null, default_properties_count: int, default_static_members_table: FFI\CData|null, default_static_members_count: int}'
-        ZendClassConstantShape: 'stdClass&object{value: FFI\CData, ce: FFI\CData, doc_comment: FFI\CData|null, attributes: FFI\CData|null}'
-        ZvalShape: 'stdClass&object{u1: stdClass&object{v: stdClass&object{type: int}, type_info: int}, u2: stdClass&object{constant_flags: int}, value: stdClass&object{lval: int, dval: float, str: FFI\CData, ptr: FFI\CData|null}}'
-        ZendPropertyInfoShape: 'stdClass&object{flags: int, offset: int, ce: FFI\CData, type: stdClass&object{type_mask: int}}'

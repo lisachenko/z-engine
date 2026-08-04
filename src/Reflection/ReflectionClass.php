@@ -64,10 +64,11 @@ use ZEngine\ClassExtension\ObjectUnsetPropertyInterface;
 use ZEngine\ClassExtension\ObjectWriteDimensionInterface;
 use ZEngine\ClassExtension\ObjectWritePropertyInterface;
 use ZEngine\Core;
-use ZEngine\Memory\SharedMemory;
+use ZEngine\Memory\SharedMemoryException;
 use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
+use ZEngine\Type\StructArray;
 
 class ReflectionClass extends NativeReflectionClass
 {
@@ -383,7 +384,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function addMethod(string $methodName, \Closure $method): ReflectionMethod
     {
-        SharedMemory::assertMutableClassEntry($this->pointer, 'add a method');
+        $this->assertMutable('add a method');
 
         $closureEntry = new ClosureEntry($method);
         // This line will make this closure live until the end of script/request
@@ -454,38 +455,39 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function isImmutable(): bool
     {
-        return ($this->getClassEntry()->ce_flags & Core::ZEND_ACC_IMMUTABLE) !== 0;
+        return ($this->getFlags() & Core::ZEND_ACC_IMMUTABLE) !== 0;
     }
 
     /**
-     * Returns the shaped view of the underlying zend_class_entry
+     * Returns the raw zend_class_entry pointer this reflection wraps
      *
-     * The declared shape (see phpstan.dist.neon typeAliases and AGENTS.md) is the
-     * single narrowing point for the class-entry fields the runtime mutation
-     * machinery touches. Keep the raw pointer for FFI hand-offs; this view serves
-     * the field access.
-     *
-     * @return ZendClassEntryShape
+     * The pointer is a live view into engine memory; prefer the typed accessors on
+     * this class over poking fields on the result.
      *
      * @internal shared with the hot-swap machinery (ClassDelta/HotSwap)
      */
-    public function getClassEntry(): object
+    public function getRawValue(): CData
     {
-        /** @var ZendClassEntryShape $classEntry */
-        $classEntry = self::asStructView($this->pointer);
-
-        return $classEntry;
+        return $this->pointer;
     }
 
     /**
-     * Widens a CData handle to plain `object` so a shape @var can be declared on it
-     *
-     * FFI\CData is final: a shape alias (stdClass&object{...}) is not a subtype of
-     * the CData native type, so the narrowing must go through the object supertype.
+     * Returns the numeric address of the underlying class entry, for identity checks
      */
-    private static function asStructView(CData $struct): object
+    public function getAddress(): int
     {
-        return $struct;
+        return Core::addressOf($this->pointer);
+    }
+
+    /**
+     * Returns the ZEND_ACC_* flags word of this class entry
+     */
+    public function getFlags(): int
+    {
+        $flags = $this->pointer->ce_flags;
+        assert(is_int($flags));
+
+        return $flags;
     }
 
     /**
@@ -493,7 +495,7 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @return HashTable|ReflectionValue[]
      *
-     * @internal shared with the hot-swap machinery (ClassDelta/FunctionBodySwap)
+     * @internal shared with the hot-swap machinery (ClassDelta)
      */
     public function getMethodTable(): HashTable
     {
@@ -513,15 +515,261 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
-     * Returns the borrowed view of this class properties_info table (zend_property_info entries)
+     * Returns the numeric address of the parent class entry, or null when unlinked/root
      *
-     * @return HashTable|ReflectionValue[]
+     * @internal used by the hot-swap compatibility guard
+     */
+    public function getParentAddress(): ?int
+    {
+        $parent = $this->pointer->parent;
+        if ($parent === null) {
+            return null;
+        }
+        assert($parent instanceof CData);
+
+        return Core::addressOf($parent);
+    }
+
+    /**
+     * Returns the sorted numeric addresses of the resolved interface entries
+     *
+     * @return list<int>
+     *
+     * @internal used by the hot-swap compatibility guard (linked classes only)
+     */
+    public function getInterfaceAddresses(): array
+    {
+        $addresses = [];
+        $total     = $this->pointer->num_interfaces;
+        assert(is_int($total));
+        $interfaceList = $this->pointer->interfaces;
+        for ($index = 0; $index < $total; $index++) {
+            assert($interfaceList instanceof CData);
+            $interfaceEntry = $interfaceList[$index];
+            assert($interfaceEntry instanceof CData);
+            $addresses[] = Core::addressOf($interfaceEntry);
+        }
+        sort($addresses);
+
+        return $addresses;
+    }
+
+    /**
+     * Returns the user methods the class declares itself, keyed by lowercased name
+     *
+     * Reads the low-level method table, so it also sees dynamic/non-persistent methods
+     * that live only as structures in memory; inherited entries (whose scope is another
+     * class) are excluded. Each value is a pointer-level ReflectionMethod.
+     *
+     * @return array<string, ReflectionMethod>
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta)
+     */
+    public function getDeclaredMethods(): array
+    {
+        $declaredMethods = [];
+        $selfAddress     = $this->getAddress();
+        foreach ($this->methodTable as $methodName => $methodEntryValue) {
+            assert(is_string($methodName));
+            $method = ReflectionMethod::fromRawEntry($methodEntryValue->getRawFunction());
+            if (!$method->isUserDefined()) {
+                continue;
+            }
+            $scope = $method->getCommonPointer()->scope;
+            if ($scope === null || Core::addressOf($scope) !== $selfAddress) {
+                continue;
+            }
+            $declaredMethods[$methodName] = $method;
+        }
+
+        return $declaredMethods;
+    }
+
+    /**
+     * Returns a single declared/inherited method by name, or null when not present
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta)
+     */
+    public function findMethod(string $name): ?ReflectionMethod
+    {
+        $methodEntryValue = $this->methodTable->find(strtolower($name));
+        if ($methodEntryValue === null) {
+            return null;
+        }
+
+        return ReflectionMethod::fromCData($methodEntryValue->getRawFunction());
+    }
+
+    /**
+     * Returns a single declared/inherited constant by name, or null when not present
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta)
+     */
+    public function findConstant(string $name): ?ReflectionClassConstant
+    {
+        $constantValue = $this->constantsTable->find($name);
+        if ($constantValue === null) {
+            return null;
+        }
+
+        return ReflectionClassConstant::fromRawEntry(
+            Core::cast('zend_class_constant *', $constantValue->getRawPointer()),
+        );
+    }
+
+    /**
+     * Returns the constants the class declares itself, keyed by name
+     *
+     * Reads the low-level constants table (dynamic constants included); inherited
+     * constants (declared by another class) are excluded. Each value is a
+     * pointer-level ReflectionClassConstant.
+     *
+     * @return array<string, ReflectionClassConstant>
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta)
+     */
+    public function getDeclaredConstants(): array
+    {
+        $declaredConstants = [];
+        $selfAddress       = $this->getAddress();
+        foreach ($this->constantsTable as $constantName => $constantValue) {
+            assert(is_string($constantName));
+            $constant = ReflectionClassConstant::fromRawEntry(
+                Core::cast('zend_class_constant *', $constantValue->getRawPointer()),
+            );
+            if ($constant->getDeclaringClassAddress() === $selfAddress) {
+                $declaredConstants[$constantName] = $constant;
+            }
+        }
+
+        return $declaredConstants;
+    }
+
+    /**
+     * Returns the properties the class declares itself, keyed by name
+     *
+     * Reads the low-level properties_info table; inherited properties are excluded.
+     * Each value is a pointer-level ReflectionProperty.
+     *
+     * @return array<string, ReflectionProperty>
      *
      * @internal shared with the hot-swap machinery (HotSwap/ClassDelta)
      */
-    public function getPropertiesTable(): HashTable
+    public function getDeclaredProperties(): array
     {
-        return $this->propertiesTable;
+        $declaredProperties = [];
+        $selfAddress        = $this->getAddress();
+        foreach ($this->propertiesTable as $propertyName => $propertyValue) {
+            assert(is_string($propertyName));
+            $property = ReflectionProperty::fromRawEntry(
+                Core::cast('zend_property_info *', $propertyValue->getRawPointer()),
+            );
+            if ($property->getDeclaringClassAddress() === $selfAddress) {
+                $declaredProperties[$propertyName] = $property;
+            }
+        }
+
+        return $declaredProperties;
+    }
+
+    /**
+     * Resolves the default-value zval slot of an instance property as a ReflectionValue
+     *
+     * The slot index is derived from the property storage offset; the returned wrapper
+     * is a live view into default_properties_table.
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta)
+     */
+    public function getDefaultPropertyValueOf(ReflectionProperty $property): ReflectionValue
+    {
+        $zvalSize = Core::sizeof(Core::type('zval'));
+        $slotBase = Core::type('zend_object')->getStructFieldOffset('properties_table');
+        $slot     = intdiv($property->getOffset() - $slotBase, $zvalSize);
+        $table    = $this->pointer->default_properties_table;
+        $count    = $this->pointer->default_properties_count;
+        assert($table instanceof CData && is_int($count));
+
+        return ReflectionValue::fromValueEntry((new StructArray($table, $count))->rawAt($slot));
+    }
+
+    /**
+     * Resolves the default-value zval slot of a static property as a ReflectionValue
+     *
+     * The slot index for static members is the property offset itself; the returned
+     * wrapper is a live view into default_static_members_table.
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta)
+     */
+    public function getDefaultStaticValueOf(ReflectionProperty $property): ReflectionValue
+    {
+        $slot  = $property->getOffset();
+        $table = $this->pointer->default_static_members_table;
+        $count = $this->pointer->default_static_members_count;
+        assert($table instanceof CData && is_int($count));
+
+        return ReflectionValue::fromValueEntry((new StructArray($table, $count))->rawAt($slot));
+    }
+
+    /**
+     * Drops the ZEND_ACC_CONSTANTS_UPDATED shortcut so the engine re-evaluates constant
+     * expressions lazily, and returns the previous ce_flags word for restoration
+     *
+     * @internal used by the hot-swap machinery after changing constants/defaults
+     */
+    public function invalidateConstants(): int
+    {
+        $previousFlags           = $this->getFlags();
+        $this->pointer->ce_flags = $previousFlags & ~Core::ZEND_ACC_CONSTANTS_UPDATED;
+
+        return $previousFlags;
+    }
+
+    /**
+     * Restores the ce_flags word saved by invalidateConstants()
+     *
+     * @internal rollback helper
+     */
+    public function restoreFlags(int $flags): void
+    {
+        $this->pointer->ce_flags = $flags;
+    }
+
+    /**
+     * Marks the class entry as declaring at least one method with static variables
+     *
+     * The engine's shutdown walk destroys per-method live static tables only for classes
+     * carrying this flag; a body swapped in with static variables must set it or the
+     * materialized table leaks at request end.
+     *
+     * @internal used by the body-swap machinery (FunctionBodySwap)
+     */
+    public function markHasStaticInMethods(): void
+    {
+        $this->pointer->ce_flags = $this->getFlags() | Core::engineConstant('ZEND_HAS_STATIC_IN_METHODS');
+    }
+
+    /**
+     * Returns the magic shortcut field name the class entry references the given method
+     * through (constructor/destructor/__get/...), or null when the method is not wired
+     * as a magic slot
+     *
+     * @internal used by ReflectionMethod::isRemovable()
+     */
+    public function getMagicSlotFor(ReflectionMethod $method): ?string
+    {
+        $methodAddress = $method->getAddress();
+        foreach (self::INHERITED_FUNCTION_POINTERS as $fieldName) {
+            $fieldFunction = $this->pointer->{$fieldName};
+            if ($fieldFunction === null) {
+                continue;
+            }
+            assert($fieldFunction instanceof CData);
+            if (Core::addressOf($fieldFunction) === $methodAddress) {
+                return $fieldName;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -570,7 +818,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function removeMethods(string ...$methodNames): void
     {
-        SharedMemory::assertMutableClassEntry($this->pointer, 'remove methods');
+        $this->assertMutable('remove methods');
         foreach ($methodNames as $methodName) {
             $this->methodTable->delete(strtolower($methodName));
         }
@@ -1016,7 +1264,19 @@ class ReflectionClass extends NativeReflectionClass
      */
     private function assertTraitConfigurationIsMutable(): void
     {
-        SharedMemory::assertMutableClassEntry($this->pointer, 'modify the trait configuration');
+        $this->assertMutable('modify the trait configuration');
+    }
+
+    /**
+     * Refuses a mutation on an opcache-shared (immutable) class entry
+     *
+     * @throws SharedMemoryException When the class lives in opcache shared memory
+     */
+    private function assertMutable(string $operation): void
+    {
+        if ($this->isImmutable()) {
+            throw SharedMemoryException::immutableClassMutation($operation);
+        }
     }
 
     /**

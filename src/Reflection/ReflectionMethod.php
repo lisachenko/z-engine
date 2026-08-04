@@ -19,8 +19,9 @@ use ZEngine\Core;
 use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
+use ZEngine\Type\StructArray;
 
-class ReflectionMethod extends NativeReflectionMethod
+class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInterface
 {
     use FunctionLikeTrait;
 
@@ -156,6 +157,28 @@ class ReflectionMethod extends NativeReflectionMethod
      *
      * @internal
      */
+    /**
+     * Creates a low-level reflection over a raw zend_function structure without
+     * initializing the native reflection state
+     *
+     * Unlike fromCData() this never resolves the method through its class, so it works
+     * for methods that are not published under their declaring class's live name (eg
+     * hot-swap donor entries residing only as structures in memory, including methods
+     * the donor adds that do not exist on the live class yet). Only the pointer-level
+     * API (equals()/getCommonPointer()/getOpArrayPointer()/getDeclaringClass()/
+     * isUserDefined()/isRemovable()) is usable, native introspection is not.
+     *
+     * @internal used by the hot-swap machinery (ClassDelta)
+     */
+    public static function fromRawEntry(CData $functionEntry): ReflectionMethod
+    {
+        /** @var ReflectionMethod $reflectionMethod */
+        $reflectionMethod          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionMethod->pointer = $functionEntry;
+
+        return $reflectionMethod;
+    }
+
     public static function fromClosureEntry(
         ClosureEntry $closureEntry,
         string $className,
@@ -277,6 +300,72 @@ class ReflectionMethod extends NativeReflectionMethod
         }
 
         return static::fromCData($this->getCommonPointer()->prototype);
+    }
+
+    /**
+     * Structurally compares the compiled body of this method with another one
+     *
+     * This is NOT full identity - it is the conservative check the hot-swap delta needs
+     * to decide whether a method body changed: the same pointer is trivially equal, and
+     * otherwise the op_arrays must agree on their body metrics (opcode/var/literal
+     * counts, temporaries, argument counts and flags), their opcode bytes and every
+     * literal value (ReflectionValue::equals()). Anything not provably identical counts
+     * as different, so a missed change never keeps stale code running.
+     */
+    public function equals(ReflectionMethod $other): bool
+    {
+        if ($this->getAddress() === $other->getAddress()) {
+            return true;
+        }
+        $thisOpArray  = $this->getOpArrayPointer();
+        $otherOpArray = $other->getOpArrayPointer();
+
+        foreach (['last', 'last_var', 'last_literal', 'T', 'num_args', 'required_num_args', 'fn_flags'] as $field) {
+            if ($thisOpArray->{$field} !== $otherOpArray->{$field}) {
+                return false;
+            }
+        }
+        $opcodesSize = $thisOpArray->last * Core::sizeof(Core::type('zend_op'));
+        if ($opcodesSize > 0 && \FFI::memcmp($thisOpArray->opcodes, $otherOpArray->opcodes, $opcodesSize) !== 0) {
+            return false;
+        }
+        $totalLiterals = $thisOpArray->last_literal;
+        assert(is_int($totalLiterals) && $totalLiterals >= 0);
+        if ($totalLiterals > 0) {
+            // A non-zero literal count guarantees both literal tables are present
+            $thisLiterals  = $thisOpArray->literals;
+            $otherLiterals = $otherOpArray->literals;
+            assert($thisLiterals instanceof CData && $otherLiterals instanceof CData);
+            $thisView  = new StructArray($thisLiterals, $totalLiterals);
+            $otherView = new StructArray($otherLiterals, $totalLiterals);
+            for ($index = 0; $index < $totalLiterals; $index++) {
+                $thisLiteral  = ReflectionValue::fromValueEntry($thisView->rawAt($index));
+                $otherLiteral = ReflectionValue::fromValueEntry($otherView->rawAt($index));
+                if (!$thisLiteral->equals($otherLiteral)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Checks if this method may be removed from its declaring class at runtime
+     *
+     * Only user-defined methods that the class entry does not reference through a magic
+     * shortcut field (constructor/destructor/magic methods) may be removed - dropping
+     * such a slot would require field surgery the hot-swap delta does not perform.
+     *
+     * @internal used by the hot-swap machinery (ClassDelta)
+     */
+    public function isRemovable(): bool
+    {
+        if (!$this->isUserDefined()) {
+            return false;
+        }
+
+        return $this->getDeclaringClass()->getMagicSlotFor($this) === null;
     }
 
     /**

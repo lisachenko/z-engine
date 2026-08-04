@@ -77,37 +77,149 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
     }
 
     /**
-     * Returns the shaped view of a raw zend_class_constant structure
+     * Creates a low-level reflection over a raw zend_class_constant structure
      *
-     * The declared shape (see phpstan.dist.neon typeAliases and AGENTS.md) is the
-     * single narrowing point for class-constant field access. This is a static view:
-     * constants of classes that are not published under their own name (eg hot-swap
-     * donor entries) cannot be wrapped through fromCData(), which resolves the
-     * native reflection state by name.
+     * Unlike fromCData() this does NOT initialize the native reflection state, so it
+     * works for constants of classes that are not published under their own name (eg
+     * hot-swap donor entries residing only as structures in memory). The pointer-level
+     * API (equals(), getReflectionValue(), getRawValue(), declaring-class access) is
+     * usable, native introspection (getName()/getValue()) is not.
      *
-     * @param CData $constantEntry zend_class_constant pointer
-     *
-     * @return ZendClassConstantShape
-     *
-     * @internal shared with the hot-swap machinery (ClassDelta)
+     * @internal used by the hot-swap machinery (ClassDelta)
      */
-    public static function viewConstantEntry(CData $constantEntry): object
+    public static function fromRawEntry(CData $constantEntry): ReflectionClassConstant
     {
-        /** @var ZendClassConstantShape $shapedEntry */
-        $shapedEntry = self::asStructView($constantEntry);
+        /** @var ReflectionClassConstant $reflectionConstant */
+        $reflectionConstant          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionConstant->pointer = $constantEntry;
 
-        return $shapedEntry;
+        return $reflectionConstant;
     }
 
     /**
-     * Widens a CData handle to plain `object` so a shape @var can be declared on it
+     * Returns the raw zend_class_constant pointer this reflection wraps
      *
-     * FFI\CData is final: a shape alias (stdClass&object{...}) is not a subtype of
-     * the CData native type, so the narrowing must go through the object supertype.
+     * The pointer is a live view into engine memory; prefer the typed accessors
+     * (getReflectionValue(), equals(), getDeclaringClass()) over poking fields.
      */
-    private static function asStructView(CData $struct): object
+    public function getRawValue(): CData
     {
-        return $struct;
+        return $this->pointer;
+    }
+
+    /**
+     * Structurally compares this constant with another one for the hot-swap delta
+     *
+     * Equal means the same access flags (visibility, final) AND a structurally equal
+     * value (ReflectionValue::equals(), a conservative scalar comparison). This is not
+     * a full identity check - it is exactly what the delta needs to decide whether a
+     * constant's stored value changed.
+     */
+    public function equals(ReflectionClassConstant $other): bool
+    {
+        if ($this->getAccessFlags() !== $other->getAccessFlags()) {
+            return false;
+        }
+
+        return $this->getReflectionValue()->equals($other->getReflectionValue());
+    }
+
+    /**
+     * Returns the packed access-flags word (visibility + final) of this constant
+     */
+    public function getAccessFlags(): int
+    {
+        $value = $this->pointer->value;
+        assert($value instanceof CData);
+        $extra = $value->u2;
+        assert($extra instanceof CData);
+        $accessFlags = $extra->constant_flags;
+        assert(is_int($accessFlags));
+
+        return $accessFlags;
+    }
+
+    /**
+     * Returns the numeric address of the declaring class entry of this constant
+     */
+    public function getDeclaringClassAddress(): int
+    {
+        $declaringClass = $this->pointer->ce;
+        assert($declaringClass instanceof CData);
+
+        return Core::addressOf($declaringClass);
+    }
+
+    /**
+     * Mints an immortal zend_class_constant container adopting this (donor) constant,
+     * rebased onto the given target class
+     *
+     * The container is a malloc-backed tracked block that owns its own payload
+     * references (value, doc comment, attributes): the engine releases them when the
+     * target class is destroyed, and it never frees the container itself (it assumes
+     * arena storage). Publish the returned reflection into the class constants table
+     * with getRawValue(); undo with releaseContainer().
+     *
+     * @internal used by the hot-swap machinery (ClassDelta "added constant")
+     */
+    public function adoptForClass(ReflectionClass $target): ReflectionClassConstant
+    {
+        $container = Core::trackedNew('zend_class_constant', true);
+        Core::memcpy($container, $this->pointer, Core::sizeof($container));
+        // The engine releases the payload of constants whose ce matches the class
+        // being destroyed - the adopted constant belongs to the target class now
+        $container->ce = $target->getRawValue();
+
+        $adopted = self::fromRawEntry($container);
+        // The container owns its own payload references
+        $adopted->getReflectionValue()->addReference();
+        $docComment = $container->doc_comment;
+        if ($docComment !== null) {
+            assert($docComment instanceof CData);
+            StringEntry::fromCData($docComment)->copy();
+        }
+        $adopted->referenceAttributes(1);
+
+        return $adopted;
+    }
+
+    /**
+     * Releases everything an adopted container took and frees the container block
+     *
+     * @internal rollback of adoptForClass()
+     */
+    public function releaseContainer(): void
+    {
+        $this->getReflectionValue()->destroy();
+        $docComment = $this->pointer->doc_comment;
+        if ($docComment !== null) {
+            assert($docComment instanceof CData);
+            StringEntry::fromCData($docComment)->releaseReference();
+        }
+        $this->referenceAttributes(-1);
+        Core::untrackAndFree(Core::addr($this->pointer));
+    }
+
+    /**
+     * Adjusts the refcount of the attributes table by the given delta (no-op when the
+     * constant has no attributes or the table is immutable)
+     */
+    private function referenceAttributes(int $delta): void
+    {
+        $attributes = $this->pointer->attributes;
+        if ($attributes === null) {
+            return;
+        }
+        assert($attributes instanceof CData);
+        $attributesTable = HashTable::fromCData($attributes);
+        if ($attributesTable->isImmutable()) {
+            return;
+        }
+        if ($delta > 0) {
+            $attributesTable->incrementReferenceCount();
+        } else {
+            $attributesTable->decrementReferenceCount();
+        }
     }
 
     /**

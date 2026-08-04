@@ -79,45 +79,98 @@ class ReflectionProperty extends NativeReflectionProperty
     }
 
     /**
-     * Returns the shaped view of a raw zend_property_info structure
+     * Creates a low-level reflection over a raw zend_property_info structure
      *
-     * The declared shape (see phpstan.dist.neon typeAliases and AGENTS.md) is the
-     * single narrowing point for property-info field access. This is a static view:
-     * property infos of classes that are not published under their own name (eg
-     * hot-swap donor entries) cannot be wrapped through fromCData(), which resolves
-     * the native reflection state by name.
+     * Unlike fromCData() this does NOT initialize the native reflection state, so it
+     * works for property infos of classes that are not published under their own name
+     * (eg hot-swap donor entries residing only as structures in memory). Only the
+     * pointer-level API (getOffset()/getFlags()/getTypeMask()/getSurface()) is usable,
+     * native introspection is not.
      *
-     * @param CData $propertyInfo zend_property_info pointer
-     *
-     * @return ZendPropertyInfoShape
-     *
-     * @internal shared with the hot-swap machinery (HotSwap/ClassDelta)
+     * @internal used by the hot-swap machinery (HotSwap/ClassDelta)
      */
-    public static function viewPropertyInfo(CData $propertyInfo): object
+    public static function fromRawEntry(CData $propertyInfo): ReflectionProperty
     {
-        /** @var ZendPropertyInfoShape $shapedInfo */
-        $shapedInfo = self::asStructView($propertyInfo);
+        /** @var ReflectionProperty $reflectionProperty */
+        $reflectionProperty          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionProperty->pointer = $propertyInfo;
 
-        return $shapedInfo;
+        return $reflectionProperty;
     }
 
     /**
-     * Widens a CData handle to plain `object` so a shape @var can be declared on it
-     *
-     * FFI\CData is final: a shape alias (stdClass&object{...}) is not a subtype of
-     * the CData native type, so the narrowing must go through the object supertype.
-     */
-    private static function asStructView(CData $struct): object
-    {
-        return $struct;
-    }
-
-    /**
-     * Returns an offset of this property
+     * Returns the storage offset of this property within the object/static table
      */
     public function getOffset(): int
     {
-        return $this->pointer->offset;
+        $offset = $this->pointer->offset;
+        assert(is_int($offset));
+
+        return $offset;
+    }
+
+    /**
+     * Returns the ZEND_ACC_* flags word of this property declaration
+     */
+    public function getFlags(): int
+    {
+        $flags = $this->pointer->flags;
+        assert(is_int($flags));
+
+        return $flags;
+    }
+
+    /**
+     * Returns the type mask (zend_type.type_mask) of this property's declared type
+     */
+    public function getTypeMask(): int
+    {
+        $type = $this->pointer->type;
+        assert($type instanceof CData);
+        $typeMask = $type->type_mask;
+        assert(is_int($typeMask));
+
+        return $typeMask;
+    }
+
+    /**
+     * Returns the numeric address of the class entry that declares this property
+     */
+    public function getDeclaringClassAddress(): int
+    {
+        $declaringClass = $this->pointer->ce;
+        assert($declaringClass instanceof CData);
+
+        return Core::addressOf($declaringClass);
+    }
+
+    /**
+     * Checks if this property is declared static
+     */
+    public function isStatic(): bool
+    {
+        return ($this->getFlags() & Core::ZEND_ACC_STATIC) !== 0;
+    }
+
+    /**
+     * Checks if this property is virtual (hooked, no backing storage slot)
+     */
+    public function isVirtual(): bool
+    {
+        return ($this->getFlags() & Core::ZEND_ACC_VIRTUAL) !== 0;
+    }
+
+    /**
+     * Returns the comparable declaration shape (flags, storage offset, type mask)
+     *
+     * Two properties with equal surfaces occupy the same slot layout, which is what the
+     * hot-swap compatibility guard checks before allowing a default-value-only swap.
+     *
+     * @return array{int, int, int}
+     */
+    public function getSurface(): array
+    {
+        return [$this->getFlags(), $this->getOffset(), $this->getTypeMask()];
     }
 
     /**

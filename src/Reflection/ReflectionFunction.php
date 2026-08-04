@@ -20,7 +20,7 @@ use ZEngine\Core;
 use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\StringEntry;
 
-class ReflectionFunction extends NativeReflectionFunction
+class ReflectionFunction extends NativeReflectionFunction implements FunctionLikeInterface
 {
     use FunctionLikeTrait;
 

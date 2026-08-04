@@ -15,7 +15,6 @@ namespace ZEngine\Reflection;
 
 use FFI\CData;
 use ZEngine\Core;
-use ZEngine\Memory\SharedMemory;
 use ZEngine\Memory\SharedMemoryException;
 use ZEngine\Type\ArgumentEntry;
 use ZEngine\Type\ClosureEntry;
@@ -138,16 +137,15 @@ trait FunctionLikeTrait
                 }
                 // Copy the entry out of SHM: the per-process function-table bucket is
                 // repointed at a writable container, the SHM original stays untouched
-                $this->pointer = SharedMemory::copyOutFunctionEntry(
-                    $this->pointer,
-                    Core::$executor->functionTable,
-                    strtolower($this->getName()),
-                );
+                // (never written, never freed)
+                $this->pointer = $this->copyOutOfSharedMemory();
             }
 
+            $entryFunction = ReflectionFunction::fromCData($this->pointer);
+            $donorFunction = ReflectionFunction::fromCData(Core::addr($newFunction));
             FunctionBodySwap::swapUserFunctionBody(
-                $this->pointer,
-                Core::addr($newFunction),
+                $entryFunction,
+                $donorFunction,
                 preserveDeclaration: true,
                 // The donor closure owns (and destroys) its static-variables table
                 duplicateStatics: true,
@@ -155,7 +153,7 @@ trait FunctionLikeTrait
                 destroyPrevious: !$isSharedMemoryEntry,
                 // Subclass method tables may share this very structure - every such
                 // bucket releases one body reference when the engine destroys it
-                publishedShares: FunctionBodySwap::countPublishedShares($this->pointer),
+                publishedShares: FunctionBodySwap::countPublishedShares($entryFunction),
             )->commit();
         } else {
             // For internal function we can simply adjust a handler
@@ -166,6 +164,43 @@ trait FunctionLikeTrait
                 $rawValue->setNativeValue($result);
             };
         }
+    }
+
+    /**
+     * Copies this opcache-shared global function out of shared memory into a writable
+     * container and repoints its per-process function-table bucket at the copy
+     *
+     * The SHM original is left completely untouched (never written, never freed). The
+     * writable container is a malloc-backed immortal-by-design block (see
+     * docs/long-running.md): the engine's function table destructor releases the body
+     * it will eventually carry but never frees user zend_function containers, and a
+     * request-lifetime block would dangle if the engine walked it after the FFI request
+     * memory was reclaimed.
+     *
+     * @return CData Writable zend_function pointer now published in the table
+     */
+    private function copyOutOfSharedMemory(): CData
+    {
+        $lowerKey    = strtolower($this->getName());
+        $bucketValue = Core::$executor->functionTable->find($lowerKey);
+        if ($bucketValue === null) {
+            throw SharedMemoryException::functionNotPublished($lowerKey);
+        }
+
+        $writableEntry = Core::trackedNew('zend_function', true);
+        Core::memcpy($writableEntry, $this->pointer, Core::sizeof($writableEntry));
+
+        // The writable copy is not opcache-shared anymore; everything it points at
+        // still is, so the body must be replaced (not freed) by the caller. The copy
+        // is a user function, so its common struct carries the fn_flags word.
+        $writablePointer = Core::cast('zend_function *', Core::addr($writableEntry));
+        $writableCommon  = ReflectionFunction::fromCData($writablePointer)->getCommonPointer();
+        $writableCommon->fn_flags &= (~Core::ZEND_ACC_IMMUTABLE);
+
+        // Repoint the per-process bucket at the writable copy (IS_PTR payload)
+        $bucketValue->setPointer($writablePointer);
+
+        return $writablePointer;
     }
 
     /**
@@ -586,5 +621,16 @@ trait FunctionLikeTrait
     public function getAddress(): int
     {
         return Core::addressOf($this->pointer);
+    }
+
+    /**
+     * Returns the raw zend_function pointer this reflection wraps
+     *
+     * @internal shared with the body-swap machinery (FunctionBodySwap), which performs
+     *           the low-level engine surgery on the entry
+     */
+    public function getEntryPointer(): CData
+    {
+        return $this->pointer;
     }
 }

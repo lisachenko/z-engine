@@ -99,8 +99,8 @@ final class FunctionBodySwap
      * returned). Nothing is destroyed until commit, so a batch of swaps can be staged
      * and reverted atomically.
      *
-     * @param CData $entry               zend_function pointer of the published entry (user function)
-     * @param CData $donor               zend_function pointer whose op_array becomes the new body
+     * @param FunctionLikeInterface $entryFunction Published entry (user function/method) to swap
+     * @param FunctionLikeInterface $donorFunction Donor whose op_array becomes the new body
      * @param bool  $preserveDeclaration True keeps the entry's declaration identity (prototype and
      *                                   declaration-level flags - the redefine() contract); false
      *                                   adopts the donor's declaration (the ClassDelta contract,
@@ -118,16 +118,17 @@ final class FunctionBodySwap
      * @internal
      */
     public static function swapUserFunctionBody(
-        CData $entry,
-        CData $donor,
+        FunctionLikeInterface $entryFunction,
+        FunctionLikeInterface $donorFunction,
         bool $preserveDeclaration,
         bool $duplicateStatics,
         bool $destroyPrevious = true,
         int $publishedShares = 1,
     ): PendingBodySwap {
         assert($publishedShares >= 1);
-        $entryFunction = ReflectionFunction::fromCData($entry);
-        $entryAddress  = $entryFunction->getAddress();
+        $entry        = $entryFunction->getEntryPointer();
+        $donor        = $donorFunction->getEntryPointer();
+        $entryAddress = $entryFunction->getAddress();
 
         // Snapshot the previous body byte-exact: rollback restores it wholesale, commit
         // detaches the shared identity fields and destroys the rest
@@ -142,7 +143,7 @@ final class FunctionBodySwap
         $previousScope = $entryCommon->scope;
         $previousProto = $entryCommon->prototype;
         $previousFlags = $entryCommon->fn_flags;
-        $donorFlags    = ReflectionFunction::fromCData($donor)->getCommonPointer()->fn_flags;
+        $donorFlags    = $donorFunction->getCommonPointer()->fn_flags;
 
         // Replace the whole function with the donor-backed one (the donor structure
         // itself stays untouched - it keeps sole ownership of its own fields)
@@ -171,7 +172,7 @@ final class FunctionBodySwap
         $mintedDefaults       = self::unshareStaticVariables($entryFunction, $duplicateStatics, $entryAddress);
 
         return new PendingBodySwap(
-            $entry,
+            $entryFunction,
             $previousBody,
             $entryAddress,
             $publishedShares,
@@ -190,14 +191,11 @@ final class FunctionBodySwap
      * Class aliases resolve to the same class entry and are deduplicated; a structure
      * published in no class table (a plain function entry) counts as one share.
      *
-     * @param CData $entry zend_function pointer of a published user function/method
-     *
      * @internal
      */
-    public static function countPublishedShares(CData $entry): int
+    public static function countPublishedShares(FunctionLikeInterface $entryFunction): int
     {
-        $entryFunction = ReflectionFunction::fromCData($entry);
-        $entryCommon   = $entryFunction->getCommonPointer();
+        $entryCommon = $entryFunction->getCommonPointer();
         if ($entryCommon->scope === null) {
             return 1;
         }
@@ -243,19 +241,19 @@ final class FunctionBodySwap
      * releases a name reference when the engine destroys it), a fresh run-time cache
      * and lazily-materialized statics. The donor may be destroyed afterwards.
      *
-     * @param CData $container zend_function container to fill (writable, zeroed or reused)
-     * @param CData $donor     zend_function pointer of the donor method
-     * @param CData $newScope  zend_class_entry the published method will belong to
+     * @param CData              $container zend_function container to fill (writable, zeroed or reused)
+     * @param FunctionLikeInterface $donor  Donor method whose body is adopted
+     * @param ReflectionClass    $newScope  Class the published method will belong to
      *
      * @internal
      */
-    public static function adoptFunctionForPublishing(CData $container, CData $donor, CData $newScope): void
+    public static function adoptFunctionForPublishing(CData $container, FunctionLikeInterface $donor, ReflectionClass $newScope): void
     {
-        Core::memcpy($container, $donor, Core::sizeof(Core::type('zend_function')));
+        Core::memcpy($container, $donor->getEntryPointer(), Core::sizeof(Core::type('zend_function')));
 
         $containerFunction      = ReflectionFunction::fromCData(Core::cast('zend_function *', Core::addr($container)));
         $containerCommon        = $containerFunction->getCommonPointer();
-        $containerCommon->scope = $newScope;
+        $containerCommon->scope = $newScope->getRawValue();
 
         // The published bucket owns one reference on the name and one body share
         $namePointer = $containerCommon->function_name;
@@ -271,14 +269,11 @@ final class FunctionBodySwap
      * Takes the ownership a published method bucket holds on an existing entry: one
      * name reference and one body share (mirrors zend_duplicate_function)
      *
-     * @param CData $entry zend_function pointer the bucket will point at
-     *
      * @internal used by ClassDelta when republishing inherited entries
      */
-    public static function acquireBucketOwnership(CData $entry): void
+    public static function acquireBucketOwnership(FunctionLikeInterface $entryFunction): void
     {
-        $entryFunction = ReflectionFunction::fromCData($entry);
-        $namePointer   = $entryFunction->getCommonPointer()->function_name;
+        $namePointer = $entryFunction->getCommonPointer()->function_name;
         assert($namePointer instanceof CData);
         StringEntry::fromCData($namePointer)->copy();
 
@@ -289,13 +284,10 @@ final class FunctionBodySwap
      * Returns the ownership taken by acquireBucketOwnership (rollback path only:
      * other holders provably keep the name and the body alive)
      *
-     * @param CData $entry zend_function pointer the bucket pointed at
-     *
      * @internal used by ClassDelta when rolling an inherited republish back
      */
-    public static function releaseBucketOwnership(CData $entry): void
+    public static function releaseBucketOwnership(FunctionLikeInterface $entryFunction): void
     {
-        $entryFunction   = ReflectionFunction::fromCData($entry);
         $refCountPointer = $entryFunction->getOpArrayPointer()->refcount;
         if ($refCountPointer !== null) {
             $referenceCount = self::counterValue($refCountPointer);
@@ -314,7 +306,7 @@ final class FunctionBodySwap
      * Immutable (opcache SHM) bodies carry no refcount at all - they are process-shared
      * and never freed, so there is nothing to account for.
      */
-    private static function addBodyReference(ReflectionFunction $entryFunction): void
+    private static function addBodyReference(FunctionLikeInterface $entryFunction): void
     {
         $refCountPointer = $entryFunction->getOpArrayPointer()->refcount;
         if ($refCountPointer !== null) {
@@ -327,7 +319,7 @@ final class FunctionBodySwap
      *
      * Only legal while another holder (the donor) provably keeps the body alive.
      */
-    private static function dropBodyReferences(ReflectionFunction $entryFunction, int $count): void
+    private static function dropBodyReferences(FunctionLikeInterface $entryFunction, int $count): void
     {
         $refCountPointer = $entryFunction->getOpArrayPointer()->refcount;
         if ($refCountPointer !== null) {
@@ -361,7 +353,7 @@ final class FunctionBodySwap
      * destroy_op_array together with the entry - and by the next swap's
      * previous-body destruction, which keeps repeated swaps memory-flat.
      */
-    private static function installFreshRunTimeCache(ReflectionFunction $entryFunction): void
+    private static function installFreshRunTimeCache(FunctionLikeInterface $entryFunction): void
     {
         $opArray     = $entryFunction->getOpArrayPointer();
         $entryCommon = $entryFunction->getCommonPointer();
@@ -390,7 +382,7 @@ final class FunctionBodySwap
      * @return bool True when an own defaults duplicate was minted for the entry
      */
     private static function unshareStaticVariables(
-        ReflectionFunction $entryFunction,
+        FunctionLikeInterface $entryFunction,
         bool $duplicateStatics,
         int $entryAddress,
     ): bool {
@@ -404,8 +396,8 @@ final class FunctionBodySwap
             // must set the flag or its materialized table leaks at request end
             $entryScope = $entryFunction->getCommonPointer()->scope;
             if ($entryScope !== null) {
-                ReflectionClass::fromCData($entryScope)->getClassEntry()->ce_flags
-                    |= Core::engineConstant('ZEND_HAS_STATIC_IN_METHODS');
+                ReflectionClass::fromCData($entryScope)
+                    ->markHasStaticInMethods();
             }
         }
         if ($defaultsTable === null || !$duplicateStatics) {
@@ -523,17 +515,16 @@ final class FunctionBodySwap
      * @internal called by PendingBodySwap::rollback() while the donor is still alive
      */
     public static function releaseSwappedInBody(
-        CData $entry,
+        FunctionLikeInterface $entryFunction,
         int $entryAddress,
         int $publishedShares,
         bool $mintedDefaults,
         ?int $previousMintedRecord,
     ): void {
         // The fresh run-time cache was installed by the swap and is not published anywhere
-        $entryFunction = ReflectionFunction::fromCData($entry);
-        $opArray       = $entryFunction->getOpArrayPointer();
-        $entryFlags    = $entryFunction->getCommonPointer()->fn_flags;
-        $cachePointer  = $opArray->run_time_cache__ptr;
+        $opArray      = $entryFunction->getOpArrayPointer();
+        $entryFlags   = $entryFunction->getCommonPointer()->fn_flags;
+        $cachePointer = $opArray->run_time_cache__ptr;
         if (($entryFlags & Core::ZEND_ACC_HEAP_RT_CACHE) !== 0 && $cachePointer !== null) {
             Core::free($cachePointer);
         }

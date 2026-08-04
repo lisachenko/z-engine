@@ -35,16 +35,16 @@ final class PendingBodySwap
     private bool $isResolved = false;
 
     /**
-     * @param CData $entry                zend_function pointer of the swapped entry
-     * @param CData $previousBody         zend_function snapshot of the previous body
-     * @param int   $entryAddress         Numeric identity of the entry
-     * @param int   $publishedShares      Bucket shares held on both the previous and the new body
-     * @param bool  $destroyPrevious      False for shared-memory previous bodies (never freed)
-     * @param bool  $mintedDefaults       True when the swap minted an own statics defaults duplicate
-     * @param ?int  $previousMintedRecord Bookkeeping record of the previous committed swap, if any
+     * @param FunctionLikeInterface $entry             Swapped entry (published function/method)
+     * @param CData              $previousBody         zend_function snapshot of the previous body
+     * @param int                $entryAddress         Numeric identity of the entry
+     * @param int                $publishedShares      Bucket shares held on both the previous and the new body
+     * @param bool               $destroyPrevious      False for shared-memory previous bodies (never freed)
+     * @param bool               $mintedDefaults       True when the swap minted an own statics defaults duplicate
+     * @param ?int               $previousMintedRecord Bookkeeping record of the previous committed swap, if any
      */
     public function __construct(
-        private CData $entry,
+        private FunctionLikeInterface $entry,
         private CData $previousBody,
         private int $entryAddress,
         private int $publishedShares,
@@ -83,7 +83,7 @@ final class PendingBodySwap
             $this->mintedDefaults,
             $this->previousMintedRecord,
         );
-        Core::memcpy($this->entry, Core::addr($this->previousBody), Core::sizeof($this->previousBody));
+        Core::memcpy($this->entry->getEntryPointer(), Core::addr($this->previousBody), Core::sizeof($this->previousBody));
     }
 
     private function assertUnresolved(): void
