@@ -268,9 +268,15 @@ final class ClassDelta
      */
     public function isEmpty(): bool
     {
-        return $this->changedMethods    === [] && $this->addedMethods === [] && $this->removedMethods === []
-                                               && $this->changedConstants  === [] && $this->addedConstants === []
-                                               && $this->changedProperties === [] && $this->changedStatics === [];
+        return array_filter([
+            $this->changedMethods,
+            $this->addedMethods,
+            $this->removedMethods,
+            $this->changedConstants,
+            $this->addedConstants,
+            $this->changedProperties,
+            $this->changedStatics,
+        ]) === [];
     }
 
     /**
@@ -451,8 +457,12 @@ final class ClassDelta
 
     private function touchesClassConstants(): bool
     {
-        return $this->changedConstants  !== [] || $this->addedConstants !== []
-                                               || $this->changedProperties !== [] || $this->changedStatics !== [];
+        return array_filter([
+            $this->changedConstants,
+            $this->addedConstants,
+            $this->changedProperties,
+            $this->changedStatics,
+        ]) !== [];
     }
 
     private function releaseDonor(): void
