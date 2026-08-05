@@ -15,7 +15,7 @@ namespace ZEngine\Reflection;
 
 use FFI\CData;
 use ZEngine\Core;
-use ZEngine\Memory\SharedMemoryException;
+use ZEngine\OpCache\SharedMemoryException;
 use ZEngine\Type\ArgumentEntry;
 use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\HashTable;

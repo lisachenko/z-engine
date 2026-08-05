@@ -11,7 +11,7 @@
  */
 declare(strict_types=1);
 
-namespace ZEngine\Memory;
+namespace ZEngine\OpCache;
 
 /**
  * Raised when a mutation API targets an engine structure that lives in opcache

@@ -16,7 +16,7 @@ namespace ZEngine\HotSwap;
 use ZEngine\AbstractSyntaxTree\NodeInterface;
 use ZEngine\AbstractSyntaxTree\NodeKind;
 use ZEngine\Core;
-use ZEngine\Memory\SharedMemoryException;
+use ZEngine\OpCache\SharedMemoryException;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\StructArray;

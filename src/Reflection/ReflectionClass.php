@@ -64,7 +64,7 @@ use ZEngine\ClassExtension\ObjectUnsetPropertyInterface;
 use ZEngine\ClassExtension\ObjectWriteDimensionInterface;
 use ZEngine\ClassExtension\ObjectWritePropertyInterface;
 use ZEngine\Core;
-use ZEngine\Memory\SharedMemoryException;
+use ZEngine\OpCache\SharedMemoryException;
 use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
