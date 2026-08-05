@@ -331,6 +331,8 @@ class ReflectionClass extends NativeReflectionClass
 
     /**
      * @inheritDoc
+     *
+     * @return ReflectionMethod
      */
     #[\ReturnTypeWillChange]
     public function getMethod($name)
@@ -341,6 +343,18 @@ class ReflectionClass extends NativeReflectionClass
         }
 
         return ReflectionMethod::fromCData($functionEntry->getRawFunction());
+    }
+
+    /**
+     * @inheritDoc
+     *
+     * Reads the low-level method table, so it also resolves methods that live only as
+     * structures in memory (dynamic/hot-swap entries not registered natively).
+     */
+    #[\ReturnTypeWillChange]
+    public function hasMethod($name)
+    {
+        return $this->methodTable->find(strtolower($name)) !== null;
     }
 
     /**
@@ -515,46 +529,6 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
-     * Returns the numeric address of the parent class entry, or null when unlinked/root
-     *
-     * @internal used by the hot-swap compatibility guard
-     */
-    public function getParentAddress(): ?int
-    {
-        $parent = $this->pointer->parent;
-        if ($parent === null) {
-            return null;
-        }
-        assert($parent instanceof CData);
-
-        return Core::addressOf($parent);
-    }
-
-    /**
-     * Returns the sorted numeric addresses of the resolved interface entries
-     *
-     * @return list<int>
-     *
-     * @internal used by the hot-swap compatibility guard (linked classes only)
-     */
-    public function getInterfaceAddresses(): array
-    {
-        $addresses = [];
-        $total     = $this->pointer->num_interfaces;
-        assert(is_int($total));
-        $interfaceList = $this->pointer->interfaces;
-        for ($index = 0; $index < $total; $index++) {
-            assert($interfaceList instanceof CData);
-            $interfaceEntry = $interfaceList[$index];
-            assert($interfaceEntry instanceof CData);
-            $addresses[] = Core::addressOf($interfaceEntry);
-        }
-        sort($addresses);
-
-        return $addresses;
-    }
-
-    /**
      * Returns the user methods the class declares itself, keyed by lowercased name
      *
      * Reads the low-level method table, so it also sees dynamic/non-persistent methods
@@ -583,21 +557,6 @@ class ReflectionClass extends NativeReflectionClass
         }
 
         return $declaredMethods;
-    }
-
-    /**
-     * Returns a single declared/inherited method by name, or null when not present
-     *
-     * @internal shared with the hot-swap machinery (ClassDelta)
-     */
-    public function findMethod(string $name): ?ReflectionMethod
-    {
-        $methodEntryValue = $this->methodTable->find(strtolower($name));
-        if ($methodEntryValue === null) {
-            return null;
-        }
-
-        return ReflectionMethod::fromCData($methodEntryValue->getRawFunction());
     }
 
     /**
@@ -637,7 +596,7 @@ class ReflectionClass extends NativeReflectionClass
             $constant = ReflectionClassConstant::fromRawEntry(
                 Core::cast('zend_class_constant *', $constantValue->getRawPointer()),
             );
-            if ($constant->getDeclaringClassAddress() === $selfAddress) {
+            if ($constant->getDeclaringClass()->getAddress() === $selfAddress) {
                 $declaredConstants[$constantName] = $constant;
             }
         }
@@ -664,7 +623,7 @@ class ReflectionClass extends NativeReflectionClass
             $property = ReflectionProperty::fromRawEntry(
                 Core::cast('zend_property_info *', $propertyValue->getRawPointer()),
             );
-            if ($property->getDeclaringClassAddress() === $selfAddress) {
+            if ($property->getDeclaringClass()->getAddress() === $selfAddress) {
                 $declaredProperties[$propertyName] = $property;
             }
         }
@@ -689,7 +648,7 @@ class ReflectionClass extends NativeReflectionClass
         $count    = $this->pointer->default_properties_count;
         assert($table instanceof CData && is_int($count));
 
-        return ReflectionValue::fromValueEntry((new StructArray($table, $count))->rawAt($slot));
+        return ReflectionValue::fromValueEntry((new StructArray($table, $count))[$slot]);
     }
 
     /**
@@ -707,7 +666,7 @@ class ReflectionClass extends NativeReflectionClass
         $count = $this->pointer->default_static_members_count;
         assert($table instanceof CData && is_int($count));
 
-        return ReflectionValue::fromValueEntry((new StructArray($table, $count))->rawAt($slot));
+        return ReflectionValue::fromValueEntry((new StructArray($table, $count))[$slot]);
     }
 
     /**

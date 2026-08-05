@@ -239,7 +239,7 @@ final class HotSwap
      */
     private static function publishClassEntry(string $lowerName, ReflectionClass $reflectionClass): void
     {
-        $rawClass   = (new StructArray($reflectionClass->getRawValue(), 1))->rawAt(0);
+        $rawClass   = (new StructArray($reflectionClass->getRawValue(), 1))[0];
         $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawClass);
         Core::$executor->classTable->add($lowerName, $valueEntry);
         $valueEntry->release();
@@ -259,12 +259,12 @@ final class HotSwap
         string $className,
     ): void {
         // Parent must be the same linked class entry
-        if ($liveClass->getParentAddress() !== $donorClass->getParentAddress()) {
+        if ($liveClass->getParentClass()?->getAddress() !== $donorClass->getParentClass()?->getAddress()) {
             throw HotSwapException::parentChanged($className);
         }
 
         // Interface sets must match (both classes are linked, so the resolved list is present)
-        if ($liveClass->getInterfaceAddresses() !== $donorClass->getInterfaceAddresses()) {
+        if (self::interfaceAddresses($liveClass) !== self::interfaceAddresses($donorClass)) {
             throw HotSwapException::interfacesChanged($className);
         }
 
@@ -273,6 +273,25 @@ final class HotSwap
         if (self::ownPropertySurface($liveClass) !== self::ownPropertySurface($donorClass)) {
             throw HotSwapException::propertySurfaceChanged($className);
         }
+    }
+
+    /**
+     * Returns the sorted numeric addresses of the class's resolved interface entries
+     *
+     * Reads through the native getInterfaces() override; each interface resolves to its
+     * globally registered class entry, so live and donor produce comparable addresses.
+     *
+     * @return list<int>
+     */
+    private static function interfaceAddresses(ReflectionClass $reflectionClass): array
+    {
+        $addresses = [];
+        foreach ($reflectionClass->getInterfaces() as $interface) {
+            $addresses[] = $interface->getAddress();
+        }
+        sort($addresses);
+
+        return $addresses;
     }
 
     /**

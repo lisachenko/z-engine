@@ -129,25 +129,10 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
      */
     public function getAccessFlags(): int
     {
+        /** @var ZvalShape $value */
         $value = $this->pointer->value;
-        assert($value instanceof CData);
-        $extra = $value->u2;
-        assert($extra instanceof CData);
-        $accessFlags = $extra->constant_flags;
-        assert(is_int($accessFlags));
 
-        return $accessFlags;
-    }
-
-    /**
-     * Returns the numeric address of the declaring class entry of this constant
-     */
-    public function getDeclaringClassAddress(): int
-    {
-        $declaringClass = $this->pointer->ce;
-        assert($declaringClass instanceof CData);
-
-        return Core::addressOf($declaringClass);
+        return $value->u2->constant_flags;
     }
 
     /**

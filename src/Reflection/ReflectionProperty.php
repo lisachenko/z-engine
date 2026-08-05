@@ -134,17 +134,6 @@ class ReflectionProperty extends NativeReflectionProperty
     }
 
     /**
-     * Returns the numeric address of the class entry that declares this property
-     */
-    public function getDeclaringClassAddress(): int
-    {
-        $declaringClass = $this->pointer->ce;
-        assert($declaringClass instanceof CData);
-
-        return Core::addressOf($declaringClass);
-    }
-
-    /**
      * Checks if this property is declared static
      */
     public function isStatic(): bool

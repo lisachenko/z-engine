@@ -129,7 +129,7 @@ final class ClassDelta
                 }
                 continue;
             }
-            if ($liveClass->findMethod($lowerName) !== null) {
+            if ($liveClass->hasMethod($lowerName)) {
                 throw HotSwapException::inheritedMethodOverride($className, $lowerName);
             }
             if (in_array($lowerName, self::MAGIC_METHOD_NAMES, true) || str_starts_with($lowerName, '__')) {
@@ -146,7 +146,9 @@ final class ClassDelta
             }
             // If an ancestor declares the same method, the donor inherited it during
             // linking: republishing that ancestor entry restores plain inheritance
-            $removedMethods[$lowerName] = $donorClass->findMethod($lowerName);
+            $removedMethods[$lowerName] = $donorClass->hasMethod($lowerName)
+                ? $donorClass->getMethod($lowerName)
+                : null;
         }
 
         // Constants: only values (and their access flags) may change; the constant set
@@ -305,8 +307,7 @@ final class ClassDelta
 
         try {
             foreach ($this->changedMethods as $lowerName => $donorMethod) {
-                $entry = $this->liveClass->findMethod($lowerName);
-                assert($entry !== null);
+                $entry   = $this->liveClass->getMethod($lowerName);
                 $pending = FunctionBodySwap::swapUserFunctionBody(
                     $entry,
                     $donorMethod,
@@ -344,8 +345,7 @@ final class ClassDelta
             }
 
             foreach ($this->removedMethods as $lowerName => $fallbackMethod) {
-                $previousMethod = $this->liveClass->findMethod($lowerName);
-                assert($previousMethod !== null);
+                $previousMethod = $this->liveClass->getMethod($lowerName);
                 $methodTable->deleteWithoutDestructor($lowerName);
                 if ($fallbackMethod !== null) {
                     // Restore plain inheritance: the bucket owns one name reference and
@@ -462,7 +462,7 @@ final class ClassDelta
             // (bounded - it is unreachable and carries no trampolines)
             return;
         }
-        $rawClass   = (new StructArray($reflectionClass->getRawValue(), 1))->rawAt(0);
+        $rawClass   = (new StructArray($reflectionClass->getRawValue(), 1))[0];
         $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawClass);
         Core::call('destroy_zend_class', $valueEntry->getRawValue());
         $valueEntry->release();
@@ -507,7 +507,7 @@ final class ClassDelta
         // newEntry(IS_PTR) stores the ADDRESS of the CData it receives, so it needs the
         // dereferenced zend_function struct, not the 8-byte pointer variable (which FFI
         // refuses to reinterpret as a larger zval - "attempt to cast to larger type")
-        $rawFunction = (new StructArray($method->getEntryPointer(), 1))->rawAt(0);
+        $rawFunction = (new StructArray($method->getEntryPointer(), 1))[0];
         $valueEntry  = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $rawFunction);
         $table->add($lowerName, $valueEntry);
         $valueEntry->release();
