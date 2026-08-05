@@ -139,34 +139,41 @@ audited for it.
 
 ## Engine structs are owned by their reflection/type class, never poked from call sites
 
-Every raw engine struct is reached through the ONE reflection/type class that owns it,
-never from a caller reaching into a `CData`. The owning class exposes typed accessors -
+This applies to EVERY class: if a class is responsible for a structure, then all external
+manipulation of that structure goes only through that class's interface API - callers
+never reach into a raw `CData`. The owning class exposes typed accessors -
 `ReflectionMethod::equals()`, `ReflectionClassConstant::getAccessFlags()`,
-`ReflectionProperty::getOffset()/getFlags()/getSurface()`,
+`ReflectionProperty::getOffset()/getFlags()/getSurface()/getDeclaringClass()`,
 `ReflectionValue::getBaseType()/equals()/replaceWith()`, `ReflectionClass::getFlags()/
-getParentAddress()/getInterfaceAddresses()/isImmutable()` - and the field pokes
-(`$this->pointer->...`) plus their single-hop narrowing `assert()`s live INSIDE those
-methods. Consumers (`HotSwap`, `ClassDelta`, `FunctionBodySwap`) operate on
-`Reflection*` objects and pass/return those, not structs. The escape hatch is a single
-`getRawValue()` / `getRawData()` returning the bare `CData` for the low-level machinery
-that genuinely needs it (the body-swap surgery); prefer a typed accessor over calling it.
+getParentClass()/getInterfaces()/getMethod()/hasMethod()/isImmutable()` - and the field
+pokes (`$this->pointer->...`) live INSIDE those methods. Prefer overriding the native
+reflection method (`getMethod()`, `getInterfaces()`, `getParentClass()`,
+`getDeclaringClass()`) so the result is drop-in compatible with native reflection; a
+consumer that needs the raw pointer calls `getAddress()` on the returned object. Consumers
+(`HotSwap`, `ClassDelta`, `FunctionBodySwap`) operate on `Reflection*` objects and
+pass/return those, not structs. The escape hatch is a single `getRawValue()` / `getRawData()`
+returning the bare `CData` for the low-level machinery that genuinely needs it (the
+body-swap surgery); prefer a typed accessor over calling it.
 
 Two conventions back this up:
 
-- **Named shapes for the two big function structs.** `zend_function.common` and its
-  `op_array` are described once as PHPStan object shapes (`ZendFunctionCommonShape`,
-  `ZendOpArrayShape`) via `parameters.typeAliases` in `phpstan.dist.neon`, surfaced by
-  `FunctionLikeTrait::getCommonPointer()/getOpArrayPointer()` (a nested-field read the
-  analyser infers statically). `FFI\CData` is `final`, so a shape can NOT be attached to
-  a plain `: CData` return and there is no runtime `asStructView()` wrapper - the shape is
-  a return annotation only. If a field is missing from a shape, extend the alias in the
+- **Named shapes for engine structs.** A struct's fields are described once as a PHPStan
+  object shape (`ZendFunctionCommonShape`, `ZendOpArrayShape`, ...) via
+  `parameters.typeAliases` in `phpstan.dist.neon`, surfaced by a `: object` accessor on the
+  owning class (`FunctionLikeTrait::getCommonPointer()/getOpArrayPointer()`) that narrows a
+  nested field read - already `mixed` via the CData ignores - to the shape. PHPStan then
+  carries the field types statically with no runtime assertion. `FFI\CData` is `final`, so a
+  shape can NOT be attached to a plain `: CData` return and there is no runtime
+  `asStructView()` wrapper. If a field is missing from a shape, extend the alias in the
   config; never spell a shape out inline.
 - **Contiguous struct arrays go through `Type\StructArray`.** zval tables (op_array
-  literals, class default property/static tables), pointer lists (resolved interfaces)
-  and single-struct dereferences use the `ArrayAccess`/`Countable` `StructArray` view
-  (`replace()` for in-place slot overwrite) instead of hand-rolled pointer arithmetic.
-  `newEntry(IS_PTR, ...)` stores the ADDRESS of the CData it is handed, so it needs the
-  dereferenced struct (`StructArray(..., 1)->rawAt(0)`), never the 8-byte pointer.
+  literals, class default property/static tables) and pointer lists (resolved interfaces)
+  use the generic `ArrayAccess`/`Countable` `StructArray<T>` view - callers reach elements
+  with `$structArray[$i]` (typed as the element shape `T`, defaulting to `CData`) and
+  `replace()` for an in-place slot overwrite, never hand-rolled pointer arithmetic. A single
+  element read that must be wrapped for typed access goes straight through the owning
+  reflection object (eg `ReflectionValue::fromValueEntry($table[$i])`) rather than being
+  poked out by index at the call site.
 
 Runtime guards that check actual engine invariants (refcount floors, table consistency)
 are not static noise and stay.
