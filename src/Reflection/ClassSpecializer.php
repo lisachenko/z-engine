@@ -1188,8 +1188,8 @@ class ClassSpecializer
      *
      * Two of the three operand encodings survive a straight memcpy and one does not:
      *
-     *  - jump targets are byte offsets from `op_array->opcodes`, so they stay correct once the
-     *    copy's `opcodes` pointer is repointed;
+     *  - jump targets are *signed* byte offsets from the opline itself, so they survive because
+     *    the whole array moves as a unit and every target keeps the same relative distance;
      *  - `live_range` and `try_catch_array` address oplines by index, so they are unaffected;
      *  - **IS_CONST operands are byte offsets from the opline itself** (the engine resolves them
      *    as `(char *) opline + node.constant`, and literals sit immediately after the opcodes in
@@ -1284,7 +1284,15 @@ class ClassSpecializer
             $jumpTarget = $copiedOpline->op2;
             $copiedCode = $copiedOpline->opcode;
             assert($jumpTarget instanceof CData && is_int($copiedCode));
-            if (self::isJumpOperand($copiedCode) && $jumpTarget->num > $total * $opcodeSize) {
+            if (!self::isJumpOperand($copiedCode)) {
+                continue;
+            }
+            // Jump offsets are signed and relative to the opline itself, so a backward jump is a
+            // large unsigned value; resolve it the way the engine does before range-checking
+            $jumpOffset = $jumpTarget->num;
+            assert(is_int($jumpOffset));
+            $targetIndex = $index + intdiv(self::asSignedOffset($jumpOffset), $opcodeSize);
+            if ($targetIndex < 0 || $targetIndex > $total) {
                 return false;
             }
         }

@@ -110,7 +110,7 @@ first, because they are shared with the template by design. Three operand encodi
 
 | Operand | Encoding | Survives the copy? |
 |---|---|---|
-| jump targets | byte offset from `op_array->opcodes` | yes, once `opcodes` is repointed |
+| jump targets | *signed* byte offset from the opline itself | yes - the whole array moves as a unit, so relative distances are unchanged |
 | `IS_CONST` operands | byte offset **from the opline itself** | no - every one is rebased by the distance the array moved |
 | `live_range`, `try_catch_array` | opline indices | yes |
 
