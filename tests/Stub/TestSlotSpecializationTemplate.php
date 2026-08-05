@@ -59,6 +59,47 @@ class TestSlotSpecializationTemplate extends TestSlotSpecializationBase implemen
         return count($values);
     }
 
+    public function constantReturn(): string
+    {
+        // A literal the compiler can prove satisfies `string`, so no check is emitted
+        return 'literal';
+    }
+
+    /**
+     * Non-constant return, so the compiler really emits ZEND_VERIFY_RETURN_TYPE
+     *
+     * @return string
+     */
+    public function describeValue(): string
+    {
+        /** @phpstan-ignore return.type (the point of the fixture is that the engine checks it) */
+        return $this->value;
+    }
+
+    /**
+     * Literals, a loop and a try/catch, so a relocated opcode array has something to get wrong
+     */
+    public function classify(mixed $input): string
+    {
+        try {
+            if ($input < 0) {
+                return 'negative';
+            }
+            if ($input === 0) {
+                return 'zero';
+            }
+            $seen = 0;
+            for ($index = 0; $index < $input; $index++) {
+                $seen++;
+            }
+
+            return 'positive:' . $seen;
+        } finally {
+            // A try region so the copied opcodes carry a try_catch_array entry to get wrong
+            $this->count = $this->count;
+        }
+    }
+
     /**
      * Intentionally untyped: a slot with no zend_type at all cannot be substituted
      *

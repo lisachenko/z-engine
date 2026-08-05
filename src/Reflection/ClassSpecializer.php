@@ -15,7 +15,9 @@ namespace ZEngine\Reflection;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\System\OpCode;
 use ZEngine\Type\HashTable;
+use ZEngine\Type\OpLine;
 use ZEngine\Type\PersistentHashTable;
 use ZEngine\Type\StringEntry;
 
@@ -70,6 +72,17 @@ class ClassSpecializer
      * opcache file cache, preload region) and must never travel onto a runtime copy
      * that lives in plain request memory
      */
+    /**
+     * The three operand slots of a zend_op, paired with the field naming their node type
+     *
+     * @var array<string, string>
+     */
+    private const CONSTANT_OPERAND_FIELDS = [
+        'op1_type'    => 'op1',
+        'op2_type'    => 'op2',
+        'result_type' => 'result',
+    ];
+
     private const STORAGE_CE_FLAGS = ['ZEND_ACC_IMMUTABLE', 'ZEND_ACC_CACHED', 'ZEND_ACC_FILE_CACHED', 'ZEND_ACC_PRELOADED'];
 
     /**
@@ -385,7 +398,10 @@ class ClassSpecializer
                     );
                 }
                 $this->assertSlotTypeWritable($returnType, $context);
-                $this->assertSignatureTypeIsEnforceable($returnType, $context);
+                $this->assertReturnTypeIsEnforceable(
+                    Core::cast('zend_op_array *', (new ReflectionMethod($sourceClassName, $slot->memberName))->getEntryPointer()),
+                    $context,
+                );
 
                 continue;
             }
@@ -397,8 +413,9 @@ class ClassSpecializer
                     "Cannot substitute {$context}: the method declares only " . count($parameters) . ' parameter(s)',
                 );
             }
+            // A builtin parameter needs its cached ZEND_RECV mask patched as well, which
+            // duplicateMethod() handles by un-sharing the opcode array; nothing to reject here.
             $this->assertSlotTypeWritable($parameters[$index]->getType(), $context);
-            $this->assertSignatureTypeIsEnforceable($parameters[$index]->getType(), $context);
         }
     }
 
@@ -416,16 +433,66 @@ class ClassSpecializer
      * Properties are not affected - a property write always consults zend_property_info - so
      * a `mixed` property can be re-typed freely.
      */
-    private function assertSignatureTypeIsEnforceable(?\ReflectionType $type, string $context): void
+    /**
+     * Refuses a return-type substitution the engine would never check
+     *
+     * A return value is verified by a ZEND_VERIFY_RETURN_TYPE opline that reads arg_info[-1] at
+     * run time, so rewriting the type is enough - *when the opline exists*. The compiler omits
+     * it in two cases: a `mixed` return type (nothing to check) and a return whose expression it
+     * already proved satisfies the declared type (`return 'x';` in a `string` method). In both
+     * the substitution would be visible to reflection and never enforced, so it is rejected
+     * rather than performed.
+     *
+     * @param CData $sourceOpArray zend_op_array * of the method declaring the return type
+     */
+    private function assertReturnTypeIsEnforceable(CData $sourceOpArray, string $context): void
     {
-        if ($type instanceof \ReflectionNamedType && $type->isBuiltin()) {
-            throw new ClassSpecializationException(
-                "Cannot substitute {$context}: it is declared as the builtin type \"{$type->getName()}\", "
-                . 'and the engine compiled its check into the shared opcodes, so a rewritten arg_info '
-                . 'would be reported by reflection but never enforced. Declare the slot with a '
-                . 'class-like (placeholder) type instead.',
-            );
+        if (self::everyReturnIsVerified($sourceOpArray)) {
+            return;
         }
+
+        throw new ClassSpecializationException(
+            "Cannot substitute {$context}: the compiler left at least one return statement "
+            . 'unchecked, either because the declared type is `mixed` or because it proved that '
+            . 'return already satisfies the declared type. Rewriting the type would be reported '
+            . 'by reflection and never enforced on those paths.',
+        );
+    }
+
+    /**
+     * Whether every return path of the method runs through a return-type check
+     *
+     * The compiler emits ZEND_VERIFY_RETURN_TYPE immediately before the ZEND_RETURN it guards,
+     * and omits it wherever the check is unnecessary - for a `mixed` declaration, or for a
+     * return whose expression it already proved satisfies the type. Testing merely that the
+     * method *contains* a check is not enough: even a `mixed` method carries one in its implicit
+     * `return null` epilogue, so the guarded-return relation is what has to hold.
+     */
+    private static function everyReturnIsVerified(CData $opArray): bool
+    {
+        $total = $opArray->last;
+        assert(is_int($total));
+
+        $opcodes = $opArray->opcodes;
+        assert($opcodes instanceof CData);
+
+        for ($index = 0; $index < $total; $index++) {
+            $opline = $opcodes[$index];
+            assert($opline instanceof CData);
+            if (!in_array($opline->opcode, [OpCode::RETURN, OpCode::RETURN_BY_REF, OpCode::GENERATOR_RETURN], true)) {
+                continue;
+            }
+            if ($index === 0) {
+                return false;
+            }
+            $previous = $opcodes[$index - 1];
+            assert($previous instanceof CData);
+            if ($previous->opcode !== OpCode::VERIFY_RETURN_TYPE) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function assertDeclaredHere(string $declaringClass, string $sourceClassName, string $context): void
@@ -941,6 +1008,9 @@ class ClassSpecializer
         if ($needsOwnArgInfo) {
             $this->duplicateArgInfo($opArrayCopy, $sourceOpArray, $substitutions, $slotSubstitutions, $methodName);
         }
+        if ($slotSubstitutions->addressesMethod($methodName)) {
+            $this->patchReceiveOpcodes($opArrayCopy, $sourceOpArray, $methodName, $slotSubstitutions);
+        }
 
         return $newTable->addFunctionEntry($methodName, $opArrayCopy);
     }
@@ -1042,6 +1112,194 @@ class ClassSpecializer
             'zend_arg_info *',
             Core::addressOf(Core::cast('zend_arg_info *', Core::addr($memory))) + ($hasReturnEntry ? $entrySize : 0),
         );
+    }
+
+    /**
+     * Un-shares the opcode array when a substituted parameter's check lives in it
+     *
+     * ZEND_RECV caches its type mask in the opline: `opline->op2.num` is a verbatim copy of
+     * `arg_info.type.type_mask`, and the handler tests that copy rather than reading arg_info
+     * back on every call. Rewriting arg_info alone is therefore invisible at run time for a
+     * plain RECV, which is why this exists at all.
+     *
+     * ZEND_RECV_INIT (a parameter with a default) and ZEND_RECV_VARIADIC cache nothing and are
+     * enforced straight from arg_info, so they never reach this method - and neither does a
+     * method whose cached masks already match, which keeps the common case free.
+     *
+     * The opcodes are shared with the template by design, so they are copied before being
+     * written. See duplicateOpcodes() for what that copy has to fix up.
+     */
+    private function patchReceiveOpcodes(
+        CData $opArrayCopy,
+        CData $sourceOpArray,
+        string $methodName,
+        SlotSubstitutionMap $slotSubstitutions,
+    ): void {
+        $total = $sourceOpArray->last;
+        assert(is_int($total));
+
+        // Collect (opline index => new mask) before touching anything: a method whose cached
+        // masks already agree with arg_info needs no copy at all
+        $sourceOpcodes = $sourceOpArray->opcodes;
+        $copiedArgs    = $opArrayCopy->arg_info;
+        assert($sourceOpcodes instanceof CData && $copiedArgs instanceof CData);
+
+        $patches = [];
+        for ($index = 0; $index < $total; $index++) {
+            $opline = $sourceOpcodes[$index];
+            assert($opline instanceof CData);
+            if ($opline->opcode !== OpCode::RECV) {
+                continue;
+            }
+            $argument = $opline->op1;
+            assert($argument instanceof CData);
+            $argumentNumber = $argument->num;
+            assert(is_int($argumentNumber));
+            if ($slotSubstitutions->resolveParameter($methodName, $argumentNumber - 1) === null) {
+                continue;
+            }
+            $copiedArgument = $copiedArgs[$argumentNumber - 1];
+            assert($copiedArgument instanceof CData);
+            $copiedType = $copiedArgument->type;
+            assert($copiedType instanceof CData);
+            $newMask = $copiedType->type_mask;
+            $cached  = $opline->op2;
+            assert(is_int($newMask) && $cached instanceof CData);
+            if ($cached->num !== $newMask) {
+                $patches[$index] = $newMask;
+            }
+        }
+        if ($patches === []) {
+            return;
+        }
+
+        $copiedOpcodes = $this->duplicateOpcodes($opArrayCopy, $sourceOpArray, $total);
+        foreach ($patches as $index => $newMask) {
+            $patched = $copiedOpcodes[$index];
+            assert($patched instanceof CData);
+            $cachedMask = $patched->op2;
+            assert($cachedMask instanceof CData);
+            $cachedMask->num = $newMask;
+        }
+    }
+
+    /**
+     * Copies a method's opcode array into request memory so the copy can be written to
+     *
+     * Two of the three operand encodings survive a straight memcpy and one does not:
+     *
+     *  - jump targets are byte offsets from `op_array->opcodes`, so they stay correct once the
+     *    copy's `opcodes` pointer is repointed;
+     *  - `live_range` and `try_catch_array` address oplines by index, so they are unaffected;
+     *  - **IS_CONST operands are byte offsets from the opline itself** (the engine resolves them
+     *    as `(char *) opline + node.constant`, and literals sit immediately after the opcodes in
+     *    one compiler-arena block), so every one of them has to be rebased by the distance the
+     *    array moved.
+     *
+     * Ownership mirrors the duplicated arg_info blocks: `destroy_op_array()` frees whichever
+     * `opcodes` pointer its holder carries once the shared body refcount reaches zero, so one
+     * sibling block is released through the engine and the other is reclaimed by the request
+     * allocator at request end. Bounded at one block per patched method. An opcache-shared
+     * source is safe because it is only ever read - the copy is what gets written.
+     *
+     * @return CData The copied zend_op[] block
+     */
+    private function duplicateOpcodes(CData $opArrayCopy, CData $sourceOpArray, int $total): CData
+    {
+        $sourceOpcodes = $sourceOpArray->opcodes;
+        assert($sourceOpcodes instanceof CData);
+        $opcodeSize = Core::sizeof(Core::type('zend_op'));
+        $memory     = Core::new("zend_op[{$total}]", false);
+        Core::memcpy($memory, $sourceOpcodes, $total * $opcodeSize);
+
+        $sourceBase = Core::addressOf($sourceOpcodes);
+        $copyBase   = Core::addressOf(Core::cast('zend_op *', Core::addr($memory)));
+        $shift      = $sourceBase - $copyBase;
+
+        for ($index = 0; $index < $total; $index++) {
+            $opline = $memory[$index];
+            assert($opline instanceof CData);
+            foreach (self::CONSTANT_OPERAND_FIELDS as $typeField => $operandField) {
+                if ($opline->{$typeField} !== OpLine::IS_CONST) {
+                    continue;
+                }
+                $operand = $opline->{$operandField};
+                assert($operand instanceof CData);
+                $current = $operand->constant;
+                assert(is_int($current));
+                // znode_op.constant is a uint32_t holding a signed opline-relative offset
+                $operand->constant = ($current + $shift) & 0xFFFFFFFF;
+            }
+        }
+
+        $opArrayCopy->opcodes = Core::cast('zend_op *', Core::addr($memory));
+        assert(self::opcodeCopyResolvesIdentically($sourceOpcodes, $memory, $total, $opcodeSize));
+
+        return $memory;
+    }
+
+    /**
+     * Verifies that a relocated opcode block still means exactly what the source meant
+     *
+     * Every IS_CONST operand must resolve to the same zval address it resolved to before the
+     * move, and every jump offset must still land inside the array. This runs under
+     * zend.assertions=1 and compiles out in production: a wrong relocation rule is the one
+     * mistake here that would otherwise surface as memory corruption at some later call rather
+     * than as a failure at specialization time.
+     */
+    private static function opcodeCopyResolvesIdentically(
+        CData $sourceOpcodes,
+        CData $copiedOpcodes,
+        int $total,
+        int $opcodeSize,
+    ): bool {
+        $sourceBase = Core::addressOf($sourceOpcodes);
+        $copyBase   = Core::addressOf(Core::cast('zend_op *', Core::addr($copiedOpcodes)));
+
+        for ($index = 0; $index < $total; $index++) {
+            $sourceOpline = $sourceOpcodes[$index];
+            $copiedOpline = $copiedOpcodes[$index];
+            assert($sourceOpline instanceof CData && $copiedOpline instanceof CData);
+
+            if ($sourceOpline->opcode !== $copiedOpline->opcode) {
+                return false;
+            }
+            foreach (self::CONSTANT_OPERAND_FIELDS as $typeField => $operandField) {
+                if ($sourceOpline->{$typeField} !== OpLine::IS_CONST) {
+                    continue;
+                }
+                $sourceOperand = $sourceOpline->{$operandField};
+                $copiedOperand = $copiedOpline->{$operandField};
+                assert($sourceOperand instanceof CData && $copiedOperand instanceof CData);
+                $sourceConstant = $sourceOperand->constant;
+                $copiedConstant = $copiedOperand->constant;
+                assert(is_int($sourceConstant) && is_int($copiedConstant));
+                // Both are unsigned views of a signed offset, so compare the resolved addresses
+                $sourceTarget = $sourceBase + $index * $opcodeSize + self::asSignedOffset($sourceConstant);
+                $copiedTarget = $copyBase   + $index * $opcodeSize + self::asSignedOffset($copiedConstant);
+                if ($sourceTarget !== $copiedTarget) {
+                    return false;
+                }
+            }
+            $jumpTarget = $copiedOpline->op2;
+            $copiedCode = $copiedOpline->opcode;
+            assert($jumpTarget instanceof CData && is_int($copiedCode));
+            if (self::isJumpOperand($copiedCode) && $jumpTarget->num > $total * $opcodeSize) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static function asSignedOffset(int $unsigned): int
+    {
+        return $unsigned >= 0x80000000 ? $unsigned - 0x100000000 : $unsigned;
+    }
+
+    private static function isJumpOperand(int $opcode): bool
+    {
+        return in_array($opcode, [OpCode::JMPZ, OpCode::JMPNZ, OpCode::JMPZ_EX, OpCode::JMPNZ_EX], true);
     }
 
     /**
