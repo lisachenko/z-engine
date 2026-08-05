@@ -490,7 +490,7 @@ class ReflectionValue implements ReferenceCountedInterface
     public function setPointer(CData $pointer): void
     {
         $this->assertNotReleased();
-        $this->payloadUnion()->ptr = Core::cast('void *', $pointer);
+        $this->valueUnion()->ptr = Core::cast('void *', $pointer);
     }
 
     /**
@@ -510,6 +510,8 @@ class ReflectionValue implements ReferenceCountedInterface
         if ($type !== $other->getBaseType()) {
             return false;
         }
+        $thisValue  = $this->valueUnion();
+        $otherValue = $other->valueUnion();
         switch ($type) {
             case self::IS_UNDEF:
             case self::IS_NULL:
@@ -517,24 +519,12 @@ class ReflectionValue implements ReferenceCountedInterface
             case self::IS_TRUE:
                 return true;
             case self::IS_LONG:
-                $thisLong  = $this->payloadUnion()->lval;
-                $otherLong = $other->payloadUnion()->lval;
-                assert(is_int($thisLong) && is_int($otherLong));
-
-                return $thisLong === $otherLong;
+                return $thisValue->lval === $otherValue->lval;
             case self::IS_DOUBLE:
-                $thisDouble  = $this->payloadUnion()->dval;
-                $otherDouble = $other->payloadUnion()->dval;
-                assert(is_float($thisDouble) && is_float($otherDouble));
-
-                return $thisDouble === $otherDouble;
+                return $thisValue->dval === $otherValue->dval;
             case self::IS_STRING:
-                $thisString  = $this->payloadUnion()->str;
-                $otherString = $other->payloadUnion()->str;
-                assert($thisString instanceof CData && $otherString instanceof CData);
-
-                return StringEntry::fromCData($thisString)->getStringValue()
-                    === StringEntry::fromCData($otherString)->getStringValue();
+                return StringEntry::fromCData($thisValue->str)->getStringValue()
+                    === StringEntry::fromCData($otherValue->str)->getStringValue();
             default:
                 // Arrays, objects and constant expressions: conservatively different
                 return false;
@@ -547,25 +537,24 @@ class ReflectionValue implements ReferenceCountedInterface
     public function getBaseType(): int
     {
         $this->assertNotReleased();
-        $u1 = $this->pointer->u1;
-        assert($u1 instanceof CData);
-        $typeView = $u1->v;
-        assert($typeView instanceof CData);
-        $type = $typeView->type;
-        assert(is_int($type));
 
-        return $type;
+        /** @var ZvalU1Shape $u1 */
+        $u1 = $this->pointer->u1;
+
+        return $u1->v->type;
     }
 
     /**
-     * Returns the value union (zend_value) of this zval as a raw CData
+     * Returns the shaped value union (zend_value) of this zval
+     *
+     * @return ZendValueShape
      */
-    private function payloadUnion(): CData
+    private function valueUnion(): object
     {
-        $payload = $this->pointer->value;
-        assert($payload instanceof CData);
+        /** @var ZendValueShape $value */
+        $value = $this->pointer->value;
 
-        return $payload;
+        return $value;
     }
 
     /**

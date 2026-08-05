@@ -134,11 +134,11 @@ class ExecutionData
      */
     public function getFunctionEntry(): ?ReflectionFunction
     {
+        /** @var CData|null $rawFunction */
         $rawFunction = $this->pointer->func;
         if ($rawFunction === null) {
             return null;
         }
-        assert($rawFunction instanceof CData);
 
         return ReflectionFunction::fromCData($rawFunction);
     }
