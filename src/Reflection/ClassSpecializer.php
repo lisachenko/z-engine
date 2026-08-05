@@ -85,8 +85,10 @@ class ClassSpecializer
         string $sourceClassName,
         string $newClassName,
         ?TypeSubstitutionMap $substitutions = null,
+        ?SlotSubstitutionMap $slotSubstitutions = null,
     ): ReflectionClass {
-        $substitutions ??= new TypeSubstitutionMap([]);
+        $substitutions     ??= new TypeSubstitutionMap([]);
+        $slotSubstitutions ??= new SlotSubstitutionMap([]);
 
         // Give the autoloader a chance to bring the source declaration into the engine
         // (the raw class-table lookup below never triggers autoloading by itself)
@@ -98,8 +100,9 @@ class ClassSpecializer
         }
         $this->assertSupportedSource($sourceEntry, $sourceClassName, $newClassName);
         $this->assertSubstitutionsApplicable($sourceEntry, $sourceClassName, $substitutions);
+        $this->assertSlotSubstitutionsApplicable($sourceClassName, $slotSubstitutions);
 
-        $newEntry = $this->copyClassEntry($sourceEntry, $newClassName, $substitutions);
+        $newEntry = $this->copyClassEntry($sourceEntry, $newClassName, $substitutions, $slotSubstitutions);
 
         // Publish the finished copy: the engine copies the temporary IS_PTR container
         // into its own bucket, the class entry itself is referenced, not copied
@@ -171,6 +174,7 @@ class ClassSpecializer
             $publishedEntry,
             $nameEntry->getStringValue(),
             new TypeSubstitutionMap([]),
+            new SlotSubstitutionMap([]),
             $publishedName,
         );
 
@@ -321,6 +325,164 @@ class ClassSpecializer
     }
 
     /**
+     * Refuses slot substitutions the engine could not carry out safely
+     *
+     * Runs on the *source* class through native reflection rather than through raw CData: the
+     * questions being asked here - does this member exist, is it declared by this class, is its
+     * type a single type, does its default still fit - are exactly the ones native reflection
+     * answers, and keeping them out of pointer arithmetic keeps the validation trustworthy.
+     */
+    private function assertSlotSubstitutionsApplicable(
+        string $sourceClassName,
+        SlotSubstitutionMap $slotSubstitutions,
+    ): void {
+        if ($slotSubstitutions->isEmpty()) {
+            return;
+        }
+        // Guaranteed by the class-table lookup and the source checks that already ran
+        assert(class_exists($sourceClassName));
+        $reflection = new \ReflectionClass($sourceClassName);
+        $defaults   = $reflection->getDefaultProperties();
+
+        foreach ($slotSubstitutions->toList() as [$slot, $replacement]) {
+            $context = $slot->describe($sourceClassName);
+
+            if ($slot->kind === TypeSlotKind::Property) {
+                if (!$reflection->hasProperty($slot->memberName)) {
+                    throw new ClassSpecializationException("Cannot substitute {$context}: no such property");
+                }
+                $property = $reflection->getProperty($slot->memberName);
+                $this->assertDeclaredHere($property->getDeclaringClass()->getName(), $sourceClassName, $context);
+                $this->assertSlotTypeWritable($property->getType(), $context);
+
+                // The engine verifies default values against declared types at compile time and
+                // never again, so a default that no longer fits would silently produce an object
+                // whose property violates its own declaration
+                if (array_key_exists($slot->memberName, $defaults)
+                    && !self::defaultSatisfies($replacement, $defaults[$slot->memberName])) {
+                    throw new ClassSpecializationException(
+                        "Cannot substitute {$context} with \"{$replacement}\": its declared default value "
+                        . 'would no longer satisfy the type',
+                    );
+                }
+
+                continue;
+            }
+
+            if (!$reflection->hasMethod($slot->memberName)) {
+                throw new ClassSpecializationException("Cannot substitute {$context}: no such method");
+            }
+            $method = $reflection->getMethod($slot->memberName);
+            $this->assertDeclaredHere($method->getDeclaringClass()->getName(), $sourceClassName, $context);
+
+            if ($slot->kind === TypeSlotKind::ReturnType) {
+                $returnType = $method->getReturnType();
+                if ($returnType === null) {
+                    // Without ZEND_ACC_HAS_RETURN_TYPE there is no arg_info entry at index -1,
+                    // and adding one would change the block layout
+                    throw new ClassSpecializationException(
+                        "Cannot substitute {$context}: the method declares no return type",
+                    );
+                }
+                $this->assertSlotTypeWritable($returnType, $context);
+                $this->assertSignatureTypeIsEnforceable($returnType, $context);
+
+                continue;
+            }
+
+            $parameters = $method->getParameters();
+            $index      = $slot->parameterIndex ?? -1;
+            if (!isset($parameters[$index])) {
+                throw new ClassSpecializationException(
+                    "Cannot substitute {$context}: the method declares only " . count($parameters) . ' parameter(s)',
+                );
+            }
+            $this->assertSlotTypeWritable($parameters[$index]->getType(), $context);
+            $this->assertSignatureTypeIsEnforceable($parameters[$index]->getType(), $context);
+        }
+    }
+
+    /**
+     * Refuses to rewrite a signature slot whose check the engine decided at compile time
+     *
+     * Whether a parameter or return type is verified at run time is not read back from
+     * arg_info on every call: for a builtin type the compiler picks a specialized ZEND_RECV /
+     * ZEND_VERIFY_RETURN_TYPE handler that has the decision baked in, and those opcodes are
+     * SHARED with the template by design. Rewriting such a slot changes what reflection
+     * reports while changing nothing about what the engine enforces, so it is rejected rather
+     * than performed: a specialization that silently stops checking is worse than one that
+     * refuses to exist. Class-like slots go through the generic path and are rewritten.
+     *
+     * Properties are not affected - a property write always consults zend_property_info - so
+     * a `mixed` property can be re-typed freely.
+     */
+    private function assertSignatureTypeIsEnforceable(?\ReflectionType $type, string $context): void
+    {
+        if ($type instanceof \ReflectionNamedType && $type->isBuiltin()) {
+            throw new ClassSpecializationException(
+                "Cannot substitute {$context}: it is declared as the builtin type \"{$type->getName()}\", "
+                . 'and the engine compiled its check into the shared opcodes, so a rewritten arg_info '
+                . 'would be reported by reflection but never enforced. Declare the slot with a '
+                . 'class-like (placeholder) type instead.',
+            );
+        }
+    }
+
+    private function assertDeclaredHere(string $declaringClass, string $sourceClassName, string $context): void
+    {
+        if (strcasecmp($declaringClass, $sourceClassName) !== 0) {
+            throw new ClassSpecializationException(
+                "Cannot substitute inherited {$context}: the declaration is shared with {$declaringClass}",
+            );
+        }
+    }
+
+    /**
+     * A writable slot carries exactly one type: untyped slots have no zend_type to rewrite and
+     * composite slots are a zend_type list, which this API deliberately does not build
+     */
+    private function assertSlotTypeWritable(?\ReflectionType $type, string $context): void
+    {
+        if ($type === null) {
+            throw new ClassSpecializationException(
+                "Cannot substitute {$context}: the declaration has no type to replace",
+            );
+        }
+        if (!$type instanceof \ReflectionNamedType) {
+            throw new ClassSpecializationException(
+                "Cannot substitute the union/intersection type of {$context}: only single types are supported",
+            );
+        }
+    }
+
+    /**
+     * Whether a declared default value would still satisfy the replacement type
+     */
+    private static function defaultSatisfies(string $replacement, mixed $default): bool
+    {
+        $nullable = str_starts_with($replacement, '?');
+        $typeName = strtolower($nullable ? substr($replacement, 1) : $replacement);
+
+        if ($default === null) {
+            return $nullable || $typeName === 'null' || $typeName === 'mixed';
+        }
+
+        return match ($typeName) {
+            'mixed'  => true,
+            'int'    => is_int($default),
+            'float'  => is_float($default) || is_int($default),
+            'string' => is_string($default),
+            'bool'   => is_bool($default),
+            'true'   => $default === true,
+            'false'  => $default === false,
+            'array'  => is_array($default),
+            'object' => is_object($default),
+            'null'   => false,
+            default  => is_object($default) && is_a($default, $typeName),
+        };
+    }
+
+    /**
      * Validates one zend_type against the substitution map
      *
      * @param bool $isOwn Whether the containing declaration will be copied (own member)
@@ -383,6 +545,7 @@ class ClassSpecializer
         CData $sourceEntry,
         string $newClassName,
         TypeSubstitutionMap $substitutions,
+        SlotSubstitutionMap $slotSubstitutions,
         ?CData $reusedName = null,
     ): CData {
         // The class entry itself mimics a compiler-arena allocation: destroy_zend_class()
@@ -438,11 +601,11 @@ class ClassSpecializer
         $this->copyInterfaceList($sourceEntry, $newEntry);
         $this->copyTraitInfo($sourceEntry, $newEntry);
 
-        $functionMap = $this->copyFunctionTable($sourceEntry, $newEntry, $substitutions);
+        $functionMap = $this->copyFunctionTable($sourceEntry, $newEntry, $substitutions, $slotSubstitutions);
         $this->relinkFunctionPointers($newEntry, $functionMap);
         $this->copyIteratorFunctionCaches($sourceEntry, $newEntry, $functionMap);
 
-        $propertyMap = $this->copyPropertiesInfo($sourceEntry, $newEntry, $substitutions);
+        $propertyMap = $this->copyPropertiesInfo($sourceEntry, $newEntry, $substitutions, $slotSubstitutions);
         $this->copyPropertiesInfoTable($sourceEntry, $newEntry, $propertyMap);
 
         $this->copyConstantsTable($sourceEntry, $newEntry);
@@ -697,8 +860,12 @@ class ClassSpecializer
      *
      * @return array<int, CData> Source zend_function address => zend_function pointer on the copy
      */
-    private function copyFunctionTable(CData $sourceEntry, CData $newEntry, TypeSubstitutionMap $substitutions): array
-    {
+    private function copyFunctionTable(
+        CData $sourceEntry,
+        CData $newEntry,
+        TypeSubstitutionMap $substitutions,
+        SlotSubstitutionMap $slotSubstitutions,
+    ): array {
         $this->initEmbeddedTable($sourceEntry, $newEntry, 'function_table');
         $sourceAddress    = Core::addressOf($sourceEntry);
         $newFunctionTable = $newEntry->function_table;
@@ -714,7 +881,14 @@ class ClassSpecializer
             assert($scope instanceof CData);
 
             if (Core::addressOf($scope) === $sourceAddress) {
-                $publishedFunction = $this->duplicateMethod($sourceOpArray, $newEntry, $substitutions, $newTable, $methodName);
+                $publishedFunction = $this->duplicateMethod(
+                    $sourceOpArray,
+                    $newEntry,
+                    $substitutions,
+                    $slotSubstitutions,
+                    $newTable,
+                    $methodName,
+                );
             } else {
                 // Inherited entry: share the pointer exactly like zend_duplicate_function()
                 self::addOpArrayBodyReference($sourceOpArray);
@@ -737,6 +911,7 @@ class ClassSpecializer
         CData $sourceOpArray,
         CData $newEntry,
         TypeSubstitutionMap $substitutions,
+        SlotSubstitutionMap $slotSubstitutions,
         HashTable $newTable,
         string $methodName,
     ): CData {
@@ -759,8 +934,12 @@ class ClassSpecializer
         // must not efree()
         $opArrayCopy->fn_flags = $functionFlags & ~(Core::ZEND_ACC_IMMUTABLE | Core::ZEND_ACC_HEAP_RT_CACHE);
 
-        if (!$substitutions->isEmpty() && $this->methodNeedsArgInfoSubstitution($sourceOpArray, $substitutions)) {
-            $this->duplicateArgInfo($opArrayCopy, $sourceOpArray, $substitutions);
+        // A slot-addressed method always duplicates: the block it would otherwise share with
+        // the template is exactly the block we are about to write into
+        $needsOwnArgInfo = $slotSubstitutions->addressesMethod($methodName)
+            || (!$substitutions->isEmpty() && $this->methodNeedsArgInfoSubstitution($sourceOpArray, $substitutions));
+        if ($needsOwnArgInfo) {
+            $this->duplicateArgInfo($opArrayCopy, $sourceOpArray, $substitutions, $slotSubstitutions, $methodName);
         }
 
         return $newTable->addFunctionEntry($methodName, $opArrayCopy);
@@ -810,8 +989,13 @@ class ClassSpecializer
      * released through the engine; the other block stays allocated until the request
      * allocator reclaims it (bounded: one block per substituted method).
      */
-    private function duplicateArgInfo(CData $opArrayCopy, CData $sourceOpArray, TypeSubstitutionMap $substitutions): void
-    {
+    private function duplicateArgInfo(
+        CData $opArrayCopy,
+        CData $sourceOpArray,
+        TypeSubstitutionMap $substitutions,
+        SlotSubstitutionMap $slotSubstitutions,
+        string $methodName,
+    ): void {
         $functionFlags = $sourceOpArray->fn_flags;
         $numberOfArgs  = $sourceOpArray->num_args;
         assert(is_int($functionFlags) && is_int($numberOfArgs));
@@ -841,7 +1025,17 @@ class ClassSpecializer
             }
             $argumentType = $entry->type;
             assert($argumentType instanceof CData);
-            $this->copyTypeInPlace($argumentType, $substitutions);
+            // Physical index 0 is the return entry when the method declares one; every other
+            // entry is parameter (index - returnEntryOffset)
+            $isReturnEntry = $hasReturnEntry && $index === 0;
+            $replacement   = $isReturnEntry
+                ? $slotSubstitutions->resolveReturnType($methodName)
+                : $slotSubstitutions->resolveParameter($methodName, $index - ($hasReturnEntry ? 1 : 0));
+            if ($replacement !== null) {
+                self::writeTypeInPlace($argumentType, $replacement);
+            } else {
+                $this->copyTypeInPlace($argumentType, $substitutions);
+            }
         }
 
         $opArrayCopy->arg_info = Core::pointerAtAddress(
@@ -856,8 +1050,12 @@ class ClassSpecializer
      *
      * @return array<int, CData> Source zend_property_info address => copy pointer
      */
-    private function copyPropertiesInfo(CData $sourceEntry, CData $newEntry, TypeSubstitutionMap $substitutions): array
-    {
+    private function copyPropertiesInfo(
+        CData $sourceEntry,
+        CData $newEntry,
+        TypeSubstitutionMap $substitutions,
+        SlotSubstitutionMap $slotSubstitutions,
+    ): array {
         $this->initEmbeddedTable($sourceEntry, $newEntry, 'properties_info');
         $sourceAddress      = Core::addressOf($sourceEntry);
         $newPropertiesTable = $newEntry->properties_info;
@@ -891,7 +1089,12 @@ class ClassSpecializer
                 }
                 $copiedPropertyType = $infoCopy->type;
                 assert($copiedPropertyType instanceof CData);
-                $this->copyTypeInPlace($copiedPropertyType, $substitutions);
+                $slotReplacement = $slotSubstitutions->resolveProperty($propertyName);
+                if ($slotReplacement !== null) {
+                    self::writeTypeInPlace($copiedPropertyType, $slotReplacement);
+                } else {
+                    $this->copyTypeInPlace($copiedPropertyType, $substitutions);
+                }
 
                 $storedInfo  = Core::cast('zend_property_info *', Core::addr($infoCopy));
                 $ownCopies[] = $storedInfo;
@@ -1067,6 +1270,49 @@ class ClassSpecializer
         $valueEntry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $structureView);
         $table->add($key, $valueEntry);
         $valueEntry->release();
+    }
+
+    /**
+     * Writes a brand-new zend_type into an already-memcpy'd slot
+     *
+     * The counterpart of copyTypeInPlace(): that one preserves whatever the template declared
+     * and only rewrites a matching placeholder name, this one replaces the declaration wholesale.
+     * Because the owner block was memcpy'd and the template keeps its own reference on the old
+     * name, replacing simply means *not* taking the reference copyTypeInPlace() would have taken
+     * - there is nothing to release here.
+     *
+     * Nullability is taken from the replacement (`?int`) rather than preserved from the slot:
+     * a slot-addressed substitution states the whole type, and `mixed` implies null, so
+     * preserving would silently turn every `mixed` slot into a nullable one.
+     */
+    private static function writeTypeInPlace(CData $type, string $replacement): void
+    {
+        $isNullable = str_starts_with($replacement, '?');
+        $typeName   = $isNullable ? substr($replacement, 1) : $replacement;
+        $nullBit    = $isNullable ? Core::engineConstant('_ZEND_TYPE_NULLABLE_BIT') : 0;
+
+        // Everything the type itself describes (MAY_BE_* bits, NAME/LITERAL_NAME/LIST kind bits,
+        // ARENA, UNION/INTERSECTION) lives inside _ZEND_TYPE_MASK and is replaced wholesale. The
+        // bits ABOVE it are not type information at all: on a zend_arg_info they carry the send
+        // mode, the variadic marker and the tentative-type marker, and dropping them silently
+        // changes how the engine treats the parameter.
+        $currentMask = $type->type_mask;
+        assert(is_int($currentMask));
+        $preservedBits = $currentMask & ~Core::engineConstant('_ZEND_TYPE_MASK');
+
+        $builtinMask = self::builtinTypeMask($typeName);
+        if ($builtinMask !== null) {
+            $type->ptr       = null;
+            $type->type_mask = $preservedBits | $builtinMask | $nullBit;
+
+            return;
+        }
+
+        // A class-like type: owned name with refcount 1, and LITERAL_NAME cleared because the
+        // name written here is already fully qualified and resolved
+        $replacementName = StringEntry::fromString($typeName)->transferReferenceOwnership()->getRawValue();
+        $type->ptr       = Core::cast('void *', $replacementName);
+        $type->type_mask = $preservedBits | Core::engineConstant('_ZEND_TYPE_NAME_BIT') | $nullBit;
     }
 
     /**

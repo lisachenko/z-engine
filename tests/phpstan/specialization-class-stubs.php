@@ -147,3 +147,68 @@ class IntCopy
         return '';
     }
 }
+
+namespace ZEngine\Stub\Specialized;
+
+/*
+ * Slot-addressed specializations minted at RUNTIME by ClassSpecializerSlotTest. Members whose
+ * types are the subject of the test are declared `mixed` on purpose - the test asserts the
+ * real, engine-enforced types at run time.
+ */
+
+class SlotPropertyCopy
+{
+    public mixed $value;
+}
+
+class SlotClassPropertyCopy
+{
+    public mixed $value;
+}
+
+class SlotNullableCopy
+{
+    public mixed $value;
+
+    public mixed $nullableValue;
+}
+
+class SlotSignatureCopy
+{
+    public function setNamed(mixed $newValue): void {}
+
+    public function getNamed(): mixed
+    {
+        return null;
+    }
+}
+
+class SlotCaseCopy
+{
+    public function setNamed(mixed $newValue): void {}
+}
+
+class SlotVariadicCopy
+{
+    public function collect(mixed ...$values): int
+    {
+        return 0;
+    }
+}
+
+class SlotPrecedenceCopy
+{
+    public mixed $value;
+
+    public mixed $named;
+}
+
+class SlotIsolationFirstCopy
+{
+    public function setNamed(mixed $newValue): void {}
+}
+
+class SlotIsolationSecondCopy
+{
+    public function setNamed(mixed $newValue): void {}
+}

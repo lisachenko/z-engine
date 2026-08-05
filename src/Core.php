@@ -307,6 +307,26 @@ class Core
      */
     private static function assertSupportedEnvironment(): void
     {
+        // Without the extension every entry point below is a fatal "Class FFI not found";
+        // with the extension disabled it is an equally opaque FFI\Exception. Both are worth
+        // one sentence of explanation, because this is the first thing anybody hits.
+        if (!extension_loaded('ffi')) {
+            throw new RuntimeException(
+                'z-engine requires the ffi extension, which is not loaded. Install it and enable it '
+                . 'with ffi.enable=1 (or ffi.enable=preload together with an opcache.preload script '
+                . 'that calls Core::preload()).',
+            );
+        }
+        $ffiEnable = strtolower((string) ini_get('ffi.enable'));
+        if (in_array($ffiEnable, ['', '0', 'off', 'false', 'no'], true)) {
+            throw new RuntimeException(sprintf(
+                'z-engine requires FFI to be usable, but ini setting ffi.enable is "%s". Set '
+                . 'ffi.enable=1, or use ffi.enable=preload with an opcache.preload script that calls '
+                . 'Core::preload().',
+                (string) ini_get('ffi.enable'),
+            ));
+        }
+
         [$minVersionId, $maxVersionId] = self::SUPPORTED_PHP_VERSION_ID;
         if (PHP_VERSION_ID < $minVersionId || PHP_VERSION_ID >= $maxVersionId) {
             $supported = sprintf('%d.%d', intdiv($minVersionId, 10000), intdiv($minVersionId % 10000, 100));

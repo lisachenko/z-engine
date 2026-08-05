@@ -46,6 +46,72 @@ enforcement follows the substituted type on the copy only: assigning a mismatche
 to a substituted typed property throws `TypeError` on the specialized class while the
 template keeps its original declaration.
 
+## Slot-addressed substitution
+
+`TypeSubstitutionMap` can only rewrite a type it can *name*. A slot declared `mixed` has no
+name to key on, and two slots that share a placeholder cannot be given different types.
+`SlotSubstitutionMap` addresses the declaration itself instead:
+
+```php
+use ZEngine\Reflection\{ClassSpecializer, SlotSubstitutionMap, TypeSlot};
+
+$specialized = (new ClassSpecializer())->specialize(SomeTemplate::class, 'App\Specialized\X', null, new SlotSubstitutionMap([
+    [TypeSlot::property('value'), 'int'],
+    [TypeSlot::parameter('setNamed', 0), '?App\User'],
+    [TypeSlot::returnType('getNamed'), '?App\User'],
+]));
+```
+
+Both maps may be supplied to one call; where they overlap, the slot map wins. Replacement
+types are written the way PHP writes them (`int`, `?int`, `App\User`, `?App\User`), and -
+unlike the name-keyed path, which preserves whatever nullability the template declared - the
+nullability written here is the nullability the copy gets. That difference is deliberate:
+`mixed` implies null, so preserving it would silently make every rewritten slot nullable.
+
+A method addressed by the slot map always gets its `arg_info` block duplicated, because the
+block it would otherwise share with the template is the block being written into.
+
+### What can be rewritten, and what the engine will actually enforce
+
+**This is the one asymmetry worth internalising: rewriting a type and having it enforced are
+not the same thing.**
+
+| Slot | Declared as a class-like type | Declared as a builtin (`mixed`, `int`, ...) |
+|------|------------------------------|---------------------------------------------|
+| Property | rewritten and enforced | rewritten and enforced |
+| Parameter | rewritten and enforced | **rejected** |
+| Return type | rewritten and enforced | **rejected** |
+
+A property write always consults `zend_property_info`, so a property slot can be re-typed
+freely whatever it was declared as. Parameters and return values are different: for a builtin
+type the compiler resolves the check at compile time and selects a specialized `ZEND_RECV` /
+`ZEND_VERIFY_RETURN_TYPE` handler, and those opcodes are **shared with the template** by the
+copy model. Rewriting such an `arg_info` entry changes what reflection reports and changes
+nothing about what the engine enforces.
+
+Rather than hand back a class that looks specialized and silently stops checking, the
+specializer rejects those two cases with a `ClassSpecializationException` naming the reason.
+A signature slot that must be re-typed has to be declared with a class-like (placeholder)
+type in the template, which is what puts it on the engine's generic, `arg_info`-driven path.
+
+This is also why the name-keyed path has no such restriction: a placeholder is by definition
+class-like, so every slot it can match is already on the generic path.
+
+### Rejections
+
+All of them are raised before any engine state is modified:
+
+| Case | Reason |
+|------|--------|
+| Unknown property or method | nothing to address |
+| Slot declared by an ancestor | the declaration is shared with the declaring class |
+| Parameter index out of range | nothing to address |
+| Method declares no return type | there is no `arg_info` entry at index `-1`, and adding one would change the block layout |
+| Slot has no type at all | there is no `zend_type` to replace |
+| Slot has a union/intersection type | the replacement would have to build a `zend_type` list |
+| Builtin-typed parameter or return type | the check is compiled into the shared opcodes (see above) |
+| Declared default value no longer fits | the engine verifies defaults at compile time and never again, so the object would violate its own declaration |
+
 ## Semantics of the copy
 
 - The specialized class is a **sibling** of the template: same parent, same interfaces.
@@ -172,6 +238,9 @@ particular what keeps pointing at the shared entry afterwards, is documented in
 | Target name already registered | no | `ClassSpecializationException` |
 | Substituting a placeholder declared by an ancestor (shared declaration) | no | `ClassSpecializationException` |
 | Substituting a placeholder inside a union/intersection type list | no (copying such types *without* substitution works) | `ClassSpecializationException` |
+| Slot-substituting a property (any declared type, including builtins) | yes | — |
+| Slot-substituting a class-like parameter or return type | yes | — |
+| Slot-substituting a builtin parameter or return type | no (the check lives in the shared opcodes) | `ClassSpecializationException` |
 
 All rejections happen **before** any engine state is modified: a failed call never
 leaves a half-built class or dangling references behind.
@@ -184,6 +253,9 @@ leaves a half-built class or dangling references behind.
 - Union/intersection placeholder substitution is a stretch goal; simple (single-name)
   placeholder types only.
 - Property hooks, enums and internal classes are out of scope for this iteration.
+- Parameter and return types that were compiled as builtins cannot be re-typed at all, by
+  either map: the engine decided at compile time not to consult `arg_info` for them, and the
+  opcodes carrying that decision are shared with the template.
 - `getStaticPropertyValue`/reflection export on the copy report the substituted types;
   code compiled *before* the specialization that references the new class name by
   literal (e.g. `new \App\Specialized\X()`) works because class lookup is runtime, but
