@@ -116,30 +116,92 @@ class ClassSpecializerSlotTest extends TestCase
         $instance->setNamed('not an int');
     }
 
+    public function testBuiltinTypedParameterIsRewrittenAndEnforced(): void
+    {
+        $newName = 'ZEngine\Stub\Specialized\SlotBuiltinParamCopy';
+        (new ClassSpecializer())->specialize(TestSlotSpecializationTemplate::class, $newName, null, new SlotSubstitutionMap([
+            [TypeSlot::parameter('setValue', 0), 'int'],
+        ]));
+
+        self::assertSame('int', (string) (new \ReflectionMethod($newName, 'setValue'))->getParameters()[0]->getType());
+
+        $instance = new $newName();
+        $instance->setValue(42);
+        self::assertSame(42, $instance->value);
+
+        // The template shares nothing writable with the copy: its cached RECV mask is untouched
+        $original = new TestSlotSpecializationTemplate();
+        $original->setValue('anything at all');
+        self::assertSame('anything at all', $original->value);
+
+        $this->expectException(\TypeError::class);
+        $instance->setValue('not an int');
+    }
+
+    public function testBuiltinTypedReturnIsRewrittenAndEnforced(): void
+    {
+        $newName = 'ZEngine\Stub\Specialized\SlotBuiltinReturnCopy';
+        (new ClassSpecializer())->specialize(TestSlotSpecializationTemplate::class, $newName, null, new SlotSubstitutionMap([
+            [TypeSlot::returnType('describeValue'), 'int'],
+        ]));
+
+        self::assertSame('int', (string) (new \ReflectionMethod($newName, 'describeValue'))->getReturnType());
+
+        // The return check reads arg_info on every call, so no opcode work was needed here
+        $instance        = new $newName();
+        $instance->value = 'a string';
+        $this->expectException(\TypeError::class);
+        $instance->describeValue();
+    }
+
     /**
-     * The engine decides at COMPILE time whether a builtin-typed parameter or return value is
-     * checked, and bakes that decision into opcodes this copy shares with its template. A
-     * rewritten arg_info would show up in reflection and change nothing at run time, so the
-     * specializer refuses instead of handing back a class that silently stops enforcing.
+     * A `mixed` return type emits no ZEND_VERIFY_RETURN_TYPE on the real return path at all, so
+     * there is nothing to make the substitution take effect - rejected rather than left silent.
      */
-    public function testBuiltinTypedParameterIsRejected(): void
+    public function testReturnTypeWithoutACheckOpcodeIsRejected(): void
     {
         $this->expectException(ClassSpecializationException::class);
-        $this->expectExceptionMessage('compiled its check into the shared opcodes');
+        $this->expectExceptionMessage('left at least one return statement unchecked');
 
         (new ClassSpecializer())->specialize(TestSlotSpecializationTemplate::class, 'ZEngine\Stub\Specialized\SlotRejectedA', null, new SlotSubstitutionMap([
-            [TypeSlot::parameter('setValue', 0), 'int'],
+            [TypeSlot::returnType('getValue'), 'int'],
         ]));
     }
 
-    public function testBuiltinTypedReturnIsRejected(): void
+    /**
+     * The other elision: the compiler proved `return 'literal';` satisfies `string`, so it never
+     * emitted a check there either - and a substitution would go unenforced on that path.
+     */
+    public function testConstantFoldedReturnCheckIsRejected(): void
     {
         $this->expectException(ClassSpecializationException::class);
-        $this->expectExceptionMessage('compiled its check into the shared opcodes');
+        $this->expectExceptionMessage('left at least one return statement unchecked');
 
         (new ClassSpecializer())->specialize(TestSlotSpecializationTemplate::class, 'ZEngine\Stub\Specialized\SlotRejectedB', null, new SlotSubstitutionMap([
-            [TypeSlot::returnType('getValue'), 'int'],
+            [TypeSlot::returnType('constantReturn'), 'int'],
         ]));
+    }
+
+    public function testOpcodeCopyPreservesLiteralsAndJumps(): void
+    {
+        $newName = 'ZEngine\Stub\Specialized\SlotOpcodeRelocationCopy';
+        (new ClassSpecializer())->specialize(TestSlotSpecializationTemplate::class, $newName, null, new SlotSubstitutionMap([
+            [TypeSlot::parameter('classify', 0), 'int'],
+        ]));
+
+        // classify() has a loop, a try/catch and string literals: if the IS_CONST rebase or the
+        // jump offsets were wrong, this would read the wrong zval or jump into the middle of an
+        // opline rather than return the expected strings
+        $instance = new $newName();
+        self::assertSame('negative', $instance->classify(-3));
+        self::assertSame('zero', $instance->classify(0));
+        self::assertSame('positive:3', $instance->classify(3));
+
+        $original = new TestSlotSpecializationTemplate();
+        self::assertSame('positive:2', $original->classify(2));
+
+        $this->expectException(\TypeError::class);
+        $instance->classify('not an int');
     }
 
     public function testMethodNamesAreMatchedCaseInsensitively(): void

@@ -212,3 +212,28 @@ class SlotIsolationSecondCopy
 {
     public function setNamed(mixed $newValue): void {}
 }
+
+class SlotBuiltinParamCopy
+{
+    public mixed $value;
+
+    public function setValue(mixed $newValue): void {}
+}
+
+class SlotBuiltinReturnCopy
+{
+    public mixed $value;
+
+    public function describeValue(): mixed
+    {
+        return null;
+    }
+}
+
+class SlotOpcodeRelocationCopy
+{
+    public function classify(mixed $input): string
+    {
+        return '';
+    }
+}

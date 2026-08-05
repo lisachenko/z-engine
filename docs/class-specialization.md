@@ -73,29 +73,66 @@ block it would otherwise share with the template is the block being written into
 
 ### What can be rewritten, and what the engine will actually enforce
 
-**This is the one asymmetry worth internalising: rewriting a type and having it enforced are
-not the same thing.**
+**Rewriting a type and having it enforced are not the same thing**, and which one you get
+depends on where the engine keeps the check.
 
-| Slot | Declared as a class-like type | Declared as a builtin (`mixed`, `int`, ...) |
-|------|------------------------------|---------------------------------------------|
-| Property | rewritten and enforced | rewritten and enforced |
-| Parameter | rewritten and enforced | **rejected** |
-| Return type | rewritten and enforced | **rejected** |
+| Slot | Where the check reads its type | Rewritable |
+|------|--------------------------------|------------|
+| Property | `zend_property_info`, on every write | yes, whatever it was declared as |
+| Parameter, `ZEND_RECV_INIT` (has a default) or `ZEND_RECV_VARIADIC` | `arg_info`, on every call | yes, whatever it was declared as |
+| Parameter, plain `ZEND_RECV` | a **mask cached in the opline** (`op2.num`) | yes - the opcode array is un-shared and the cached mask patched |
+| Return type | `arg_info[-1]`, on every call | yes, **if** the compiler emitted a check for every return |
 
-A property write always consults `zend_property_info`, so a property slot can be re-typed
-freely whatever it was declared as. Parameters and return values are different: for a builtin
-type the compiler resolves the check at compile time and selects a specialized `ZEND_RECV` /
-`ZEND_VERIFY_RETURN_TYPE` handler, and those opcodes are **shared with the template** by the
-copy model. Rewriting such an `arg_info` entry changes what reflection reports and changes
-nothing about what the engine enforces.
+Two of these are worth expanding.
 
-Rather than hand back a class that looks specialized and silently stops checking, the
-specializer rejects those two cases with a `ClassSpecializationException` naming the reason.
-A signature slot that must be re-typed has to be declared with a class-like (placeholder)
-type in the template, which is what puts it on the engine's generic, `arg_info`-driven path.
+`ZEND_RECV` caches its type mask in the opline: `opline->op2.num` is a verbatim copy of
+`arg_info.type.type_mask`, upper flag bits included - a by-ref `string` parameter reads
+`SEND_BY_REF | MAY_BE_STRING` in both places. The handler tests that copy rather than reading
+`arg_info` back, so rewriting `arg_info` alone is invisible at run time. The specializer
+therefore un-shares the opcode array for such a method and writes the new mask into both (see
+below). `RECV_INIT` and `RECV_VARIADIC` cache nothing, and a class-like type caches only
+`_ZEND_TYPE_NAME_BIT`, which sends the handler down the generic `arg_info` path - so neither
+needs any opcode work.
 
-This is also why the name-keyed path has no such restriction: a placeholder is by definition
-class-like, so every slot it can match is already on the generic path.
+Return types are checked by a `ZEND_VERIFY_RETURN_TYPE` opline that reads `arg_info[-1]` at run
+time, so rewriting the type is enough **wherever that opline exists**. The compiler omits it in
+two cases, and both are rejected rather than silently unenforced:
+
+- a **`mixed` return type** - nothing to check, so no opline is emitted on the real return path
+  (one still appears in the implicit `return null` epilogue, which is why the specializer tests
+  that *every* return is guarded rather than that the method contains a check somewhere);
+- a **return the compiler already proved** - `return 'x';` in a `string` method needs no check.
+
+### Un-sharing the opcode array
+
+When a plain `ZEND_RECV` has to be patched, the method's opcodes are copied into request memory
+first, because they are shared with the template by design. Three operand encodings matter:
+
+| Operand | Encoding | Survives the copy? |
+|---|---|---|
+| jump targets | *signed* byte offset from the opline itself | yes - the whole array moves as a unit, so relative distances are unchanged |
+| `IS_CONST` operands | byte offset **from the opline itself** | no - every one is rebased by the distance the array moved |
+| `live_range`, `try_catch_array` | opline indices | yes |
+
+Literals sit immediately after the opcodes in one compiler-arena block, which is why a constant
+operand is opline-relative and why moving the array alone would silently make every literal
+reference point at the wrong zval. Under `zend.assertions=1` the copy is verified: every
+`IS_CONST` operand must resolve to the same address it resolved to before the move, and every
+jump offset must still land inside the array.
+
+An `IS_CONST` operand stores a **signed 32-bit** offset, so the relocated opcodes have to stay
+within 2GB of the literals they point at. Request memory and the compiler arena are neighbours,
+so this holds for an ordinary class - but an **opcache-shared body** lives in an mmap'd region
+that can be arbitrarily far from the request heap, and a truncated offset would read whatever sat
+at the wrapped address. That case is detected and rejected: substituting a *builtin parameter*
+type needs a body that is not in shared memory. Class-like parameters, all return types and all
+properties are unaffected, because none of them un-shares the opcodes.
+
+Ownership mirrors the duplicated `arg_info` blocks - `destroy_op_array()` frees whichever
+`opcodes` pointer its holder carries once the shared body refcount reaches zero, so one sibling
+block is released through the engine and the other is reclaimed by the request allocator at
+request end. Bounded at one block per patched method, and only methods that actually need a
+patch pay it. An opcache-shared source is safe because it is only ever read.
 
 ### Rejections
 
@@ -109,7 +146,7 @@ All of them are raised before any engine state is modified:
 | Method declares no return type | there is no `arg_info` entry at index `-1`, and adding one would change the block layout |
 | Slot has no type at all | there is no `zend_type` to replace |
 | Slot has a union/intersection type | the replacement would have to build a `zend_type` list |
-| Builtin-typed parameter or return type | the check is compiled into the shared opcodes (see above) |
+| Return type with an unguarded return path | the compiler emitted no check there, so a rewrite would go unenforced |
 | Declared default value no longer fits | the engine verifies defaults at compile time and never again, so the object would violate its own declaration |
 
 ## Semantics of the copy
@@ -240,7 +277,8 @@ particular what keeps pointing at the shared entry afterwards, is documented in
 | Substituting a placeholder inside a union/intersection type list | no (copying such types *without* substitution works) | `ClassSpecializationException` |
 | Slot-substituting a property (any declared type, including builtins) | yes | — |
 | Slot-substituting a class-like parameter or return type | yes | — |
-| Slot-substituting a builtin parameter or return type | no (the check lives in the shared opcodes) | `ClassSpecializationException` |
+| Slot-substituting a builtin parameter | yes (the opcode array is un-shared and the cached `ZEND_RECV` mask patched) | — |
+| Slot-substituting a return type whose checks the compiler elided (`mixed`, or a provably valid return) | no | `ClassSpecializationException` |
 
 All rejections happen **before** any engine state is modified: a failed call never
 leaves a half-built class or dangling references behind.
@@ -253,9 +291,9 @@ leaves a half-built class or dangling references behind.
 - Union/intersection placeholder substitution is a stretch goal; simple (single-name)
   placeholder types only.
 - Property hooks, enums and internal classes are out of scope for this iteration.
-- Parameter and return types that were compiled as builtins cannot be re-typed at all, by
-  either map: the engine decided at compile time not to consult `arg_info` for them, and the
-  opcodes carrying that decision are shared with the template.
+- A return type the compiler never emitted a check for (`mixed`, or one whose every return it
+  proved valid) cannot be re-typed: there is no opline to make the substitution take effect, and
+  inserting one would mean renumbering jumps and try/catch regions.
 - `getStaticPropertyValue`/reflection export on the copy report the substituted types;
   code compiled *before* the specialization that references the new class name by
   literal (e.g. `new \App\Specialized\X()`) works because class lookup is runtime, but
