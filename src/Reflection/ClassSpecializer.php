@@ -1227,8 +1227,23 @@ class ClassSpecializer
                 assert($operand instanceof CData);
                 $current = $operand->constant;
                 assert(is_int($current));
-                // znode_op.constant is a uint32_t holding a signed opline-relative offset
-                $operand->constant = ($current + $shift) & 0xFFFFFFFF;
+                // znode_op.constant is a uint32_t holding a SIGNED opline-relative offset, so the
+                // literal has to stay within 2GB of the relocated opline. Request memory and the
+                // compiler arena are neighbours, but an opcache-shared body lives in an mmap'd
+                // region that can be arbitrarily far away - and a silently truncated offset would
+                // read whatever happens to sit at the wrapped address.
+                $relocated = self::asSignedOffset($current) + $shift;
+                if ($relocated < -0x80000000 || $relocated > 0x7FFFFFFF) {
+                    throw new ClassSpecializationException(
+                        'Cannot un-share the opcodes of this method: its literals are '
+                        . abs($relocated) . ' bytes from the relocated opcode array, which does not '
+                        . 'fit the signed 32-bit offset an IS_CONST operand stores. This happens when '
+                        . 'the body is opcache-shared, because shared memory is too far from the '
+                        . 'request heap; substituting a builtin parameter type needs a body that is '
+                        . 'not in shared memory.',
+                    );
+                }
+                $operand->constant = $relocated & 0xFFFFFFFF;
             }
         }
 

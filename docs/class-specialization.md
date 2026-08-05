@@ -120,6 +120,14 @@ reference point at the wrong zval. Under `zend.assertions=1` the copy is verifie
 `IS_CONST` operand must resolve to the same address it resolved to before the move, and every
 jump offset must still land inside the array.
 
+An `IS_CONST` operand stores a **signed 32-bit** offset, so the relocated opcodes have to stay
+within 2GB of the literals they point at. Request memory and the compiler arena are neighbours,
+so this holds for an ordinary class - but an **opcache-shared body** lives in an mmap'd region
+that can be arbitrarily far from the request heap, and a truncated offset would read whatever sat
+at the wrapped address. That case is detected and rejected: substituting a *builtin parameter*
+type needs a body that is not in shared memory. Class-like parameters, all return types and all
+properties are unaffected, because none of them un-shares the opcodes.
+
 Ownership mirrors the duplicated `arg_info` blocks - `destroy_op_array()` frees whichever
 `opcodes` pointer its holder carries once the shared body refcount reaches zero, so one sibling
 block is released through the engine and the other is reclaimed by the request allocator at
