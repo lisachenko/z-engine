@@ -78,6 +78,14 @@ class OpCacheException extends \RuntimeException
     }
 
     /**
+     * The script a cache-binary path was requested for does not exist
+     */
+    public static function scriptNotFound(string $scriptPath): self
+    {
+        return new self("Script {$scriptPath} does not exist or cannot be resolved to a real path");
+    }
+
+    /**
      * The child compile process did not produce a cache binary
      */
     public static function compilationFailed(string $scriptPath, string $processOutput): self
