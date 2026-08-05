@@ -27,10 +27,14 @@ use ZEngine\Core;
  * tables (op_array literals, class default property/static tables), pointer lists
  * (resolved interfaces) and single-struct dereferences. This view owns all the
  * size-related machinery (bounds checking, iteration, replace) so callers reach the
- * elements through ordinary array access instead of hand-rolled pointer arithmetic
- * (see AGENTS.md "Engine structs are typed by shape"). Each element is returned as a
- * raw CData handle - wrap it in the owning reflection/type object (eg
- * ReflectionValue::fromValueEntry()) for typed access.
+ * elements through ordinary array access (`$structArray[$i]`) instead of hand-rolled
+ * pointer arithmetic (see AGENTS.md).
+ *
+ * The element type is the generic parameter T: callers parameterize the view with the
+ * PHPStan object shape of the element (eg `StructArray<ZvalShape>` for a zval table) and
+ * every read (`$structArray[$i]`, iteration) and `replace()` is typed as that shape, so
+ * PHPStan carries the field types statically without any runtime assertion. T defaults to
+ * FFI\CData when left unspecified.
  *
  * The view is BORROWED: the base pointer stays owned by the engine structure it was
  * read from and must outlive the view. Element pointer arithmetic follows the FFI
@@ -39,8 +43,9 @@ use ZEngine\Core;
  *
  * @internal
  *
- * @implements IteratorAggregate<int, CData>
- * @implements ArrayAccess<int, CData>
+ * @template T of object = \FFI\CData
+ * @implements IteratorAggregate<int, T>
+ * @implements ArrayAccess<int, T>
  */
 final class StructArray implements ArrayAccess, Countable, IteratorAggregate
 {
@@ -53,27 +58,47 @@ final class StructArray implements ArrayAccess, Countable, IteratorAggregate
         private int $count,
     ) {}
 
+    /**
+     * @param int $offset
+     */
     public function offsetExists(mixed $offset): bool
     {
-        return is_int($offset) && $offset >= 0 && $offset < $this->count;
+        return $offset >= 0 && $offset < $this->count;
     }
 
-    public function offsetGet(mixed $offset): CData
+    /**
+     * @param int $offset
+     *
+     * @return T
+     */
+    public function offsetGet(mixed $offset): mixed
     {
-        assert(is_int($offset));
+        if ($offset < 0 || $offset >= $this->count) {
+            throw new \OutOfBoundsException(
+                "Struct array index {$offset} is out of bounds, valid range is 0..{$this->count}",
+            );
+        }
 
-        return $this->rawAt($offset);
+        /** @var T $element */
+        $element = $this->baseAddress[$offset];
+
+        return $element;
     }
 
     /**
      * Overwrites the element at the given index, dropping the previous value
+     *
+     * @param int $offset
+     * @param T   $value
      */
     public function offsetSet(mixed $offset, mixed $value): void
     {
-        assert(is_int($offset) && $value instanceof CData);
         $this->replace($offset, $value);
     }
 
+    /**
+     * @param int $offset
+     */
     public function offsetUnset(mixed $offset): never
     {
         throw new \LogicException('Struct-array elements live in engine memory and cannot be unset');
@@ -85,32 +110,25 @@ final class StructArray implements ArrayAccess, Countable, IteratorAggregate
      *
      * This is a raw slot overwrite: engine reference semantics (if any) are the
      * caller's responsibility.
+     *
+     * @param T $value
+     *
+     * @return CData The previous element value, detached as an independent byte copy
      */
-    public function replace(int $position, CData $value): CData
+    public function replace(int $position, mixed $value): CData
     {
-        $previous     = $this->rawAt($position);
+        // The slot and the incoming value are raw engine memory (T is only the static
+        // element shape); the byte-level copy operates on them as plain CData
+        /** @var CData $previous */
+        $previous = $this[$position];
+        /** @var CData $rawValue */
+        $rawValue     = $value;
         $elementSize  = Core::sizeof($previous);
         $previousCopy = Core::new("char[{$elementSize}]");
         Core::memcpy($previousCopy, $previous, $elementSize);
-        Core::memcpy($previous, $value, $elementSize);
+        Core::memcpy($previous, $rawValue, $elementSize);
 
         return $previousCopy;
-    }
-
-    /**
-     * Returns the element at the given index as the raw CData handle
-     */
-    public function rawAt(int $index): CData
-    {
-        if ($index < 0 || $index >= $this->count) {
-            throw new \OutOfBoundsException(
-                "Struct array index {$index} is out of bounds, valid range is 0..{$this->count}",
-            );
-        }
-        $element = $this->baseAddress[$index];
-        assert($element instanceof CData);
-
-        return $element;
     }
 
     public function count(): int
@@ -119,12 +137,12 @@ final class StructArray implements ArrayAccess, Countable, IteratorAggregate
     }
 
     /**
-     * @return Traversable<int, CData>
+     * @return Traversable<int, T>
      */
     public function getIterator(): Traversable
     {
         for ($index = 0; $index < $this->count; $index++) {
-            yield $index => $this->rawAt($index);
+            yield $index => $this[$index];
         }
     }
 }

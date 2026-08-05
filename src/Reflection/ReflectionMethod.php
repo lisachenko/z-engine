@@ -339,8 +339,8 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
             $thisView  = new StructArray($thisLiterals, $totalLiterals);
             $otherView = new StructArray($otherLiterals, $totalLiterals);
             for ($index = 0; $index < $totalLiterals; $index++) {
-                $thisLiteral  = ReflectionValue::fromValueEntry($thisView->rawAt($index));
-                $otherLiteral = ReflectionValue::fromValueEntry($otherView->rawAt($index));
+                $thisLiteral  = ReflectionValue::fromValueEntry($thisView[$index]);
+                $otherLiteral = ReflectionValue::fromValueEntry($otherView[$index]);
                 if (!$thisLiteral->equals($otherLiteral)) {
                     return false;
                 }
