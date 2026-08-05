@@ -433,12 +433,22 @@ class ReflectionClass extends NativeReflectionClass
      * memory-ownership contract; unsupported sources fail with
      * ClassSpecializationException before any engine state is modified.
      *
-     * @param string                   $newClassName  Fully-qualified name for the specialized copy
-     * @param TypeSubstitutionMap|null $substitutions Placeholder-to-type substitutions (optional)
+     * @param string                   $newClassName      Fully-qualified name for the specialized copy
+     * @param TypeSubstitutionMap|null $substitutions     Placeholder-to-type substitutions (optional)
+     * @param SlotSubstitutionMap|null $slotSubstitutions Slot-addressed substitutions, which also reach
+     *                                                    builtin-typed slots such as `mixed` (optional)
      */
-    public function specialize(string $newClassName, ?TypeSubstitutionMap $substitutions = null): ReflectionClass
-    {
-        return (new ClassSpecializer())->specialize($this->getName(), $newClassName, $substitutions);
+    public function specialize(
+        string $newClassName,
+        ?TypeSubstitutionMap $substitutions = null,
+        ?SlotSubstitutionMap $slotSubstitutions = null,
+    ): ReflectionClass {
+        return (new ClassSpecializer())->specialize(
+            $this->getName(),
+            $newClassName,
+            $substitutions,
+            $slotSubstitutions,
+        );
     }
 
     /**
