@@ -208,6 +208,21 @@ echo $ast->dump();
 
 You can also install a `zend_ast_process` hook to rewrite the AST of *every* file as it compiles.
 
+### OpCache binary files
+
+Read the binary files opcache writes for `opcache.file_cache`, patch the compiled script through the framework wrappers, and write a valid binary back — so the engine loads and executes your patched code on the next request:
+
+```php
+use ZEngine\OpCache\BinaryCacheFile;
+
+$file = BinaryCacheFile::compile(__DIR__ . '/Service.php', $cacheDir);
+$view = $file->script();          // ReflectionFunction/ReflectionClass over the cached script
+// ... mutate literals, opcodes, flags through the usual wrappers ...
+$file->refresh();                 // rewrite the binary + invalidate the source
+```
+
+The payload is re-serialized from the mutated graph (not just byte-poked), so size-changing edits are written correctly. See **[docs/opcache-binary.md](docs/opcache-binary.md)** for the format, build-matching rules and current limits — this is the foundation for AOP, transpiling and source-code protection on top of the file cache.
+
 ### Extensions written in PHP
 
 Register a real engine module at runtime, complete with persistent globals shared across requests:

@@ -206,7 +206,7 @@ Common scopes: `core`, `gen` (generator), `reflection`, `ast`, `ci`, `docs`.
 ## Repository map
 
 ```
-src/                 the library (Core, Reflection\*, Type\*, System\*, ClassExtension\*, EngineExtension\*, AbstractSyntaxTree\*)
+src/                 the library (Core, Reflection\*, Type\*, System\*, ClassExtension\*, EngineExtension\*, AbstractSyntaxTree\*, HotSwap\*, OpCache\*)
 include/<key>/       generated FFI definitions per platform (do not edit)
 tools/generator/     the header generator (symbols.php is the manifest)
 tools/docker/        debug PHP image used by CI

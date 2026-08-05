@@ -114,7 +114,9 @@ the detection as `ReflectionClass::isImmutable()` and
 `ReflectionFunction`/`ReflectionMethod::isImmutable()`, surfaced together on
 the `ZEngine\OpCache\SharedMemory` facade; the copy-out of an immutable global
 function happens inside `ReflectionFunction::redefine()`
-(`FunctionLikeTrait::copyOutOfSharedMemory()`).
+(`FunctionLikeTrait::copyOutOfSharedMemory()`). Generating, reading and
+patching the on-disk cache binaries themselves is covered in
+[opcache-binary.md](opcache-binary.md).
 
 | Target | Behaviour |
 |--------|-----------|
