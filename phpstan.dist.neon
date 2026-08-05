@@ -63,15 +63,15 @@ parameters:
         -
             identifier: argument.type
             path: src/OpCache/PayloadRelocator.php
-        # PersistentScriptView is the CData facade over the relocated script:
+        # ReflectionOpcacheFile is the CData facade over the relocated script:
         # it reads embedded engine structs (script.filename, function/class
         # tables) that resolve to `mixed` after the first CData hop.
         -
             identifier: property.nonObject
-            path: src/OpCache/PersistentScriptView.php
+            path: src/OpCache/ReflectionOpcacheFile.php
         -
             identifier: argument.type
-            path: src/OpCache/PersistentScriptView.php
+            path: src/OpCache/ReflectionOpcacheFile.php
     reportUnmatchedIgnoredErrors: false
     treatPhpDocTypesAsCertain: false
     # Named engine-struct shapes (see AGENTS.md "Engine structs are typed by shape").

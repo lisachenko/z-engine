@@ -70,11 +70,38 @@ class OpCacheException extends \RuntimeException
     }
 
     /**
-     * No cache binary exists at the location opcache would use for the script
+     * No readable cache binary exists at the location opcache would use
      */
     public static function binFileNotFound(string $path): self
     {
-        return new self("Opcache binary not found at {$path}: compile the script with file cache enabled first");
+        return new self("Opcache binary not found or not readable at {$path}: compile the script with file cache enabled first");
+    }
+
+    /**
+     * The cache binary could not be read (open, lock or I/O failure)
+     */
+    public static function readFailed(string $path): self
+    {
+        return new self("Failed to read the opcache binary at {$path}: could not open, lock or read the file");
+    }
+
+    /**
+     * The cache binary could not be written (I/O or rename failure)
+     */
+    public static function writeFailed(string $path): self
+    {
+        return new self("Failed to write the opcache binary at {$path}");
+    }
+
+    /**
+     * The cache directory does not exist and no permission mask was given to
+     * create it (callers that manage directory creation pass null)
+     */
+    public static function cacheDirectoryMissing(string $directory): self
+    {
+        return new self(
+            "Cache directory {$directory} does not exist; create it yourself or pass a directory-permission mask",
+        );
     }
 
     /**

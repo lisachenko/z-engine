@@ -16,8 +16,8 @@ use ZEngine\Reflection\ReflectionValue;
 $file = BinaryCacheFile::compile(__DIR__ . '/Service.php', $cacheDir);
 
 // Walk the compiled script through the framework wrappers
-$view = $file->script();
-foreach ($view->functions() as $function) {
+$reflection = $file->getReflection();
+foreach ($reflection->getFunctions() as $name => $function) {
     foreach ($function->getLiterals() as $literal) {
         // ... inspect or mutate literals, opcodes, flags ...
     }
@@ -49,7 +49,7 @@ things are checked on load, and the API mirrors each:
 
 - **System id** — `SystemId::current()` is the running build's 32-hex-char
   `zend_system_id`. `BinaryCacheFile::read()` parses the header of a binary
-  from *any* build, but `script()` throws `OpCacheException::systemIdMismatch`
+  from *any* build, but `getReflection()` throws `OpCacheException::systemIdMismatch`
   unless the build matches, because a foreign payload cannot be interpreted.
 - **Checksum** — an adler32 over the payload and string section
   (`opcache.file_cache_consistency_checks=1`). `save()` always recomputes it,
@@ -61,18 +61,18 @@ things are checked on load, and the API mirrors each:
 
 ## Reading, patching and writing
 
-`BinaryCacheFile::script()` materializes the payload into a live in-memory image
-(`PayloadRelocator`, a faithful port of opcache's own
-`zend_file_cache_unserialize`) and returns a `PersistentScriptView`. The view
-hands out ordinary z-engine wrappers — `ReflectionFunction`, `ReflectionClass`,
-`HashTable`, `ReflectionValue` — so every existing mutation API works on the
-loaded script:
+`BinaryCacheFile::getReflection()` materializes the payload into a live
+in-memory image (`PayloadRelocator`, a faithful port of opcache's own
+`zend_file_cache_unserialize`) and returns a `ReflectionOpcacheFile` — a handle
+shaped like the native `ReflectionExtension`. It hands out ordinary z-engine
+wrappers — `ReflectionFunction`, `ReflectionClass`, `HashTable`,
+`ReflectionValue` — so every existing mutation API works on the loaded script:
 
 ```php
-$view->scriptName();      // the cached source path
-$view->mainOpArray();     // file-level op_array as a ReflectionFunction
-$view->functions();       // list<ReflectionFunction>
-$view->classes();         // list<ReflectionClass>
+$reflection->getFileName();        // the cached source path
+$reflection->getScriptFunction();  // file-level op_array as a ReflectionFunction
+$reflection->getFunctions();       // array<string, ReflectionFunction>, name-keyed
+$reflection->getClasses();         // array<string, ReflectionClass>, name-keyed
 ```
 
 `save()` re-serializes the (possibly mutated) image back to a valid binary and

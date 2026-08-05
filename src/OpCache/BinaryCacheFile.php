@@ -31,7 +31,7 @@ final class BinaryCacheFile
 {
     private ?PayloadRelocator $relocator = null;
 
-    private ?PersistentScriptView $view = null;
+    private ?ReflectionOpcacheFile $view = null;
 
     private function __construct(
         private readonly string $binPath,
@@ -48,10 +48,10 @@ final class BinaryCacheFile
      */
     public static function read(string $binPath, ?string $scriptPath = null): self
     {
-        if (!is_file($binPath)) {
+        if (!is_readable($binPath)) {
             throw OpCacheException::binFileNotFound($binPath);
         }
-        $bytes    = (string) file_get_contents($binPath);
+        $bytes    = self::readLocked($binPath);
         $metaInfo = CacheMetaInfo::parse($bytes, $binPath);
         $payload  = substr($bytes, CacheMetaInfo::byteSize());
         if (strlen($payload) < $metaInfo->memSize() + $metaInfo->strSize()) {
@@ -59,6 +59,35 @@ final class BinaryCacheFile
         }
 
         return new self($binPath, $metaInfo, $payload, $scriptPath);
+    }
+
+    /**
+     * Reads the whole file under a shared advisory lock, so a concurrent
+     * writer (another worker refreshing the same binary) cannot be observed
+     * mid-write. Mirrors opcache's own zend_file_cache_flock(fd, LOCK_SH) on
+     * load. Any I/O failure surfaces as a typed OpCacheException.
+     */
+    private static function readLocked(string $binPath): string
+    {
+        $handle = fopen($binPath, 'rb');
+        if ($handle === false) {
+            throw OpCacheException::readFailed($binPath);
+        }
+
+        try {
+            if (!flock($handle, LOCK_SH)) {
+                throw OpCacheException::readFailed($binPath);
+            }
+            $bytes = stream_get_contents($handle);
+            if ($bytes === false) {
+                throw OpCacheException::readFailed($binPath);
+            }
+
+            return $bytes;
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
     }
 
     /**
@@ -83,17 +112,28 @@ final class BinaryCacheFile
      *
      * This is the "generate" primitive: the result is bit-exact what opcache
      * itself would cache, ready for inspection and patching.
+     *
+     * @param list<string>  $extraDirectives Additional `-d name=value` ini
+     *                                       directives for the child (e.g.
+     *                                       `['opcache.optimization_level=0']`)
+     * @param int|null       $directoryPermissions Mask used if the cache directory
+     *                                       has to be created; null requires the
+     *                                       directory to already exist. Never
+     *                                       world-writable by default.
      */
-    public static function compile(string $scriptPath, string $fileCacheDir, ?string $phpBinary = null): self
-    {
+    public static function compile(
+        string $scriptPath,
+        string $fileCacheDir,
+        ?string $phpBinary = null,
+        array $extraDirectives = [],
+        ?int $directoryPermissions = 0o755,
+    ): self {
         $realPath = realpath($scriptPath);
         if ($realPath === false) {
             throw OpCacheException::scriptNotFound($scriptPath);
         }
         // Opcache refuses to boot file_cache_only against a missing directory
-        if (!is_dir($fileCacheDir) && !mkdir($fileCacheDir, 0777, true) && !is_dir($fileCacheDir)) {
-            throw OpCacheException::compilationFailed($realPath, "cannot create the cache directory {$fileCacheDir}");
-        }
+        self::ensureDirectory($fileCacheDir, $directoryPermissions);
         $command = [
             $phpBinary ?? PHP_BINARY,
             '-d', 'opcache.enable=1',
@@ -103,6 +143,13 @@ final class BinaryCacheFile
             // The file cache refuses to store scripts while the JIT is active
             '-d', 'opcache.jit=off',
             '-d', 'opcache.jit_buffer_size=0',
+        ];
+        foreach ($extraDirectives as $directive) {
+            $command[] = '-d';
+            $command[] = $directive;
+        }
+        $command = [
+            ...$command,
             '-r', 'exit(function_exists("opcache_compile_file") ? (opcache_compile_file($argv[1]) ? 0 : 1) : 2);',
             '--',
             $realPath,
@@ -165,12 +212,12 @@ final class BinaryCacheFile
     }
 
     /**
-     * Materializes the payload into a live image and returns a facade over its
-     * zend_persistent_script. Mutations made through the returned wrappers are
-     * written back by save(). The view is cached, so repeated calls share one
-     * image.
+     * Materializes the payload into a live image and returns a Reflection-style
+     * handle over its zend_persistent_script. Mutations made through the
+     * returned wrappers are written back by save(). The handle is cached, so
+     * repeated calls share one image.
      */
-    public function script(): PersistentScriptView
+    public function getReflection(): ReflectionOpcacheFile
     {
         if ($this->view !== null) {
             return $this->view;
@@ -179,14 +226,17 @@ final class BinaryCacheFile
             throw OpCacheException::systemIdMismatch(SystemId::current(), $this->metaInfo->systemId());
         }
         $length = strlen($this->payload);
-        // The buffer is kept alive by the relocator it is handed to; the
-        // relocated image points into it, so it must outlive the view
+        // The relocator needs its own WRITABLE buffer: relocate() rewrites the
+        // stored offsets to real addresses in place, and PHP strings are
+        // immutable/copy-on-write, so $this->payload cannot be relocated
+        // directly. The buffer is kept alive by the relocator it is handed to;
+        // the relocated image points into it, so it must outlive the handle.
         $buffer = Core::new("char[{$length}]", false);
         Core::memcpy($buffer, $this->payload, $length);
 
         $this->relocator = new PayloadRelocator($buffer, $this->metaInfo);
 
-        return $this->view = new PersistentScriptView($this->relocator->relocate());
+        return $this->view = new ReflectionOpcacheFile($this->relocator->relocate());
     }
 
     /**
@@ -197,7 +247,7 @@ final class BinaryCacheFile
      * The write is atomic: a temporary sibling file is renamed over the
      * destination, so a concurrent loader never observes a torn binary.
      */
-    public function save(?string $binPath = null, ?int $timestamp = null): void
+    public function save(?string $binPath = null, ?int $timestamp = null, ?int $directoryPermissions = 0o755): void
     {
         $target = $binPath ?? $this->binPath;
         if ($this->relocator !== null) {
@@ -213,13 +263,37 @@ final class BinaryCacheFile
             $this->metaInfo = $this->metaInfo->withTimestamp($timestamp);
         }
 
-        $directory = dirname($target);
-        if (!is_dir($directory) && !mkdir($directory, 0777, true) && !is_dir($directory)) {
-            throw OpCacheException::compilationFailed($target, "cannot create the cache directory {$directory}");
-        }
+        self::ensureDirectory(dirname($target), $directoryPermissions);
+        // Write to a unique sibling under an exclusive lock, then rename over
+        // the destination: the rename is atomic, so a concurrent reader (see
+        // readLocked()) observes either the old or the new file, never a torn one
         $temporary = $target . '.' . bin2hex(random_bytes(6)) . '.tmp';
-        file_put_contents($temporary, $this->metaInfo->toBinary() . $this->payload);
-        rename($temporary, $target);
+        if (file_put_contents($temporary, $this->metaInfo->toBinary() . $this->payload, LOCK_EX) === false) {
+            throw OpCacheException::writeFailed($temporary);
+        }
+        if (!rename($temporary, $target)) {
+            @unlink($temporary);
+            throw OpCacheException::writeFailed($target);
+        }
+    }
+
+    /**
+     * Ensures the target directory exists. A null permission mask means the
+     * caller owns directory creation and the directory must already exist; a
+     * non-null mask creates it with exactly that mask (umask still applies),
+     * never implicitly world-writable.
+     */
+    private static function ensureDirectory(string $directory, ?int $permissions): void
+    {
+        if (is_dir($directory)) {
+            return;
+        }
+        if ($permissions === null) {
+            throw OpCacheException::cacheDirectoryMissing($directory);
+        }
+        if (!mkdir($directory, $permissions, true) && !is_dir($directory)) {
+            throw OpCacheException::cacheDirectoryMissing($directory);
+        }
     }
 
     /**

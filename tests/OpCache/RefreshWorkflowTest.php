@@ -15,7 +15,6 @@ namespace ZEngine\OpCache;
 
 use PHPUnit\Framework\TestCase;
 use ZEngine\Reflection\ReflectionValue;
-use ZEngine\Type\StringEntry;
 
 /**
  * The full vision loop end to end: compile a script into the file cache,
@@ -38,19 +37,11 @@ final class RefreshWorkflowTest extends TestCase
         self::assertSame('41', self::runFromCache(self::fixturePath(), 'zengine_bin_answer', self::$cacheDir));
 
         // mutate the compiled literal through the reflection wrappers
-        foreach ($file->script()->functions() as $function) {
-            $namePointer = $function->getCommonPointer()->function_name;
-            if ($namePointer === null) {
-                continue;
-            }
-            if (strtolower(StringEntry::fromCData($namePointer)->getStringValue()) !== 'zengine_bin_answer') {
-                continue;
-            }
-            foreach ($function->getLiterals() as $literal) {
-                $literal->getNativeValue($value);
-                if ($literal->getBaseType() === ReflectionValue::IS_LONG && $value === 41) {
-                    $literal->setNativeValue(42);
-                }
+        $function = $file->getReflection()->getFunctions()['zengine_bin_answer'];
+        foreach ($function->getLiterals() as $literal) {
+            $literal->getNativeValue($value);
+            if ($literal->getBaseType() === ReflectionValue::IS_LONG && $value === 41) {
+                $literal->setNativeValue(42);
             }
         }
 

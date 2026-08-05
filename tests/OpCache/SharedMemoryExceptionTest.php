@@ -17,7 +17,7 @@ use PHPUnit\Framework\TestCase;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionFunction;
 
-final class SharedMemoryTest extends TestCase
+final class SharedMemoryExceptionTest extends TestCase
 {
     public function testExceptionLivesInTheOpCacheNamespaceAndStaysCatchable(): void
     {
@@ -28,10 +28,11 @@ final class SharedMemoryTest extends TestCase
         );
     }
 
-    public function testRuntimeDeclaredCodeIsNotReportedAsShared(): void
+    public function testRuntimeDeclaredCodeIsNotReportedAsImmutable(): void
     {
-        // Code declared in this process (no opcache SHM) is never immutable
-        self::assertFalse(SharedMemory::isImmutableClass(new ReflectionClass(self::class)));
-        self::assertFalse(SharedMemory::isImmutableFunction(new ReflectionFunction('strlen')));
+        // Detection is on the owning wrappers; code declared in this process
+        // (never opcache-shared) is never immutable
+        self::assertFalse((new ReflectionClass(self::class))->isImmutable());
+        self::assertFalse((new ReflectionFunction('strlen'))->isImmutable());
     }
 }

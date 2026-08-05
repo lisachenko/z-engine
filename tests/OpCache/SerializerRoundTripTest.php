@@ -16,7 +16,6 @@ namespace ZEngine\OpCache;
 use PHPUnit\Framework\TestCase;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionValue;
-use ZEngine\Type\StringEntry;
 
 /**
  * The decisive tests for the relocate/serialize pipeline: byte-identity of an
@@ -49,7 +48,7 @@ final class SerializerRoundTripTest extends TestCase
     public function testUnmodifiedResaveStillExecutes(): void
     {
         $file = BinaryCacheFile::read(self::compileFixture(), self::fixturePath());
-        $file->script(); // relocate
+        $file->getReflection(); // relocate
         $file->save();   // re-serialize unchanged
 
         self::assertTrue(BinaryCacheFile::read($file->binPath())->verifyChecksum());
@@ -108,17 +107,11 @@ final class SerializerRoundTripTest extends TestCase
      */
     private static function functionLiterals(BinaryCacheFile $file, string $functionName): iterable
     {
-        foreach ($file->script()->functions() as $function) {
-            $namePointer = $function->getCommonPointer()->function_name;
-            if ($namePointer === null) {
-                continue;
-            }
-            $name = strtolower(StringEntry::fromCData($namePointer)->getStringValue());
-            if ($name === $functionName) {
-                return $function->getLiterals();
-            }
+        $functions = $file->getReflection()->getFunctions();
+        if (!isset($functions[$functionName])) {
+            self::fail("Function {$functionName} not found in the cached script");
         }
 
-        self::fail("Function {$functionName} not found in the cached script");
+        return $functions[$functionName]->getLiterals();
     }
 }

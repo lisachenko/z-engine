@@ -14,10 +14,8 @@ declare(strict_types=1);
 namespace ZEngine\OpCache;
 
 use PHPUnit\Framework\TestCase;
-use ZEngine\Reflection\ReflectionClass;
-use ZEngine\Type\StringEntry;
 
-final class PersistentScriptViewTest extends TestCase
+final class ReflectionOpcacheFileTest extends TestCase
 {
     use FileCacheFixture;
 
@@ -29,40 +27,34 @@ final class PersistentScriptViewTest extends TestCase
     public function testWalksFunctionsThroughReflectionWrappers(): void
     {
         $file = BinaryCacheFile::read(self::compileFixture(), self::fixturePath());
-        $view = $file->script();
+        $view = $file->getReflection();
 
-        self::assertStringEndsWith('answer.php', $view->scriptName());
+        self::assertStringEndsWith('answer.php', $view->getFileName());
 
-        // The functions are not registered in this process, so their name is
-        // read at the pointer level (native getName() needs a live reflection)
-        $names = [];
-        foreach ($view->functions() as $function) {
-            $namePointer = $function->getCommonPointer()->function_name;
-            self::assertNotNull($namePointer);
-            $names[] = strtolower(StringEntry::fromCData($namePointer)->getStringValue());
-        }
-        self::assertContains('zengine_bin_answer', $names);
-        self::assertContains('zengine_bin_greeting', $names);
+        // getFunctions() is name-keyed (parity with ReflectionExtension), and
+        // each value is a working ReflectionFunction over the cached body
+        $functions = $view->getFunctions();
+        self::assertArrayHasKey('zengine_bin_answer', $functions);
+        self::assertArrayHasKey('zengine_bin_greeting', $functions);
+        self::assertGreaterThan(0, count([...$functions['zengine_bin_answer']->getOpCodes()]));
     }
 
     public function testWalksClassesThroughReflectionWrappers(): void
     {
         $file = BinaryCacheFile::read(self::compileFixture(), self::fixturePath());
-        $view = $file->script();
+        $view = $file->getReflection();
 
-        $names = array_map(
-            static fn(ReflectionClass $class): string => (string) $class->getName(),
-            $view->classes(),
-        );
-        self::assertContains('ZEngineBinSubject', $names);
-        self::assertContains('ZEngineBinMarker', $names);
+        $classes = $view->getClasses();
+        self::assertArrayHasKey('zenginebinsubject', $classes);
+        self::assertArrayHasKey('zenginebinmarker', $classes);
+        self::assertSame('ZEngineBinSubject', (string) $classes['zenginebinsubject']->getName());
     }
 
     public function testMainOpArrayIsReadable(): void
     {
         $file = BinaryCacheFile::read(self::compileFixture(), self::fixturePath());
 
-        $main    = $file->script()->mainOpArray();
+        $main    = $file->getReflection()->getScriptFunction();
         $opCodes = [...$main->getOpCodes()];
         self::assertGreaterThan(0, count($opCodes));
     }
@@ -85,6 +77,6 @@ final class PersistentScriptViewTest extends TestCase
 
         $this->expectException(OpCacheException::class);
         $this->expectExceptionMessage('was produced by build');
-        BinaryCacheFile::read($foreign)->script();
+        BinaryCacheFile::read($foreign)->getReflection();
     }
 }

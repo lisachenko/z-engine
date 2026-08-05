@@ -215,10 +215,10 @@ Read the binary files opcache writes for `opcache.file_cache`, patch the compile
 ```php
 use ZEngine\OpCache\BinaryCacheFile;
 
-$file = BinaryCacheFile::compile(__DIR__ . '/Service.php', $cacheDir);
-$view = $file->script();          // ReflectionFunction/ReflectionClass over the cached script
+$file       = BinaryCacheFile::compile(__DIR__ . '/Service.php', $cacheDir);
+$reflection = $file->getReflection();   // ReflectionExtension-shaped handle over the cached script
 // ... mutate literals, opcodes, flags through the usual wrappers ...
-$file->refresh();                 // rewrite the binary + invalidate the source
+$file->refresh();                       // rewrite the binary + invalidate the source
 ```
 
 The payload is re-serialized from the mutated graph (not just byte-poked), so size-changing edits are written correctly. See **[docs/opcache-binary.md](docs/opcache-binary.md)** for the format, build-matching rules and current limits — this is the foundation for AOP, transpiling and source-code protection on top of the file cache.
