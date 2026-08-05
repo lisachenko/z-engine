@@ -1165,7 +1165,17 @@ class ClassSpecializer
             $newMask = $copiedType->type_mask;
             $cached  = $opline->op2;
             assert(is_int($newMask) && $cached instanceof CData);
-            if ($cached->num !== $newMask) {
+            $cachedMask = $cached->num;
+            assert(is_int($cachedMask));
+
+            // A cached mask carrying a name or list bit means the compiler already routed this
+            // parameter through the generic path that reads arg_info on every call, so the
+            // rewrite is live without touching an opcode - and the opcodes stay shared, which
+            // is both cheaper and free of the 32-bit reach limit below.
+            $routedThroughArgInfo = ($cachedMask & (
+                Core::engineConstant('_ZEND_TYPE_NAME_BIT') | Core::engineConstant('_ZEND_TYPE_LIST_BIT')
+            )) !== 0;
+            if (!$routedThroughArgInfo && $cachedMask !== $newMask) {
                 $patches[$index] = $newMask;
             }
         }
