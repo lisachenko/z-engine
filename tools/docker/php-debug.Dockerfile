@@ -27,6 +27,9 @@ RUN apt-get update \
 # build-time -dev libraries were stripped from the runtime image. The default
 # extension set (dom, xml, xmlwriter, simplexml, ctype, tokenizer, phar, json,
 # filter) builds automatically once libxml is present.
+# The ini paths must be replayed explicitly: without them the rebuilt binary keeps
+# the autoconf defaults and scans NO conf.d at all, which silently drops every
+# setting (and every zend_extension) the image configures below.
 RUN set -eux; \
     docker-php-source extract; \
     cd /usr/src/php; \
@@ -35,10 +38,13 @@ RUN set -eux; \
         --with-ffi \
         --enable-mbstring \
         --enable-opcache \
+        --with-config-file-path="${PHP_INI_DIR}" \
+        --with-config-file-scan-dir="${PHP_INI_DIR}/conf.d" \
         > /tmp/configure.log 2>&1 || (cat /tmp/configure.log && false); \
     make -j"$(nproc)" > /tmp/make.log 2>&1 || (tail -80 /tmp/make.log && false); \
     make install; \
-    docker-php-source delete
+    docker-php-source delete; \
+    php --ini | grep -q "${PHP_INI_DIR}/conf.d"
 
 # Drop the base image's shared-extension enablers: they point at release-ABI
 # .so files that a debug PHP refuses to load (and ffi is now built in).
