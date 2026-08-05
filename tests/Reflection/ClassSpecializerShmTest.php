@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace ZEngine\Reflection;
 
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -26,6 +27,7 @@ use PHPUnit\Framework\TestCase;
  * NOT immutable, so this test can never silently pass against a mutable class. It only
  * skips when the opcache extension itself is unavailable.
  */
+#[Group('opcache')]
 final class ClassSpecializerShmTest extends TestCase
 {
     protected function setUp(): void

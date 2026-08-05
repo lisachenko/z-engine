@@ -13,9 +13,11 @@ declare(strict_types=1);
 
 namespace ZEngine\OpCache;
 
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ZEngine\Core;
 
+#[Group('opcache')]
 final class CacheMetaInfoTest extends TestCase
 {
     use FileCacheFixture;
@@ -51,10 +53,20 @@ final class CacheMetaInfoTest extends TestCase
 
     public function testBinaryRoundTripIsByteIdentical(): void
     {
-        $binPath = self::compileFixture();
-        $header  = substr((string) file_get_contents($binPath), 0, CacheMetaInfo::byteSize());
+        $binPath      = self::compileFixture();
+        $header       = substr((string) file_get_contents($binPath), 0, CacheMetaInfo::byteSize());
+        $roundTripped = CacheMetaInfo::parse($header, $binPath)->toBinary();
 
-        self::assertSame($header, CacheMetaInfo::parse($header, $binPath)->toBinary());
+        // Every byte the format defines - up to and including the checksum - survives the
+        // round trip. The struct's trailing padding does NOT take part: opcache fills the
+        // metainfo on the stack and writes it out without zeroing the padding, so those
+        // bytes are whatever the engine's stack held (a debug build makes that visible).
+        // toBinary() writes them as zeros, which no reader interprets.
+        $definedBytes = Core::type('zend_file_cache_metainfo')->getStructFieldOffset('checksum')
+            + Core::sizeof(Core::type('uint32_t'));
+
+        self::assertSame(substr($header, 0, $definedBytes), substr($roundTripped, 0, $definedBytes));
+        self::assertSame(CacheMetaInfo::byteSize(), strlen($roundTripped));
     }
 
     public function testWithTimestampAndChecksumProduceModifiedHeaders(): void

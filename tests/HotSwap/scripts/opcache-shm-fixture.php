@@ -28,4 +28,54 @@ class ZEngineShmClass
     {
         return 'shm-hello';
     }
+
+    public function callsGreet(): string
+    {
+        // Compiled call site inside a shared-memory body: it must dispatch the
+        // redefined method through the writable copy of the class entry
+        return 'via:' . $this->greet();
+    }
+}
+
+/**
+ * Target of the addMethod branch of issue #41
+ *
+ * Kept separate from the redefine/hot-swap targets so every copy-out in the matrix
+ * starts from a pristine shared-memory class entry.
+ */
+class ZEngineShmExtendable
+{
+    public const KIND = 'extendable';
+
+    public function original(): string
+    {
+        return 'original';
+    }
+
+    /**
+     * Dispatches a method that exists only after addMethod() published it
+     *
+     * The name arrives as an argument: a runtime-published method is invisible to
+     * static analysis, and a compiled call site would resolve nothing at all.
+     */
+    public function callsInjected(string $injectedMethod): string
+    {
+        $injectedResult = $this->{$injectedMethod}();
+
+        return 'via:' . (is_string($injectedResult) ? $injectedResult : '');
+    }
+}
+
+/**
+ * Target of the hot-swap branch: a plain shared-memory class whose whole body is
+ * replaced from source
+ */
+class ZEngineShmSwappable
+{
+    public const VERSION = 'v1';
+
+    public function ping(): string
+    {
+        return 'v1';
+    }
 }

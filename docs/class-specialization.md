@@ -149,6 +149,14 @@ copy works while the SHM original reads back unchanged. The test skips only when
 opcache extension is unavailable; a preload setup that fails to produce an immutable
 template fails the test instead of passing silently.
 
+The same copy machinery backs the **shared-memory copy-out of the mutation APIs**
+(`ReflectionClass::copyOutOfSharedMemory()`, used by `addMethod()`, method `redefine()`,
+`HotSwap` and friends): there the copy is published under the *original* name - it reuses
+the source's interned name string and replaces the class-table bucket instead of adding a
+new one - so the class keeps its identity while becoming writable. Its contract, and in
+particular what keeps pointing at the shared entry afterwards, is documented in
+[hot-swap.md](hot-swap.md#opcache-shared-memory-support-matrix).
+
 ## Support matrix
 
 | Source | Supported | Failure |

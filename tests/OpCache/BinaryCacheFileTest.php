@@ -13,8 +13,10 @@ declare(strict_types=1);
 
 namespace ZEngine\OpCache;
 
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('opcache')]
 final class BinaryCacheFileTest extends TestCase
 {
     use FileCacheFixture;

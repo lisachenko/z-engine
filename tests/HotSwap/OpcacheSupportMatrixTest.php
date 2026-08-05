@@ -13,22 +13,66 @@ declare(strict_types=1);
 
 namespace ZEngine\HotSwap;
 
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Opcache shared-memory support matrix (resolves the ambiguity of issue #41)
+ * Opcache shared-memory support matrix (the regression test of issue #41)
  *
  * A child process runs with opcache enabled so classes/functions loaded from a
  * file are published from shared memory with ZEND_ACC_IMMUTABLE. The child
  * asserts the documented matrix (docs/hot-swap.md):
  *
  *  - immutable global function + redefine(): copy-out into a writable entry works
- *  - immutable class + redefine()/addMethod()/HotSwap: typed SharedMemoryException
+ *  - immutable class + method redefine()/addMethod()/HotSwap: the class entry is
+ *    copied out of shared memory and the mutation applies to the writable copy,
+ *    while the shared-memory original stays byte-for-byte untouched
  *  - runtime-declared classes keep the full mutation surface under opcache
+ *
+ * The child exit code doubles as the shutdown check of issue #41, whose original
+ * symptom was a zend_function_dtor() assertion failure and a SIGABRT while the
+ * request was being torn down.
  */
+#[Group('opcache')]
 class OpcacheSupportMatrixTest extends TestCase
 {
     public function testSharedMemorySupportMatrix(): void
+    {
+        [$exitCode, $stdout, $report] = $this->runOpcacheChild(__DIR__ . '/scripts/opcache-matrix.php');
+
+        self::assertSame(0, $exitCode, "Opcache matrix child exited with code {$exitCode}\n{$report}");
+        self::assertStringContainsString('function-copy-out: ok', $stdout, $report);
+        self::assertStringContainsString('method-redefine: ok', $stdout, $report);
+        self::assertStringContainsString('add-method: ok', $stdout, $report);
+        self::assertStringContainsString('hot-swap: ok', $stdout, $report);
+        self::assertStringContainsString('runtime-class-swap: ok', $stdout, $report);
+        self::assertStringContainsString('MATRIX OK', $stdout, $report);
+    }
+
+    /**
+     * A preloaded class entry is the one shared-memory shape the copy-out refuses:
+     * its class-table bucket is reused by every request of the worker process, while
+     * the copy would die with this one
+     */
+    public function testPreloadedClassMutationIsRejected(): void
+    {
+        [$exitCode, $stdout, $report] = $this->runOpcacheChild(
+            __DIR__ . '/scripts/opcache-preloaded.php',
+            ['-d', 'opcache.preload=' . dirname(__DIR__) . '/Stub/specializationShmPreload.php'],
+        );
+
+        self::assertSame(0, $exitCode, "Preloaded-class child exited with code {$exitCode}\n{$report}");
+        self::assertStringContainsString('preloaded-rejected: ok', $stdout, $report);
+    }
+
+    /**
+     * Runs a probe script in a child process with opcache activated
+     *
+     * @param list<string> $extraOptions Additional `php -d` options for this probe
+     *
+     * @return array{int, string, string} Exit code, stdout and a stdout+stderr report
+     */
+    private function runOpcacheChild(string $scriptPath, array $extraOptions = []): array
     {
         if (!extension_loaded('Zend OPcache')) {
             self::markTestSkipped('Zend OPcache extension is not loaded');
@@ -47,7 +91,8 @@ class OpcacheSupportMatrixTest extends TestCase
             // The JIT rewrites the executor internals z-engine hooks into (AGENTS.md)
             '-d', 'opcache.jit=off',
             '-d', 'opcache.jit_buffer_size=0',
-            __DIR__ . '/scripts/opcache-matrix.php',
+            ...$extraOptions,
+            $scriptPath,
         ];
         $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
         self::assertIsResource($process, 'Unable to spawn the opcache child process');
@@ -60,14 +105,10 @@ class OpcacheSupportMatrixTest extends TestCase
 
         $report = "STDOUT:\n{$stdout}\nSTDERR:\n{$stderr}";
         if ($exitCode === 2) {
+            // Never a silent pass: the shared-memory branch was not exercised at all
             self::markTestSkipped("Opcache could not be activated in the child process\n{$report}");
         }
-        self::assertSame(0, $exitCode, "Opcache matrix child exited with code {$exitCode}\n{$report}");
-        self::assertStringContainsString('function-copy-out: ok', $stdout, $report);
-        self::assertStringContainsString('method-redefine-rejected: ok', $stdout, $report);
-        self::assertStringContainsString('add-method-rejected: ok', $stdout, $report);
-        self::assertStringContainsString('hot-swap-rejected: ok', $stdout, $report);
-        self::assertStringContainsString('runtime-class-swap: ok', $stdout, $report);
-        self::assertStringContainsString('MATRIX OK', $stdout, $report);
+
+        return [$exitCode, $stdout, $report];
     }
 }

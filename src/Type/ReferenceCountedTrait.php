@@ -107,7 +107,7 @@ trait ReferenceCountedTrait
      */
     public function isImmutable(): bool
     {
-        return (bool) ($this->getGC()->u->type_info & ReferenceCountedInterface::GC_IMMUTABLE);
+        return $this->hasGcFlag(ReferenceCountedInterface::GC_IMMUTABLE);
     }
 
     /**
@@ -115,7 +115,7 @@ trait ReferenceCountedTrait
      */
     public function isPersistent(): bool
     {
-        return (bool) ($this->getGC()->u->type_info & ReferenceCountedInterface::GC_PERSISTENT);
+        return $this->hasGcFlag(ReferenceCountedInterface::GC_PERSISTENT);
     }
 
     /**
@@ -123,7 +123,22 @@ trait ReferenceCountedTrait
      */
     public function isPersistentLocal(): bool
     {
-        return (bool) ($this->getGC()->u->type_info & ReferenceCountedInterface::GC_PERSISTENT_LOCAL);
+        return $this->hasGcFlag(ReferenceCountedInterface::GC_PERSISTENT_LOCAL);
+    }
+
+    /**
+     * Tests the GC flag word (zend_refcounted_h.u.type_info) of the payload against a mask
+     *
+     * The single read of the flag word: every storage-class predicate of a refcounted
+     * payload (immutable, persistent, thread-local, and the string-specific flags on top
+     * of them) goes through it.
+     */
+    protected function hasGcFlag(int $flagMask): bool
+    {
+        $typeInfo = $this->getGC()->u->type_info;
+        assert(is_int($typeInfo));
+
+        return ($typeInfo & $flagMask) !== 0;
     }
 
     /**

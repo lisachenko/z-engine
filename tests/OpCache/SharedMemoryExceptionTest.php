@@ -24,8 +24,30 @@ final class SharedMemoryExceptionTest extends TestCase
         // Existing catch (\ReflectionException) blocks keep working after the move
         self::assertInstanceOf(
             \ReflectionException::class,
-            SharedMemoryException::immutableMethodTable(),
+            SharedMemoryException::methodMissingAfterCopyOut('Some\Shared', 'method'),
         );
+    }
+
+    public function testCopyOutFailureCarriesTheRefusalReason(): void
+    {
+        $reason    = new \RuntimeException('classes with property hooks are not supported');
+        $exception = SharedMemoryException::classCopyOutFailed('Some\Shared', $reason);
+
+        self::assertSame($reason, $exception->getPrevious());
+        self::assertStringContainsString('Some\Shared', $exception->getMessage());
+        self::assertStringContainsString('property hooks', $exception->getMessage());
+    }
+
+    public function testMutationFailureNamesTheOperationAndTheReason(): void
+    {
+        $exception = SharedMemoryException::immutableClassMutation(
+            'add a method',
+            SharedMemoryException::classCopyOutFailed('Some\Shared', new \RuntimeException('it is an enum')),
+        );
+
+        self::assertStringContainsString('add a method', $exception->getMessage());
+        self::assertStringContainsString('it is an enum', $exception->getMessage());
+        self::assertInstanceOf(SharedMemoryException::class, $exception->getPrevious());
     }
 
     public function testRuntimeDeclaredCodeIsNotReportedAsImmutable(): void

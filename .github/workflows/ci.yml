@@ -19,18 +19,38 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up PHP
+        # opcache must be LOADED in the parent process: every opcache-gated test
+        # skips itself on `extension_loaded('Zend OPcache')` and would otherwise
+        # silently drop out of the run (issue #124). It stays INACTIVE here
+        # (opcache.enable_cli=0) - the tests activate it explicitly in the child
+        # processes that exercise shared memory, while the test runner itself
+        # mutates the very classes opcache would publish as immutable. The JIT is
+        # off everywhere: it rewrites the executor internals z-engine hooks into
+        # (AGENTS.md).
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_MINOR }}
-          extensions: ffi
-          ini-values: ffi.enable=1, zend.assertions=1, opcache.jit=off
+          extensions: ffi, opcache
+          ini-values: ffi.enable=1, zend.assertions=1, opcache.enable=1, opcache.enable_cli=0, opcache.jit=off, opcache.jit_buffer_size=0
           coverage: none
+
+      - name: Assert the opcache extension is available to the test runner
+        run: |
+          php -r 'exit(extension_loaded("Zend OPcache") ? 0 : 1);' \
+            || { echo "::error::Zend OPcache is not loaded - the opcache tests would silently skip"; exit 1; }
 
       - name: Install dependencies
         uses: ramsey/composer-install@v3
 
       - name: Run test suite
         run: composer test
+
+      # The gate for issue #124: the opcache/shared-memory tests must have RUN.
+      # They are self-skipping (no opcache extension, opcache not activatable in
+      # the child process, fixture not published from shared memory), so without
+      # this step a broken opcache setup reads as a green run.
+      - name: Opcache/SHM coverage must not silently skip
+        run: composer test:opcache
 
       - name: Worker-loop soak (flat memory after warm-up)
         run: php -d ffi.enable=1 -d zend.assertions=1 -d opcache.jit=off tools/examples/worker-loop.php
@@ -97,6 +117,15 @@ jobs:
         run: |
           docker run --rm -v "$PWD:/app" -w /app z-engine-php:debug \
             vendor/bin/phpunit --group internal --process-isolation
+
+      # The shared-memory mutations of issue #41 corrupt engine memory when they
+      # are wrong; on a debug build that surfaces as a Zend assertion failure
+      # (zend_function_dtor) and a SIGABRT during request shutdown instead of a
+      # silently wrong result. Skips fail the step (issue #124).
+      - name: Run opcache/SHM group on the debug build
+        run: |
+          docker run --rm -v "$PWD:/app" -w /app z-engine-php:debug \
+            vendor/bin/phpunit --group opcache --fail-on-skipped
 
   header-drift:
     name: Generated headers up to date

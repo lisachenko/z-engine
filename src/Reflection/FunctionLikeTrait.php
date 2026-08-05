@@ -115,8 +115,9 @@ trait FunctionLikeTrait
      * the same entry are memory-flat, see FunctionBodySwap. An opcache-shared
      * (ZEND_ACC_IMMUTABLE) global function is first copied out of shared memory into
      * a writable entry (its SHM body stays allocated, never freed); a method of an
-     * opcache-shared class cannot be redefined at all, because its method table
-     * lives inside the SHM class entry - see docs/hot-swap.md for the matrix.
+     * opcache-shared class is redefined on the writable copy of its declaring class,
+     * which is copied out of shared memory the same way - see docs/hot-swap.md for
+     * the matrix and the copy-out caveats.
      *
      * @internal
      */
@@ -132,13 +133,15 @@ trait FunctionLikeTrait
 
             $isSharedMemoryEntry = $this->isImmutable();
             if ($isSharedMemoryEntry) {
-                if ($this->getCommonPointer()->scope !== null) {
-                    throw SharedMemoryException::immutableMethodTable();
-                }
-                // Copy the entry out of SHM: the per-process function-table bucket is
+                // Copy the entry out of SHM: the per-process bucket that publishes it is
                 // repointed at a writable container, the SHM original stays untouched
-                // (never written, never freed)
-                $this->pointer = $this->copyOutOfSharedMemory();
+                // (never written, never freed). A method entry lives inside the shared
+                // class entry, so the whole class is copied out and the swap targets the
+                // method entry of the writable copy.
+                $entryScope    = $this->getCommonPointer()->scope;
+                $this->pointer = $entryScope !== null
+                    ? $this->copyMethodOutOfSharedMemory($entryScope)
+                    : $this->copyOutOfSharedMemory();
             }
 
             $entryFunction = ReflectionFunction::fromCData($this->pointer);
@@ -201,6 +204,34 @@ trait FunctionLikeTrait
         $bucketValue->setPointer($writablePointer);
 
         return $writablePointer;
+    }
+
+    /**
+     * Copies the opcache-shared class this method belongs to out of shared memory and
+     * returns the writable method entry of the copy
+     *
+     * A method table lives INSIDE the class entry, so there is no per-method bucket to
+     * repoint: the whole class entry is copied out instead (see
+     * ReflectionClass::copyOutOfSharedMemory() for the copy model and its caveats) and the
+     * body swap targets the entry the copy publishes, which is a writable zend_op_array
+     * struct still sharing the compiled body with shared memory.
+     *
+     * @param CData $entryScope Shared-memory zend_class_entry this method is declared in
+     *
+     * @return CData Writable zend_function pointer published in the copied method table
+     */
+    private function copyMethodOutOfSharedMemory(CData $entryScope): CData
+    {
+        $declaringClass = ReflectionClass::fromCData($entryScope);
+        $declaringClass->copyOutOfSharedMemory();
+
+        $methodName  = $this->getName();
+        $methodValue = $declaringClass->getMethodTable()->find(strtolower($methodName));
+        if ($methodValue === null) {
+            throw SharedMemoryException::methodMissingAfterCopyOut($declaringClass->getName(), $methodName);
+        }
+
+        return $methodValue->getRawFunction();
     }
 
     /**

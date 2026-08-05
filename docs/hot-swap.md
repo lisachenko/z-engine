@@ -109,25 +109,54 @@ engine's fatal error, which is not catchable - validate such sources upstream.
 
 Opcache publishes cached scripts from shared memory and marks their class
 entries and functions `ZEND_ACC_IMMUTABLE`. SHM is visible to every worker
-process, so z-engine never writes it and never frees it. The wrappers expose
-the detection as `ReflectionClass::isImmutable()` and
-`ReflectionFunction`/`ReflectionMethod::isImmutable()`; the copy-out of an
-immutable global function happens inside `ReflectionFunction::redefine()`
-(`FunctionLikeTrait::copyOutOfSharedMemory()`). Generating, reading and
-patching the on-disk cache binaries themselves is covered in
-[opcache-binary.md](opcache-binary.md).
+process, so z-engine never writes it and never frees it. Every mutation API
+instead **copies the target out of shared memory** into a writable per-process
+structure and repoints the per-process bucket that publishes it; the shared
+original is left byte-for-byte untouched and simply stops being published in
+this process (opcache republishes it into a fresh class/function table on the
+next request). The wrappers expose the detection as
+`ReflectionClass::isImmutable()` and
+`ReflectionFunction`/`ReflectionMethod::isImmutable()`, and the copy-out itself
+as `ReflectionClass::copyOutOfSharedMemory()` (functions:
+`FunctionLikeTrait::copyOutOfSharedMemory()`, run from inside `redefine()`).
+Generating, reading and patching the on-disk cache binaries themselves is
+covered in [opcache-binary.md](opcache-binary.md).
 
 | Target | Behaviour |
 |--------|-----------|
 | Immutable **global function** + `redefine()` | Supported via copy-out: the per-process function-table bucket is repointed at a writable `zend_function` copy; the SHM original stays untouched and allocated. The first swap does not destroy the previous (SHM) body; later swaps behave normally. |
-| Immutable **class**: method `redefine()` | Rejected with `SharedMemoryException` - the method table lives inside the SHM class entry, there is no writable per-process slot to repoint. |
-| Immutable **class**: `addMethod()` / `removeMethods()` / trait configuration | Rejected with `SharedMemoryException` (writing the SHM method table would corrupt sibling processes). |
-| Immutable **class**: `HotSwap::prepare()` | Rejected with `SharedMemoryException`. |
+| Immutable **class**: method `redefine()`, `addMethod()`, `removeMethods()`, trait configuration, `HotSwap::prepare()` | Supported via class copy-out: the class entry is deep-copied into request memory with the [class-specialization](class-specialization.md) copy model (own tables and property/constant blocks, method entries duplicated at the `zend_op_array` level with the compiled bodies still shared with SHM), the class-table bucket and the engine's fast class-name cache are repointed at the copy, and the mutation is applied to it. The copy is an ordinary userland class the engine dismantles at request end. |
+| Immutable **preloaded** class (`ZEND_ACC_PRELOADED`) | Rejected with `SharedMemoryException`: a preloaded class keeps its class-table bucket across the requests of a worker, while the copy lives in request memory - repointing the bucket would leave it dangling for the next request. |
+| Immutable class the copy machinery does not support (enum/interface/trait, property hooks, internal ancestor or internal methods) | Rejected with `SharedMemoryException` carrying the refusal reason. |
 | Runtime-declared functions/classes (never in SHM, even with opcache enabled) | Full mutation surface. |
 
 `SharedMemoryException` and `HotSwapException` both extend
 `ReflectionException`, so existing catch blocks keep working while the failure
 modes stay distinguishable.
+
+### Copy-out caveats
+
+A copy-out changes which `zend_class_entry` the class name resolves to, and
+only *resolution* is redirected - structures that captured the shared entry
+earlier keep it. Copy out (or mutate) at bootstrap, before such state exists:
+
+- **Instances created before the copy-out** keep the shared class entry in
+  `obj->ce`: they dispatch the old method bodies and are not `instanceof` the
+  copy. The same holds for subclasses that were already linked against the
+  shared entry (they keep the shared parent and its inherited method entries)
+  and for call sites whose run-time cache already resolved the class.
+- **Static properties** materialized before the copy-out stay with the shared
+  entry; the copy re-materializes its statics from the declared defaults.
+- **Differently-cased references**: the engine memoizes "class name string →
+  class entry" in a per-request cache slot on the interned name string. The
+  copy-out refreshes the slot of the declared class name, which is what every
+  call site spelling the class the way it was declared uses; a call site that
+  already resolved the class through another spelling (`new foo\bar()` for
+  `Foo\Bar`) in this request keeps the shared entry.
+- **Per-request only**: the copy dies with the request, and the next request of
+  the same worker starts from the shared-memory class again - apply the
+  mutation on every request (bootstrap), exactly like for a runtime-declared
+  class.
 
 ## Memory footprint
 
