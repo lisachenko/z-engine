@@ -71,6 +71,42 @@ trait FileCacheFixture
         return $binPath;
     }
 
+    /**
+     * Runs the given script strictly from the file cache in a child process and
+     * returns its stdout, proving the engine executed whatever binary the cache
+     * dir holds. Skips the test when opcache cannot be activated in the child.
+     */
+    private static function runFromCache(string $scriptPath, string $target, string $cacheDir): string
+    {
+        $command = [
+            PHP_BINARY,
+            '-d', 'opcache.enable=1',
+            '-d', 'opcache.enable_cli=1',
+            '-d', 'opcache.file_cache=' . $cacheDir,
+            '-d', 'opcache.file_cache_only=1',
+            '-d', 'opcache.file_cache_consistency_checks=1',
+            '-d', 'opcache.validate_timestamps=0',
+            '-d', 'opcache.jit=off',
+            '-d', 'opcache.jit_buffer_size=0',
+            __DIR__ . '/scripts/run-cached.php',
+            $scriptPath,
+            $target,
+        ];
+        $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        Assert::assertIsResource($process, 'Unable to spawn the cache-run child process');
+        $stdout = stream_get_contents($pipes[1]) ?: '';
+        $stderr = stream_get_contents($pipes[2]) ?: '';
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $exitCode = proc_close($process);
+        if ($exitCode === 2) {
+            Assert::markTestSkipped("Opcache could not be activated in the cache-run child\n{$stderr}");
+        }
+        Assert::assertSame(0, $exitCode, "Cache-run child failed ({$exitCode})\nSTDOUT:\n{$stdout}\nSTDERR:\n{$stderr}");
+
+        return trim($stdout);
+    }
+
     private static function fixturePath(): string
     {
         $path = realpath(__DIR__ . '/fixtures/answer.php');

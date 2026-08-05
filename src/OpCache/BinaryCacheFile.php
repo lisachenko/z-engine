@@ -13,6 +13,8 @@ declare(strict_types=1);
 
 namespace ZEngine\OpCache;
 
+use ZEngine\Core;
+
 /**
  * An opcache file-cache binary (`opcache.file_cache` .bin file).
  *
@@ -27,6 +29,10 @@ namespace ZEngine\OpCache;
  */
 final class BinaryCacheFile
 {
+    private ?PayloadRelocator $relocator = null;
+
+    private ?PersistentScriptView $view = null;
+
     private function __construct(
         private readonly string $binPath,
         private CacheMetaInfo $metaInfo,
@@ -159,6 +165,31 @@ final class BinaryCacheFile
     }
 
     /**
+     * Materializes the payload into a live image and returns a facade over its
+     * zend_persistent_script. Mutations made through the returned wrappers are
+     * written back by save(). The view is cached, so repeated calls share one
+     * image.
+     */
+    public function script(): PersistentScriptView
+    {
+        if ($this->view !== null) {
+            return $this->view;
+        }
+        if (!$this->matchesCurrentBuild()) {
+            throw OpCacheException::systemIdMismatch(SystemId::current(), $this->metaInfo->systemId());
+        }
+        $length = strlen($this->payload);
+        // The buffer is kept alive by the relocator it is handed to; the
+        // relocated image points into it, so it must outlive the view
+        $buffer = Core::new("char[{$length}]", false);
+        Core::memcpy($buffer, $this->payload, $length);
+
+        $this->relocator = new PayloadRelocator($buffer, $this->metaInfo);
+
+        return $this->view = new PersistentScriptView($this->relocator->relocate());
+    }
+
+    /**
      * Writes the binary. The checksum is always recomputed from the payload;
      * pass a timestamp to match the target script's mtime (opcache compares
      * them for equality when opcache.validate_timestamps=1).
@@ -168,7 +199,14 @@ final class BinaryCacheFile
      */
     public function save(?string $binPath = null, ?int $timestamp = null): void
     {
-        $target         = $binPath ?? $this->binPath;
+        $target = $binPath ?? $this->binPath;
+        if ($this->relocator !== null) {
+            // Re-serialize the (possibly mutated) live image, updating the
+            // interned-string section size in the header
+            $this->payload  = $this->relocator->derelocate();
+            $length         = strlen($this->payload);
+            $this->metaInfo = $this->metaInfo->withStrSize($length - $this->metaInfo->memSize());
+        }
         $this->metaInfo = $this->metaInfo
             ->withChecksum(CacheMetaInfo::checksumOf($this->payload));
         if ($timestamp !== null) {

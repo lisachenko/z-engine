@@ -158,6 +158,14 @@ final class CacheMetaInfo
     }
 
     /**
+     * Header with a new interned-string section size, set after re-serialization
+     */
+    public function withStrSize(int $strSize): self
+    {
+        return new self($this->systemId, $this->memSize, $strSize, $this->scriptOffset, $this->timestamp, $this->checksum);
+    }
+
+    /**
      * The exact on-disk header bytes (byteSize() long, tail padding zeroed)
      */
     public function toBinary(): string

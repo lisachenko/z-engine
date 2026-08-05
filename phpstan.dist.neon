@@ -16,6 +16,9 @@ parameters:
         # Compiled into the opcache file cache by child processes; the static
         # counter and attribute usage are fixture payload, not library code
         - tests/OpCache/fixtures/answer.php
+        # Child driver invoked in a subprocess; calls a dynamic global/method
+        # target passed on argv, which is not statically typeable
+        - tests/OpCache/scripts/run-cached.php
     # Analysis-only declarations of the runtime-generated specialized classes and the
     # deliberately-undefined placeholder type (see the file header for the rationale)
     scanFiles:
@@ -42,6 +45,33 @@ parameters:
         -
             identifier: method.notFound
             message: '#Call to an undefined method FFI::#'
+        # PayloadRelocator is the file-cache pointer-surgery machinery: it walks
+        # engine structs field by field through FFI\CData, so a chained access
+        # (`$zval->u1->v->type`) resolves to `mixed` after the first hop and the
+        # arithmetic/casts on those reads cannot be statically typed. The FFI
+        # blast radius is confined to this one audited file (AGENTS.md); every
+        # path is covered by the byte-identity and execute-from-cache tests.
+        -
+            identifier: property.nonObject
+            path: src/OpCache/PayloadRelocator.php
+        -
+            identifier: binaryOp.invalid
+            path: src/OpCache/PayloadRelocator.php
+        -
+            identifier: cast.int
+            path: src/OpCache/PayloadRelocator.php
+        -
+            identifier: argument.type
+            path: src/OpCache/PayloadRelocator.php
+        # PersistentScriptView is the CData facade over the relocated script:
+        # it reads embedded engine structs (script.filename, function/class
+        # tables) that resolve to `mixed` after the first CData hop.
+        -
+            identifier: property.nonObject
+            path: src/OpCache/PersistentScriptView.php
+        -
+            identifier: argument.type
+            path: src/OpCache/PersistentScriptView.php
     reportUnmatchedIgnoredErrors: false
     treatPhpDocTypesAsCertain: false
     # Named engine-struct shapes (see AGENTS.md "Engine structs are typed by shape").
