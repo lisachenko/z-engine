@@ -43,6 +43,7 @@ final class ProbeGenerator
         $lines[] = '#include "zend_modules.h"';
         $lines[] = '#include "zend_arena.h"';
         $lines[] = '#include "zend_exceptions.h"';
+        $lines[] = '#include "Optimizer/zend_optimizer.h"';
         if ($supplementFile !== '') {
             $lines[] = '#include "' . basename($supplementFile) . '"';
         }

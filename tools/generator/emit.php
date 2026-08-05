@@ -109,14 +109,45 @@ echo '[generator] Target: PHP ' . PHP_VERSION . " ({$platformKey}), debug=" . (P
 $manifest = require __DIR__ . '/symbols.php';
 
 // --- 1. Supplement: slice private structs out of php-src C files -----------
-$closuresSource = file_get_contents($phpSrc . '/Zend/zend_closures.c');
-if ($closuresSource === false) {
-    fail("Cannot read {$phpSrc}/Zend/zend_closures.c");
+/**
+ * @param list<string> $patterns
+ */
+function sliceStructs(string $phpSrc, string $file, array $patterns): string
+{
+    $source = file_get_contents($phpSrc . '/' . $file);
+    if ($source === false) {
+        fail("Cannot read {$phpSrc}/{$file}");
+    }
+    $slices = [];
+    foreach ($patterns as $pattern) {
+        if (preg_match($pattern, $source, $matches) !== 1) {
+            fail("Cannot slice {$pattern} out of {$file}");
+        }
+        $slices[] = $matches[0];
+    }
+
+    return implode("\n\n", $slices);
 }
-if (preg_match('/typedef struct _zend_closure \{.*?\} zend_closure;/s', $closuresSource, $matches) !== 1) {
-    fail('Cannot slice struct _zend_closure out of Zend/zend_closures.c');
-}
-$supplement = "/* Private engine structs sliced from php-src by tools/generator */\n" . $matches[0] . "\n";
+
+$supplement = "/* Private engine structs sliced from php-src by tools/generator */\n"
+    . sliceStructs($phpSrc, 'Zend/zend_closures.c', [
+        '/typedef struct _zend_closure \{.*?\} zend_closure;/s',
+    ])
+    . "\n\n"
+    // Opcache's private structs live in ext/opcache (not installed by php-dev):
+    // accel_time_t (the non-Windows branch), the early-binding record and the
+    // persistent script container from ZendAccelerator.h, and the file-cache
+    // header record from zend_file_cache.c.
+    . sliceStructs($phpSrc, 'ext/opcache/ZendAccelerator.h', [
+        '/typedef time_t accel_time_t;/',
+        '/typedef struct _zend_early_binding \{.*?\} zend_early_binding;/s',
+        '/typedef struct _zend_persistent_script \{.*?\} zend_persistent_script;/s',
+    ])
+    . "\n\n"
+    . sliceStructs($phpSrc, 'ext/opcache/zend_file_cache.c', [
+        '/typedef struct _zend_file_cache_metainfo \{.*?\} zend_file_cache_metainfo;/s',
+    ])
+    . "\n";
 file_put_contents($buildDir . '/supplement.h', $supplement);
 
 $includes = trim(run('php-config --includes'));
@@ -134,6 +165,8 @@ if ($emitHeader) {
     #include "zend_modules.h"
     #include "zend_arena.h"
     #include "zend_exceptions.h"
+    #include "zend_system_id.h"
+    #include "Optimizer/zend_optimizer.h"
     #include "supplement.h"
     C;
     file_put_contents($buildDir . '/input.c', $inputC);

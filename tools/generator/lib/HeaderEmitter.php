@@ -279,6 +279,12 @@ final class HeaderEmitter
         }
         $this->requireIdentifiersOf($qualType);
 
+        // Array-typed globals: the array suffix belongs after the declarator
+        // name (clang reports `char[32]`, C requires `char zend_system_id[32]`)
+        if (preg_match('/^(.*?)\s*((?:\[[^\]]*\])+)$/', $qualType, $matches) === 1) {
+            return 'extern ' . trim($matches[1]) . " {$name}{$matches[2]};";
+        }
+
         return "extern {$qualType} {$name};";
     }
 
