@@ -615,6 +615,64 @@
                 "called_scope": 328,
                 "orig_internal_handler": 336
             }
+        },
+        "zend_script": {
+            "size": 376,
+            "fields": {
+                "filename": 0,
+                "main_op_array": 8,
+                "function_table": 264,
+                "class_table": 320
+            }
+        },
+        "zend_error_info": {
+            "size": 24,
+            "fields": {
+                "type": 0,
+                "lineno": 4,
+                "filename": 8,
+                "message": 16
+            }
+        },
+        "zend_early_binding": {
+            "size": 32,
+            "fields": {
+                "lcname": 0,
+                "rtd_key": 8,
+                "lc_parent_name": 16,
+                "cache_slot": 24
+            }
+        },
+        "zend_persistent_script": {
+            "size": 480,
+            "fields": {
+                "script": 0,
+                "compiler_halt_offset": 376,
+                "ping_auto_globals_mask": 384,
+                "timestamp": 392,
+                "corrupted": 400,
+                "is_phar": 401,
+                "empty": 402,
+                "num_warnings": 404,
+                "num_early_bindings": 408,
+                "warnings": 416,
+                "early_bindings": 424,
+                "mem": 432,
+                "size": 440,
+                "dynamic_members": 448
+            }
+        },
+        "zend_file_cache_metainfo": {
+            "size": 80,
+            "fields": {
+                "magic": 0,
+                "system_id": 8,
+                "mem_size": 40,
+                "str_size": 48,
+                "script_offset": 56,
+                "timestamp": 64,
+                "checksum": 72
+            }
         }
     }
 }

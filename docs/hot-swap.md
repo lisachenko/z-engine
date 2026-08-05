@@ -111,8 +111,11 @@ Opcache publishes cached scripts from shared memory and marks their class
 entries and functions `ZEND_ACC_IMMUTABLE`. SHM is visible to every worker
 process, so z-engine never writes it and never frees it. The wrappers expose
 the detection as `ReflectionClass::isImmutable()` and
-`ReflectionFunction`/`ReflectionMethod::isImmutable()`; the shared detection
-and copy-out mechanics both delegate to live in `ZEngine\Memory\SharedMemory`.
+`ReflectionFunction`/`ReflectionMethod::isImmutable()`; the copy-out of an
+immutable global function happens inside `ReflectionFunction::redefine()`
+(`FunctionLikeTrait::copyOutOfSharedMemory()`). Generating, reading and
+patching the on-disk cache binaries themselves is covered in
+[opcache-binary.md](opcache-binary.md).
 
 | Target | Behaviour |
 |--------|-----------|

@@ -74,12 +74,14 @@ When Docker or the Debian package mirrors are unreachable (as in restricted CI
 sandboxes), the generator can run directly on the host — the Docker image is a
 convenience, not a requirement. `emit.php` derives everything from the
 *running* PHP build (`php-config --includes`, clang over the real headers, a C
-probe compiled with `cc`); the php-src tree is only needed to slice
-`Zend/zend_closures.c`. Verified recipe:
+probe compiled with `cc`); the php-src tree is only needed to slice the private
+structs (`Zend/zend_closures.c`, `ext/opcache/ZendAccelerator.h`,
+`ext/opcache/zend_file_cache.c`). Verified recipe:
 
 1. Host needs: `clang`, `cc`, `php-config` + dev headers for the exact running
-   PHP version, ext-ffi. Fetch the matching `Zend/zend_closures.c` (and nothing
-   else) from `raw.githubusercontent.com/php/php-src/php-<version>/`.
+   PHP version, ext-ffi. Fetch the matching `Zend/zend_closures.c`,
+   `ext/opcache/ZendAccelerator.h` and `ext/opcache/zend_file_cache.c` (and
+   nothing else) from `raw.githubusercontent.com/php/php-src/php-<version>/`.
 2. First run against the **committed** `symbols.php` into a scratch directory
    and `diff` against `include/<minor>/<platform>/` — the output must be
    byte-identical (it was, verified on Ubuntu clang-18 vs the trixie image:
@@ -204,7 +206,7 @@ Common scopes: `core`, `gen` (generator), `reflection`, `ast`, `ci`, `docs`.
 ## Repository map
 
 ```
-src/                 the library (Core, Reflection\*, Type\*, System\*, ClassExtension\*, EngineExtension\*, AbstractSyntaxTree\*)
+src/                 the library (Core, Reflection\*, Type\*, System\*, ClassExtension\*, EngineExtension\*, AbstractSyntaxTree\*, HotSwap\*, OpCache\*)
 include/<key>/       generated FFI definitions per platform (do not edit)
 tools/generator/     the header generator (symbols.php is the manifest)
 tools/docker/        debug PHP image used by CI

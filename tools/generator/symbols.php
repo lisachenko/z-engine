@@ -73,6 +73,12 @@ return [
         'zend_object_iterator_funcs',
         // Private engine structs injected via supplement.h (see Dockerfile)
         'zend_closure',
+        // Compiled-script container (Zend/Optimizer/zend_optimizer.h, installed)
+        'zend_script',
+        // Private opcache structs injected via supplement.h: the persistent
+        // script container and the file-cache binary header record
+        'zend_persistent_script',
+        'zend_file_cache_metainfo',
     ],
 
     'functions' => [
@@ -150,6 +156,9 @@ return [
         'module_registry',
         'std_object_handlers',
         'zend_ast_process',
+        // 32 hex chars identifying the exact engine build (Zend/zend_system_id.h);
+        // opcache stamps it into every file-cache binary header
+        'zend_system_id',
     ],
 
     'defines' => [
@@ -287,5 +296,10 @@ return [
         'zend_ast_zval',
         'zend_lex_state',
         'zend_closure',
+        'zend_script',
+        'zend_error_info',
+        'zend_early_binding',
+        'zend_persistent_script',
+        'zend_file_cache_metainfo',
     ],
 ];

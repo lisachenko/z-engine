@@ -7,6 +7,7 @@
 #include "zend_modules.h"
 #include "zend_arena.h"
 #include "zend_exceptions.h"
+#include "Optimizer/zend_optimizer.h"
 #include "supplement.h"
 #include <stdio.h>
 
@@ -1462,6 +1463,54 @@ int main(void) {
     fprintf(layouts, ", \"this_ptr\": %zu", offsetof(zend_closure, this_ptr));
     fprintf(layouts, ", \"called_scope\": %zu", offsetof(zend_closure, called_scope));
     fprintf(layouts, ", \"orig_internal_handler\": %zu", offsetof(zend_closure, orig_internal_handler));
+    fputs("}},\n", layouts);
+    fputs("        \"zend_script\": {", layouts);
+    fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_script));
+    fprintf(layouts, "\"filename\": %zu", offsetof(zend_script, filename));
+    fprintf(layouts, ", \"main_op_array\": %zu", offsetof(zend_script, main_op_array));
+    fprintf(layouts, ", \"function_table\": %zu", offsetof(zend_script, function_table));
+    fprintf(layouts, ", \"class_table\": %zu", offsetof(zend_script, class_table));
+    fputs("}},\n", layouts);
+    fputs("        \"zend_error_info\": {", layouts);
+    fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_error_info));
+    fprintf(layouts, "\"type\": %zu", offsetof(zend_error_info, type));
+    fprintf(layouts, ", \"lineno\": %zu", offsetof(zend_error_info, lineno));
+    fprintf(layouts, ", \"filename\": %zu", offsetof(zend_error_info, filename));
+    fprintf(layouts, ", \"message\": %zu", offsetof(zend_error_info, message));
+    fputs("}},\n", layouts);
+    fputs("        \"zend_early_binding\": {", layouts);
+    fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_early_binding));
+    fprintf(layouts, "\"lcname\": %zu", offsetof(zend_early_binding, lcname));
+    fprintf(layouts, ", \"rtd_key\": %zu", offsetof(zend_early_binding, rtd_key));
+    fprintf(layouts, ", \"lc_parent_name\": %zu", offsetof(zend_early_binding, lc_parent_name));
+    fprintf(layouts, ", \"cache_slot\": %zu", offsetof(zend_early_binding, cache_slot));
+    fputs("}},\n", layouts);
+    fputs("        \"zend_persistent_script\": {", layouts);
+    fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_persistent_script));
+    fprintf(layouts, "\"script\": %zu", offsetof(zend_persistent_script, script));
+    fprintf(layouts, ", \"compiler_halt_offset\": %zu", offsetof(zend_persistent_script, compiler_halt_offset));
+    fprintf(layouts, ", \"ping_auto_globals_mask\": %zu", offsetof(zend_persistent_script, ping_auto_globals_mask));
+    fprintf(layouts, ", \"timestamp\": %zu", offsetof(zend_persistent_script, timestamp));
+    fprintf(layouts, ", \"corrupted\": %zu", offsetof(zend_persistent_script, corrupted));
+    fprintf(layouts, ", \"is_phar\": %zu", offsetof(zend_persistent_script, is_phar));
+    fprintf(layouts, ", \"empty\": %zu", offsetof(zend_persistent_script, empty));
+    fprintf(layouts, ", \"num_warnings\": %zu", offsetof(zend_persistent_script, num_warnings));
+    fprintf(layouts, ", \"num_early_bindings\": %zu", offsetof(zend_persistent_script, num_early_bindings));
+    fprintf(layouts, ", \"warnings\": %zu", offsetof(zend_persistent_script, warnings));
+    fprintf(layouts, ", \"early_bindings\": %zu", offsetof(zend_persistent_script, early_bindings));
+    fprintf(layouts, ", \"mem\": %zu", offsetof(zend_persistent_script, mem));
+    fprintf(layouts, ", \"size\": %zu", offsetof(zend_persistent_script, size));
+    fprintf(layouts, ", \"dynamic_members\": %zu", offsetof(zend_persistent_script, dynamic_members));
+    fputs("}},\n", layouts);
+    fputs("        \"zend_file_cache_metainfo\": {", layouts);
+    fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_file_cache_metainfo));
+    fprintf(layouts, "\"magic\": %zu", offsetof(zend_file_cache_metainfo, magic));
+    fprintf(layouts, ", \"system_id\": %zu", offsetof(zend_file_cache_metainfo, system_id));
+    fprintf(layouts, ", \"mem_size\": %zu", offsetof(zend_file_cache_metainfo, mem_size));
+    fprintf(layouts, ", \"str_size\": %zu", offsetof(zend_file_cache_metainfo, str_size));
+    fprintf(layouts, ", \"script_offset\": %zu", offsetof(zend_file_cache_metainfo, script_offset));
+    fprintf(layouts, ", \"timestamp\": %zu", offsetof(zend_file_cache_metainfo, timestamp));
+    fprintf(layouts, ", \"checksum\": %zu", offsetof(zend_file_cache_metainfo, checksum));
     fputs("}}\n", layouts);
     fputs("    }\n}\n", layouts);
     fclose(layouts);

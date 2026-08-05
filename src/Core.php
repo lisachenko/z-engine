@@ -800,6 +800,20 @@ class Core
     }
 
     /**
+     * Returns the engine build fingerprint (32 hex characters, zend_system_id)
+     *
+     * Opcache stamps this identifier into every file-cache binary header; a
+     * binary is loadable only by the exact build that produced it.
+     */
+    public static function systemId(): string
+    {
+        /** @var CData $systemId */
+        $systemId = self::$engine->zend_system_id;
+
+        return FFI::string($systemId, 32);
+    }
+
+    /**
      * Returns the value of an engine C constant (macro, enum member or opcode)
      * extracted by the generator for the currently running PHP version.
      *
