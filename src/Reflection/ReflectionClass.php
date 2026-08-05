@@ -398,7 +398,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function addMethod(string $methodName, \Closure $method): ReflectionMethod
     {
-        $this->assertMutable('add a method');
+        $this->ensureWritableEntry('add a method');
 
         $closureEntry = new ClosureEntry($method);
         // This line will make this closure live until the end of script/request
@@ -470,6 +470,57 @@ class ReflectionClass extends NativeReflectionClass
     public function isImmutable(): bool
     {
         return ($this->getFlags() & Core::ZEND_ACC_IMMUTABLE) !== 0;
+    }
+
+    /**
+     * Copies this opcache-shared (immutable) class entry out of shared memory and rebinds
+     * this reflection to the writable per-process copy
+     *
+     * Shared memory is visible to every worker process, so a mutation API can not write the
+     * class entry opcache published. Instead the whole class is deep-copied into request
+     * memory (the ClassSpecializer copy model: own tables, own property/constant blocks,
+     * method entries duplicated at the zend_op_array level with the compiled bodies still
+     * shared), the per-process class-table bucket is repointed at the copy and the
+     * shared-memory original is left byte-for-byte untouched. From that moment on the class
+     * behaves like any runtime-declared class: it carries the full mutation surface and the
+     * engine dismantles it at request end.
+     *
+     * Two consequences follow from repointing a bucket and are the caller's responsibility
+     * (see docs/hot-swap.md):
+     *
+     *  - Structures that captured the shared-memory entry BEFORE the copy-out keep pointing
+     *    at it: objects instantiated earlier, subclasses already linked against it and
+     *    warmed-up inline caches. Copy out (or mutate) before such state exists - at
+     *    bootstrap - exactly like every other z-engine class mutation.
+     *  - Static properties materialized before the copy-out stay with the shared-memory
+     *    entry: the copy re-materializes its statics from the declared defaults.
+     *
+     * Calling this on a class that is not opcache-shared is a no-op.
+     *
+     * @throws SharedMemoryException When this class cannot be copied out of shared memory
+     *
+     * @internal called by the mutation APIs; also useful to make the class writable up front
+     */
+    public function copyOutOfSharedMemory(): void
+    {
+        if (!$this->isImmutable()) {
+            return;
+        }
+        $className = $this->getName();
+        try {
+            $writableClass = (new ClassSpecializer())->copyOutOfSharedMemory($className);
+        } catch (ClassSpecializationException $copyFailure) {
+            throw SharedMemoryException::classCopyOutFailed($className, $copyFailure);
+        }
+        $this->initLowLevelStructures($writableClass->getRawValue());
+
+        // Native reflection resolves (and caches) the class entry at construction time, so
+        // the inherited API would keep reading the shared-memory entry without this refresh
+        try {
+            Core::callParentConstructor($this, self::class, $className);
+        } catch (\ReflectionException $e) {
+            // Same tolerance as the constructor: the low-level view is enough to keep working
+        }
     }
 
     /**
@@ -777,7 +828,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function removeMethods(string ...$methodNames): void
     {
-        $this->assertMutable('remove methods');
+        $this->ensureWritableEntry('remove methods');
         foreach ($methodNames as $methodName) {
             $this->methodTable->delete(strtolower($methodName));
         }
@@ -1020,7 +1071,7 @@ class ReflectionClass extends NativeReflectionClass
                 'Trait alias flags accept only public/protected/private/final modifiers',
             );
         }
-        $this->assertTraitConfigurationIsMutable();
+        $this->ensureWritableForTraitConfiguration();
         [$traitName, $methodName] = self::parseTraitMethodReference($traitMethod);
         $isPersistent             = $this->isPersistentAllocation();
 
@@ -1054,7 +1105,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function removeTraitAlias(string $alias): void
     {
-        $this->assertTraitConfigurationIsMutable();
+        $this->ensureWritableForTraitConfiguration();
         $aliasList = $this->pointer->trait_aliases;
         if ($aliasList !== null) {
             assert($aliasList instanceof CData);
@@ -1111,7 +1162,7 @@ class ReflectionClass extends NativeReflectionClass
                 'Trait precedence requires a qualified "TraitName::method" reference',
             );
         }
-        $this->assertTraitConfigurationIsMutable();
+        $this->ensureWritableForTraitConfiguration();
         $isPersistent  = $this->isPersistentAllocation();
         $totalExcludes = count($insteadOf);
 
@@ -1155,7 +1206,7 @@ class ReflectionClass extends NativeReflectionClass
                 'Trait precedence requires a qualified "TraitName::method" reference',
             );
         }
-        $this->assertTraitConfigurationIsMutable();
+        $this->ensureWritableForTraitConfiguration();
         $precedenceList = $this->pointer->trait_precedences;
         if ($precedenceList !== null) {
             assert($precedenceList instanceof CData);
@@ -1219,22 +1270,32 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
-     * Refuses trait configuration changes on classes whose structures live in shared memory
+     * Makes the class entry writable before a trait configuration change
      */
-    private function assertTraitConfigurationIsMutable(): void
+    private function ensureWritableForTraitConfiguration(): void
     {
-        $this->assertMutable('modify the trait configuration');
+        $this->ensureWritableEntry('modify the trait configuration');
     }
 
     /**
-     * Refuses a mutation on an opcache-shared (immutable) class entry
+     * Makes sure this reflection points at a class entry this process may write
      *
-     * @throws SharedMemoryException When the class lives in opcache shared memory
+     * An opcache-shared (immutable) class entry lives in memory every worker process of the
+     * pool sees, so it is copied out into a writable per-process copy first and this
+     * reflection is rebound to the copy (see copyOutOfSharedMemory()). Only a class the copy
+     * machinery cannot reproduce still rejects the mutation.
+     *
+     * @throws SharedMemoryException When the shared-memory class entry cannot be copied out
      */
-    private function assertMutable(string $operation): void
+    private function ensureWritableEntry(string $operation): void
     {
-        if ($this->isImmutable()) {
-            throw SharedMemoryException::immutableClassMutation($operation);
+        if (!$this->isImmutable()) {
+            return;
+        }
+        try {
+            $this->copyOutOfSharedMemory();
+        } catch (SharedMemoryException $copyFailure) {
+            throw SharedMemoryException::immutableClassMutation($operation, $copyFailure);
         }
     }
 

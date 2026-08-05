@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace ZEngine\OpCache;
 
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ZEngine\Reflection\ReflectionValue;
 
@@ -21,6 +22,7 @@ use ZEngine\Reflection\ReflectionValue;
  * mutate its compiled body through the framework, refresh the cache, and prove
  * a fresh worker executes the patched code.
  */
+#[Group('opcache')]
 final class RefreshWorkflowTest extends TestCase
 {
     use FileCacheFixture;

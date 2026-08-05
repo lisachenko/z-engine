@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace ZEngine\OpCache;
 
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionValue;
@@ -21,6 +22,7 @@ use ZEngine\Reflection\ReflectionValue;
  * The decisive tests for the relocate/serialize pipeline: byte-identity of an
  * untouched round trip, and that a patched binary is what the engine executes.
  */
+#[Group('opcache')]
 final class SerializerRoundTripTest extends TestCase
 {
     use FileCacheFixture;

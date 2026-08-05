@@ -35,6 +35,7 @@
     "scripts": {
         "test": "phpunit",
         "test:internal": "phpunit --group internal --process-isolation",
+        "test:opcache": "phpunit --group opcache --fail-on-skipped",
         "phpstan": "phpstan analyse",
         "cs:check": "php-cs-fixer fix --dry-run --diff",
         "cs:fix": "php-cs-fixer fix",
@@ -43,6 +44,7 @@
     "scripts-descriptions": {
         "test": "Run the test suite (segfault-prone internal group excluded)",
         "test:internal": "Run the segfault-prone internal test group with process isolation (use a debug PHP build)",
+        "test:opcache": "Run the opcache/shared-memory tests and FAIL if any of them skipped (they are self-skipping when opcache is unavailable)",
         "phpstan": "Run static analysis at the maximum level",
         "cs:check": "Check coding standards without fixing",
         "cs:fix": "Fix coding standards",

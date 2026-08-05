@@ -119,6 +119,42 @@ class Compiler
     }
 
     /**
+     * Returns the base address of the map-ptr area, CG(map_ptr_base), or 0 when unallocated
+     *
+     * The area holds the per-request slots addressed by the offset form of every
+     * ZEND_MAP_PTR field (run-time caches, static members and the fast class-name cache of
+     * permanent interned strings). An address is returned instead of a pointer because the
+     * slots are addressed by byte offset, not as a typed array.
+     *
+     * @internal used by StringEntry to reach the engine's fast class-entry cache
+     */
+    public function getMapPointerBaseAddress(): int
+    {
+        $mapPointerBase = $this->pointer->map_ptr_base;
+        if ($mapPointerBase === null) {
+            return 0;
+        }
+        assert($mapPointerBase instanceof CData);
+
+        // A void* view reads as the pointed-to memory, so the pointer value itself is
+        // taken through a typed (char*) view of the very same field
+        return Core::addressOf(Core::cast('char *', $mapPointerBase));
+    }
+
+    /**
+     * Returns the number of slots handed out in the map-ptr area, CG(map_ptr_last)
+     *
+     * @internal used to validate a map-ptr slot before dereferencing it
+     */
+    public function getMapPointerLast(): int
+    {
+        $lastSlot = $this->pointer->map_ptr_last;
+        assert(is_int($lastSlot));
+
+        return $lastSlot;
+    }
+
+    /**
      * Checks if engine is compilation mode or not
      */
     public function isInCompilation(): bool

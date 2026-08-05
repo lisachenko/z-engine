@@ -13,9 +13,11 @@ declare(strict_types=1);
 
 namespace ZEngine\OpCache;
 
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ZEngine\Core;
 
+#[Group('opcache')]
 final class CacheMetaInfoTest extends TestCase
 {
     use FileCacheFixture;

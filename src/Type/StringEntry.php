@@ -247,7 +247,55 @@ class StringEntry implements ReferenceCountedInterface
      */
     public function isPermanent(): bool
     {
-        return (bool) ($this->getGC()->u->type_info & Core::engineConstant('IS_STR_PERMANENT'));
+        return $this->hasGcFlag(Core::engineConstant('IS_STR_PERMANENT'));
+    }
+
+    /**
+     * Checks whether this string carries the engine's fast class-entry cache slot
+     *
+     * A permanent interned class-name string (opcache shared memory, preload, engine
+     * startup) reuses its refcount field as the byte offset of a per-request slot in the
+     * map-ptr area, where the engine memoizes the class entry the name resolves to. Every
+     * class lookup consults that slot BEFORE the class table, so a name whose cache is
+     * populated never reaches the table again in this request.
+     *
+     * @see zend_types.h:ZSTR_HAS_CE_CACHE/ZSTR_VALID_CE_CACHE
+     */
+    public function hasClassEntryCache(): bool
+    {
+        if (!$this->hasGcFlag(Core::engineConstant('IS_STR_CLASS_NAME_MAP_PTR'))) {
+            return false;
+        }
+        $mapPointerBase = Core::$compiler->getMapPointerBaseAddress();
+        if ($mapPointerBase === 0) {
+            return false;
+        }
+        // ZSTR_VALID_CE_CACHE(): the slot must be inside the area allocated so far
+        $slotIndex = intdiv($this->getReferenceCount() - 1, Core::sizeof(Core::type('void *')));
+
+        return $slotIndex < Core::$compiler->getMapPointerLast();
+    }
+
+    /**
+     * Points the engine's fast class-entry cache for this class name at the given class entry
+     *
+     * The counterpart of the engine's own ZSTR_SET_CE_CACHE(), needed whenever the class
+     * entry a name resolves to is replaced in the class table (the opcache copy-out): call
+     * sites compiled into cached scripts read the memoized entry, not the table, so without
+     * this refresh they would keep dispatching the shared-memory class entry.
+     *
+     * @param CData $classEntry zend_class_entry the name must resolve to from now on
+     *
+     * @see zend_types.h:ZSTR_SET_CE_CACHE
+     */
+    public function setCachedClassEntry(CData $classEntry): void
+    {
+        if (!$this->hasClassEntryCache()) {
+            throw new \LogicException('This string does not carry an engine class-entry cache slot');
+        }
+        $slotAddress  = Core::$compiler->getMapPointerBaseAddress() + $this->getReferenceCount();
+        $cacheSlot    = Core::pointerAtAddress('zend_class_entry **', $slotAddress);
+        $cacheSlot[0] = $classEntry;
     }
 
     /**

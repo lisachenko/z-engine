@@ -113,6 +113,80 @@ class ClassSpecializer
     }
 
     /**
+     * Copies an opcache-shared (ZEND_ACC_IMMUTABLE) class entry out of shared memory into a
+     * writable per-process copy published under the SAME name
+     *
+     * Shared memory is visible to every worker process of the pool, so the class entry it
+     * holds can never be written in place. The copy-out gives this process its own writable
+     * class entry - built by the very same copy machinery specialize() uses, so the copy is
+     * an ordinary userland class the engine dismantles at request end - and repoints the
+     * per-process class-table bucket at it. The shared-memory original is left completely
+     * untouched (never written, never freed) and simply stops being published in this
+     * process; opcache republishes it into a fresh class table on the next request.
+     *
+     * Calling this for a class that is already writable is a no-op that returns the
+     * published entry, so every mutation entry point can call it unconditionally.
+     *
+     * @param string $className Name of the loaded class to copy out
+     *
+     * @throws ClassSpecializationException When the class is not loaded or its shape is not
+     *                                      supported by the copy machinery
+     *
+     * @internal used by the mutation APIs of ReflectionClass/ReflectionMethod and by HotSwap
+     */
+    public function copyOutOfSharedMemory(string $className): ReflectionClass
+    {
+        // Give the autoloader a chance to bring the declaration into the engine
+        class_exists($className);
+
+        $classValue = Core::$executor->classTable->find(strtolower($className));
+        if ($classValue === null) {
+            throw new ClassSpecializationException("Class {$className} was not found in the engine");
+        }
+        $publishedEntry = $classValue->getRawClass();
+        $publishedFlags = $publishedEntry->ce_flags;
+        assert(is_int($publishedFlags));
+
+        // Either never shared, or already copied out by an earlier mutation
+        if (($publishedFlags & Core::ZEND_ACC_IMMUTABLE) === 0) {
+            return ReflectionClass::fromCData($publishedEntry);
+        }
+        if (($publishedFlags & Core::engineConstant('ZEND_ACC_PRELOADED')) !== 0) {
+            throw new ClassSpecializationException(
+                "Cannot copy the preloaded class {$className} out of shared memory: its class-table "
+                . 'bucket is reused by every request of the worker process, while the copy lives in '
+                . 'request memory and dies with the request',
+            );
+        }
+        $this->assertCopyableSource($publishedEntry, $className);
+
+        // The copy keeps the original name STRING (same table key, same case, same
+        // pointer): it is a permanent interned string carrying the engine's fast
+        // class-name cache slot, and releasing an interned string is a no-op, so the copy
+        // can share it without any accounting
+        $publishedName = $publishedEntry->name;
+        assert($publishedName instanceof CData);
+        $nameEntry = StringEntry::fromCData($publishedName);
+        $newEntry  = $this->copyClassEntry(
+            $publishedEntry,
+            $nameEntry->getStringValue(),
+            new TypeSubstitutionMap([]),
+            $publishedName,
+        );
+
+        // Repoint the per-process class-table bucket at the writable copy...
+        $classValue->setPointer($newEntry);
+        // ...and the engine's fast class-name cache with it: every class lookup consults
+        // that memoized slot BEFORE the class table, so call sites compiled into
+        // opcache-cached scripts would otherwise keep resolving the shared-memory entry
+        if ($nameEntry->hasClassEntryCache()) {
+            $nameEntry->setCachedClassEntry($newEntry);
+        }
+
+        return ReflectionClass::fromCData($newEntry);
+    }
+
+    /**
      * Looks up a zend_class_entry pointer by class name (null when not registered)
      */
     private function findClassEntry(string $className): ?CData
@@ -133,11 +207,24 @@ class ClassSpecializer
         if ($this->findClassEntry($newClassName) !== null) {
             throw new ClassSpecializationException("Class {$newClassName} already exists in the engine");
         }
+
+        $this->assertCopyableSource($sourceEntry, $sourceClassName);
+    }
+
+    /**
+     * Support matrix of the class-entry copy itself: every shape the copy machinery has no
+     * defined semantics for fails here, before any allocation
+     *
+     * Shared by specialize() (copy under a new name) and by copyOutOfSharedMemory() (copy
+     * under the original name), which is why it knows nothing about the target name.
+     */
+    private function assertCopyableSource(CData $sourceEntry, string $sourceClassName): void
+    {
         $sourceKind = $sourceEntry->type;
         assert(is_string($sourceKind));
         if (ord($sourceKind) !== Core::ZEND_USER_CLASS) {
             throw new ClassSpecializationException(
-                "Cannot specialize internal class {$sourceClassName}: only userland classes are supported",
+                "Cannot copy internal class {$sourceClassName}: only userland classes are supported",
             );
         }
         $classFlags = $sourceEntry->ce_flags;
@@ -150,19 +237,19 @@ class ClassSpecializer
         };
         if ($unsupportedKind !== null) {
             throw new ClassSpecializationException(
-                "Cannot specialize {$sourceClassName}: it is {$unsupportedKind}, only plain classes are supported",
+                "Cannot copy {$sourceClassName}: it is {$unsupportedKind}, only plain classes are supported",
             );
         }
         if (($classFlags & Core::ZEND_ACC_LINKED) === 0) {
             throw new ClassSpecializationException(
-                "Cannot specialize {$sourceClassName}: the class is not linked yet",
+                "Cannot copy {$sourceClassName}: the class is not linked yet",
             );
         }
         $hookedProperties = $sourceEntry->num_hooked_props;
         assert(is_int($hookedProperties));
         if ($hookedProperties > 0) {
             throw new ClassSpecializationException(
-                "Cannot specialize {$sourceClassName}: classes with property hooks are not supported",
+                "Cannot copy {$sourceClassName}: classes with property hooks are not supported",
             );
         }
         // An internal ancestor grafts internal function copies and a custom create_object
@@ -176,7 +263,7 @@ class ClassSpecializer
                 assert($rawParentName instanceof CData);
                 $parentName = StringEntry::fromCData($rawParentName)->getStringValue();
                 throw new ClassSpecializationException(
-                    "Cannot specialize {$sourceClassName}: ancestor {$parentName} is an internal class",
+                    "Cannot copy {$sourceClassName}: ancestor {$parentName} is an internal class",
                 );
             }
         }
@@ -186,7 +273,7 @@ class ClassSpecializer
             assert(is_int($functionKind));
             if ($functionKind !== Core::ZEND_USER_FUNCTION) {
                 throw new ClassSpecializationException(
-                    "Cannot specialize {$sourceClassName}: the method table contains internal functions",
+                    "Cannot copy {$sourceClassName}: the method table contains internal functions",
                 );
             }
         }
@@ -292,8 +379,12 @@ class ClassSpecializer
     /**
      * Builds the specialized zend_class_entry (fully materialized, not yet registered)
      */
-    private function copyClassEntry(CData $sourceEntry, string $newClassName, TypeSubstitutionMap $substitutions): CData
-    {
+    private function copyClassEntry(
+        CData $sourceEntry,
+        string $newClassName,
+        TypeSubstitutionMap $substitutions,
+        ?CData $reusedName = null,
+    ): CData {
         // The class entry itself mimics a compiler-arena allocation: destroy_zend_class()
         // dismantles the tables but never frees the struct of a userland class, and the
         // request allocator reclaims the block at request end
@@ -309,7 +400,11 @@ class ClassSpecializer
             $classFlags &= ~Core::engineConstant($storageFlag);
         }
         $newEntry->ce_flags = $classFlags;
-        $newEntry->name     = StringEntry::fromString($newClassName)->transferReferenceOwnership()->getRawValue();
+        // A copy published under a new name mints (and owns) its own name string; the
+        // shared-memory copy-out reuses the interned name of the source instead, see
+        // copyOutOfSharedMemory()
+        $newEntry->name = $reusedName
+            ?? StringEntry::fromString($newClassName)->transferReferenceOwnership()->getRawValue();
 
         // Per-class engine caches must start empty on the copy
         $newEntry->static_members_table__ptr = null;

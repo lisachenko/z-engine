@@ -16,7 +16,6 @@ namespace ZEngine\HotSwap;
 use ZEngine\AbstractSyntaxTree\NodeInterface;
 use ZEngine\AbstractSyntaxTree\NodeKind;
 use ZEngine\Core;
-use ZEngine\OpCache\SharedMemoryException;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\StructArray;
@@ -73,7 +72,11 @@ final class HotSwap
         }
         $liveClass = ReflectionClass::fromCData($classEntryValue->getRawClass());
         if ($liveClass->isImmutable()) {
-            throw SharedMemoryException::immutableClassMutation('hot-swap');
+            // The delta is applied in place, which opcache shared memory never allows: the
+            // class entry is copied out into a writable per-process copy first (the class
+            // table bucket is repointed, the shared original stays untouched) and the whole
+            // hot-swap then runs against that copy. See docs/hot-swap.md for the caveats.
+            $liveClass->copyOutOfSharedMemory();
         }
         self::assertPlainLinkedUserClass($liveClass, $normalizedName);
 
