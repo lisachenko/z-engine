@@ -221,4 +221,29 @@ final class BinaryCacheFile
         file_put_contents($temporary, $this->metaInfo->toBinary() . $this->payload);
         rename($temporary, $target);
     }
+
+    /**
+     * Writes the (patched) binary and invalidates opcache's in-memory copy of
+     * the source script, so the next include picks the patched binary up.
+     *
+     * A script already resident in shared memory is not re-read until it is
+     * invalidated, which is what this does; under opcache.file_cache_only there
+     * is no shared copy and the write alone suffices. Invalidation is a no-op
+     * when opcache is not active in this process (the write still happens).
+     *
+     * @param int|null $timestamp Source mtime to stamp; defaults to the script's
+     *                            current mtime so the binary stays valid under
+     *                            opcache.validate_timestamps=1
+     */
+    public function refresh(?int $timestamp = null): void
+    {
+        if ($timestamp === null && $this->scriptPath !== null && is_file($this->scriptPath)) {
+            $timestamp = filemtime($this->scriptPath) ?: null;
+        }
+        $this->save(null, $timestamp);
+
+        if ($this->scriptPath !== null && function_exists('opcache_invalidate')) {
+            opcache_invalidate($this->scriptPath, true);
+        }
+    }
 }
