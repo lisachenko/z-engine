@@ -13,6 +13,9 @@ parameters:
         - tools/generator/validate.php
     excludePaths:
         - tests/phpstan/specialization-class-stubs.php
+        # Compiled into the opcache file cache by child processes; the static
+        # counter and attribute usage are fixture payload, not library code
+        - tests/OpCache/fixtures/answer.php
     # Analysis-only declarations of the runtime-generated specialized classes and the
     # deliberately-undefined placeholder type (see the file header for the rationale)
     scanFiles:
@@ -56,3 +59,4 @@ parameters:
         ZvalU2Shape: 'stdClass&object{constant_flags: int, extra: int, next: int}'
         ZendValueShape: 'stdClass&object{lval: int, dval: float, str: FFI\CData, ptr: FFI\CData, counted: FFI\CData}'
         ZvalShape: 'stdClass&object{value: ZendValueShape, u1: ZvalU1Shape, u2: ZvalU2Shape}'
+        ZendFileCacheMetaInfoShape: 'stdClass&object{magic: FFI\CData, system_id: FFI\CData, mem_size: int, str_size: int, script_offset: int, timestamp: int, checksum: int}'

@@ -1,0 +1,98 @@
+<?php
+
+/**
+ * Z-Engine framework
+ *
+ * @copyright Copyright 2026, Lisachenko Alexander <lisachenko.it@gmail.com>
+ *
+ * This source file is subject to the license that is bundled
+ * with this source code in the file LICENSE.
+ *
+ */
+declare(strict_types=1);
+
+namespace ZEngine\OpCache;
+
+use PHPUnit\Framework\Assert;
+
+/**
+ * Shared harness for tests that need a real opcache file-cache binary: spawns
+ * a child PHP with the file cache enabled, compiles the fixture script into a
+ * per-test cache directory and hands back the paths.
+ */
+trait FileCacheFixture
+{
+    private static string $cacheDir = '';
+
+    /**
+     * Compiles the given script into a fresh file-cache directory and returns
+     * the produced .bin path. Skips the test when opcache is unavailable.
+     */
+    private static function compileFixture(?string $scriptPath = null): string
+    {
+        if (!extension_loaded('Zend OPcache')) {
+            Assert::markTestSkipped('Zend OPcache extension is not loaded');
+        }
+        $scriptPath     = $scriptPath ?? self::fixturePath();
+        self::$cacheDir = sys_get_temp_dir() . '/zengine-opcache-' . bin2hex(random_bytes(6));
+        if (!mkdir(self::$cacheDir, 0777, true)) {
+            Assert::fail('Cannot create the file-cache directory ' . self::$cacheDir);
+        }
+
+        $command = [
+            PHP_BINARY,
+            '-d', 'opcache.enable=1',
+            '-d', 'opcache.enable_cli=1',
+            '-d', 'opcache.file_cache=' . self::$cacheDir,
+            '-d', 'opcache.file_cache_only=1',
+            // The file cache refuses to store scripts while the JIT is active
+            '-d', 'opcache.jit=off',
+            '-d', 'opcache.jit_buffer_size=0',
+            '-r', 'exit(function_exists("opcache_compile_file") ? (opcache_compile_file($argv[1]) ? 0 : 1) : 2);',
+            '--',
+            $scriptPath,
+        ];
+        $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        Assert::assertIsResource($process, 'Unable to spawn the compile child process');
+        $stdout = stream_get_contents($pipes[1]) ?: '';
+        $stderr = stream_get_contents($pipes[2]) ?: '';
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $exitCode = proc_close($process);
+        if ($exitCode === 2) {
+            Assert::markTestSkipped("Opcache could not be activated in the compile child\n{$stdout}\n{$stderr}");
+        }
+        Assert::assertSame(0, $exitCode, "Compile child failed ({$exitCode})\nSTDOUT:\n{$stdout}\nSTDERR:\n{$stderr}");
+
+        $binPath = self::$cacheDir . '/' . \ZEngine\Core::systemId() . realpath($scriptPath) . '.bin';
+
+        Assert::assertFileExists($binPath, 'The compile child did not produce the expected cache binary');
+
+        return $binPath;
+    }
+
+    private static function fixturePath(): string
+    {
+        $path = realpath(__DIR__ . '/fixtures/answer.php');
+        Assert::assertIsString($path);
+
+        return $path;
+    }
+
+    private static function removeCacheDir(): void
+    {
+        if (self::$cacheDir === '' || !is_dir(self::$cacheDir)) {
+            return;
+        }
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator(self::$cacheDir, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST,
+        );
+        foreach ($iterator as $item) {
+            assert($item instanceof \SplFileInfo);
+            $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
+        }
+        rmdir(self::$cacheDir);
+        self::$cacheDir = '';
+    }
+}
