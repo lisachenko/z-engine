@@ -55,8 +55,14 @@ RUN rm -f /usr/local/etc/php/conf.d/docker-php-ext-*.ini
 # explicitly in the child processes that exercise shared memory - which is where
 # a debug build turns the shared-memory corruption of issue #41 into a loud
 # zend_function_dtor() assertion instead of a silent wrong result.
-RUN { \
-      echo 'zend_extension=opcache.so'; \
+# opcache is a shared zend_extension here (the debug build installs its own
+# ABI-tagged extension directory), so it is loaded by absolute path - a bare
+# file name resolves against whatever extension_dir the base image left behind.
+RUN set -eux; \
+    extension_dir="$(php-config --extension-dir)"; \
+    test -f "${extension_dir}/opcache.so"; \
+    { \
+      echo "zend_extension=${extension_dir}/opcache.so"; \
       echo 'ffi.enable=1'; \
       echo 'zend.assertions=1'; \
       echo 'report_memleaks=1'; \
@@ -67,9 +73,16 @@ RUN { \
 
 # Sanity check: the interpreter's own banner must report a DEBUG build and FFI
 # must be present (built in). (PHP_DEBUG's constant type is not worth asserting
-# strictly - the banner is the ground truth PHP prints for itself.)
+# strictly - the banner is the ground truth PHP prints for itself.) A missing
+# opcache is reported with the state that explains it, since the whole
+# shared-memory test group depends on the extension being loaded.
 RUN php -v && php -v | grep -q 'DEBUG' && php -m | grep -qi '^FFI$' \
-    && php -r 'exit(extension_loaded("Zend OPcache") ? 0 : 1);' \
+    && { php -r 'exit(extension_loaded("Zend OPcache") ? 0 : 1);' \
+         || { echo "Zend OPcache did not load:"; \
+              php --ini; \
+              cat /usr/local/etc/php/conf.d/z-engine.ini; \
+              ls -la "$(php-config --extension-dir)"; \
+              false; }; } \
     && echo "debug FFI+opcache build OK"
 
 WORKDIR /app
