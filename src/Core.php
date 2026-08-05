@@ -24,6 +24,7 @@ use ZEngine\Hook\HookInterface;
 use ZEngine\System\Compiler;
 use ZEngine\System\Executor;
 use ZEngine\System\Hook\AstProcessHook;
+use ZEngine\System\Hook\ObserverHook;
 use ZEngine\Type\HashTable;
 
 /**
@@ -245,6 +246,16 @@ class Core
     private static bool $shutdownRegistered = false;
 
     /**
+     * Whether Core::preload() was the boot path for this process.
+     *
+     * The engine freezes its fcall-observer configuration during startup
+     * (zend_observer_post_startup), before any request begins, so features that
+     * require the observer machinery are only meaningful when z-engine booted
+     * from the opcache.preload script. See src/System/Hook/ObserverHook.php.
+     */
+    private static bool $isPreloaded = false;
+
+    /**
      * Performs Z-engine core initialization
      */
     public static function init(): void
@@ -300,6 +311,114 @@ class Core
 
         // Performs initialization of properties, otherwise we will get an error about uninitialized properties
         Core::init();
+
+        // Record that observer registration timing is available for this process
+        self::$isPreloaded = true;
+    }
+
+    /**
+     * Checks whether z-engine booted through Core::preload() (the opcache.preload path)
+     *
+     * @see ZEngine\System\Hook\ObserverHook for why the observer bridge requires it
+     */
+    public static function isPreloaded(): bool
+    {
+        return self::$isPreloaded;
+    }
+
+    /**
+     * Checks whether the engine fcall-observer machinery is enabled (ZEND_OBSERVER_ENABLED)
+     *
+     * The extension slot globals are -1 until a startup-time (MINIT) observer provider reserves
+     * them in zend_observer_post_startup(); once frozen at -1 they cannot be enabled from userland.
+     *
+     * @param bool $forUserFunction true to test the op_array (user function) slot, false for the
+     *                              internal-function slot
+     */
+    public static function isObserverEnabled(bool $forUserFunction = true): bool
+    {
+        return self::observerFcallExtensionSlot($forUserFunction) !== -1;
+    }
+
+    /**
+     * Returns the run_time_cache slot index reserved for observer handlers (-1 when disabled)
+     *
+     * The engine reserves one contiguous block of 2*count slots per function kind in
+     * zend_observer_post_startup(); this is the index of the block's first slot.
+     *
+     * @param bool $forUserFunction true for the op_array (user function) slot, false for the
+     *                              internal-function slot
+     * @internal used by ObserverHook to locate a function's observer handler slots
+     */
+    public static function observerFcallExtensionSlot(bool $forUserFunction): int
+    {
+        if ($forUserFunction) {
+            // @phpstan-ignore property.notFound (FFI global read, dynamically typed)
+            $extension = self::$engine->zend_observer_fcall_op_array_extension;
+        } else {
+            // @phpstan-ignore property.notFound (FFI global read, dynamically typed)
+            $extension = self::$engine->zend_observer_fcall_internal_function_extension;
+        }
+        assert(is_int($extension));
+
+        return $extension;
+    }
+
+    /**
+     * Returns the number of fcall observers registered with the engine at startup
+     *
+     * Derived without touching engine privates: the observer block is always the LAST
+     * internal-handle reservation (zend_observer_post_startup() runs after every MINIT and
+     * nothing may reserve handles later - the internal run_time_cache is sized immediately
+     * afterwards), so the block spans from the internal observer slot to the total reserved
+     * size, and holds exactly 2 slots (begin + end) per registered observer.
+     *
+     * @internal used by ObserverHook to compute the observer slot layout
+     */
+    public static function observerFcallObserverCount(): int
+    {
+        $internalSlot = self::observerFcallExtensionSlot(false);
+        if ($internalSlot === -1) {
+            return 0;
+        }
+        $reservedBytes = self::call('zend_internal_run_time_cache_reserved_size');
+        assert(is_int($reservedBytes));
+
+        return intdiv(intdiv($reservedBytes, PHP_INT_SIZE) - $internalSlot, 2);
+    }
+
+    /**
+     * Resolves a ZEND_MAP_PTR field value to the real address it maps to (0 for NULL)
+     *
+     * A map pointer field stores either a real pointer (even value) or an odd offset that must
+     * be resolved through the biased CG(map_ptr_base); this mirrors ZEND_MAP_PTR_GET.
+     *
+     * @param CData|null $mapPtrField Value read from a *__ptr map pointer field (null when the
+     *                                engine stored NULL)
+     * @internal used by ObserverHook to reach a function's run_time_cache
+     */
+    public static function mapPtrGet(?CData $mapPtrField): int
+    {
+        if ($mapPtrField === null) {
+            return 0;
+        }
+        $raw = self::addressOf($mapPtrField);
+        if (($raw & 1) === 0) {
+            return $raw;
+        }
+
+        // Offset form: resolve against the biased base (the -1 bias of the base and the +1 tag
+        // of the offset cancel out, exactly like ZEND_MAP_PTR_OFFSET2PTR)
+        // @phpstan-ignore property.notFound (FFI global read, dynamically typed)
+        $compilerGlobals = self::$engine->compiler_globals;
+        assert($compilerGlobals instanceof CData);
+        $base = $compilerGlobals->map_ptr_base;
+        assert($base instanceof CData);
+        $slot  = self::pointerAtAddress('uintptr_t *', self::addressOf($base) + $raw);
+        $value = $slot[0];
+        assert(is_int($value));
+
+        return $value;
     }
 
     /**
@@ -825,6 +944,27 @@ class Core
     public static function setASTProcessHandler(Closure $handler): AstProcessHook
     {
         $hook = new AstProcessHook($handler, self::$engine);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs an ObserverHook bridging the engine fcall begin/end observers to userland callbacks
+     *
+     * Only meaningful from the opcache.preload path and only when a startup-time observer provider
+     * has enabled the engine observer machinery; the hook throws a typed ObserverException
+     * otherwise (never a silent no-op, never a memory-unsafe write). See docs/observer-hook.md.
+     *
+     * @param CData        $function zend_function* to observe (e.g. ReflectionFunction::getRawFunctionPointer())
+     * @param Closure      $begin    function(ExecutionData $frame): void, invoked as the call is entered
+     * @param Closure|null $end      function(ExecutionData $frame, ?ReflectionValue $return): void, on
+     *                               return; omit for a begin-only hook (REQUIRED for functions that can
+     *                               throw, see docs/observer-hook.md)
+     */
+    public static function observeFunction(CData $function, Closure $begin, ?Closure $end = null): ObserverHook
+    {
+        $hook = new ObserverHook($function, $begin, $end);
         $hook->install();
 
         return $hook;

@@ -390,6 +390,8 @@ typedef struct _zend_lazy_objects_store {
  HashTable infos;
 } zend_lazy_objects_store;
 typedef struct _zend_property_info zend_property_info;
+typedef struct _zend_fcall_info zend_fcall_info;
+typedef struct _zend_fcall_info_cache zend_fcall_info_cache;
 struct _zend_property_info;
 typedef zval *(*zend_object_read_property_t)(zend_object *object, zend_string *member, int type, void **cache_slot, zval *rv);
 typedef zval *(*zend_object_read_dimension_t)(zend_object *object, zval *offset, int type, zval *rv);
@@ -886,6 +888,22 @@ struct _zend_function_entry {
  const zend_frameless_function_info *frameless_function_infos;
  const char *doc_comment;
 };
+struct _zend_fcall_info {
+ size_t size;
+ zval function_name;
+ zval *retval;
+ zval *params;
+ zend_object *object;
+ uint32_t param_count;
+ HashTable *named_params;
+};
+struct _zend_fcall_info_cache {
+ zend_function *function_handler;
+ zend_class_entry *calling_scope;
+ zend_class_entry *called_scope;
+ zend_object *object;
+ zend_object *closure;
+};
 struct _zend_ini_entry {
  zend_string *name;
  int (*on_modify)(zend_ini_entry *entry, zend_string *new_value, void *mh_arg1, void *mh_arg2, void *mh_arg3, int stage);
@@ -950,6 +968,50 @@ typedef struct _zend_lex_state {
  zend_ast *ast;
  zend_arena *ast_arena;
 } zend_lex_state;
+typedef enum {
+ ZEND_FIBER_STATUS_INIT,
+ ZEND_FIBER_STATUS_RUNNING,
+ ZEND_FIBER_STATUS_SUSPENDED,
+ ZEND_FIBER_STATUS_DEAD,
+} zend_fiber_status;
+typedef struct _zend_fiber_stack zend_fiber_stack;
+typedef struct _zend_fiber_transfer {
+ zend_fiber_context *context;
+ zval value;
+ uint8_t flags;
+} zend_fiber_transfer;
+typedef void (*zend_fiber_coroutine)(zend_fiber_transfer *transfer);
+typedef void (*zend_fiber_clean)(zend_fiber_context *context);
+struct _zend_fiber_context {
+ void *handle;
+ void *kind;
+ zend_fiber_coroutine function;
+ zend_fiber_clean cleanup;
+ zend_fiber_stack *stack;
+ zend_fiber_status status;
+ zend_execute_data *top_observed_frame;
+ void *reserved[6];
+};
+struct _zend_fiber {
+ zend_object std;
+ uint8_t flags;
+ zend_fiber_context context;
+ zend_fiber_context *caller;
+ zend_fiber_context *previous;
+ zend_fcall_info fci;
+ zend_fcall_info_cache fci_cache;
+ zend_execute_data *execute_data;
+ zend_execute_data *stack_bottom;
+ zend_vm_stack vm_stack;
+ zval result;
+};
+typedef void (*zend_observer_fcall_begin_handler)(zend_execute_data *execute_data);
+typedef void (*zend_observer_fcall_end_handler)(zend_execute_data *execute_data, zval *retval);
+typedef struct _zend_observer_fcall_handlers {
+ zend_observer_fcall_begin_handler begin;
+ zend_observer_fcall_end_handler end;
+} zend_observer_fcall_handlers;
+typedef zend_observer_fcall_handlers (*zend_observer_fcall_init)(zend_execute_data *execute_data);
 typedef struct _zend_closure {
  zend_object std;
  zend_function func;
@@ -968,6 +1030,13 @@ extern zval * zend_hash_index_find(const HashTable *, zend_ulong);
 extern void zend_hash_destroy(HashTable *);
 extern zend_result zend_set_user_opcode_handler(uint8_t, user_opcode_handler_t);
 extern user_opcode_handler_t zend_get_user_opcode_handler(uint8_t);
+extern void zend_observer_fcall_register(zend_observer_fcall_init);
+extern void zend_observer_add_begin_handler(zend_function *, zend_observer_fcall_begin_handler);
+extern void zend_observer_add_end_handler(zend_function *, zend_observer_fcall_end_handler);
+extern _Bool zend_observer_remove_begin_handler(zend_function *, zend_observer_fcall_begin_handler, zend_observer_fcall_begin_handler *);
+extern _Bool zend_observer_remove_end_handler(zend_function *, zend_observer_fcall_end_handler, zend_observer_fcall_end_handler *);
+extern void zend_init_func_run_time_cache(zend_op_array *);
+extern size_t zend_internal_run_time_cache_reserved_size(void);
 extern void zend_do_inheritance_ex(zend_class_entry *, zend_class_entry *, _Bool);
 extern zend_object * zend_objects_new(zend_class_entry *);
 extern void zend_object_std_init(zend_object *, zend_class_entry *);
@@ -1007,3 +1076,5 @@ extern struct _zend_compiler_globals compiler_globals;
 extern HashTable module_registry;
 extern const zend_object_handlers std_object_handlers;
 extern zend_ast_process_t zend_ast_process;
+extern int zend_observer_fcall_op_array_extension;
+extern int zend_observer_fcall_internal_function_extension;
