@@ -15,7 +15,9 @@ namespace ZEngine\Reflection;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Memory\SharedMemoryException;
 use ZEngine\Type\ArgumentEntry;
+use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\LiveRange;
 use ZEngine\Type\OpLine;
@@ -39,7 +41,6 @@ trait FunctionLikeTrait
         $commonPointer = $this->getCommonPointer();
         $previousName  = $commonPointer->function_name;
         if ($previousName !== null) {
-            assert($previousName instanceof CData);
             StringEntry::fromCData($previousName)->releaseReference();
         }
         $commonPointer->function_name = StringEntry::fromString($newName)
@@ -57,7 +58,6 @@ trait FunctionLikeTrait
     {
         $commonPointer = $this->getCommonPointer();
         $flags         = $commonPointer->fn_flags;
-        assert(is_int($flags));
         if ($isClosure) {
             $commonPointer->fn_flags = $flags | Core::ZEND_ACC_CLOSURE;
         } else {
@@ -108,25 +108,16 @@ trait FunctionLikeTrait
     }
 
     /**
-     * Function flags that describe the body of the function (as opposed to its declaration):
-     * they must always travel together with the op_array they were compiled for.
-     *
-     * ZEND_ACC_HEAP_RT_CACHE and the run_time_cache/T fields live in zend_function.common
-     * since PHP 8.2, so a whole-common copy from the previous entry would graft a run-time
-     * cache and a temporaries count sized for the OLD opcodes onto the new body - the VM
-     * then reads cache slots out of bounds and crashes.
-     */
-    private const BODY_LEVEL_FUNCTION_FLAGS = Core::ZEND_ACC_HEAP_RT_CACHE
-        | Core::ZEND_ACC_GENERATOR
-        | Core::ZEND_ACC_VARIADIC
-        | Core::ZEND_ACC_RETURN_REFERENCE
-        | Core::ZEND_ACC_HAS_RETURN_TYPE
-        | Core::ZEND_ACC_HAS_TYPE_HINTS
-        | Core::ZEND_ACC_STRICT_TYPES
-        | Core::ZEND_ACC_IMMUTABLE;
-
-    /**
      * Redefines an existing method in the class with closure
+     *
+     * The previous function body is destroyed with engine semantics (the entry keeps
+     * one owned share of the new closure body instead) - repeated redefinitions of
+     * the same entry are memory-flat, see FunctionBodySwap. An opcache-shared
+     * (ZEND_ACC_IMMUTABLE) global function is first copied out of shared memory into
+     * a writable entry (its SHM body stays allocated, never freed); a method of an
+     * opcache-shared class cannot be redefined at all, because its method table
+     * lives inside the SHM class entry - see docs/hot-swap.md for the matrix.
+     *
      * @internal
      */
     public function redefine(\Closure $newCode): void
@@ -136,35 +127,34 @@ trait FunctionLikeTrait
         if (!$this->isInternal()) {
             $selfExecutionState = Core::$executor->getExecutionState();
             $newCodeEntry       = $selfExecutionState->getArgument(0)->getRawObject();
-            $newCodeEntry       = Core::cast('zend_closure *', $newCodeEntry);
+            $closureEntry       = ClosureEntry::fromCData(Core::cast('zend_closure *', $newCodeEntry));
+            $newFunction        = $closureEntry->getRawFunction();
 
-            // Remember the declaration identity of the redefined entry: it survives the
-            // body replacement, while everything executor-related (opcodes, literals,
-            // run-time cache, temporaries count) comes from the new closure body
-            $targetCommon  = $this->getCommonPointer();
-            $previousName  = $targetCommon->function_name;
-            $previousScope = $targetCommon->scope;
-            $previousProto = $targetCommon->prototype;
-            $previousFlags = $targetCommon->fn_flags;
-            $newFunction   = $newCodeEntry->func;
-            assert(is_int($previousFlags) && $newFunction instanceof CData);
-            $newFunctionCommon = $newFunction->common;
-            assert($newFunctionCommon instanceof CData);
-            $newBodyFlags = $newFunctionCommon->fn_flags;
-            assert(is_int($newBodyFlags));
+            $isSharedMemoryEntry = $this->isImmutable();
+            if ($isSharedMemoryEntry) {
+                if ($this->getCommonPointer()->scope !== null) {
+                    throw SharedMemoryException::immutableMethodTable();
+                }
+                // Copy the entry out of SHM: the per-process function-table bucket is
+                // repointed at a writable container, the SHM original stays untouched
+                // (never written, never freed)
+                $this->pointer = $this->copyOutOfSharedMemory();
+            }
 
-            // Replace the whole function with the closure-backed one (the donor closure
-            // object itself stays untouched - it keeps sole ownership of its own fields)
-            Core::memcpy($this->pointer, Core::addr($newFunction), Core::sizeof($newFunction));
-
-            // Restore the declaration identity: the single owned reference on the previous
-            // name stays with this entry, declaration-level flags (visibility, static,
-            // final, closure bit) are kept while body-level flags follow the new op_array
-            $targetCommon->function_name = $previousName;
-            $targetCommon->scope         = $previousScope;
-            $targetCommon->prototype     = $previousProto;
-            $targetCommon->fn_flags      = ($previousFlags & ~self::BODY_LEVEL_FUNCTION_FLAGS)
-                | ($newBodyFlags & self::BODY_LEVEL_FUNCTION_FLAGS);
+            $entryFunction = ReflectionFunction::fromCData($this->pointer);
+            $donorFunction = ReflectionFunction::fromCData(Core::addr($newFunction));
+            FunctionBodySwap::swapUserFunctionBody(
+                $entryFunction,
+                $donorFunction,
+                preserveDeclaration: true,
+                // The donor closure owns (and destroys) its static-variables table
+                duplicateStatics: true,
+                // A shared-memory body is immortal by definition and must not be freed
+                destroyPrevious: !$isSharedMemoryEntry,
+                // Subclass method tables may share this very structure - every such
+                // bucket releases one body reference when the engine destroys it
+                publishedShares: FunctionBodySwap::countPublishedShares($entryFunction),
+            )->commit();
         } else {
             // For internal function we can simply adjust a handler
             $this->pointer->handler = function (CData $executeData, CData $returnValue) use ($newCode): void {
@@ -177,11 +167,66 @@ trait FunctionLikeTrait
     }
 
     /**
+     * Copies this opcache-shared global function out of shared memory into a writable
+     * container and repoints its per-process function-table bucket at the copy
+     *
+     * The SHM original is left completely untouched (never written, never freed). The
+     * writable container is a malloc-backed immortal-by-design block (see
+     * docs/long-running.md): the engine's function table destructor releases the body
+     * it will eventually carry but never frees user zend_function containers, and a
+     * request-lifetime block would dangle if the engine walked it after the FFI request
+     * memory was reclaimed.
+     *
+     * @return CData Writable zend_function pointer now published in the table
+     */
+    private function copyOutOfSharedMemory(): CData
+    {
+        $lowerKey    = strtolower($this->getName());
+        $bucketValue = Core::$executor->functionTable->find($lowerKey);
+        if ($bucketValue === null) {
+            throw SharedMemoryException::functionNotPublished($lowerKey);
+        }
+
+        $writableEntry = Core::trackedNew('zend_function', true);
+        Core::memcpy($writableEntry, $this->pointer, Core::sizeof($writableEntry));
+
+        // The writable copy is not opcache-shared anymore; everything it points at
+        // still is, so the body must be replaced (not freed) by the caller. The copy
+        // is a user function, so its common struct carries the fn_flags word.
+        $writablePointer = Core::cast('zend_function *', Core::addr($writableEntry));
+        $writableCommon  = ReflectionFunction::fromCData($writablePointer)->getCommonPointer();
+        $writableCommon->fn_flags &= (~Core::ZEND_ACC_IMMUTABLE);
+
+        // Repoint the per-process bucket at the writable copy (IS_PTR payload)
+        $bucketValue->setPointer($writablePointer);
+
+        return $writablePointer;
+    }
+
+    /**
      * @inheritDoc
      */
     public function isUserDefined(): bool
     {
         return (bool) ($this->pointer->type & Core::ZEND_USER_FUNCTION);
+    }
+
+    /**
+     * Checks if this function entry lives in opcache shared memory (ZEND_ACC_IMMUTABLE)
+     *
+     * Opcache marks every function it publishes from its shared memory as immutable:
+     * such an entry is visible to all worker processes and must never be written or
+     * freed in place - redefine() copies immutable global functions out of SHM first
+     * (see docs/hot-swap.md). Only user functions can be opcache-shared; internal
+     * functions are persistent process memory, a different lifetime class entirely.
+     */
+    public function isImmutable(): bool
+    {
+        if (!$this->isUserDefined()) {
+            return false;
+        }
+
+        return ($this->getCommonPointer()->fn_flags & Core::ZEND_ACC_IMMUTABLE) !== 0;
     }
 
     /**
@@ -198,7 +243,6 @@ trait FunctionLikeTrait
         if ($attributes === null) {
             return null;
         }
-        assert($attributes instanceof CData);
 
         return HashTable::fromCData($attributes);
     }
@@ -298,10 +342,9 @@ trait FunctionLikeTrait
      */
     public function getArgumentInfo(int $index): ArgumentEntry
     {
-        $commonPointer = $this->getCommonPointer();
-        $functionFlags = $commonPointer->fn_flags;
-        $numberOfArgs  = $commonPointer->num_args;
-        assert(is_int($functionFlags) && is_int($numberOfArgs));
+        $commonPointer  = $this->getCommonPointer();
+        $functionFlags  = $commonPointer->fn_flags;
+        $numberOfArgs   = $commonPointer->num_args;
         $isVariadic     = ($functionFlags & Core::ZEND_ACC_VARIADIC)        !== 0;
         $hasReturnEntry = ($functionFlags & Core::ZEND_ACC_HAS_RETURN_TYPE) !== 0;
         $minIndex       = $hasReturnEntry ? ArgumentEntry::RETURN_ENTRY_INDEX : 0;
@@ -317,7 +360,6 @@ trait FunctionLikeTrait
         if ($argInfoTable === null) {
             throw new \ReflectionException('Function does not provide argument info entries');
         }
-        assert($argInfoTable instanceof CData);
         // Explicit pointer arithmetic also resolves the -1 return entry; the view type
         // selects the right name representation for the entry
         $entryType = $this->isUserDefined() ? 'zend_arg_info' : 'zend_internal_arg_info';
@@ -523,8 +565,15 @@ trait FunctionLikeTrait
 
     /**
      * Returns a pointer to the common structure (to work natively with zend_function and zend_internal_function)
+     *
+     * The declared shape (see phpstan.dist.neon typeAliases and AGENTS.md) is the
+     * single narrowing point for every common-struct field this trait touches.
+     *
+     * @return ZendFunctionCommonShape
+     *
+     * @internal shared with the body-swap machinery (FunctionBodySwap)
      */
-    private function getCommonPointer(): CData
+    public function getCommonPointer(): object
     {
         // For zend_internal_function we have same fields directly in current structure.
         // The check goes through the low-level structure (not native isInternal()) so it
@@ -536,6 +585,52 @@ trait FunctionLikeTrait
             $pointer = $this->pointer->common;
         }
 
+        /** @var ZendFunctionCommonShape $pointer */
         return $pointer;
+    }
+
+    /**
+     * Returns the shaped view of the op_array this user function executes
+     *
+     * The declared shape (see phpstan.dist.neon typeAliases and AGENTS.md) is the
+     * single narrowing point for the op_array fields the swap machinery touches.
+     * Only user-defined functions carry an op_array.
+     *
+     * @return ZendOpArrayShape
+     *
+     * @internal shared with the body-swap machinery (FunctionBodySwap)
+     */
+    public function getOpArrayPointer(): object
+    {
+        if (!$this->isUserDefined()) {
+            throw new \LogicException('op_array is available only for user-defined functions');
+        }
+        $opArray = $this->pointer->op_array;
+
+        /** @var ZendOpArrayShape $opArray */
+        return $opArray;
+    }
+
+    /**
+     * Returns the numeric address of the underlying zend_function entry
+     *
+     * The address is the identity of the published entry: warmed-up caches, method
+     * table buckets and VM frames reference the entry by this pointer, so callers
+     * compare addresses instead of poking the raw CData handle.
+     */
+    public function getAddress(): int
+    {
+        return Core::addressOf($this->pointer);
+    }
+
+    /**
+     * Returns the raw zend_function pointer this reflection wraps
+     *
+     * @internal shared with the body-swap machinery (FunctionBodySwap), which performs
+     *           the low-level engine surgery on the entry
+     */
+    public function getEntryPointer(): CData
+    {
+        return $this->pointer;
     }
 }

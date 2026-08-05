@@ -82,10 +82,8 @@ class ReflectionFunctionTest extends TestCase
     #[Group('internal')]
     public function testRedefine(): void
     {
-        // Known bounded residual: redefine() must leave the previous function body
-        // allocated because its arg_info/name remain shared with the redefined entry
-        // (see docs/long-running.md); the debug shutdown report would flag it
-        ini_set('report_memleaks', '0');
+        // The previous function body is destroyed by the swap (issue #64): the debug
+        // leak gate now enforces that no residual is left behind
         $this->refFunction->redefine(function (): ?string {
             return 'Yes';
         });

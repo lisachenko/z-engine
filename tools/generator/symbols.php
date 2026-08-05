@@ -111,6 +111,15 @@ return [
         'zend_ast_create_4',
         'zend_ast_create_5',
         'zend_ast_create_decl',
+        // Function/class lifetime API (hot-swap support): destroy_op_array releases a
+        // user function body (refcount-aware), zend_destroy_static_vars drops the
+        // materialized static-variables table of an op_array, destroy_zend_class
+        // releases a class entry the same way the engine class table destructor does,
+        // and zend_array_dup mints an independent copy of an engine hashtable
+        'destroy_op_array',
+        'zend_destroy_static_vars',
+        'destroy_zend_class',
+        'zend_array_dup',
         // Iterator API (wraps a zend_object_iterator as an engine object)
         'zend_iterator_init',
         // Module API
@@ -150,7 +159,8 @@ return [
         'ZEND_ACC_INTERFACE', 'ZEND_ACC_TRAIT', 'ZEND_ACC_ANON_CLASS', 'ZEND_ACC_ENUM',
         'ZEND_ACC_IMPLICIT_ABSTRACT_CLASS', 'ZEND_ACC_LINKED', 'ZEND_ACC_IMMUTABLE',
         'ZEND_ACC_USE_GUARDS', 'ZEND_ACC_CONSTANTS_UPDATED', 'ZEND_ACC_NO_DYNAMIC_PROPERTIES',
-        'ZEND_ACC_HAS_STATIC_IN_METHODS', 'ZEND_ACC_TOP_LEVEL', 'ZEND_ACC_PRELOADED',
+        'ZEND_ACC_HAS_STATIC_IN_METHODS', 'ZEND_HAS_STATIC_IN_METHODS',
+        'ZEND_ACC_TOP_LEVEL', 'ZEND_ACC_PRELOADED',
         'ZEND_ACC_NOT_SERIALIZABLE', 'ZEND_ACC_READONLY_CLASS', 'ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES',
         'ZEND_ACC_UNRESOLVED_VARIANCE', 'ZEND_ACC_NEARLY_LINKED', 'ZEND_ACC_RESOLVED_PARENT',
         'ZEND_ACC_RESOLVED_INTERFACES', 'ZEND_ACC_HAS_UNLINKED_USES', 'ZEND_ACC_PROPERTY_TYPES_RESOLVED',

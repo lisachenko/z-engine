@@ -20,6 +20,7 @@ use ZEngine\Type\ReferenceCountedInterface;
 use ZEngine\Type\ReferenceCountedTrait;
 use ZEngine\Type\ReferenceEntry;
 use ZEngine\Type\ReleasableTrait;
+use ZEngine\Type\StringEntry;
 
 /**
  * Class ReflectionValue represents a value in PHP
@@ -456,10 +457,172 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * Returns the raw zval structure
+     *
+     * The pointer is a live view into engine memory: reads reflect the current zval
+     * state and writes go straight to the engine. Prefer the typed accessors
+     * (getType(), getNativeValue(), equals()) over poking fields on the result.
      */
     public function getRawValue(): CData
     {
         $this->assertNotReleased();
+
+        return $this->pointer;
+    }
+
+    /**
+     * Returns the numeric address of the underlying zval, for pointer identity checks
+     */
+    public function getAddress(): int
+    {
+        $this->assertNotReleased();
+
+        return Core::addressOf($this->pointer);
+    }
+
+    /**
+     * Repoints the IS_PTR payload of this zval at the given raw pointer
+     *
+     * Used to redirect a function/class table bucket at a writable copy without running
+     * the bucket destructor - the previous pointer is simply overwritten.
+     *
+     * @internal used by the copy-out-of-SHM path
+     */
+    public function setPointer(CData $pointer): void
+    {
+        $this->assertNotReleased();
+        $this->valueUnion()->ptr = Core::cast('void *', $pointer);
+    }
+
+    /**
+     * Structurally compares this zval with another one for the hot-swap delta
+     *
+     * This is a CONSERVATIVE scalar comparison: two values are equal only when they
+     * carry the same base type and, for scalars, the same payload; every non-scalar
+     * payload (array, object, constant expression) is treated as different, because a
+     * missed change would keep stale state while a spurious "different" only costs a
+     * redundant swap. Constant-flag comparison is left to the owning wrapper
+     * (ReflectionClassConstant::equals()).
+     */
+    public function equals(ReflectionValue $other): bool
+    {
+        $this->assertNotReleased();
+        $type = $this->getBaseType();
+        if ($type !== $other->getBaseType()) {
+            return false;
+        }
+        $thisValue  = $this->valueUnion();
+        $otherValue = $other->valueUnion();
+        switch ($type) {
+            case self::IS_UNDEF:
+            case self::IS_NULL:
+            case self::IS_FALSE:
+            case self::IS_TRUE:
+                return true;
+            case self::IS_LONG:
+                return $thisValue->lval === $otherValue->lval;
+            case self::IS_DOUBLE:
+                return $thisValue->dval === $otherValue->dval;
+            case self::IS_STRING:
+                return StringEntry::fromCData($thisValue->str)->getStringValue()
+                    === StringEntry::fromCData($otherValue->str)->getStringValue();
+            default:
+                // Arrays, objects and constant expressions: conservatively different
+                return false;
+        }
+    }
+
+    /**
+     * Returns the base type byte (IS_LONG, IS_STRING, ...) of this zval
+     */
+    public function getBaseType(): int
+    {
+        $this->assertNotReleased();
+
+        /** @var ZvalU1Shape $u1 */
+        $u1 = $this->pointer->u1;
+
+        return $u1->v->type;
+    }
+
+    /**
+     * Returns the shaped value union (zend_value) of this zval
+     *
+     * @return ZendValueShape
+     */
+    private function valueUnion(): object
+    {
+        /** @var ZendValueShape $value */
+        $value = $this->pointer->value;
+
+        return $value;
+    }
+
+    /**
+     * Copies the donor value over this zval slot, taking its own engine reference, and
+     * returns a byte-exact snapshot of the previous slot content
+     *
+     * The snapshot is NOT released here: the caller keeps it so a rollback can restore
+     * the slot verbatim, and releases it (destroy()) once the swap is committed. This is
+     * the reference-safe primitive the hot-swap delta uses to replace default property,
+     * static and constant values in place.
+     */
+    public function replaceWith(ReflectionValue $donor): ReflectionValue
+    {
+        $this->assertNotReleased();
+        $zvalSize = Core::sizeof(Core::type('zval'));
+        $snapshot = Core::new('zval');
+        Core::memcpy($snapshot, $this->pointer, $zvalSize);
+        Core::memcpy($this->pointer, $donor->getRawValue(), $zvalSize);
+        // The slot now holds its own reference on the (possibly shared) payload
+        Core::call('zval_add_ref', $this->zvalPointer());
+
+        return self::fromValueEntry($snapshot);
+    }
+
+    /**
+     * Restores this zval slot from a snapshot taken by replaceWith(), releasing whatever
+     * the slot holds now (rollback path)
+     */
+    public function restoreFrom(ReflectionValue $snapshot): void
+    {
+        $this->assertNotReleased();
+        Core::call('zval_ptr_dtor', $this->zvalPointer());
+        Core::memcpy($this->pointer, $snapshot->getRawValue(), Core::sizeof(Core::type('zval')));
+    }
+
+    /**
+     * Releases the engine reference this slot holds with full engine semantics
+     *
+     * Used to drop a snapshot after a committed swap; interned/immutable payloads stay
+     * untouched, refcounted payloads go through zval_ptr_dtor.
+     */
+    public function destroy(): void
+    {
+        $this->assertNotReleased();
+        Core::call('zval_ptr_dtor', $this->zvalPointer());
+    }
+
+    /**
+     * Takes one engine reference on the payload of this zval (ZVAL_COPY-style addref)
+     *
+     * Unlike acquireReference() this does not flip the wrapper's ownership bit - it is a
+     * bare engine addref for slots the caller manages by hand (adopted constant values).
+     */
+    public function addReference(): void
+    {
+        $this->assertNotReleased();
+        Core::call('zval_add_ref', $this->zvalPointer());
+    }
+
+    /**
+     * Returns a zval POINTER for engine calls, whether this wrapper holds an embedded
+     * zval struct (a table slot / constant value) or a zval pointer (a container)
+     */
+    private function zvalPointer(): CData
+    {
+        if (\FFI::sizeof($this->pointer) === Core::sizeof(Core::type('zval'))) {
+            return Core::addr($this->pointer);
+        }
 
         return $this->pointer;
     }
@@ -478,6 +641,27 @@ class ReflectionValue implements ReferenceCountedInterface
             Core::call('zval_add_ref', $this->pointer);
             $this->ownsReference = true;
         }
+
+        return $this;
+    }
+
+    /**
+     * Records that this wrapper now owns the reference sitting in its zval, without taking
+     * a new one
+     *
+     * Used after an engine call replaces the payload in place with a FRESH refcounted value
+     * the wrapper must release exactly once - eg zend_prepare_string_for_scanning(), which
+     * swaps the source string for a padded scanner copy (a brand new rc=1 zend_string).
+     * Unlike acquireReference() this adds no reference: the engine already produced the
+     * fresh value. It exists because acquireReference() leaves ownsReference false when the
+     * ORIGINAL payload was interned (non-refcounted), which would leak the fresh copy the
+     * engine put in its place.
+     */
+    public function claimReference(): self
+    {
+        $this->assertNotReleased();
+        assert($this->isTypeInfoRefCounted($this->getType()));
+        $this->ownsReference = true;
 
         return $this;
     }

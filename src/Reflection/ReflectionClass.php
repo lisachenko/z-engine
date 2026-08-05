@@ -64,9 +64,11 @@ use ZEngine\ClassExtension\ObjectUnsetPropertyInterface;
 use ZEngine\ClassExtension\ObjectWriteDimensionInterface;
 use ZEngine\ClassExtension\ObjectWritePropertyInterface;
 use ZEngine\Core;
+use ZEngine\Memory\SharedMemoryException;
 use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
+use ZEngine\Type\StructArray;
 
 class ReflectionClass extends NativeReflectionClass
 {
@@ -329,6 +331,8 @@ class ReflectionClass extends NativeReflectionClass
 
     /**
      * @inheritDoc
+     *
+     * @return ReflectionMethod
      */
     #[\ReturnTypeWillChange]
     public function getMethod($name)
@@ -339,6 +343,18 @@ class ReflectionClass extends NativeReflectionClass
         }
 
         return ReflectionMethod::fromCData($functionEntry->getRawFunction());
+    }
+
+    /**
+     * @inheritDoc
+     *
+     * Reads the low-level method table, so it also resolves methods that live only as
+     * structures in memory (dynamic/hot-swap entries not registered natively).
+     */
+    #[\ReturnTypeWillChange]
+    public function hasMethod($name)
+    {
+        return $this->methodTable->find(strtolower($name)) !== null;
     }
 
     /**
@@ -374,10 +390,16 @@ class ReflectionClass extends NativeReflectionClass
 
     /**
      * Adds a new method to the class in runtime
+     *
+     * Rejected for opcache-shared (immutable) classes: the method table lives inside
+     * the SHM class entry and cannot be written per-process (see docs/hot-swap.md).
+     *
      * @internal
      */
     public function addMethod(string $methodName, \Closure $method): ReflectionMethod
     {
+        $this->assertMutable('add a method');
+
         $closureEntry = new ClosureEntry($method);
         // This line will make this closure live until the end of script/request
         $closureEntry->getClosureObjectEntry()->incrementReferenceCount();
@@ -438,6 +460,278 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
+     * Checks if this class entry lives in opcache shared memory (ZEND_ACC_IMMUTABLE)
+     *
+     * Opcache marks every class it publishes from its shared memory as immutable:
+     * such an entry is visible to all worker processes and must never be written or
+     * freed in place, so every class-level mutation API rejects it (see the support
+     * matrix in docs/hot-swap.md).
+     */
+    public function isImmutable(): bool
+    {
+        return ($this->getFlags() & Core::ZEND_ACC_IMMUTABLE) !== 0;
+    }
+
+    /**
+     * Returns the raw zend_class_entry pointer this reflection wraps
+     *
+     * The pointer is a live view into engine memory; prefer the typed accessors on
+     * this class over poking fields on the result.
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta/HotSwap)
+     */
+    public function getRawValue(): CData
+    {
+        return $this->pointer;
+    }
+
+    /**
+     * Returns the numeric address of the underlying class entry, for identity checks
+     */
+    public function getAddress(): int
+    {
+        return Core::addressOf($this->pointer);
+    }
+
+    /**
+     * Returns the ZEND_ACC_* flags word of this class entry
+     */
+    public function getFlags(): int
+    {
+        $flags = $this->pointer->ce_flags;
+        assert(is_int($flags));
+
+        return $flags;
+    }
+
+    /**
+     * Returns the borrowed view of this class method table (zend_function entries)
+     *
+     * @return HashTable|ReflectionValue[]
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta)
+     */
+    public function getMethodTable(): HashTable
+    {
+        return $this->methodTable;
+    }
+
+    /**
+     * Returns the borrowed view of this class constants table (zend_class_constant entries)
+     *
+     * @return HashTable|ReflectionValue[]
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta)
+     */
+    public function getConstantsTable(): HashTable
+    {
+        return $this->constantsTable;
+    }
+
+    /**
+     * Returns the user methods the class declares itself, keyed by lowercased name
+     *
+     * Reads the low-level method table, so it also sees dynamic/non-persistent methods
+     * that live only as structures in memory; inherited entries (whose scope is another
+     * class) are excluded. Each value is a pointer-level ReflectionMethod.
+     *
+     * @return array<string, ReflectionMethod>
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta)
+     */
+    public function getDeclaredMethods(): array
+    {
+        $declaredMethods = [];
+        $selfAddress     = $this->getAddress();
+        foreach ($this->methodTable as $methodName => $methodEntryValue) {
+            assert(is_string($methodName));
+            $method = ReflectionMethod::fromRawEntry($methodEntryValue->getRawFunction());
+            if (!$method->isUserDefined()) {
+                continue;
+            }
+            $scope = $method->getCommonPointer()->scope;
+            if ($scope === null || Core::addressOf($scope) !== $selfAddress) {
+                continue;
+            }
+            $declaredMethods[$methodName] = $method;
+        }
+
+        return $declaredMethods;
+    }
+
+    /**
+     * Returns a single declared/inherited constant by name, or null when not present
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta)
+     */
+    public function findConstant(string $name): ?ReflectionClassConstant
+    {
+        $constantValue = $this->constantsTable->find($name);
+        if ($constantValue === null) {
+            return null;
+        }
+
+        return ReflectionClassConstant::fromRawEntry(
+            Core::cast('zend_class_constant *', $constantValue->getRawPointer()),
+        );
+    }
+
+    /**
+     * Returns the constants the class declares itself, keyed by name
+     *
+     * Reads the low-level constants table (dynamic constants included); inherited
+     * constants (declared by another class) are excluded. Each value is a
+     * pointer-level ReflectionClassConstant.
+     *
+     * @return array<string, ReflectionClassConstant>
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta)
+     */
+    public function getDeclaredConstants(): array
+    {
+        $declaredConstants = [];
+        $selfAddress       = $this->getAddress();
+        foreach ($this->constantsTable as $constantName => $constantValue) {
+            assert(is_string($constantName));
+            $constant = ReflectionClassConstant::fromRawEntry(
+                Core::cast('zend_class_constant *', $constantValue->getRawPointer()),
+            );
+            if ($constant->getDeclaringClass()->getAddress() === $selfAddress) {
+                $declaredConstants[$constantName] = $constant;
+            }
+        }
+
+        return $declaredConstants;
+    }
+
+    /**
+     * Returns the properties the class declares itself, keyed by name
+     *
+     * Reads the low-level properties_info table; inherited properties are excluded.
+     * Each value is a pointer-level ReflectionProperty.
+     *
+     * @return array<string, ReflectionProperty>
+     *
+     * @internal shared with the hot-swap machinery (HotSwap/ClassDelta)
+     */
+    public function getDeclaredProperties(): array
+    {
+        $declaredProperties = [];
+        $selfAddress        = $this->getAddress();
+        foreach ($this->propertiesTable as $propertyName => $propertyValue) {
+            assert(is_string($propertyName));
+            $property = ReflectionProperty::fromRawEntry(
+                Core::cast('zend_property_info *', $propertyValue->getRawPointer()),
+            );
+            if ($property->getDeclaringClass()->getAddress() === $selfAddress) {
+                $declaredProperties[$propertyName] = $property;
+            }
+        }
+
+        return $declaredProperties;
+    }
+
+    /**
+     * Resolves the default-value zval slot of an instance property as a ReflectionValue
+     *
+     * The slot index is derived from the property storage offset; the returned wrapper
+     * is a live view into default_properties_table.
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta)
+     */
+    public function getDefaultPropertyValueOf(ReflectionProperty $property): ReflectionValue
+    {
+        $zvalSize = Core::sizeof(Core::type('zval'));
+        $slotBase = Core::type('zend_object')->getStructFieldOffset('properties_table');
+        $slot     = intdiv($property->getOffset() - $slotBase, $zvalSize);
+        $table    = $this->pointer->default_properties_table;
+        $count    = $this->pointer->default_properties_count;
+        assert($table instanceof CData && is_int($count));
+
+        return ReflectionValue::fromValueEntry((new StructArray($table, $count))[$slot]);
+    }
+
+    /**
+     * Resolves the default-value zval slot of a static property as a ReflectionValue
+     *
+     * The slot index for static members is the property offset itself; the returned
+     * wrapper is a live view into default_static_members_table.
+     *
+     * @internal shared with the hot-swap machinery (ClassDelta)
+     */
+    public function getDefaultStaticValueOf(ReflectionProperty $property): ReflectionValue
+    {
+        $slot  = $property->getOffset();
+        $table = $this->pointer->default_static_members_table;
+        $count = $this->pointer->default_static_members_count;
+        assert($table instanceof CData && is_int($count));
+
+        return ReflectionValue::fromValueEntry((new StructArray($table, $count))[$slot]);
+    }
+
+    /**
+     * Drops the ZEND_ACC_CONSTANTS_UPDATED shortcut so the engine re-evaluates constant
+     * expressions lazily, and returns the previous ce_flags word for restoration
+     *
+     * @internal used by the hot-swap machinery after changing constants/defaults
+     */
+    public function invalidateConstants(): int
+    {
+        $previousFlags           = $this->getFlags();
+        $this->pointer->ce_flags = $previousFlags & ~Core::ZEND_ACC_CONSTANTS_UPDATED;
+
+        return $previousFlags;
+    }
+
+    /**
+     * Restores the ce_flags word saved by invalidateConstants()
+     *
+     * @internal rollback helper
+     */
+    public function restoreFlags(int $flags): void
+    {
+        $this->pointer->ce_flags = $flags;
+    }
+
+    /**
+     * Marks the class entry as declaring at least one method with static variables
+     *
+     * The engine's shutdown walk destroys per-method live static tables only for classes
+     * carrying this flag; a body swapped in with static variables must set it or the
+     * materialized table leaks at request end.
+     *
+     * @internal used by the body-swap machinery (FunctionBodySwap)
+     */
+    public function markHasStaticInMethods(): void
+    {
+        $this->pointer->ce_flags = $this->getFlags() | Core::engineConstant('ZEND_HAS_STATIC_IN_METHODS');
+    }
+
+    /**
+     * Returns the magic shortcut field name the class entry references the given method
+     * through (constructor/destructor/__get/...), or null when the method is not wired
+     * as a magic slot
+     *
+     * @internal used by ReflectionMethod::isRemovable()
+     */
+    public function getMagicSlotFor(ReflectionMethod $method): ?string
+    {
+        $methodAddress = $method->getAddress();
+        foreach (self::INHERITED_FUNCTION_POINTERS as $fieldName) {
+            $fieldFunction = $this->pointer->{$fieldName};
+            if ($fieldFunction === null) {
+                continue;
+            }
+            assert($fieldFunction instanceof CData);
+            if (Core::addressOf($fieldFunction) === $methodAddress) {
+                return $fieldName;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Returns the raw backed-enum table of a backed enum (backing value => case name)
      *
      * The engine stores one entry per case: the key is the case backing value (a string
@@ -483,6 +777,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function removeMethods(string ...$methodNames): void
     {
+        $this->assertMutable('remove methods');
         foreach ($methodNames as $methodName) {
             $this->methodTable->delete(strtolower($methodName));
         }
@@ -928,12 +1223,18 @@ class ReflectionClass extends NativeReflectionClass
      */
     private function assertTraitConfigurationIsMutable(): void
     {
-        $classFlags = $this->pointer->ce_flags;
-        assert(is_int($classFlags));
-        if (($classFlags & Core::ZEND_ACC_IMMUTABLE) !== 0) {
-            throw new \ReflectionException(
-                'Cannot modify the trait configuration of an immutable (opcache-shared) class',
-            );
+        $this->assertMutable('modify the trait configuration');
+    }
+
+    /**
+     * Refuses a mutation on an opcache-shared (immutable) class entry
+     *
+     * @throws SharedMemoryException When the class lives in opcache shared memory
+     */
+    private function assertMutable(string $operation): void
+    {
+        if ($this->isImmutable()) {
+            throw SharedMemoryException::immutableClassMutation($operation);
         }
     }
 

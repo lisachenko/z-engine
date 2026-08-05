@@ -273,6 +273,27 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
     }
 
     /**
+     * Removes a bucket WITHOUT running the table destructor over its payload
+     *
+     * Used to unpublish an entry whose payload must survive the removal (a shared
+     * zend_function pointing into an immortal container, a class entry rehomed to
+     * another table): the pDestructor is disabled for the duration of the delete so
+     * the bucket removal releases nothing.
+     *
+     * @internal
+     */
+    public function deleteWithoutDestructor(string $key): void
+    {
+        $previousDestructor         = $this->pointer->pDestructor;
+        $this->pointer->pDestructor = null;
+        try {
+            $this->delete($key);
+        } finally {
+            $this->pointer->pDestructor = $previousDestructor;
+        }
+    }
+
+    /**
      * Deletes a value by integer key from the hashtable
      *
      * Same ownership contract as delete(): the engine destructor releases the bucket
@@ -295,14 +316,18 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
     public function add(string $key, ReflectionValue $value): void
     {
         $stringEntry = new StringEntry($key);
-        $result      = Core::call(
+        // HASH_ADD (not HASH_ADD_NEW): the engine must actually check for an existing key
+        // and return NULL on a duplicate. HASH_ADD_NEW skips that check in a non-debug
+        // build and would silently insert a second bucket under the same key instead of
+        // signalling the collision.
+        $result = Core::call(
             'zend_hash_add_or_update',
             $this->pointer,
             $stringEntry->getRawValue(),
             $value->getRawValue(),
-            self::HASH_ADD_NEW,
+            self::HASH_ADD,
         );
-        if ($result === Core::FAILURE) {
+        if ($result === null) {
             throw new \RuntimeException("Can not add an item with key {$key}");
         }
     }

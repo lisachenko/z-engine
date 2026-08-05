@@ -79,11 +79,87 @@ class ReflectionProperty extends NativeReflectionProperty
     }
 
     /**
-     * Returns an offset of this property
+     * Creates a low-level reflection over a raw zend_property_info structure
+     *
+     * Unlike fromCData() this does NOT initialize the native reflection state, so it
+     * works for property infos of classes that are not published under their own name
+     * (eg hot-swap donor entries residing only as structures in memory). Only the
+     * pointer-level API (getOffset()/getFlags()/getTypeMask()/getSurface()) is usable,
+     * native introspection is not.
+     *
+     * @internal used by the hot-swap machinery (HotSwap/ClassDelta)
+     */
+    public static function fromRawEntry(CData $propertyInfo): ReflectionProperty
+    {
+        /** @var ReflectionProperty $reflectionProperty */
+        $reflectionProperty          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionProperty->pointer = $propertyInfo;
+
+        return $reflectionProperty;
+    }
+
+    /**
+     * Returns the storage offset of this property within the object/static table
      */
     public function getOffset(): int
     {
-        return $this->pointer->offset;
+        $offset = $this->pointer->offset;
+        assert(is_int($offset));
+
+        return $offset;
+    }
+
+    /**
+     * Returns the ZEND_ACC_* flags word of this property declaration
+     */
+    public function getFlags(): int
+    {
+        $flags = $this->pointer->flags;
+        assert(is_int($flags));
+
+        return $flags;
+    }
+
+    /**
+     * Returns the type mask (zend_type.type_mask) of this property's declared type
+     */
+    public function getTypeMask(): int
+    {
+        $type = $this->pointer->type;
+        assert($type instanceof CData);
+        $typeMask = $type->type_mask;
+        assert(is_int($typeMask));
+
+        return $typeMask;
+    }
+
+    /**
+     * Checks if this property is declared static
+     */
+    public function isStatic(): bool
+    {
+        return ($this->getFlags() & Core::ZEND_ACC_STATIC) !== 0;
+    }
+
+    /**
+     * Checks if this property is virtual (hooked, no backing storage slot)
+     */
+    public function isVirtual(): bool
+    {
+        return ($this->getFlags() & Core::ZEND_ACC_VIRTUAL) !== 0;
+    }
+
+    /**
+     * Returns the comparable declaration shape (flags, storage offset, type mask)
+     *
+     * Two properties with equal surfaces occupy the same slot layout, which is what the
+     * hot-swap compatibility guard checks before allowing a default-value-only swap.
+     *
+     * @return array{int, int, int}
+     */
+    public function getSurface(): array
+    {
+        return [$this->getFlags(), $this->getOffset(), $this->getTypeMask()];
     }
 
     /**
