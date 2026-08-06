@@ -61,14 +61,18 @@ RUN rm -f /usr/local/etc/php/conf.d/docker-php-ext-*.ini
 # explicitly in the child processes that exercise shared memory - which is where
 # a debug build turns the shared-memory corruption of issue #41 into a loud
 # zend_function_dtor() assertion instead of a silent wrong result.
-# opcache is a shared zend_extension here (the debug build installs its own
-# ABI-tagged extension directory), so it is loaded by absolute path - a bare
+# Up to PHP 8.4 opcache is a shared zend_extension (the debug build installs
+# its own ABI-tagged extension directory), loaded by absolute path - a bare
 # file name resolves against whatever extension_dir the base image left behind.
+# Since PHP 8.5 opcache is linked statically into the binary: no opcache.so
+# exists and no zend_extension line is needed. The sanity check below asserts
+# the extension is present either way.
 RUN set -eux; \
     extension_dir="$(php-config --extension-dir)"; \
-    test -f "${extension_dir}/opcache.so"; \
     { \
-      echo "zend_extension=${extension_dir}/opcache.so"; \
+      if [ -f "${extension_dir}/opcache.so" ]; then \
+        echo "zend_extension=${extension_dir}/opcache.so"; \
+      fi; \
       echo 'ffi.enable=1'; \
       echo 'zend.assertions=1'; \
       echo 'report_memleaks=1'; \
