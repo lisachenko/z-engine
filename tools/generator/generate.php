@@ -20,14 +20,13 @@ error_reporting(E_ALL);
  * Version/TS targets maintained on this branch. Extend when a new platform
  * or thread-safety mode becomes supported (see AGENTS.md).
  *
- * master targets PHP 8.5, but it keeps regenerating the 8.4 artifacts as well:
- * the maintenance branch `8.4` merges up into master, and dropping include/8.4
- * here would turn every such merge into a modify/delete conflict.
+ * master targets PHP 8.5 only. The committed include/8.4 artifacts are
+ * maintained on the `8.4` branch (its own gen-headers run regenerates them)
+ * and arrive here through the cascade merge-up.
  *
  * @var list<array{php: string, ts: string}> $defaultTargets
  */
 $defaultTargets = [
-    ['php' => '8.4', 'ts' => 'nts'],
     ['php' => '8.5', 'ts' => 'nts'],
 ];
 
