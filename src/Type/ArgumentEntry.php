@@ -27,7 +27,7 @@ namespace ZEngine\Type;
  *
  * The zend_type.type_mask field packs the allowed-type bits together with several
  * argument-passing flags; the bit layout below mirrors zend_types.h/zend_compile.h
- * for PHP 8.4 (there is no exported engine constant for these internal macros).
+ * for PHP 8.5 (there is no exported engine constant for these internal macros).
  */
 class ArgumentEntry
 {

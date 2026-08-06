@@ -63,6 +63,8 @@ return [
         'zend_ast_decl',
         'zend_ast_list',
         'zend_ast_zval',
+        // PHP 8.5: constant expressions may embed a compiled closure body
+        'zend_ast_op_array',
         'zend_ast_process_t',
         'zend_lex_state',
         'zend_arena',
@@ -294,6 +296,7 @@ return [
         'zend_ast_decl',
         'zend_ast_list',
         'zend_ast_zval',
+        'zend_ast_op_array',
         'zend_lex_state',
         'zend_closure',
         'zend_script',

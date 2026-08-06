@@ -42,7 +42,7 @@ class GeneratedFunctionBenchmarkTest extends TestCase
     public function testGeneratedFunctionMatchesDeclaredSpeed(): void
     {
         // The generated function keeps its body alive until request end (immortal-by-design)
-        ini_set('report_memleaks', '0');
+        @ini_set('report_memleaks', '0'); // deprecated in PHP 8.5, still the only leak-report switch
 
         $generatedName = 'zengine_benchmark_twice';
         ReflectionFunction::addFunction($generatedName, static fn(int $x): int => $x * 2);

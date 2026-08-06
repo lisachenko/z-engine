@@ -188,7 +188,7 @@ class ReflectionClassTraitConfigurationTest extends TestCase
         // Bounded residual: replacing the engine-original (compiler-emalloc'd) alias list
         // leaves that list allocated until the request ends (see docs/long-running.md);
         // the debug-build shutdown report would flag it although nothing is wrong
-        ini_set('report_memleaks', '0');
+        @ini_set('report_memleaks', '0'); // deprecated in PHP 8.5, still the only leak-report switch
         $refClass = new ReflectionClass(TestTraitConfiguredClass::class);
 
         $refClass->removeTraitAlias('secondConflicting');
@@ -208,7 +208,7 @@ class ReflectionClassTraitConfigurationTest extends TestCase
     {
         // Bounded residual: the replaced engine-original precedence list stays allocated
         // (see docs/long-running.md), which the debug-build shutdown report would flag
-        ini_set('report_memleaks', '0');
+        @ini_set('report_memleaks', '0'); // deprecated in PHP 8.5, still the only leak-report switch
         $refClass = new ReflectionClass(TestTraitConfiguredClass::class);
 
         $refClass->removeTraitPrecedence(TestFirstConflictTrait::class . '::conflicting');

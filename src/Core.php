@@ -59,7 +59,7 @@ use ZEngine\Type\HashTable;
 class Core
 {
     /**
-     * Class, method, property and constant flags (ZEND_ACC_*) for PHP 8.4.
+     * Class, method, property and constant flags (ZEND_ACC_*) for PHP 8.5.
      *
      * Ground truth lives in the generated include/<version>/<platform>/constants.php;
      * EngineConstantsTest asserts these values match it exactly, so any drift
@@ -88,7 +88,6 @@ class Core
     public const ZEND_ACC_LINKED                   = 0x8;
     public const ZEND_ACC_IMPLICIT_ABSTRACT_CLASS  = 0x10;
     public const ZEND_ACC_EXPLICIT_ABSTRACT_CLASS  = 0x40;
-    public const ZEND_ACC_USE_GUARDS               = 0x800;
     public const ZEND_ACC_CONSTANTS_UPDATED        = 0x1000;
     public const ZEND_ACC_NO_DYNAMIC_PROPERTIES    = 0x2000;
     public const ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES = 0x8000;
@@ -99,6 +98,7 @@ class Core
     public const ZEND_ACC_NEARLY_LINKED            = 0x100000;
     public const ZEND_ACC_ENUM                     = 0x10000000;
     public const ZEND_ACC_NOT_SERIALIZABLE         = 0x20000000;
+    public const ZEND_ACC_USE_GUARDS               = 0x40000000; // was 0x800 before PHP 8.5
     public const ZEND_ACC_UNINSTANTIABLE           = 0x10000053;
 
     /* Property flags */
@@ -188,7 +188,7 @@ class Core
      * anything else is memory corruption, not a degraded mode - hence the hard
      * boot guard. See AGENTS.md ("Version matching is non-negotiable").
      */
-    private const SUPPORTED_PHP_VERSION_ID = [80400, 80500];
+    private const SUPPORTED_PHP_VERSION_ID = [80500, 80600];
 
     /**
      * Stores an internal instance of low-level FFI binding
@@ -354,7 +354,7 @@ class Core
     }
 
     /**
-     * Platform selector for the generated per-ABI artifacts, e.g. "8.4/linux-x64-nts"
+     * Platform selector for the generated per-ABI artifacts, e.g. "8.5/linux-x64-nts"
      */
     private static function platformKey(): string
     {

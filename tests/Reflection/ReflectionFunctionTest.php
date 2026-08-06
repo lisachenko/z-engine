@@ -119,7 +119,7 @@ class ReflectionFunctionTest extends TestCase
         // request (the published zend_function lives inside the closure object, see
         // docs/memory-model.md), so the debug-build shutdown report would flag it although
         // nothing is wrong
-        ini_set('report_memleaks', '0');
+        @ini_set('report_memleaks', '0'); // deprecated in PHP 8.5, still the only leak-report switch
 
         $functionName = 'zengine_generated_twice';
         $refFunction  = ReflectionFunction::addFunction($functionName, fn(int $x): int => $x * 2);
