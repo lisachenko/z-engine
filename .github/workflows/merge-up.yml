@@ -43,12 +43,19 @@ jobs:
             echo "Merge-up PR #$EXISTING already open; push updated it automatically." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          if git ls-remote --exit-code origin "refs/heads/$SUCCESSOR" > /dev/null; then
-            BODY=$(printf '%s\n\n%s' \
-              "Automated cascade merge of \`$BRANCH\` into \`$SUCCESSOR\` (branch flow defined in \`.github/branch-flow.json\`)." \
-              "Resolve conflicts in favour of the newer engine structures where they touch \`include/\` - regenerate headers on the target branch instead of merging them textually. See AGENTS.md.")
-            gh pr create --repo "$GITHUB_REPOSITORY" \
-              --head "$BRANCH" --base "$SUCCESSOR" \
-              --title "merge: cascade $BRANCH into $SUCCESSOR" \
-              --body "$BODY"
+          if ! git ls-remote --exit-code origin "refs/heads/$SUCCESSOR" > /dev/null; then
+            echo "Successor branch $SUCCESSOR does not exist - no cascade." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
+          AHEAD=$(gh api "repos/$GITHUB_REPOSITORY/compare/$SUCCESSOR...$BRANCH" --jq '.ahead_by')
+          if [ "$AHEAD" -eq 0 ]; then
+            echo "Branch $BRANCH has no commits ahead of $SUCCESSOR - nothing to cascade." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          BODY=$(printf '%s\n\n%s' \
+            "Automated cascade merge of \`$BRANCH\` into \`$SUCCESSOR\` (branch flow defined in \`.github/branch-flow.json\`)." \
+            "Resolve conflicts in favour of the newer engine structures where they touch \`include/\` - regenerate headers on the target branch instead of merging them textually. See AGENTS.md.")
+          gh pr create --repo "$GITHUB_REPOSITORY" \
+            --head "$BRANCH" --base "$SUCCESSOR" \
+            --title "merge: cascade $BRANCH into $SUCCESSOR" \
+            --body "$BODY"
