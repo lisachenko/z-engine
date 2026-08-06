@@ -427,7 +427,7 @@ trait FunctionLikeTrait
     /**
      * Returns the static variables table of this function (borrowed engine view)
      *
-     * On PHP 8.4 the engine keeps two tables: op_array.static_variables holds the default
+     * On PHP 8.4+ the engine keeps two tables: op_array.static_variables holds the default
      * values from the declaration, while the map pointer static_variables_ptr points to
      * the live table once it was materialized (on the first ZEND_BIND_STATIC execution,
      * or already at creation time for closures). The live table is returned whenever it

@@ -55,10 +55,23 @@ final class PayloadRelocator
     private const ZEND_ACC_HAS_RETURN_TYPE = 0x2000;
     private const ZEND_ACC_VARIADIC        = 0x4000;
 
-    private const ZEND_AST_ZVAL           = 64;
-    private const ZEND_AST_CONSTANT       = 65;
-    private const ZEND_AST_IS_LIST_SHIFT  = 7;
-    private const ZEND_AST_CHILDREN_SHIFT = 8;
+    /**
+     * AST node kinds the walk special-cases. PHP 8.5 added two node shapes that can
+     * appear in a constant expression: ZEND_AST_OP_ARRAY (a static closure compiled
+     * into the expression, carrying a zend_op_array pointer) and ZEND_AST_CALLABLE_CONVERT
+     * (first-class callable syntax, whose zend_ast_fcc holds only a ZEND_MAP_PTR slot).
+     */
+    private const ZEND_AST_ZVAL             = 64;
+    private const ZEND_AST_CONSTANT         = 65;
+    private const ZEND_AST_OP_ARRAY         = 66;
+    private const ZEND_AST_CALLABLE_CONVERT = 3;
+    private const ZEND_AST_IS_LIST_SHIFT    = 7;
+    private const ZEND_AST_CHILDREN_SHIFT   = 8;
+
+    /** Opcodes whose operands carry file-cache state the opline walk must convert (PHP 8.5) */
+    private const ZEND_DECLARE_ATTRIBUTED_CONST = 210;
+    private const ZEND_OP_DATA                  = 137;
+    private const IS_CONST                      = 1;
 
     /** zend_type bit layout (zend_types.h) - list/name discriminators */
     private const TYPE_LIST_BIT = 4194304;  // _ZEND_TYPE_LIST_BIT
@@ -400,6 +413,22 @@ final class PayloadRelocator
 
             return;
         }
+        if ($kind === self::ZEND_AST_OP_ARRAY) {
+            // PHP 8.5 constant expressions may hold a compiled static closure; the
+            // embedded body is stored the same way a function-table entry is
+            $node = Core::pointerAtAddress('zend_ast_op_array *', $astAddress);
+            if (!$this->isUnserialized($this->ptrValue($node, 'op_array'))) {
+                $address = $this->unPtr($node, 'op_array');
+                $this->unserializeOpArray(Core::pointerAtAddress('zend_op_array *', $address));
+            }
+
+            return;
+        }
+        if ($kind === self::ZEND_AST_CALLABLE_CONVERT) {
+            // zend_ast_fcc holds only a ZEND_MAP_PTR slot, which is execution-only
+            // state this port preserves verbatim (see class docblock)
+            return;
+        }
         if (($kind >> self::ZEND_AST_IS_LIST_SHIFT & 1) !== 0) {
             $list      = Core::pointerAtAddress('zend_ast_list *', $astAddress);
             $childBase = $astAddress + Core::sizeof(Core::type('zend_ast_list')) - PHP_INT_SIZE;
@@ -425,6 +454,18 @@ final class PayloadRelocator
         if ($kind === self::ZEND_AST_ZVAL || $kind === self::ZEND_AST_CONSTANT) {
             $this->serializeZval(Core::pointerAtAddress('zend_ast_zval *', $astAddress)->val);
 
+            return;
+        }
+        if ($kind === self::ZEND_AST_OP_ARRAY) {
+            $node = Core::pointerAtAddress('zend_ast_op_array *', $astAddress);
+            if (!$this->isSerialized($this->ptrValue($node, 'op_array'))) {
+                $address = $this->serPtr($node, 'op_array');
+                $this->serializeOpArray(Core::pointerAtAddress('zend_op_array *', $address));
+            }
+
+            return;
+        }
+        if ($kind === self::ZEND_AST_CALLABLE_CONVERT) {
             return;
         }
         if (($kind >> self::ZEND_AST_IS_LIST_SHIFT & 1) !== 0) {
@@ -478,6 +519,8 @@ final class PayloadRelocator
         $attr = Core::pointerAtAddress('zend_attribute *', $this->unPtr($zval->value, 'ptr'));
         $this->unStr($attr, 'name');
         $this->unStr($attr, 'lcname');
+        // PHP 8.5: delayed target validation stores the pending error message here
+        $this->unStr($attr, 'validation_error');
         $argSize = Core::sizeof(Core::type('zend_attribute_arg'));
         $argBase = Core::addressOf($attr->args);
         for ($i = 0; $i < $attr->argc; $i++) {
@@ -493,6 +536,7 @@ final class PayloadRelocator
         $attr    = Core::pointerAtAddress('zend_attribute *', $address);
         $this->serStr($attr, 'name');
         $this->serStr($attr, 'lcname');
+        $this->serStr($attr, 'validation_error');
         $argSize = Core::sizeof(Core::type('zend_attribute_arg'));
         $argBase = Core::addressOf($attr->args);
         for ($i = 0; $i < $attr->argc; $i++) {
@@ -570,17 +614,20 @@ final class PayloadRelocator
             $address = $this->unPtr($opArray, 'static_variables');
             $this->unserializeHash(Core::pointerAtAddress('zend_array *', $address), $this->unserializeZval(...));
         }
+        $literals = 0;
         if ($this->ptrValue($opArray, 'literals') !== 0) {
-            $address  = $this->unPtr($opArray, 'literals');
+            $literals = $this->unPtr($opArray, 'literals');
             $zvalSize = Core::sizeof(Core::type('zval'));
             for ($i = 0; $i < $opArray->last_literal; $i++) {
-                $this->unserializeZval(Core::pointerAtAddress('zval *', $address + $i * $zvalSize));
+                $this->unserializeZval(Core::pointerAtAddress('zval *', $literals + $i * $zvalSize));
             }
         }
         // opcodes: only the array pointer is relocated; per-opline operands and
         // handlers are literal indexes/relative jumps on this platform and are
-        // preserved verbatim (see class docblock)
-        $this->unPtr($opArray, 'opcodes');
+        // preserved verbatim (see class docblock). The one exception is the PHP 8.5
+        // attributed-constant payload hanging off an ZEND_OP_DATA operand.
+        $opcodes = $this->unPtr($opArray, 'opcodes');
+        $this->walkAttributedConstOplines($opcodes, $literals, (int) $opArray->last, false);
         $this->unPtr($opArray, 'scope');
         $this->unserializeArgInfo($opArray);
         $this->unserializeVars($opArray);
@@ -630,14 +677,16 @@ final class PayloadRelocator
             $address = $this->serPtr($opArray, 'static_variables');
             $this->serializeHash(Core::pointerAtAddress('zend_array *', $address), $this->serializeZval(...));
         }
+        $literals = 0;
         if ($this->ptrValue($opArray, 'literals') !== 0) {
-            $address  = $this->serPtr($opArray, 'literals');
+            $literals = $this->serPtr($opArray, 'literals');
             $zvalSize = Core::sizeof(Core::type('zval'));
             for ($i = 0; $i < $opArray->last_literal; $i++) {
-                $this->serializeZval(Core::pointerAtAddress('zval *', $address + $i * $zvalSize));
+                $this->serializeZval(Core::pointerAtAddress('zval *', $literals + $i * $zvalSize));
             }
         }
-        $this->serPtr($opArray, 'opcodes');
+        $opcodes = $this->serPtr($opArray, 'opcodes');
+        $this->walkAttributedConstOplines($opcodes, $literals, (int) $opArray->last, true);
         $this->serializeArgInfo($opArray);
         $this->serializeVars($opArray);
         if ($opArray->num_dynamic_func_defs !== 0) {
@@ -652,6 +701,54 @@ final class PayloadRelocator
         $this->serPtr($opArray, 'try_catch_array');
         $this->serPtr($opArray, 'prototype');
         $this->serPtr($opArray, 'prop_info');
+    }
+
+    /**
+     * Converts the attribute tables reachable from ZEND_DECLARE_ATTRIBUTED_CONST oplines.
+     *
+     * PHP 8.5 emits ZEND_DECLARE_ATTRIBUTED_CONST (instead of ZEND_DECLARE_CONST) for a
+     * global `const` carrying attributes, followed by a ZEND_OP_DATA whose op1 literal is
+     * an IS_PTR zval holding the compiled attribute HashTable. Because the zval type is
+     * IS_PTR the ordinary literal walk skips it, so opcache converts it from the opline
+     * loop - and so must this port, otherwise the table keeps a raw offset (read path) or
+     * a live address (write path) and the written binary is unloadable.
+     *
+     * The operand is read as a LITERAL INDEX, not as the run-time byte offset the engine's
+     * RT_CONSTANT() macro expects: opcache stores IS_CONST operands as indexes in the file
+     * cache (ZEND_PASS_TWO_UNDO_CONSTANT) and only converts them back on load, while this
+     * port keeps every opline in its serialized form (see class docblock). Everything else
+     * about the opline - handlers, jump offsets, the other operands - stays untouched.
+     *
+     * @param int  $opcodes    Address of the (already converted) opcodes array, 0 when null
+     * @param int  $literals   Address of the (already converted) literals array, 0 when null
+     * @param int  $count      Number of oplines (op_array.last)
+     * @param bool $serialized True on the write path, false on the read path
+     */
+    private function walkAttributedConstOplines(int $opcodes, int $literals, int $count, bool $serialized): void
+    {
+        if ($opcodes === 0 || $literals === 0 || $count < 2) {
+            return;
+        }
+        $oplineSize = Core::sizeof(Core::type('zend_op'));
+        $zvalSize   = Core::sizeof(Core::type('zval'));
+        // The pair is (DECLARE_ATTRIBUTED_CONST, OP_DATA), so the scan starts at index 1
+        for ($i = 1; $i < $count; $i++) {
+            $address = $opcodes + $i * $oplineSize;
+            $opline  = Core::pointerAtAddress('zend_op *', $address);
+            if ($opline->opcode !== self::ZEND_OP_DATA || $opline->op1_type !== self::IS_CONST) {
+                continue;
+            }
+            $previous = Core::pointerAtAddress('zend_op *', $address - $oplineSize);
+            if ($previous->opcode !== self::ZEND_DECLARE_ATTRIBUTED_CONST) {
+                continue;
+            }
+            $literal = Core::pointerAtAddress('zval *', $literals + (int) $opline->op1->constant * $zvalSize);
+            if ($serialized) {
+                $this->serializeAttributes($literal->value, 'ptr');
+            } else {
+                $this->unserializeAttributes($literal->value, 'ptr');
+            }
+        }
     }
 
     /**

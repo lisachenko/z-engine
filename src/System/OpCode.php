@@ -230,6 +230,7 @@ final class OpCode
     public const FRAMELESS_ICALL_3              = 207;
     public const JMP_FRAMELESS                  = 208;
     public const INIT_PARENT_PROPERTY_HOOK_CALL = 209;
+    public const DECLARE_ATTRIBUTED_CONST       = 210; // PHP 8.5: DECLARE_CONST with attributes
 
     /**
      * Reversed class constants, containing names by number
