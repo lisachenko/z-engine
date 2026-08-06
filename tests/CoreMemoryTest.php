@@ -94,4 +94,71 @@ final class CoreMemoryTest extends TestCase
         Core::untrack($pointer);
         $this->assertFalse(Core::isTrackedBlock($pointer));
     }
+
+    public function testPointerAtAddressTargetsTheGivenAddress(): void
+    {
+        $block   = Core::trackedNew('char[64]', true);
+        $pointer = Core::cast('char *', $block);
+        $address = Core::addressOf($pointer);
+
+        $materialized = Core::pointerAtAddress('char *', $address);
+
+        $this->assertSame(
+            $address,
+            Core::addressOf($materialized),
+            'pointerAtAddress() must be the exact inverse of addressOf()',
+        );
+
+        Core::untrack($pointer);
+        Core::persistentFree($pointer);
+    }
+
+    /**
+     * pointerAtAddress() is the primitive behind every walk to a raw engine address (a
+     * hashtable construction alone calls it once per table), so it has to be free of any
+     * per-call allocation. It used to write the address through an integer view of a
+     * fresh `{$type}[1]` slot and return `$slot[0]`; that element view pins its owning
+     * slot for as long as it lives, so every single call retained ~116 bytes for the rest
+     * of the request - about 5.8 MB over the loop below.
+     */
+    public function testPointerAtAddressDoesNotAllocatePerCall(): void
+    {
+        $residentKiloBytes = static function (): int {
+            foreach (file('/proc/self/status') ?: [] as $line) {
+                if (str_starts_with($line, 'VmRSS:')) {
+                    return (int) filter_var($line, FILTER_SANITIZE_NUMBER_INT);
+                }
+            }
+
+            return 0;
+        };
+
+        if ($residentKiloBytes() === 0) {
+            self::markTestSkipped('VmRSS is not readable on this platform');
+        }
+
+        $block   = Core::trackedNew('char[64]', true);
+        $address = Core::addressOf(Core::cast('char *', $block));
+
+        // Warm up so lazily built FFI state is not counted as growth
+        for ($cycle = 0; $cycle < 1_000; $cycle++) {
+            Core::pointerAtAddress('char *', $address);
+        }
+        $baseline = $residentKiloBytes();
+
+        for ($cycle = 0; $cycle < 50_000; $cycle++) {
+            Core::pointerAtAddress('char *', $address);
+        }
+
+        // The leaking implementation grew ~5.5 MB here; anything under a megabyte means
+        // the calls are not retaining a buffer each
+        $this->assertLessThan(
+            1_024,
+            $residentKiloBytes() - $baseline,
+            'pointerAtAddress() retained memory per call',
+        );
+
+        Core::untrack(Core::cast('char *', $block));
+        Core::persistentFree(Core::cast('char *', $block));
+    }
 }
