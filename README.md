@@ -247,6 +247,7 @@ These libraries are built entirely on Z-Engine and make good, real-world reading
 
 - **[lisachenko/immutable-object](https://github.com/lisachenko/immutable-object)** — mark a class immutable with a single interface; property writes outside the constructor throw
 - **[lisachenko/native-php-matrix](https://github.com/lisachenko/native-php-matrix)** — a `Matrix` type with fully overloaded arithmetic operators
+- **[lisachenko/userland-php-generics](https://github.com/lisachenko/userland-php-generics)** — reified generics: `Box::of('int')` monomorphizes a template into a real class entry whose `int` the engine enforces, and measures what that costs
 
 ## Contributing
 
