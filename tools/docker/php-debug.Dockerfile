@@ -11,7 +11,7 @@
 # the base image's release-ABI ffi.so) plus the extensions PHPUnit needs at
 # runtime (dom/xml/xmlwriter from libxml, mbstring). Build locally with:
 #   docker build -f tools/docker/php-debug.Dockerfile -t z-engine-php:debug .
-ARG PHP_VERSION=8.4
+ARG PHP_VERSION=8.5
 FROM php:${PHP_VERSION}-cli AS build
 
 # Build dependencies for the default-enabled extensions (which the official

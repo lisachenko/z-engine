@@ -7,7 +7,7 @@
  *
  * Usage:
  *   php tools/generator/generate.php               # all targets of this branch
- *   php tools/generator/generate.php --php=8.4 --ts=nts
+ *   php tools/generator/generate.php --php=8.5 --ts=nts
  *
  * Requires docker (with buildx). Invoked via `composer gen-headers`.
  */
@@ -20,16 +20,21 @@ error_reporting(E_ALL);
  * Version/TS targets maintained on this branch. Extend when a new platform
  * or thread-safety mode becomes supported (see AGENTS.md).
  *
+ * master targets PHP 8.5, but it keeps regenerating the 8.4 artifacts as well:
+ * the maintenance branch `8.4` merges up into master, and dropping include/8.4
+ * here would turn every such merge into a modify/delete conflict.
+ *
  * @var list<array{php: string, ts: string}> $defaultTargets
  */
 $defaultTargets = [
     ['php' => '8.4', 'ts' => 'nts'],
+    ['php' => '8.5', 'ts' => 'nts'],
 ];
 
 $options = getopt('', ['php:', 'ts:']);
 $targets = $defaultTargets;
 if (isset($options['php']) || isset($options['ts'])) {
-    $php     = is_string($options['php'] ?? null) ? $options['php'] : '8.4';
+    $php     = is_string($options['php'] ?? null) ? $options['php'] : '8.5';
     $ts      = is_string($options['ts'] ?? null) ? $options['ts'] : 'nts';
     $targets = [['php' => $php, 'ts' => $ts]];
 }
