@@ -44,7 +44,7 @@ Engine memory layouts change between every PHP minor version, so each PHP minor 
 
 | PHP | OS / Arch / TS | Branch | Status |
 |-----|----------------|--------|--------|
-| 8.5 | linux-x64-nts | `master` | 🚧 in progress |
+| 8.5 | linux-x64-nts | `master` | ✅ supported |
 | 8.4 | linux-x64-nts | `8.4` | ✅ supported |
 | 8.0 | linux-x64-nts | `8.0` | 🧊 frozen (legacy) |
 | macOS / Windows / ZTS | — | — | 📋 [tracked in issues](https://github.com/lisachenko/z-engine/issues) |
