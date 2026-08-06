@@ -33,10 +33,11 @@ use ZEngine\Type\StringEntry;
  *    scope-dependent and owned by the donor; the engine frees a heap cache together
  *    with the entry (destroy_op_array), and every subsequent swap releases the
  *    previous one, so repeated swaps stay memory-flat.
- *  - Static variables never stay shared with a donor that owns them: a closure
- *    destroys its own static table when it dies, so the entry duplicates the
- *    defaults; the live per-entry table materializes lazily on the first
- *    ZEND_BIND_STATIC, exactly like a plain compiled function.
+ *  - The entry never shares the donor's LIVE static-variables table: its ZEND_MAP_PTR
+ *    slot is dropped so the table materializes lazily on the first ZEND_BIND_STATIC,
+ *    exactly like a plain compiled function. The defaults table behind it stays
+ *    shared and is guarded by the body refcount alone - no donor kind owns it, see
+ *    unshareStaticVariables() for the PHP 8.5 ownership rules.
  *  - The previous body is destroyed with engine semantics (destroy_op_array) when
  *    the swap is committed - unless it lives in opcache shared memory, which is
  *    never freed. The entry keeps its owned reference on the function name;
@@ -75,17 +76,6 @@ final class FunctionBodySwap
         | Core::ZEND_ACC_IMMUTABLE;
 
     /**
-     * Static-variable defaults tables minted by swaps, keyed by entry address
-     *
-     * A minted table is exclusively owned by its entry, so the next swap of the same
-     * entry may release it eagerly even while the body arrays themselves are still
-     * shared with a live template op_array (whose own defaults pointer differs).
-     *
-     * @var array<int, int> Entry address => defaults table address
-     */
-    private static array $mintedStaticDefaults = [];
-
-    /**
      * This is an utility class, no instances needed
      */
     private function __construct() {}
@@ -106,10 +96,6 @@ final class FunctionBodySwap
      *                                   adopts the donor's declaration (the ClassDelta contract,
      *                                   where the new source is authoritative). The entry always
      *                                   keeps its own function name and class scope.
-     * @param bool  $duplicateStatics    True when the donor keeps ownership of its static-variables
-     *                                   table (closure donors destroy theirs on death); false when
-     *                                   the table's lifetime is guarded by the body refcount alone
-     *                                   (method donors about to be released via destroy_zend_class)
      * @param bool  $destroyPrevious     False when the previous body must stay allocated on commit
      *                                   (opcache shared memory is never freed)
      * @param int   $publishedShares     Number of table buckets pointing at this entry structure,
@@ -121,7 +107,6 @@ final class FunctionBodySwap
         FunctionLikeInterface $entryFunction,
         FunctionLikeInterface $donorFunction,
         bool $preserveDeclaration,
-        bool $duplicateStatics,
         bool $destroyPrevious = true,
         int $publishedShares = 1,
     ): PendingBodySwap {
@@ -168,8 +153,7 @@ final class FunctionBodySwap
             self::addBodyReference($entryFunction);
         }
         self::installFreshRunTimeCache($entryFunction);
-        $previousMintedRecord = self::$mintedStaticDefaults[$entryAddress] ?? null;
-        $mintedDefaults       = self::unshareStaticVariables($entryFunction, $duplicateStatics, $entryAddress);
+        self::unshareStaticVariables($entryFunction);
 
         return new PendingBodySwap(
             $entryFunction,
@@ -177,8 +161,6 @@ final class FunctionBodySwap
             $entryAddress,
             $publishedShares,
             $destroyPrevious,
-            $mintedDefaults,
-            $previousMintedRecord,
         );
     }
 
@@ -262,7 +244,7 @@ final class FunctionBodySwap
 
         self::addBodyReference($containerFunction);
         self::installFreshRunTimeCache($containerFunction);
-        self::unshareStaticVariables($containerFunction, false, $containerFunction->getAddress());
+        self::unshareStaticVariables($containerFunction);
     }
 
     /**
@@ -371,46 +353,41 @@ final class FunctionBodySwap
     }
 
     /**
-     * Detaches the entry's static variables from the donor
+     * Detaches the entry's live static-variables table from the donor
      *
-     * The live per-entry table always materializes lazily (first ZEND_BIND_STATIC dup
-     * of the defaults), exactly like a plain compiled function; the engine destroys it
-     * through its regular shutdown walks. When the donor owns the defaults table (a
-     * closure destroys its own on death), the entry gets an independent duplicate,
-     * recorded so the next swap can release it eagerly.
+     * Only the LIVE table is unshared: dropping the ZEND_MAP_PTR slot makes it
+     * materialize lazily on the first ZEND_BIND_STATIC, from the defaults, exactly
+     * like a plain compiled function.
      *
-     * @return bool True when an own defaults duplicate was minted for the entry
+     * The defaults table itself stays shared with the donor's other body holders. No
+     * donor kind owns it: since PHP 8.5 zend_create_closure_ex() duplicates the
+     * prototype defaults into the closure's ZEND_MAP_PTR slot only and leaves
+     * op_array.static_variables aliasing the prototype's table, whose single destroy
+     * is tied to the body refcount that destroy_op_array decrements. The entry holds
+     * one such reference per published bucket, so the last holder - whichever it turns
+     * out to be - frees the table exactly once.
+     *
+     * Duplicating it here instead would be a leak: the swap would replace the only
+     * field through which this entry's body reference could still reach the original,
+     * while PHP 8.5 also dropped the unconditional release destroy_op_array used to
+     * perform for the closure prototypes of a dying op_array.
      */
-    private static function unshareStaticVariables(
-        FunctionLikeInterface $entryFunction,
-        bool $duplicateStatics,
-        int $entryAddress,
-    ): bool {
+    private static function unshareStaticVariables(FunctionLikeInterface $entryFunction): void
+    {
         $opArray                            = $entryFunction->getOpArrayPointer();
         $opArray->static_variables_ptr__ptr = null;
 
-        $defaultsTable = $opArray->static_variables;
-        if ($defaultsTable !== null) {
-            // The engine's shutdown walk destroys per-method live static tables only
-            // for classes flagged as having statics - a swapped-in body with statics
-            // must set the flag or its materialized table leaks at request end
-            $entryScope = $entryFunction->getCommonPointer()->scope;
-            if ($entryScope !== null) {
-                ReflectionClass::fromCData($entryScope)
-                    ->markHasStaticInMethods();
-            }
+        if ($opArray->static_variables === null) {
+            return;
         }
-        if ($defaultsTable === null || !$duplicateStatics) {
-            return false;
+        // The engine's shutdown walk destroys per-method live static tables only
+        // for classes flagged as having statics - a swapped-in body with statics
+        // must set the flag or its materialized table leaks at request end
+        $entryScope = $entryFunction->getCommonPointer()->scope;
+        if ($entryScope !== null) {
+            ReflectionClass::fromCData($entryScope)
+                ->markHasStaticInMethods();
         }
-        // Core::call() proxies a variadic engine symbol, its result stays untyped
-        $ownDefaults = Core::call('zend_array_dup', $defaultsTable);
-        assert($ownDefaults instanceof CData);
-        $opArray->static_variables = $ownDefaults;
-
-        self::$mintedStaticDefaults[$entryAddress] = Core::addressOf($ownDefaults);
-
-        return true;
     }
 
     /**
@@ -466,19 +443,9 @@ final class FunctionBodySwap
             Core::call('zend_destroy_static_vars', $rawOpArray);
         }
 
-        // A minted defaults duplicate belongs exclusively to this entry: release it
-        // eagerly when the shared body arrays themselves are not freed below
-        $defaultsTable = $previousOpArray->static_variables;
-        if ($defaultsTable !== null) {
-            $isMintedTable = (self::$mintedStaticDefaults[$entryAddress] ?? null) === Core::addressOf($defaultsTable);
-            if ($isMintedTable) {
-                if (!$isLastHolder) {
-                    Core::call('rc_dtor_func', Core::cast('zend_refcounted *', $defaultsTable));
-                    $previousOpArray->static_variables = null;
-                }
-                unset(self::$mintedStaticDefaults[$entryAddress]);
-            }
-        }
+        // The defaults table needs no handling of its own: it is shared with the other
+        // holders of this body and destroy_op_array below frees it exactly when this
+        // entry drops the final reference
 
         // The entry keeps the single owned reference on the name - the snapshot must
         // not release it
@@ -516,10 +483,7 @@ final class FunctionBodySwap
      */
     public static function releaseSwappedInBody(
         FunctionLikeInterface $entryFunction,
-        int $entryAddress,
         int $publishedShares,
-        bool $mintedDefaults,
-        ?int $previousMintedRecord,
     ): void {
         // The fresh run-time cache was installed by the swap and is not published anywhere
         $opArray      = $entryFunction->getOpArrayPointer();
@@ -528,19 +492,8 @@ final class FunctionBodySwap
         if (($entryFlags & Core::ZEND_ACC_HEAP_RT_CACHE) !== 0 && $cachePointer !== null) {
             Core::free($cachePointer);
         }
-
-        if ($mintedDefaults) {
-            $defaultsTable = $opArray->static_variables;
-            if ($defaultsTable !== null) {
-                Core::call('rc_dtor_func', Core::cast('zend_refcounted *', $defaultsTable));
-            }
-            // Restore the bookkeeping of the previous (still committed) swap, if any
-            if ($previousMintedRecord !== null) {
-                self::$mintedStaticDefaults[$entryAddress] = $previousMintedRecord;
-            } else {
-                unset(self::$mintedStaticDefaults[$entryAddress]);
-            }
-        }
+        // The defaults table was never duplicated, so the rollback owes nothing for it:
+        // restoring the previous body puts the entry's own pointer back in place
 
         self::dropBodyReferences($entryFunction, $publishedShares);
     }
