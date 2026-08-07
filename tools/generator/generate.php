@@ -17,16 +17,17 @@ declare(strict_types=1);
 error_reporting(E_ALL);
 
 /**
- * Version/TS targets maintained on this branch. Extend when a new platform
- * or thread-safety mode becomes supported (see AGENTS.md).
+ * Version/TS targets maintained on this branch. Extend when a new platform,
+ * PHP minor or thread-safety mode becomes supported (see AGENTS.md).
  *
- * master targets PHP 8.5 only. The committed include/8.4 artifacts are
- * maintained on the `8.4` branch (its own gen-headers run regenerates them)
- * and arrive here through the cascade merge-up.
+ * This branch supports PHP 8.4 and 8.5 in parallel: Core resolves the artifact
+ * set of the RUNNING minor at boot, so both include/8.4 and include/8.5 are
+ * maintained (and drift-checked) here.
  *
  * @var list<array{php: string, ts: string}> $defaultTargets
  */
 $defaultTargets = [
+    ['php' => '8.4', 'ts' => 'nts'],
     ['php' => '8.5', 'ts' => 'nts'],
 ];
 

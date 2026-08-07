@@ -13,7 +13,7 @@
         }
     ],
     "require": {
-        "php": "~8.5.0",
+        "php": "~8.4.0 || ~8.5.0",
         "ext-ffi": "*"
     },
     "require-dev": {
@@ -36,6 +36,7 @@
         "test": "phpunit",
         "test:internal": "phpunit --group internal --process-isolation",
         "test:opcache": "phpunit --group opcache --fail-on-skipped",
+        "test:opcache85": "phpunit --group opcache-php85 --fail-on-skipped",
         "phpstan": "phpstan analyse",
         "cs:check": "php-cs-fixer fix --dry-run --diff",
         "cs:fix": "php-cs-fixer fix",
@@ -45,6 +46,7 @@
         "test": "Run the test suite (segfault-prone internal group excluded)",
         "test:internal": "Run the segfault-prone internal test group with process isolation (use a debug PHP build)",
         "test:opcache": "Run the opcache/shared-memory tests and FAIL if any of them skipped (they are self-skipping when opcache is unavailable)",
+        "test:opcache85": "Run the PHP 8.5-only file-cache shape tests and FAIL if any skipped (run this on PHP 8.5+)",
         "phpstan": "Run static analysis at the maximum level",
         "cs:check": "Check coding standards without fixing",
         "cs:fix": "Fix coding standards",
