@@ -19,6 +19,9 @@ parameters:
         # Child driver invoked in a subprocess; calls a dynamic global/method
         # target passed on argv, which is not statically typeable
         - tests/OpCache/scripts/run-cached.php
+        # Sacrificial child pinning the ext-ffi abort on zend_throw_exception_hook:
+        # pokes the raw engine symbol through an ad-hoc FFI::cdef on purpose
+        - tests/System/Hook/scenarios/throw-hook-ffi-abort.php
     # Analysis-only declarations of the runtime-generated specialized classes and the
     # deliberately-undefined placeholder type (see the file header for the rationale)
     scanFiles:

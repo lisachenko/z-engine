@@ -15,7 +15,6 @@ namespace ZEngine\System;
 
 use FFI\CData;
 use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionValue;
@@ -40,12 +39,28 @@ class ExecutionDataTest extends TestCase
         $this->assertSame($trace[1]['function'], $executionData->getFunction()->getName());
     }
 
-    #[Group('internal')]
-    public function testGetSymbolTable()
+    public function testGetSymbolTableIsNullWithoutMaterializedTable(): void
     {
-        $symTable = Core::$executor->getExecutionState()->getSymbolTable();
-        $this->assertNotNull($symTable);
-        $this->markTestIncomplete('Segfaults if we try to look for local variables');
+        // Ordinary frames keep their locals in CV slots and never materialize a
+        // symbol table: the field is stale garbage then (the historical segfault of
+        // this method), so the accessor reports the absence as null instead
+        $this->assertNull(Core::$executor->getExecutionState()->getSymbolTable());
+    }
+
+    public function testGetSymbolTableReadsMaterializedTable(): void
+    {
+        $localValue = 'observable-through-symbol-table';
+        get_defined_vars(); // Triggers zend_rebuild_symbol_table() for this frame
+
+        $symbolTable = Core::$executor->getExecutionState()->getSymbolTable();
+        $this->assertNotNull($symbolTable);
+
+        // Rebuilt tables alias the live CV slots through IS_INDIRECT entries
+        $entry = $symbolTable->find('localValue');
+        $this->assertNotNull($entry);
+        $this->assertSame(ReflectionValue::IS_INDIRECT, $entry->getType());
+        $entry->getIndirectValue()->getNativeValue($resolvedValue);
+        $this->assertSame($localValue, $resolvedValue);
     }
 
     /**

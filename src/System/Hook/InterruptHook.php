@@ -53,7 +53,9 @@ class InterruptHook extends AbstractHook
      */
     public function handle(...$rawArguments): void
     {
-        [$this->executeData] = $rawArguments;
+        [$executeData] = $rawArguments;
+        assert($executeData instanceof CData);
+        $this->executeData = $executeData;
 
         ($this->userHandler)($this);
     }

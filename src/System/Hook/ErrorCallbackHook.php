@@ -63,7 +63,12 @@ class ErrorCallbackHook extends AbstractHook
      */
     public function handle(...$rawArguments): void
     {
-        [$this->type, $this->fileName, $this->line, $this->message] = $rawArguments;
+        [$type, $fileName, $line, $message] = $rawArguments;
+        assert(is_int($type) && $fileName instanceof CData && is_int($line) && $message instanceof CData);
+        $this->type     = $type;
+        $this->fileName = $fileName;
+        $this->line     = $line;
+        $this->message  = $message;
 
         ($this->userHandler)($this);
     }

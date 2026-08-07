@@ -167,7 +167,10 @@ class ReflectionValueTest extends TestCase
         $value = self::class;
         get_defined_vars(); // This triggers Symbol Table rebuilt under the hood
 
-        $valueEntry = Core::$executor->getExecutionState()->getSymbolTable()->find('value');
+        $symbolTable = Core::$executor->getExecutionState()->getSymbolTable();
+        $this->assertNotNull($symbolTable);
+        $valueEntry = $symbolTable->find('value');
+        $this->assertNotNull($valueEntry);
 
         // We know that $valueEntry is indirect pointer to string
         $this->assertSame(ReflectionValue::IS_INDIRECT, $valueEntry->getType());

@@ -285,17 +285,23 @@ class ExecutionData
     }
 
     /**
-     * Returns the current symbol table.
+     * Returns the symbol table of this frame, or null when the frame carries none
      *
-     * Engine doesn't use symbol tables. Instead optimized opcodes and operands are used.
-     * Symbol table is used only for tricky cases like variable variable $$variable and super-globals.
-     *
-     * <span style="color:red; font-weight: bold">Warning!</span> Do not use it as it's not recommended.
-     *
-     * @internal
+     * The engine doesn't use symbol tables for ordinary frames: locals live in
+     * optimized CV slots (see getLocalVariables()). A symbol table is materialized
+     * only for tricky cases (variable variables, extract(), compact(), eval'd code)
+     * and its presence is flagged by ZEND_CALL_HAS_SYMBOL_TABLE in the frame's
+     * call_info. Without that flag the symbol_table field is stale garbage - reading
+     * it was the historical segfault of this method, so the flag is checked first
+     * and null is returned for frames without a materialized table.
      */
-    public function getSymbolTable(): HashTable
+    public function getSymbolTable(): ?HashTable
     {
+        // ZEND_CALL_INFO(call): the frame flags live in the type_info of This
+        $callInfo = $this->getThisZvalShape()->u1->type_info;
+        if (($callInfo & Core::engineConstant('ZEND_CALL_HAS_SYMBOL_TABLE')) === 0) {
+            return null;
+        }
         $symbolTable = $this->pointer->symbol_table;
         assert($symbolTable instanceof CData);
 
@@ -340,6 +346,21 @@ class ExecutionData
         $pointer = Core::cast('zval *', $this->pointer);
 
         return $pointer + self::getCallFrameSlot() + $variableNum;
+    }
+
+    /**
+     * Returns the shaped view of the frame's This zval, which carries the frame
+     * flags (call_info in u1.type_info) and the argument count (u2.num_args)
+     * next to the object scope
+     *
+     * @return ZvalShape
+     */
+    private function getThisZvalShape(): object
+    {
+        $thisZval = $this->pointer->This;
+
+        /** @var ZvalShape $thisZval */
+        return $thisZval;
     }
 
     /**
