@@ -553,6 +553,9 @@ int main(void) {
 #ifdef ZEND_CALL_CLOSURE
     fprintf(constants, "    'ZEND_CALL_CLOSURE' => %lld,\n", (long long)(ZEND_CALL_CLOSURE));
 #endif
+#ifdef ZEND_CALL_HAS_SYMBOL_TABLE
+    fprintf(constants, "    'ZEND_CALL_HAS_SYMBOL_TABLE' => %lld,\n", (long long)(ZEND_CALL_HAS_SYMBOL_TABLE));
+#endif
 #ifdef ZEND_ATTRIBUTE_TARGET_CLASS
     fprintf(constants, "    'ZEND_ATTRIBUTE_TARGET_CLASS' => %lld,\n", (long long)(ZEND_ATTRIBUTE_TARGET_CLASS));
 #endif
