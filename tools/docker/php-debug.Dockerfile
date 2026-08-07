@@ -14,6 +14,11 @@
 ARG PHP_VERSION=8.5
 FROM php:${PHP_VERSION}-cli AS build
 
+# Thread-safety mode: "nts" (default) or "zts". The base tag stays -cli either
+# way - PHP is rebuilt from the bundled source tarball below, which is identical
+# across the -cli/-zts image variants; only the configure flag differs.
+ARG PHP_TS=nts
+
 # Build dependencies for the default-enabled extensions (which the official
 # image's runtime layer strips the -dev libs for): FFI, libxml-based extensions
 # (dom/xml/xmlwriter/simplexml), mbstring (oniguruma) and sqlite3/pdo_sqlite.
@@ -35,6 +40,7 @@ RUN set -eux; \
     cd /usr/src/php; \
     ./configure \
         --enable-debug \
+        $(test "$PHP_TS" = "zts" && echo --enable-zts) \
         --with-ffi \
         --enable-mbstring \
         --enable-opcache \
@@ -81,12 +87,15 @@ RUN set -eux; \
       echo 'opcache.jit=off'; \
     } > /usr/local/etc/php/conf.d/z-engine.ini
 
-# Sanity check: the interpreter's own banner must report a DEBUG build and FFI
-# must be present (built in). (PHP_DEBUG's constant type is not worth asserting
-# strictly - the banner is the ground truth PHP prints for itself.) A missing
-# opcache is reported with the state that explains it, since the whole
-# shared-memory test group depends on the extension being loaded.
-RUN php -v && php -v | grep -q 'DEBUG' && php -m | grep -qi '^FFI$' \
+# Sanity check: the interpreter's own banner must report a DEBUG build, the
+# requested thread-safety mode, and FFI must be present (built in). (PHP_DEBUG's
+# constant type is not worth asserting strictly - the banner is the ground truth
+# PHP prints for itself.) A missing opcache is reported with the state that
+# explains it, since the whole shared-memory test group depends on the extension
+# being loaded.
+RUN php -v && php -v | grep -q 'DEBUG' \
+    && EXPECTED_TS="$PHP_TS" php -r 'exit(ZEND_THREAD_SAFE === (getenv("EXPECTED_TS") === "zts") ? 0 : 1);' \
+    && php -m | grep -qi '^FFI$' \
     && { php -r 'exit(extension_loaded("Zend OPcache") ? 0 : 1);' \
          || { echo "Zend OPcache did not load:"; \
               php --ini; \

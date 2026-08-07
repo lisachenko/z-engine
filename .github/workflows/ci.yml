@@ -13,8 +13,21 @@ env:
 
 jobs:
   tests:
-    name: Tests (release, NTS)
+    name: Tests (release, ${{ matrix.ts_label }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ts: nts
+            ts_label: NTS
+            opcache_gate: composer test:opcache
+          - ts: zts
+            ts_label: ZTS
+            # The file-cache relocator does not support ZTS payloads yet
+            # (issue #118): its tests self-skip on ZTS, so the non-skip gate
+            # excludes that group while still proving the SHM tests ran
+            opcache_gate: composer test:opcache-zts
     steps:
       - uses: actions/checkout@v4
 
@@ -28,11 +41,18 @@ jobs:
         # off everywhere: it rewrites the executor internals z-engine hooks into
         # (AGENTS.md).
         uses: shivammathur/setup-php@v2
+        env:
+          phpts: ${{ matrix.ts == 'zts' && 'ts' || 'nts' }}
         with:
           php-version: ${{ env.PHP_MINOR }}
           extensions: ffi, opcache
           ini-values: ffi.enable=1, zend.assertions=1, opcache.enable=1, opcache.enable_cli=0, opcache.jit=off, opcache.jit_buffer_size=0
           coverage: none
+
+      - name: Assert the thread-safety mode matches the matrix leg
+        run: |
+          php -r 'exit(ZEND_THREAD_SAFE === ("'"${{ matrix.ts }}"'" === "zts") ? 0 : 1);' \
+            || { echo "::error::PHP thread-safety mode does not match the ${{ matrix.ts }} matrix leg"; exit 1; }
 
       - name: Assert the opcache extension is available to the test runner
         run: |
@@ -50,7 +70,7 @@ jobs:
       # the child process, fixture not published from shared memory), so without
       # this step a broken opcache setup reads as a green run.
       - name: Opcache/SHM coverage must not silently skip
-        run: composer test:opcache
+        run: ${{ matrix.opcache_gate }}
 
       - name: Worker-loop soak (flat memory after warm-up)
         run: php -d ffi.enable=1 -d zend.assertions=1 -d opcache.jit=off tools/examples/worker-loop.php
@@ -83,7 +103,7 @@ jobs:
       - run: composer cs:check
 
   tests-internal-debug:
-    name: Internal group (debug build)
+    name: Internal group (debug build, ${{ matrix.ts_label }})
     runs-on: ubuntu-latest
     # The segfault-prone destructive tests run only against a --enable-debug
     # PHP build, where corruption surfaces as assertion failures. There is no
@@ -91,6 +111,18 @@ jobs:
     # own source with a plain `docker build` (the daemon's built-in BuildKit -
     # no buildx setup, no moby/buildkit pull, fewer flaky Docker Hub round trips)
     # and run the tests in it.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ts: nts
+            ts_label: NTS
+            # ZTS excludes the relocator tests (no ZTS payload support yet,
+            # issue #118) but still gates the SHM coverage against silent skips
+            opcache_args: --group opcache --fail-on-skipped
+          - ts: zts
+            ts_label: ZTS
+            opcache_args: --group opcache --exclude-group opcache-relocator --fail-on-skipped
     steps:
       - uses: actions/checkout@v4
 
@@ -111,6 +143,7 @@ jobs:
           docker build \
             -f tools/docker/php-debug.Dockerfile \
             --build-arg "PHP_VERSION=${PHP_MINOR}" \
+            --build-arg "PHP_TS=${{ matrix.ts }}" \
             -t z-engine-php:debug .
 
       - name: Run internal group with process isolation
@@ -125,7 +158,7 @@ jobs:
       - name: Run opcache/SHM group on the debug build
         run: |
           docker run --rm -v "$PWD:/app" -w /app z-engine-php:debug \
-            vendor/bin/phpunit --group opcache --fail-on-skipped
+            vendor/bin/phpunit ${{ matrix.opcache_args }}
 
   header-drift:
     name: Generated headers up to date

@@ -272,9 +272,17 @@ class Core
             self::verifyEngineLayouts($engine);
         }
 
-        self::$executor = new Executor($engine->executor_globals);
-        self::$compiler = new Compiler($engine->compiler_globals);
-        self::$modules  = HashTable::fromCData(Core::addr($engine->module_registry));
+        if (\ZEND_THREAD_SAFE) {
+            // ZTS: executor_globals/compiler_globals are not linkable symbols - the
+            // globals are per-thread and live inside the TSRM local-storage block,
+            // reached exactly like the engine's own EG()/CG() fast path (issue #60)
+            self::$executor = new Executor(self::threadGlobals('zend_executor_globals', $engine->executor_globals_offset));
+            self::$compiler = new Compiler(self::threadGlobals('zend_compiler_globals', $engine->compiler_globals_offset));
+        } else {
+            self::$executor = new Executor($engine->executor_globals);
+            self::$compiler = new Compiler($engine->compiler_globals);
+        }
+        self::$modules = HashTable::fromCData(Core::addr($engine->module_registry));
 
         // Deterministic teardown: user shutdown functions run before object destructors and
         // before ext/ffi RSHUTDOWN frees the callback trampolines, so every hooked engine
@@ -353,6 +361,64 @@ class Core
                 implode(', ', self::availablePlatforms()),
             ));
         }
+    }
+
+    /**
+     * Resolves a per-thread engine globals struct (EG/CG) through the TSRM on ZTS builds.
+     *
+     * Mirrors the engine's own EG()/CG() macro expansion (zend_globals_macros.h):
+     *
+     *   (zend_executor_globals *)((char *) tsrm_get_ls_cache() + executor_globals_offset)
+     *
+     * tsrm_get_ls_cache() returns the CALLING thread's local-storage block and the FFI
+     * call runs on the requesting PHP thread, so the resolved struct is exactly this
+     * thread's globals. PHP statics are per-thread on ZTS, so the wrappers Core::init()
+     * caches from this view can never leak across threads - a thread that boots z-engine
+     * runs Core::init() itself and resolves its own block.
+     *
+     * @param string $structName Globals struct type, e.g. "zend_executor_globals"
+     * @param mixed  $offset     Engine-exported byte offset inside the TSRM block
+     */
+    private static function threadGlobals(string $structName, mixed $offset): CData
+    {
+        if (!\is_int($offset)) {
+            throw new RuntimeException("The engine-exported TSRM offset for {$structName} is not an integer");
+        }
+        $globals = self::pointerAtAddress($structName . ' *', self::threadLocalStorageBase() + $offset)[0];
+        if (!$globals instanceof CData) {
+            throw new RuntimeException("Unable to resolve the per-thread {$structName} block through the TSRM");
+        }
+
+        return $globals;
+    }
+
+    /**
+     * Address of the calling thread's TSRM local-storage block (ZTS builds only).
+     *
+     * This is the base the engine's TSRMG* accessor family works from: the fast
+     * EG/CG offsets are relative to it, and its first field is the per-resource
+     * storage array used for module globals (TSRMG_BULK).
+     *
+     * @internal only meaningful on ZTS builds; requires the engine binding to be loaded
+     */
+    public static function threadLocalStorageBase(): int
+    {
+        $lsCache = self::call('tsrm_get_ls_cache');
+        if (!$lsCache instanceof CData) {
+            throw new RuntimeException('tsrm_get_ls_cache() did not return a pointer');
+        }
+        // A call-returned void* carries the TARGET, not a slot: addressOf() on it
+        // reinterprets pointee bytes and addr()+addressOf() yields the temporary
+        // slot's own address. Reading the slot through a typed integer view is the
+        // one shape that extracts the returned pointer's value.
+        $base = self::cast('uintptr_t *', self::addr($lsCache))[0];
+        if (!\is_int($base) || $base === 0) {
+            throw new RuntimeException(
+                'TSRM local storage is not initialized for this thread - Core::init() must run on a PHP-managed thread',
+            );
+        }
+
+        return $base;
     }
 
     /**

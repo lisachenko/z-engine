@@ -28,6 +28,7 @@ error_reporting(E_ALL);
  */
 $defaultTargets = [
     ['php' => '8.5', 'ts' => 'nts'],
+    ['php' => '8.5', 'ts' => 'zts'],
 ];
 
 $options = getopt('', ['php:', 'ts:']);

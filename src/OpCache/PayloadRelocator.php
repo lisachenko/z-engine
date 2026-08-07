@@ -21,7 +21,8 @@ use ZEngine\Core;
  * Turns the position-independent file-cache payload into a live in-memory
  * image and back, a faithful port of ext/opcache/zend_file_cache.c
  * (unserialize = {@see relocate}, serialize = {@see derelocate}) for the
- * linux-x64 non-thread-safe build.
+ * linux-x64 non-thread-safe build. Thread-safe (ZTS) payloads use a different
+ * binary layout and are rejected until issue #118 lands ZTS-specific walking.
  *
  * In the file every interior pointer is stored as a byte offset from the
  * buffer start (SERIALIZE_PTR) and every interned string as a tagged offset
@@ -98,6 +99,11 @@ final class PayloadRelocator
     {
         if (PHP_INT_SIZE !== 8 || \DIRECTORY_SEPARATOR !== '/') {
             throw OpCacheException::unsupportedPayload('the relocator supports 64-bit non-Windows builds only');
+        }
+        if (\ZEND_THREAD_SAFE) {
+            throw OpCacheException::unsupportedPayload(
+                'ZTS file-cache payloads use a different binary layout - tracked in issue #118',
+            );
         }
         $this->base           = Core::addressOf(Core::addr($buffer));
         $this->size           = $metaInfo->memSize();
