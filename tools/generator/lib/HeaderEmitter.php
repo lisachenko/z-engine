@@ -285,6 +285,13 @@ final class HeaderEmitter
             return 'extern ' . trim($matches[1]) . " {$name}{$matches[2]};";
         }
 
+        // Function-pointer globals without a typedef (zend_error_cb & friends):
+        // the declarator name belongs inside the pointer parentheses (clang
+        // reports `void (*)(int)`, C requires `void (*zend_error_cb)(int)`)
+        if (preg_match('/^(.*?)\(\*\)\s*(\(.*\))$/s', $qualType, $matches) === 1) {
+            return 'extern ' . trim($matches[1]) . " (*{$name}){$matches[2]};";
+        }
+
         return "extern {$qualType} {$name};";
     }
 

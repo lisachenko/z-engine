@@ -258,6 +258,27 @@ class Executor
     }
 
     /**
+     * Raises the VM interrupt flag (EG(vm_interrupt)) so the engine calls the
+     * interrupt callback at the next interrupt check
+     *
+     * Interrupt checks sit on loop back-edges and function entries, so the callback
+     * installed via Core::setInterruptHandler() fires at the next such boundary of
+     * whatever code is currently executing. This is how the engine's own async
+     * consumers (pcntl, the request timeout) get scheduled; without an installed
+     * callback the flag is consumed by the timeout check alone.
+     *
+     * The field is a zend_atomic_bool written here as a plain byte store - the same
+     * relaxed store the engine's non-C11 fallback performs; FFI offers no atomic RMW,
+     * and the single-writer/flag semantics of vm_interrupt do not need one.
+     */
+    public function requestInterrupt(): void
+    {
+        $interrupt = $this->pointer->vm_interrupt;
+        \assert($interrupt instanceof CData);
+        $interrupt->value = 1;
+    }
+
+    /**
      * Returns the global symbol table (EG(symbol_table)) - the true global variable scope
      *
      * Memory contract (see docs/long-running.md): EG(symbol_table) is a zend_array value
