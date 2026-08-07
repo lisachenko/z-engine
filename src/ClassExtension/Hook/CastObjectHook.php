@@ -42,6 +42,15 @@ class CastObjectHook extends AbstractHook
     protected int $type;
 
     /**
+     * Status of the last proceed() call within the current handle() invocation, null if none
+     *
+     * The engine hands cast_object an UNINITIALIZED retval slot; only a successful original
+     * handler writes it. Tracking the status is what lets getResult() refuse to read scratch
+     * memory and lets handle() propagate a fall-through failure to the engine caller.
+     */
+    private ?int $lastProceedStatus = null;
+
+    /**
      * typedef int (*zend_object_cast_t)(zend_object *readobj, zval *retval, int type);
      *
      * @inheritDoc
@@ -49,8 +58,17 @@ class CastObjectHook extends AbstractHook
     public function handle(...$rawArguments): int
     {
         [$this->object, $this->returnValue, $this->type] = $rawArguments;
+        $this->lastProceedStatus                         = null;
 
         $result = ($this->userHandler)($this);
+        if ($result === null && $this->lastProceedFailed()) {
+            // The user handler fell through to the original handler and that handler could not
+            // produce a value. Propagate the failure so the engine caller applies its own
+            // default behaviour (diagnostic and substitute value for numeric casts, engine
+            // Error for string casts) instead of silently installing NULL as the cast result
+            return Core::FAILURE;
+        }
+
         // The retval slot is uninitialized scratch memory provided by the engine caller,
         // so there is no previous value to release in it
         ReflectionValue::fromValueEntry($this->returnValue)->initializeNativeValue($result);
@@ -79,10 +97,31 @@ class CastObjectHook extends AbstractHook
     }
 
     /**
-     * Returns result of casting (eg from call to proceed)
+     * Whether the user handler fell through to the original handler and that handler failed
+     *
+     * A method rather than an inline comparison on purpose: the property is mutated by
+     * proceed() from inside the userHandler closure invocation, a side effect static analysis
+     * cannot see through — inline, the null assignment in handle() would narrow the comparison
+     * to a compile-time constant.
+     */
+    private function lastProceedFailed(): bool
+    {
+        return $this->lastProceedStatus === Core::FAILURE;
+    }
+
+    /**
+     * Returns result of casting from a successful call to proceed(), null otherwise
+     *
+     * The retval slot is written only by a successful proceed(): reading it before one (or after
+     * a failed one) would dereference uninitialized scratch memory, so null is returned instead.
+     * Combined with handle() this makes the naive fall-through — `$hook->proceed(); return
+     * $hook->getResult();` — behave exactly like an uninstalled handler for every cast type.
      */
     public function getResult()
     {
+        if ($this->lastProceedStatus !== Core::SUCCESS) {
+            return null;
+        }
         ReflectionValue::fromValueEntry($this->returnValue)->getNativeValue($result);
 
         return $result;
@@ -90,14 +129,19 @@ class CastObjectHook extends AbstractHook
 
     /**
      * Proceeds with object casting
+     *
+     * @return int Core::SUCCESS when the original handler produced a value in the retval slot,
+     *             Core::FAILURE when it could not (numeric casts on plain objects, for example)
      */
     public function proceed()
     {
         if (!$this->hasOriginalHandler()) {
             throw new \LogicException('Original handler is not available');
         }
-        $result = ($this->originalHandler)($this->object, $this->returnValue, $this->type);
+        $status = ($this->originalHandler)($this->object, $this->returnValue, $this->type);
+        assert(is_int($status));
+        $this->lastProceedStatus = $status;
 
-        return $result;
+        return $this->lastProceedStatus;
     }
 }

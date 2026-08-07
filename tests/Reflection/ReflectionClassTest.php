@@ -321,6 +321,62 @@ class ReflectionClassTest extends TestCase
     }
 
     #[RunInSeparateProcess]
+    public function testCastObjectHandlerFallsThroughToEngineDefault(): void
+    {
+        $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
+        $this->refClass->setCreateObjectHandler($handler);
+        $this->refClass->setCastObjectHandler(function (CastObjectHook $hook) {
+            // The naive fall-through: defer every cast to the engine and hand back its result
+            $hook->proceed();
+
+            return $hook->getResult();
+        });
+
+        $instance = new TestClass();
+
+        // Boolean casts succeed in the default handler, so the fall-through must yield its value
+        $this->assertTrue(self::convertToBooleanViaEngine($instance));
+
+        // Numeric casts FAIL in the default handler without writing the retval slot: the
+        // failure must propagate to the engine caller (which warns and substitutes 1) instead
+        // of reading uninitialized memory or silently installing null. Capturing every PHP
+        // diagnostic also proves the fall-through emits no "Undefined variable" corruption noise
+        $capturedWarnings = [];
+        set_error_handler(static function (int $code, string $message) use (&$capturedWarnings): bool {
+            $capturedWarnings[] = $message;
+
+            return true;
+        });
+        try {
+            $long = (int) $instance;
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertSame(1, $long);
+        $this->assertSame(
+            ['Object of class ' . TestClass::class . ' could not be converted to int'],
+            $capturedWarnings,
+        );
+        $this->markTestIncomplete('Initialization object handler brings segfaults thus run it separately');
+    }
+
+    /**
+     * Converts an object through the engine's boolean-conversion path (cast_object)
+     *
+     * A helper on purpose: written inline, the conversion result is a compile-time constant
+     * for static analysis (object-to-bool is always true there), while the installed cast
+     * handler decides it at runtime — the declared bool return type erases the narrowing
+     */
+    private static function convertToBooleanViaEngine(object $instance): bool
+    {
+        $value = $instance;
+        settype($value, 'boolean');
+
+        return $value;
+    }
+
+    #[RunInSeparateProcess]
     public function testInstallReadPropertyHandler(): void
     {
         $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);

@@ -3303,7 +3303,7 @@ parameters:
 		-
 			message: '#^Cannot cast ZEngine\\Stub\\TestClass to int\.$#'
 			identifier: cast.int
-			count: 1
+			count: 2
 			path: tests/Reflection/ReflectionClassTest.php
 
 		-
