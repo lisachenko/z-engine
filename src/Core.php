@@ -247,29 +247,40 @@ class Core
     private static bool $shutdownRegistered = false;
 
     /**
-     * Performs Z-engine core initialization
+     * Performs Z-engine core initialization (idempotent per process)
+     *
+     * A repeated call - eg a worker manager re-booting z-engine after Core::shutdown()
+     * inside one live process - reuses the process-wide FFI binding instead of minting a
+     * new one. Rebinding via a second FFI::cdef() frees the first binding's type data
+     * together with the old FFI object, which turns every CData minted against it
+     * (module entries, hooks, heap anchors) invalid by the time the exit handlers touch
+     * them (issue #108).
      */
     public static function init(): void
     {
         self::assertSupportedEnvironment();
 
-        try {
-            $engine = FFI::scope('ZEngine');
-        } catch (FFI\Exception $e) {
-            if (ini_get('ffi.enable') === 'preload' && PHP_SAPI !== 'cli') {
-                throw new RuntimeException('Preload mode requires that you call Core::preload before');
+        if (isset(self::$engine)) {
+            $engine = self::$engine;
+        } else {
+            try {
+                $engine = FFI::scope('ZEngine');
+            } catch (FFI\Exception $e) {
+                if (ini_get('ffi.enable') === 'preload' && PHP_SAPI !== 'cli') {
+                    throw new RuntimeException('Preload mode requires that you call Core::preload before');
+                }
+                // If not, then load definitions by hand
+                $definition = file_get_contents(self::resolveArtifact('engine.h'));
+                if ($definition === false) {
+                    throw new RuntimeException('Unable to read the engine definition file');
+                }
+                $engine = FFI::cdef($definition);
             }
-            // If not, then load definitions by hand
-            $definition = file_get_contents(self::resolveArtifact('engine.h'));
-            if ($definition === false) {
-                throw new RuntimeException('Unable to read the engine definition file');
-            }
-            $engine = FFI::cdef($definition);
-        }
-        self::$engine = $engine;
+            self::$engine = $engine;
 
-        if (getenv('ZENGINE_STRICT_LAYOUT_CHECK') === '1') {
-            self::verifyEngineLayouts($engine);
+            if (getenv('ZENGINE_STRICT_LAYOUT_CHECK') === '1') {
+                self::verifyEngineLayouts($engine);
+            }
         }
 
         if (\ZEND_THREAD_SAFE) {
