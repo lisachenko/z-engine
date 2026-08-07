@@ -17,9 +17,17 @@ use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 #[Group('opcache')]
+#[Group('opcache-relocator')]
 final class ReflectionOpcacheFileTest extends TestCase
 {
     use FileCacheFixture;
+
+    protected function setUp(): void
+    {
+        if (\ZEND_THREAD_SAFE) {
+            self::markTestSkipped('The file-cache relocator does not support ZTS payloads yet (issue #118)');
+        }
+    }
 
     protected function tearDown(): void
     {
