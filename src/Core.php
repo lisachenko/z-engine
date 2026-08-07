@@ -488,23 +488,27 @@ class Core
     /**
      * Materializes a typed pointer from a numeric address (the inverse of addressOf())
      *
-     * The address is written through an integer view of a fresh pointer slot and the
-     * typed pointer value is read back. This is the explicit form of C pointer
-     * arithmetic (base address plus a signed byte offset), which FFI otherwise only
-     * offers through CData operator overloads.
+     * FFI::cast() reinterprets a plain integer as a pointer value, which yields the
+     * typed pointer without allocating anything at all - the result is an unowned view
+     * that carries the address and nothing else.
+     *
+     * It must stay allocation-free: this is the primitive behind every "walk to that
+     * engine address" in the framework (hashtable construction alone calls it once per
+     * table), so an owned buffer per call would be a leak with no upper bound. The
+     * previous implementation wrote the address through an integer view of a fresh
+     * `{$type}[1]` slot and returned `$slot[0]`; because that element view pins its
+     * owning slot for as long as it lives, every call permanently retained the slot
+     * (~116 bytes) - the same FFI ownership trap documented on cast() above.
+     *
+     * The result needs no instanceof narrowing anymore: reading `$slot[0]` off a CData
+     * array yielded an untyped value, while cast() is declared to return CData.
      *
      * @param string $type    Pointer type of the result (eg "zend_arg_info *")
      * @param int    $address Numeric address the pointer should point at
      */
     public static function pointerAtAddress(string $type, int $address): CData
     {
-        $slot           = self::new("{$type}[1]");
-        $addressView    = self::cast('uintptr_t *', $slot);
-        $addressView[0] = $address;
-        $pointer        = $slot[0];
-        assert($pointer instanceof CData);
-
-        return $pointer;
+        return self::$engine->cast($type, $address);
     }
 
     /**
