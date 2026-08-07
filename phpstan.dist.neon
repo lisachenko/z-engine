@@ -3,6 +3,11 @@ includes:
 
 parameters:
     level: max
+    # The branch supports PHP 8.4 and 8.5 in parallel; analysis is pinned to the
+    # newest supported minor rather than the [8.4, 8.5] range because the range
+    # would fold Core::init()'s out-of-range boot guard into "always false" -
+    # the guard exists precisely for interpreters the analysis says cannot occur.
+    # CI runs this config on both matrix runtimes.
     phpVersion: 80500
     paths:
         - src
@@ -16,6 +21,9 @@ parameters:
         # Compiled into the opcache file cache by child processes; the static
         # counter and attribute usage are fixture payload, not library code
         - tests/OpCache/fixtures/answer.php
+        # Same, plus 8.5-only syntax that an analysis run on a PHP 8.4 runtime
+        # cannot even parse/check (ConstantAttributesRule refuses non-8.5 runtimes)
+        - tests/OpCache/fixtures/answer-php85.php
         # Child driver invoked in a subprocess; calls a dynamic global/method
         # target passed on argv, which is not statically typeable
         - tests/OpCache/scripts/run-cached.php
