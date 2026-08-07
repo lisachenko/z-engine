@@ -5,8 +5,10 @@
  *
  * Deliberately exercises walker breadth: a global function, a class with a
  * constant, a typed property with a default, a static variable, an attribute,
- * a try/catch block and a string literal that patch tests rewrite, plus the two
- * node shapes PHP 8.5 introduced into the file-cache format (see below).
+ * a try/catch block and a string literal that patch tests rewrite. This file
+ * must stay parsable on every supported PHP minor; the node shapes PHP 8.5
+ * introduced into the file-cache format use 8.5-only syntax and live in
+ * answer-php85.php, compiled by Php85SerializerShapesTest only.
  */
 declare(strict_types=1);
 
@@ -41,24 +43,3 @@ class ZEngineBinSubject
         }
     }
 }
-
-#[\Attribute(\Attribute::TARGET_ALL)]
-class ZEngineBinConstMarker {}
-
-/*
- * PHP 8.5 shape #1: an attributed global constant compiles to
- * ZEND_DECLARE_ATTRIBUTED_CONST + ZEND_OP_DATA, whose IS_CONST operand points at
- * a literal of type IS_PTR holding the attribute table. The literal walk skips
- * IS_PTR zvals, so the table is only reachable through the opline pair.
- */
-#[ZEngineBinConstMarker]
-const ZENGINE_BIN_FLAG = 'on';
-
-/*
- * PHP 8.5 shape #2: a static closure inside a constant expression compiles to a
- * ZEND_AST_OP_ARRAY node, which carries a zend_op_array pointer instead of the
- * child pointers the generic AST walk expects.
- */
-const ZENGINE_BIN_CALLBACK = static function (): int {
-    return 5;
-};

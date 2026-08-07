@@ -151,6 +151,9 @@ trait FunctionLikeTrait
                 $entryFunction,
                 $donorFunction,
                 preserveDeclaration: true,
+                // The donor closure owns (and destroys) its static-variables table on
+                // PHP 8.4; on 8.5+ the flag is ignored (body refcount guards the table)
+                duplicateStatics: true,
                 // A shared-memory body is immortal by definition and must not be freed
                 destroyPrevious: !$isSharedMemoryEntry,
                 // Subclass method tables may share this very structure - every such

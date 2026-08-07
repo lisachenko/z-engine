@@ -61,11 +61,14 @@ use ZEngine\Type\HashTable;
 class Core
 {
     /**
-     * Class, method, property and constant flags (ZEND_ACC_*) for PHP 8.5.
+     * Class, method, property and constant flags (ZEND_ACC_*) for PHP 8.4/8.5.
      *
      * Ground truth lives in the generated include/<version>/<platform>/constants.php;
-     * EngineConstantsTest asserts these values match it exactly, so any drift
-     * in a future engine version fails CI instead of corrupting memory.
+     * EngineConstantsTest asserts these values match it exactly on every supported
+     * minor, so any drift in a future engine version fails CI instead of
+     * corrupting memory. A flag whose value moved between minors is declared as a
+     * PHP_VERSION_ID conditional, so the constant is always right for the
+     * running engine.
      */
 
     /* Visibility flags (methods, properties, constants) */
@@ -100,7 +103,7 @@ class Core
     public const ZEND_ACC_NEARLY_LINKED            = 0x100000;
     public const ZEND_ACC_ENUM                     = 0x10000000;
     public const ZEND_ACC_NOT_SERIALIZABLE         = 0x20000000;
-    public const ZEND_ACC_USE_GUARDS               = 0x40000000; // was 0x800 before PHP 8.5
+    public const ZEND_ACC_USE_GUARDS               = PHP_VERSION_ID >= 80500 ? 0x40000000 : 0x800; // moved in PHP 8.5
     public const ZEND_ACC_UNINSTANTIABLE           = 0x10000053;
 
     /* Property flags */
@@ -185,12 +188,15 @@ class Core
     /**
      * PHP version range supported by this branch: [min, max).
      *
-     * Engine memory structures differ between minor PHP versions, therefore a
-     * branch of z-engine works with exactly one minor version. Running against
-     * anything else is memory corruption, not a degraded mode - hence the hard
-     * boot guard. See AGENTS.md ("Version matching is non-negotiable").
+     * Engine memory structures differ between minor PHP versions. z-engine hides
+     * that from consumers by bundling generated definitions per minor version
+     * (include/<minor>/<platform>/) and selecting the right set at boot, together
+     * with PHP_VERSION_ID conditionals in the few places where a hand-declared
+     * value moved between minors. Running on a minor OUTSIDE this range is memory
+     * corruption, not a degraded mode - hence the hard boot guard. See AGENTS.md
+     * ("Version matching is non-negotiable").
      */
-    private const SUPPORTED_PHP_VERSION_ID = [80500, 80600];
+    private const SUPPORTED_PHP_VERSION_ID = [80400, 80600];
 
     /**
      * Stores an internal instance of low-level FFI binding
@@ -331,13 +337,16 @@ class Core
 
         [$minVersionId, $maxVersionId] = self::SUPPORTED_PHP_VERSION_ID;
         if (PHP_VERSION_ID < $minVersionId || PHP_VERSION_ID >= $maxVersionId) {
-            $supported = sprintf('%d.%d', intdiv($minVersionId, 10000), intdiv($minVersionId % 10000, 100));
+            $supportedMinors = [];
+            for ($versionId = $minVersionId; $versionId < $maxVersionId; $versionId += 100) {
+                $supportedMinors[] = sprintf('%d.%d', intdiv($versionId, 10000), intdiv($versionId % 10000, 100));
+            }
             throw new RuntimeException(sprintf(
-                'z-engine (branch %1$s) supports PHP %1$s only, but you are running PHP %2$s. ' .
+                'This z-engine release supports PHP %1$s, but you are running PHP %2$s. ' .
                 'Engine memory structures differ between minor versions: running a mismatched version ' .
                 'would corrupt memory and crash PHP. Install the z-engine release matching your PHP minor ' .
-                'version (e.g. the "%1$s" branch for PHP %1$s, "8.0" for legacy PHP 8.0).',
-                $supported,
+                'version (e.g. "8.0" for legacy PHP 8.0), or wait for a release adding support for a newer one.',
+                implode(' and ', $supportedMinors),
                 PHP_VERSION,
             ));
         }
@@ -356,7 +365,8 @@ class Core
     }
 
     /**
-     * Platform selector for the generated per-ABI artifacts, e.g. "8.5/linux-x64-nts"
+     * Platform selector for the generated per-ABI artifacts, e.g. "8.4/linux-x64-nts"
+     * or "8.5/linux-x64-nts" - the running PHP minor picks its own definitions
      */
     private static function platformKey(): string
     {

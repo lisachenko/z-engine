@@ -955,7 +955,7 @@ parameters:
 			path: src/Reflection/ReflectionClass.php
 
 		-
-			message: '#^Binary operation "&" between mixed and 1073741824 results in an error\.$#'
+			message: '#^Binary operation "&" between mixed and 2048\|1073741824 results in an error\.$#'
 			identifier: binaryOp.invalid
 			count: 1
 			path: src/Reflection/ReflectionClass.php

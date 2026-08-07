@@ -40,6 +40,8 @@ final class PendingBodySwap
      * @param int                $entryAddress         Numeric identity of the entry
      * @param int                $publishedShares      Bucket shares held on both the previous and the new body
      * @param bool               $destroyPrevious      False for shared-memory previous bodies (never freed)
+     * @param bool               $mintedDefaults       True when the swap minted an own statics defaults duplicate
+     * @param ?int               $previousMintedRecord Bookkeeping record of the previous committed swap, if any
      */
     public function __construct(
         private FunctionLikeInterface $entry,
@@ -47,6 +49,8 @@ final class PendingBodySwap
         private int $entryAddress,
         private int $publishedShares,
         private bool $destroyPrevious,
+        private bool $mintedDefaults,
+        private ?int $previousMintedRecord,
     ) {}
 
     /**
@@ -72,7 +76,13 @@ final class PendingBodySwap
     {
         $this->assertUnresolved();
         $this->isResolved = true;
-        FunctionBodySwap::releaseSwappedInBody($this->entry, $this->publishedShares);
+        FunctionBodySwap::releaseSwappedInBody(
+            $this->entry,
+            $this->entryAddress,
+            $this->publishedShares,
+            $this->mintedDefaults,
+            $this->previousMintedRecord,
+        );
         Core::memcpy($this->entry->getEntryPointer(), Core::addr($this->previousBody), Core::sizeof($this->previousBody));
     }
 

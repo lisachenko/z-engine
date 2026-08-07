@@ -60,10 +60,14 @@ final class PayloadRelocator
      * appear in a constant expression: ZEND_AST_OP_ARRAY (a static closure compiled
      * into the expression, carrying a zend_op_array pointer) and ZEND_AST_CALLABLE_CONVERT
      * (first-class callable syntax, whose zend_ast_fcc holds only a ZEND_MAP_PTR slot).
+     *
+     * ZEND_AST_OP_ARRAY carries a sentinel on PHP 8.4, where kind 66 is
+     * ZEND_AST_ZNODE (a compile-time-only node that never reaches a payload) -
+     * matching it there would misread the node as an embedded op_array.
      */
     private const ZEND_AST_ZVAL             = 64;
     private const ZEND_AST_CONSTANT         = 65;
-    private const ZEND_AST_OP_ARRAY         = 66;
+    private const ZEND_AST_OP_ARRAY         = PHP_VERSION_ID >= 80500 ? 66 : -66;
     private const ZEND_AST_CALLABLE_CONVERT = 3;
     private const ZEND_AST_IS_LIST_SHIFT    = 7;
     private const ZEND_AST_CHILDREN_SHIFT   = 8;
@@ -519,8 +523,11 @@ final class PayloadRelocator
         $attr = Core::pointerAtAddress('zend_attribute *', $this->unPtr($zval->value, 'ptr'));
         $this->unStr($attr, 'name');
         $this->unStr($attr, 'lcname');
-        // PHP 8.5: delayed target validation stores the pending error message here
-        $this->unStr($attr, 'validation_error');
+        if (PHP_VERSION_ID >= 80500) {
+            // Delayed target validation stores the pending error message here;
+            // the field does not exist in the PHP 8.4 zend_attribute struct
+            $this->unStr($attr, 'validation_error');
+        }
         $argSize = Core::sizeof(Core::type('zend_attribute_arg'));
         $argBase = Core::addressOf($attr->args);
         for ($i = 0; $i < $attr->argc; $i++) {
@@ -536,7 +543,9 @@ final class PayloadRelocator
         $attr    = Core::pointerAtAddress('zend_attribute *', $address);
         $this->serStr($attr, 'name');
         $this->serStr($attr, 'lcname');
-        $this->serStr($attr, 'validation_error');
+        if (PHP_VERSION_ID >= 80500) {
+            $this->serStr($attr, 'validation_error');
+        }
         $argSize = Core::sizeof(Core::type('zend_attribute_arg'));
         $argBase = Core::addressOf($attr->args);
         for ($i = 0; $i < $attr->argc; $i++) {
@@ -726,7 +735,8 @@ final class PayloadRelocator
      */
     private function walkAttributedConstOplines(int $opcodes, int $literals, int $count, bool $serialized): void
     {
-        if ($opcodes === 0 || $literals === 0 || $count < 2) {
+        // ZEND_DECLARE_ATTRIBUTED_CONST exists only since PHP 8.5 (8.4 tops out at 209)
+        if (PHP_VERSION_ID < 80500 || $opcodes === 0 || $literals === 0 || $count < 2) {
             return;
         }
         $oplineSize = Core::sizeof(Core::type('zend_op'));

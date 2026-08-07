@@ -313,6 +313,8 @@ final class ClassDelta
                     $donorMethod,
                     // The new source is authoritative for the declaration as well
                     preserveDeclaration: false,
+                    // The donor body refcount guards the statics defaults table
+                    duplicateStatics: false,
                     destroyPrevious: true,
                     publishedShares: FunctionBodySwap::countPublishedShares($entry),
                 );
@@ -533,7 +535,13 @@ final class ClassDelta
         assert($namePointer instanceof CData);
         StringEntry::fromCData($namePointer)->releaseReference();
 
-        FunctionBodySwap::releaseSwappedInBody($containerFunction, 1);
+        FunctionBodySwap::releaseSwappedInBody(
+            $containerFunction,
+            $containerFunction->getAddress(),
+            1,
+            false,
+            null,
+        );
         Core::untrackAndFree(Core::addr($container));
     }
 }
