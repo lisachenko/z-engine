@@ -23,9 +23,17 @@ use ZEngine\Reflection\ReflectionValue;
  * a fresh worker executes the patched code.
  */
 #[Group('opcache')]
+#[Group('opcache-relocator')]
 final class RefreshWorkflowTest extends TestCase
 {
     use FileCacheFixture;
+
+    protected function setUp(): void
+    {
+        if (\ZEND_THREAD_SAFE) {
+            self::markTestSkipped('The file-cache relocator does not support ZTS payloads yet (issue #118)');
+        }
+    }
 
     protected function tearDown(): void
     {
