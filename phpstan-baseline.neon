@@ -3277,15 +3277,9 @@ parameters:
 			path: tests/Reflection/ReflectionClassTest.php
 
 		-
-			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with false and true will always evaluate to false\.$#'
-			identifier: method.impossibleType
-			count: 1
-			path: tests/Reflection/ReflectionClassTest.php
-
-		-
 			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertTrue\(\) with true will always evaluate to true\.$#'
 			identifier: method.alreadyNarrowedType
-			count: 1
+			count: 2
 			path: tests/Reflection/ReflectionClassTest.php
 
 		-
