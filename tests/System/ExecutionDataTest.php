@@ -211,6 +211,14 @@ class ExecutionDataTest extends TestCase
         $self = $this; // Save current $this to call method on it later
         $thisValue->setNativeValue(new \stdClass());
         $self->assertInstanceOf(\stdClass::class, $this);
+
+        // Restore the original $this before the frame unwinds: leaving a foreign object
+        // in the running frame's This slot desyncs the object the engine releases at
+        // frame cleanup from the one still referenced elsewhere, which corrupts the heap
+        // on stricter allocators (PHP 8.5). Swapping is a real capability; not cleaning
+        // up after it in the *live* frame is the bug.
+        Core::$executor->getExecutionState()->getThis()->setNativeValue($self);
+        $self->assertSame($self, $this);
     }
 
     public function testGetFunction()
