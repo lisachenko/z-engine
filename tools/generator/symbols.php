@@ -148,11 +148,22 @@ return [
         // PHP static and therefore request-scoped). Used by Core::persistentFree for
         // persistent blocks minted by z-engine or by the engine's pemalloc(..., 1).
         'free',
+        // TSRM (ZTS builds only): the exported accessor for the calling thread's
+        // local-storage block. EG/CG live at tsrm_get_ls_cache() + *_globals_offset -
+        // the same fast path the engine's own EG()/CG() macros compile to (issue #60).
+        ...(ZEND_THREAD_SAFE ? ['tsrm_get_ls_cache'] : []),
     ],
 
     'variables' => [
-        'executor_globals',
-        'compiler_globals',
+        // EG/CG storage: plain extern symbols on NTS; on ZTS the globals are
+        // per-thread and only the TSRM byte offsets are exported
+        // (Zend/zend_globals.h) - the structs are reached through
+        // tsrm_get_ls_cache(). The _id resource ids are deliberately not
+        // exported: the offsets path never needs them, and the __thread TLS
+        // cache variable itself cannot be bound by FFI at all.
+        ...(ZEND_THREAD_SAFE
+            ? ['executor_globals_offset', 'compiler_globals_offset']
+            : ['executor_globals', 'compiler_globals']),
         'module_registry',
         'std_object_handlers',
         'zend_ast_process',
