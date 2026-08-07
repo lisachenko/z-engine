@@ -215,7 +215,16 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
     }
 
     /**
-     * This getter extends general logic with automatic casting global memory to required type
+     * This getter extends general logic with automatic casting of the global memory pointer
+     * to the declared globals type
+     *
+     * Returns a `<globalType> *` view of the globals block (never a value copy): a pointer
+     * cast is size-safe for every globals type, while a value-type cast reinterprets the
+     * pointer variable itself - FFI only auto-dereferences a bare `void *` source and
+     * throws "attempt to cast to larger type" for anything else wider than a pointer
+     * (issue #109). FFI supports `->field` access directly on a pointer-to-struct, and
+     * array-typed globals (eg `unsigned int[10]`) decay to an element pointer, exactly
+     * like a C array expression, so indexing keeps working.
      *
      * @inheritDoc
      */
@@ -223,10 +232,31 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
     {
         $rawPointer = parent::getGlobals();
         if ($rawPointer !== null) {
-            $rawPointer = Core::cast(static::globalType(), $rawPointer);
+            $globalType = static::globalType();
+            // The engine only allocates a globals block when a type was declared
+            \assert($globalType !== null);
+            $rawPointer = Core::cast(self::pointerTypeFor($globalType), $rawPointer);
         }
 
         return $rawPointer;
+    }
+
+    /**
+     * Builds the pointer declaration for the given globals type (C array-to-pointer decay)
+     *
+     * `zend_counter_globals` => `zend_counter_globals *`, `unsigned int[10]` =>
+     * `unsigned int *`, `int[4][5]` => `int(*)[5]` (a pointer to the first row, as in C).
+     */
+    private static function pointerTypeFor(string $globalType): string
+    {
+        $matched = preg_match('/^(?<element>[^\[\]]+?)\s*\[\w*\](?<rows>(?:\[\w+\])*)$/', $globalType, $match);
+        if ($matched !== 1) {
+            return $globalType . ' *';
+        }
+
+        return $match['rows'] === ''
+            ? $match['element'] . ' *'
+            : $match['element'] . '(*)' . $match['rows'];
     }
 
     /**

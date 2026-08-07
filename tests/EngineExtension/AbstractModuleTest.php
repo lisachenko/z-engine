@@ -13,9 +13,13 @@ declare(strict_types=1);
 
 namespace ZEngine\EngineExtension;
 
+use FFI\CData;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
+use ZEngine\Reflection\ReflectionValue;
+use ZEngine\Stub\ArrayGlobalsModule;
+use ZEngine\Stub\GlobalsModule;
 use ZEngine\Stub\LifecycleModule;
 use ZEngine\Stub\ThrowingLifecycleModule;
 
@@ -99,6 +103,56 @@ class AbstractModuleTest extends TestCase
         $allWarnings = implode("\n", $capturedWarnings);
         $this->assertStringContainsString('module_startup_func failed: MINIT boom', $allWarnings);
         $this->assertStringContainsString('requestStartup failed: RINIT boom', $allWarnings);
+    }
+
+    /**
+     * getGlobals() must cast the raw globals pointer through the POINTER type - size-safe
+     * for every globals type, unlike the former value-type cast (issue #109: "attempt to
+     * cast to larger type")
+     */
+    #[RunInSeparateProcess]
+    public function testGetGlobalsReturnsTypedPointerForZvalGlobals(): void
+    {
+        $module = new GlobalsModule();
+        $module->register();
+        $module->startup();
+
+        $globals = $module->getGlobals();
+        $this->assertNotNull($globals);
+        $slotType = $globals->u1;
+        $this->assertInstanceOf(CData::class, $slotType);
+        if (!\ZEND_THREAD_SAFE) {
+            // The NTS globals block is zero-initialized at registration (IS_UNDEF): the
+            // contract the zengine heap anchor relies on
+            $this->assertSame(ReflectionValue::IS_UNDEF, $slotType->type_info);
+        }
+
+        // Write through the typed pointer and read the value back through a fresh view
+        $slotType->type_info = ReflectionValue::IS_TRUE;
+        $freshView           = $module->getGlobals();
+        $this->assertNotNull($freshView);
+        $freshSlotType = $freshView->u1;
+        $this->assertInstanceOf(CData::class, $freshSlotType);
+        $this->assertSame(ReflectionValue::IS_TRUE, $freshSlotType->type_info);
+    }
+
+    /**
+     * Array-typed globals (the README counter example) decay to an element pointer,
+     * exactly like a C array expression, so indexing keeps working (issue #109)
+     */
+    #[RunInSeparateProcess]
+    public function testGetGlobalsDecaysArrayTypedGlobalsToElementPointer(): void
+    {
+        $module = new ArrayGlobalsModule();
+        $module->register();
+        $module->startup();
+
+        $globals = $module->getGlobals();
+        $this->assertNotNull($globals);
+        $globals[3] = 42;
+        $freshView  = $module->getGlobals();
+        $this->assertNotNull($freshView);
+        $this->assertSame(42, $freshView[3]);
     }
 
     #[RunInSeparateProcess]
