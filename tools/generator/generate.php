@@ -78,13 +78,31 @@ if ($usesProxy && is_string($caBundle) && $caBundle !== '' && is_readable($caBun
     $caBundleCopied = true;
 }
 
+// Optional buildx layer-cache directory (e.g. wrapped in actions/cache by CI):
+// per-target subdirectories, rotated after each successful build so the local
+// cache never accumulates stale layers across runs.
+$layerCacheDir = getenv('Z_ENGINE_BUILDX_CACHE_DIR');
+$layerCacheDir = is_string($layerCacheDir) && $layerCacheDir !== '' ? rtrim($layerCacheDir, '/') : '';
+
 $failures = 0;
 foreach ($targets as $target) {
     $baseImage = $mirror . ($target['ts'] === 'zts' ? "php:{$target['php']}-zts" : "php:{$target['php']}-cli");
     $outputDir = "{$repositoryRoot}/include/{$target['php']}/linux-{$arch}-{$target['ts']}";
-    $command   = 'docker buildx build --progress=plain'
+
+    $cacheArguments  = '';
+    $targetCacheDir  = '';
+    if ($layerCacheDir !== '') {
+        $targetCacheDir = "{$layerCacheDir}/{$target['php']}-{$target['ts']}";
+        if (is_dir($targetCacheDir)) {
+            $cacheArguments .= ' --cache-from ' . escapeshellarg("type=local,src={$targetCacheDir}");
+        }
+        $cacheArguments .= ' --cache-to ' . escapeshellarg("type=local,dest={$targetCacheDir}-new,mode=max");
+    }
+
+    $command = 'docker buildx build --progress=plain'
         . ' --build-arg ' . escapeshellarg("BASE_IMAGE={$baseImage}")
         . $proxyArguments
+        . $cacheArguments
         . ' --output ' . escapeshellarg("type=local,dest={$outputDir}")
         . ' ' . escapeshellarg($repositoryRoot . '/tools/generator');
 
@@ -94,6 +112,10 @@ foreach ($targets as $target) {
         fwrite(STDERR, "==> FAILED: {$target['php']} {$target['ts']} (exit {$exitCode})\n");
         $failures++;
         continue;
+    }
+    if ($targetCacheDir !== '' && is_dir("{$targetCacheDir}-new")) {
+        passthru('rm -rf ' . escapeshellarg($targetCacheDir));
+        passthru('mv ' . escapeshellarg("{$targetCacheDir}-new") . ' ' . escapeshellarg($targetCacheDir));
     }
     echo "==> OK: {$outputDir}\n";
 }
