@@ -107,10 +107,33 @@ class ReflectionExtension extends NativeReflectionExtension
 
     /**
      * Returns a pointer (if any) to global memory area or null if extension doesn't use global memory structure
+     *
+     * On ZTS builds the entry stores a TSRM resource id instead of a direct pointer;
+     * the returned view is the CALLING thread's globals block, resolved the same way
+     * as the engine's ZEND_MODULE_GLOBALS_ACCESSOR (entry->storage[id - 1]).
      */
     public function getGlobals(): ?CData
     {
-        return $this->moduleEntry->globals_ptr;
+        if (!\ZEND_THREAD_SAFE) {
+            return $this->moduleEntry->globals_ptr;
+        }
+
+        $idPointer = $this->moduleEntry->globals_id_ptr;
+        if (!$idPointer instanceof CData) {
+            return null;
+        }
+        $resourceId = $idPointer[0];
+        if (!\is_int($resourceId) || $resourceId === 0) {
+            return null;
+        }
+        // TSRMG_BULK: (*(void ***) tsrm_get_ls_cache())[id - 1]
+        $storage = Core::pointerAtAddress('void ***', Core::threadLocalStorageBase())[0];
+        if (!$storage instanceof CData) {
+            return null;
+        }
+        $globals = $storage[$resourceId - 1];
+
+        return $globals instanceof CData ? $globals : null;
     }
 
     /**

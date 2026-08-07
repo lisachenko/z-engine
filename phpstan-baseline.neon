@@ -643,7 +643,19 @@ parameters:
 			path: src/Core.php
 
 		-
+			message: '#^Access to an undefined property FFI\:\:\$compiler_globals_offset\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Core.php
+
+		-
 			message: '#^Access to an undefined property FFI\:\:\$executor_globals\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Core.php
+
+		-
+			message: '#^Access to an undefined property FFI\:\:\$executor_globals_offset\.$#'
 			identifier: property.notFound
 			count: 1
 			path: src/Core.php

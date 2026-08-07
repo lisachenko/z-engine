@@ -38,16 +38,16 @@ FFI lets PHP load shared libraries, call C functions, and read C structures with
 ## Requirements & support matrix
 
 - PHP with the **FFI** extension enabled
-- **x64, non-thread-safe (NTS)** builds
+- **x64** builds, **NTS and ZTS** (on ZTS the opcache file-cache relocator is not yet supported — [#118](https://github.com/lisachenko/z-engine/issues/118))
 
 Engine memory layouts change between every PHP minor version, so each PHP minor has its own generated definitions and its own branch.
 
 | PHP | OS / Arch / TS | Branch | Status |
 |-----|----------------|--------|--------|
-| 8.5 | linux-x64-nts | `master` | ✅ supported |
-| 8.4 | linux-x64-nts | `8.4` | ✅ supported |
+| 8.5 | linux-x64-nts, linux-x64-zts | `master` | ✅ supported |
+| 8.4 | linux-x64-nts, linux-x64-zts | `8.4` | ✅ supported |
 | 8.0 | linux-x64-nts | `8.0` | 🧊 frozen (legacy) |
-| macOS / Windows / ZTS | — | — | 📋 [tracked in issues](https://github.com/lisachenko/z-engine/issues) |
+| macOS / Windows | — | — | 📋 [tracked in issues](https://github.com/lisachenko/z-engine/issues) |
 
 > **Version matching is not optional.** Running Z-Engine against a PHP minor it was not built for corrupts memory. `Core::init()` enforces the match and aborts with a clear message rather than letting you crash.
 

@@ -144,10 +144,18 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
 
         $globalType = static::globalType();
         if ($globalType !== null) {
-            // The engine dereferences globals_ptr for the module's whole registry lifetime
             $module->globals_size = Core::sizeof(Core::type($globalType));
-            $memoryStructure      = Core::trackedNew($globalType, true);
-            $module->globals_ptr  = Core::addr($memoryStructure);
+            if (\ZEND_THREAD_SAFE) {
+                // On ZTS the entry carries a pointer to a ts_rsrc_id slot instead of the
+                // globals block: zend_startup_module_ex() passes it to ts_allocate_id(),
+                // and the TSRM allocates (and frees) the per-thread globals itself
+                $resourceIdSlot         = Core::trackedNew('ts_rsrc_id', true);
+                $module->globals_id_ptr = Core::addr($resourceIdSlot);
+            } else {
+                // The engine dereferences globals_ptr for the module's whole registry lifetime
+                $memoryStructure     = Core::trackedNew($globalType, true);
+                $module->globals_ptr = Core::addr($memoryStructure);
+            }
         }
 
         $this->attachDependencies($module);

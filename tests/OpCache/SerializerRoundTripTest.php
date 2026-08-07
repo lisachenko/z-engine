@@ -23,9 +23,17 @@ use ZEngine\Reflection\ReflectionValue;
  * untouched round trip, and that a patched binary is what the engine executes.
  */
 #[Group('opcache')]
+#[Group('opcache-relocator')]
 final class SerializerRoundTripTest extends TestCase
 {
     use FileCacheFixture;
+
+    protected function setUp(): void
+    {
+        if (\ZEND_THREAD_SAFE) {
+            self::markTestSkipped('The file-cache relocator does not support ZTS payloads yet (issue #118)');
+        }
+    }
 
     protected function tearDown(): void
     {
