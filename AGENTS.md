@@ -50,7 +50,11 @@ Everything under `include/<minor>/<os>-<arch>-<ts>/` is generated:
 | `layouts.json` | `sizeof`/`offsetof` of every dereferenced struct, from the C compiler |
 | `probe.c` | the generated C probe (kept so a probe-only run can reuse it) |
 
-Regenerate them with:
+This branch maintains **two thread-safety targets**: `linux-x64-nts` and
+`linux-x64-zts` (the manifest in `tools/generator/symbols.php` is
+thread-safety-aware — on ZTS the per-thread EG/CG are reached through the TSRM
+offsets instead of the plain extern symbols, see issue #60). Regenerate them
+with:
 
 ```bash
 composer gen-headers          # all targets for this branch (needs Docker)
@@ -82,12 +86,19 @@ structs (`Zend/zend_closures.c`, `ext/opcache/ZendAccelerator.h`,
    PHP version, ext-ffi. Fetch the matching `Zend/zend_closures.c`,
    `ext/opcache/ZendAccelerator.h` and `ext/opcache/zend_file_cache.c` (and
    nothing else) from `raw.githubusercontent.com/php/php-src/php-<version>/`.
+   For the `zts` target the running PHP must itself be a matching
+   `--enable-zts` **release** build of the same minor (emit.php derives the
+   thread-safety mode, the TSRM symbols and the layouts from the interpreter
+   it runs under).
 2. First run against the **committed** `symbols.php` into a scratch directory
    and `diff` against `include/<minor>/<platform>/` — the output must be
    byte-identical (it was, verified on Ubuntu clang-18 vs the trixie image:
    the emitter normalizes declarations from the clang AST, so compiler
    version does not leak into the artifacts). If the diff is clean, host
-   regeneration is equivalent to the Docker/CI pipeline for this host.
+   regeneration is equivalent to the Docker/CI pipeline for this host. An
+   NTS pre-check validates the host pipeline for the ZTS target too — the
+   emitter and probe code paths are identical, only the manifest branch
+   differs.
 3. Only then apply the `symbols.php` change and regenerate into `include/`
    for real: `php -d memory_limit=2G tools/generator/emit.php
    --php-src=<dir> [--out=...]`.
@@ -115,6 +126,10 @@ composer test:internal   # destructive/segfault-prone group, process-isolated
 - `ZENGINE_STRICT_LAYOUT_CHECK=1` (set in the test bootstrap) makes
   `Core::init()` verify every struct layout against `layouts.json` before
   touching engine memory — the anti-segfault airbag. Keep it on in development.
+- On **ZTS** builds the file-cache relocator tests (`opcache-relocator` group)
+  self-skip — ZTS payloads are not supported yet (issue #118). The non-skip
+  gate for the remaining opcache/SHM coverage is `composer test:opcache-zts`;
+  CI runs both release and debug test legs on NTS **and** ZTS.
 
 ## Quality gates (all enforced in CI)
 
