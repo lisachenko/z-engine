@@ -89,8 +89,8 @@ foreach ($targets as $target) {
     $baseImage = $mirror . ($target['ts'] === 'zts' ? "php:{$target['php']}-zts" : "php:{$target['php']}-cli");
     $outputDir = "{$repositoryRoot}/include/{$target['php']}/linux-{$arch}-{$target['ts']}";
 
-    $cacheArguments  = '';
-    $targetCacheDir  = '';
+    $cacheArguments = '';
+    $targetCacheDir = '';
     if ($layerCacheDir !== '') {
         $targetCacheDir = "{$layerCacheDir}/{$target['php']}-{$target['ts']}";
         if (is_dir($targetCacheDir)) {
