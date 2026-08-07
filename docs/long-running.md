@@ -74,6 +74,13 @@ structures (class entries, handler blocks) never carry a pointer into the next r
 freed trampolines. After shutdown, z-engine performs no engine writes at all — hooks are
 inactive during shutdown-phase object destructors, and installing a new hook throws.
 
+`Core::init()` is idempotent per process: a repeated call — eg re-booting z-engine after a
+manual `Core::shutdown()` inside one live worker process — reuses the process-wide FFI
+binding, so every CData minted before the re-boot (module entries, hook state, heap
+anchors) stays valid. Minting a second binding would free the first one's type data
+together with the old FFI object and leave those CData dangling by the time the exit
+handlers touch them.
+
 ### Runtime models
 
 - **Worker loops** (RoadRunner, Swoole, ReactPHP, FrankenPHP worker mode): the whole worker

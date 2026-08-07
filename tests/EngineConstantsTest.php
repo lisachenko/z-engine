@@ -16,6 +16,8 @@ namespace ZEngine;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ZEngine\AbstractSyntaxTree\NodeKind;
+use ZEngine\ClassExtension\Hook\CastType;
+use ZEngine\Reflection\ReflectionValue;
 use ZEngine\System\OpCode;
 
 /**
@@ -31,10 +33,12 @@ final class EngineConstantsTest extends TestCase
     public static function constantOwnerProvider(): array
     {
         return [
-            'ZEND_ACC_* on Core'           => [Core::class, 'ZEND_ACC_'],
-            'ZEND_PROPERTY_HOOK_* on Core' => [Core::class, 'ZEND_PROPERTY_HOOK_'],
-            'opcodes on OpCode'            => [OpCode::class, ''],
-            'AST kinds on NodeKind'        => [NodeKind::class, 'AST_'],
+            'ZEND_ACC_* on Core'                   => [Core::class, 'ZEND_ACC_'],
+            'ZEND_PROPERTY_HOOK_* on Core'         => [Core::class, 'ZEND_PROPERTY_HOOK_'],
+            'opcodes on OpCode'                    => [OpCode::class, ''],
+            'AST kinds on NodeKind'                => [NodeKind::class, 'AST_'],
+            'zval type ids on ReflectionValue'     => [ReflectionValue::class, 'IS_'],
+            'cast/internal ids on ReflectionValue' => [ReflectionValue::class, '_IS_'],
         ];
     }
 
@@ -75,6 +79,30 @@ final class EngineConstantsTest extends TestCase
             self::loadGeneratedConstants()['ZEND_MODULE_API_NO'],
             Core::engineConstant('ZEND_MODULE_API_NO'),
         );
+    }
+
+    public function testCastTypeCasesMatchGeneratedGroundTruth(): void
+    {
+        $generated    = self::loadGeneratedConstants();
+        $symbolByCase = [
+            'Long'   => 'IS_LONG',
+            'Double' => 'IS_DOUBLE',
+            'String' => 'IS_STRING',
+            'Array'  => 'IS_ARRAY',
+            'Object' => 'IS_OBJECT',
+            'Bool'   => '_IS_BOOL',
+            'Number' => '_IS_NUMBER',
+        ];
+
+        foreach (CastType::cases() as $case) {
+            $this->assertArrayHasKey($case->name, $symbolByCase, "CastType::{$case->name} has no engine symbol mapping in this test");
+            $engineName = $symbolByCase[$case->name];
+            $this->assertSame(
+                $generated[$engineName],
+                $case->value,
+                "CastType::{$case->name} ({$case->value}) does not match engine {$engineName} ({$generated[$engineName]})",
+            );
+        }
     }
 
     /**

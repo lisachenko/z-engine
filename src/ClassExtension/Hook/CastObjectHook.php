@@ -87,6 +87,18 @@ class CastObjectHook extends AbstractHook
     }
 
     /**
+     * Returns the cast type as a named case, or null for an id unknown to this PHP line
+     *
+     * Prefer this over comparing getCastType() against numeric constants: the cast-only type ids
+     * have shifted between PHP minors before, and the enum is guarded against the generated
+     * engine ground truth.
+     */
+    public function getCastTypeEnum(): ?CastType
+    {
+        return CastType::tryFrom($this->type);
+    }
+
+    /**
      * Returns an object instance
      */
     public function getObject(): object
