@@ -24,6 +24,8 @@ use ZEngine\Hook\HookInterface;
 use ZEngine\System\Compiler;
 use ZEngine\System\Executor;
 use ZEngine\System\Hook\AstProcessHook;
+use ZEngine\System\Hook\ErrorCallbackHook;
+use ZEngine\System\Hook\InterruptHook;
 use ZEngine\Type\HashTable;
 
 /**
@@ -863,6 +865,40 @@ class Core
     public static function setASTProcessHandler(Closure $handler): AstProcessHook
     {
         $hook = new AstProcessHook($handler, self::$engine);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs a hook for the `zend_error_cb` engine global callback
+     *
+     * The callback observes every engine diagnostic (including ones suppressed by
+     * error_reporting and fatal errors) before the userland error-handler machinery.
+     * See ErrorCallbackHook for the fatal-severity proceed() contract.
+     *
+     * @param Closure $handler function(ErrorCallbackHook $hook): void callback
+     */
+    public static function setErrorCallbackHandler(Closure $handler): ErrorCallbackHook
+    {
+        $hook = new ErrorCallbackHook($handler, self::$engine);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs a hook for the `zend_interrupt_function` engine global callback
+     *
+     * The callback fires at the next VM interrupt check after EG(vm_interrupt) is
+     * raised (Executor::requestInterrupt()) - the engine's asynchronous "break"
+     * primitive, running as ordinary PHP inside the interrupted frame.
+     *
+     * @param Closure $handler function(InterruptHook $hook): void callback
+     */
+    public static function setInterruptHandler(Closure $handler): InterruptHook
+    {
+        $hook = new InterruptHook($handler, self::$engine);
         $hook->install();
 
         return $hook;
