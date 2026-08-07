@@ -124,6 +124,7 @@ class ReflectionValue implements ReferenceCountedInterface
     public const IS_VOID     = 14;
     public const IS_STATIC   = 15;
     public const IS_MIXED    = 16;
+    public const IS_NEVER    = 17;
 
     /* internal types */
     public const IS_INDIRECT  = 12;
@@ -132,8 +133,8 @@ class ReflectionValue implements ReferenceCountedInterface
     public const _IS_ERROR    = 15;
 
     /* used for casts */
-    public const _IS_BOOL   = 17;
-    public const _IS_NUMBER = 18;
+    public const _IS_BOOL   = 18;
+    public const _IS_NUMBER = 19;
 
     private const Z_TYPE_FLAGS_MASK = 0xFF00;
 

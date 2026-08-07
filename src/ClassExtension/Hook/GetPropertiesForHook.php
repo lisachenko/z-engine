@@ -78,6 +78,14 @@ class GetPropertiesForHook extends AbstractHook
     }
 
     /**
+     * Returns the purpose as a named case, or null for a value unknown to this PHP line
+     */
+    public function getPurposeEnum(): ?PropertyPurpose
+    {
+        return PropertyPurpose::tryFrom($this->purpose);
+    }
+
+    /**
      * Proceeds with default handler
      */
     public function proceed()

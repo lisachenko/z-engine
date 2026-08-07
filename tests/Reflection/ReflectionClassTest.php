@@ -19,6 +19,7 @@ use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use ZEngine\ClassExtension\Hook\CastObjectHook;
+use ZEngine\ClassExtension\Hook\CastType;
 use ZEngine\ClassExtension\Hook\CloneObjectHook;
 use ZEngine\ClassExtension\Hook\CompareValuesHook;
 use ZEngine\ClassExtension\Hook\CreateObjectHook;
@@ -293,19 +294,18 @@ class ReflectionClassTest extends TestCase
         $handler = Closure::fromCallable([ObjectCreateTrait::class, '__init']);
         $this->refClass->setCreateObjectHandler($handler);
         $this->refClass->setCastObjectHandler(function (CastObjectHook $hook) {
-            $castType = $hook->getCastType();
-            switch ($castType) {
-                case ReflectionValue::IS_LONG:
-                case ReflectionValue::_IS_NUMBER:
-                    return 1;
-                case ReflectionValue::IS_DOUBLE:
-                    return 2.0;
-                case ReflectionValue::IS_STRING:
-                    return 'test';
-                case ReflectionValue::_IS_BOOL:
-                    return false;
-            }
-            throw new \UnexpectedValueException('Unknown type ' . ReflectionValue::name($castType));
+            return match ($hook->getCastTypeEnum()) {
+                CastType::Long, CastType::Number => 1,
+                CastType::Double                 => 2.0,
+                CastType::String                 => 'test',
+                // The engine accepts a boolean cast result only as IS_TRUE/IS_FALSE: a handler
+                // misrouted into the numeric branch would produce long(1), which the engine
+                // reports as false - so asserting true below proves the _IS_BOOL id is correct
+                CastType::Bool => true,
+                default        => throw new \UnexpectedValueException(
+                    'Unknown type ' . ReflectionValue::name($hook->getCastType()),
+                ),
+            };
         });
 
         $testClass = new TestClass();
@@ -316,7 +316,7 @@ class ReflectionClassTest extends TestCase
         $string = (string) $testClass;
         $this->assertSame('test', $string);
         $bool = (bool) $testClass;
-        $this->assertSame(false, $bool);
+        $this->assertTrue($bool);
         $this->markTestIncomplete('Initialization object handler brings segfaults thus run it separately');
     }
 
