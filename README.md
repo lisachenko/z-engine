@@ -223,6 +223,30 @@ $file->refresh();                       // rewrite the binary + invalidate the s
 
 The payload is re-serialized from the mutated graph (not just byte-poked), so size-changing edits are written correctly. See **[docs/opcache-binary.md](docs/opcache-binary.md)** for the format, build-matching rules and current limits — this is the foundation for AOP, transpiling and source-code protection on top of the file cache.
 
+### Debugger-grade introspection
+
+Statement-level interception with named live frame variables — the raw material for
+a pure-PHP step debugger:
+
+```php
+use ZEngine\System\Compiler;
+use ZEngine\System\ExecutionData;
+use ZEngine\System\OpCode;
+
+Core::$compiler->setOptions(Core::$compiler->getOptions() | Compiler::COMPILE_EXTENDED_STMT);
+OpCode::setHandler(OpCode::EXT_STMT, function (ExecutionData $frame): int {
+    $line   = $frame->getOpline()->getLine();
+    $locals = $frame->getLocalVariables();     // ['n' => ReflectionValue, ...]
+    return Core::ZEND_USER_OPCODE_DISPATCH;
+});
+```
+
+Engine error and VM interrupt hooks (`Core::setErrorCallbackHandler()`,
+`Core::setInterruptHandler()` + `Core::$executor->requestInterrupt()`) round out the
+breakpoint/pause primitives. See **[docs/self-debugging.md](docs/self-debugging.md)**
+for the full feasibility research: what an Xdebug-equivalent can and cannot do from
+pure PHP, and why.
+
 ### Extensions written in PHP
 
 Register a real engine module at runtime, complete with persistent globals shared across requests:

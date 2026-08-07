@@ -158,6 +158,15 @@ return [
         'module_registry',
         'std_object_handlers',
         'zend_ast_process',
+        // Engine hook points for debugger-grade tooling: the error callback
+        // (zend_error_cb, fires for every engine error/warning/notice), the
+        // exception-throw hook (zend_throw_exception_hook, fires inside
+        // zend_throw_exception_internal) and the VM interrupt callback
+        // (zend_interrupt_function, fires at the next interrupt check after
+        // EG(vm_interrupt) is raised - the engine's async "break" primitive)
+        'zend_error_cb',
+        'zend_throw_exception_hook',
+        'zend_interrupt_function',
         // 32 hex chars identifying the exact engine build (Zend/zend_system_id.h);
         // opcache stamps it into every file-cache binary header
         'zend_system_id',
@@ -237,6 +246,7 @@ return [
         // Call frame (zend_compile.h)
         'ZEND_CALL_FUNCTION', 'ZEND_CALL_CODE', 'ZEND_CALL_NESTED', 'ZEND_CALL_TOP',
         'ZEND_CALL_HAS_THIS', 'ZEND_CALL_FAKE_CLOSURE', 'ZEND_CALL_CLOSURE',
+        'ZEND_CALL_HAS_SYMBOL_TABLE',
         // Attribute targets/flags (zend_attributes.h)
         'ZEND_ATTRIBUTE_TARGET_CLASS', 'ZEND_ATTRIBUTE_TARGET_FUNCTION', 'ZEND_ATTRIBUTE_TARGET_METHOD',
         'ZEND_ATTRIBUTE_TARGET_PROPERTY', 'ZEND_ATTRIBUTE_TARGET_CLASS_CONST', 'ZEND_ATTRIBUTE_TARGET_PARAMETER',

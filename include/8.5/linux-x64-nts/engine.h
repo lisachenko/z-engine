@@ -1084,4 +1084,7 @@ extern struct _zend_compiler_globals compiler_globals;
 extern HashTable module_registry;
 extern const zend_object_handlers std_object_handlers;
 extern zend_ast_process_t zend_ast_process;
+extern void (*zend_error_cb)(int, zend_string *, const uint32_t, zend_string *);
+extern void (*zend_throw_exception_hook)(zend_object *);
+extern void (*zend_interrupt_function)(zend_execute_data *);
 extern char zend_system_id[32];

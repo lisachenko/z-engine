@@ -38,6 +38,23 @@ function untypedInfoFunction($value)
     return $value;
 }
 
+/**
+ * CV slot layout fixture: declared arguments occupy the first slots in declaration
+ * order, then plain locals in order of first appearance ($sum before $conditional,
+ * which is compiled into a slot even though its assignment never executes)
+ *
+ * @return array{int, string, string|null}
+ */
+function localVariablesFunction(int $first, string $second = 'default'): array
+{
+    $sum = $first + 1;
+    if ($first < 0) {
+        $conditional = 'assigned only for negative input';
+    }
+
+    return [$sum, $second, $conditional ?? null];
+}
+
 function staticVariablesFunction(): int
 {
     /** @var int $invocations */
@@ -182,6 +199,24 @@ class FunctionLikeInfoTest extends TestCase
         // and must never be dereferenced - it is always reported as null
         $this->assertNull($returnEntry->getName());
         $this->assertTrue($returnEntry->mayBeOfType(ReflectionValue::IS_LONG));
+    }
+
+    public function testUserFunctionVariableNames(): void
+    {
+        $refFunction = new ReflectionFunction(__NAMESPACE__ . '\localVariablesFunction');
+
+        // Slot numbers are the ExecutionData::getCallVariableByNumber() numbering:
+        // arguments first (declaration order), then locals by first appearance
+        $this->assertSame(['first', 'second', 'sum', 'conditional'], $refFunction->getVariableNames());
+    }
+
+    public function testInternalFunctionHasNoVariableNames(): void
+    {
+        $refFunction = new ReflectionFunction('strlen');
+
+        // Internal functions carry no op_array, hence no compiled variables: this is
+        // an empty set by definition, not a misuse - no exception is thrown
+        $this->assertSame([], $refFunction->getVariableNames());
     }
 
     public function testStaticVariablesOfNamedFunction(): void

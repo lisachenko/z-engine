@@ -22,6 +22,7 @@ use ZEngine\Type\HashTable;
 use ZEngine\Type\LiveRange;
 use ZEngine\Type\OpLine;
 use ZEngine\Type\StringEntry;
+use ZEngine\Type\StructArray;
 use ZEngine\Type\TryCatchElement;
 
 trait FunctionLikeTrait
@@ -297,6 +298,39 @@ trait FunctionLikeTrait
         }
 
         return $opCodes;
+    }
+
+    /**
+     * Returns the names of the compiled variables (CV slots) of this function
+     *
+     * The array index is the CV slot number: the same numbering that
+     * ExecutionData::getCallVariableByNumber() uses, so pairing both gives named
+     * access to the live frame variables of any user function. Declared arguments
+     * occupy the first slots in declaration order; names carry no '$' sigil.
+     *
+     * Internal functions have no compiled variables, so the list is empty for them
+     * (unlike opcodes/literals this is a real empty set, not a misuse - no exception).
+     *
+     * @return array<int, string> Variable names indexed by CV slot number
+     */
+    public function getVariableNames(): array
+    {
+        if (!$this->isUserDefined()) {
+            return [];
+        }
+        $opArray        = $this->getOpArrayPointer();
+        $variableTable  = $opArray->vars;
+        $totalVariables = $opArray->last_var;
+        if ($variableTable === null || $totalVariables === 0) {
+            return [];
+        }
+
+        $names = [];
+        foreach (new StructArray($variableTable, $totalVariables) as $index => $namePointer) {
+            $names[$index] = StringEntry::fromCData($namePointer)->getStringValue();
+        }
+
+        return $names;
     }
 
     /**
