@@ -8,19 +8,33 @@ human contributors and automated agents alike.
 
 ## The one rule that is non-negotiable: version matching
 
-**Never run z-engine code or tests against a PHP minor version other than the
-one the current branch targets.** The engine's C structures change between
-every minor version (`zend_class_entry` alone changed size in 8.1, 8.3 and
-8.4). z-engine reads those structures by offset. Run it on a mismatched
+**Never run z-engine code or tests against a PHP minor version the current
+branch has no bundled definitions for.** The engine's C structures change
+between every minor version (`zend_class_entry` alone changed size in 8.1, 8.3
+and 8.4). z-engine reads those structures by offset. Run it on an unsupported
 version and you are reading and writing the wrong memory — the result is a
 crash, or worse, silent corruption.
 
-- `master` targets the newest supported PHP minor (currently **8.5**).
-- Branch `8.4` targets **PHP 8.4**.
+The current line supports **PHP 8.4 and 8.5 in parallel**: both minors have
+generated definitions bundled (`include/8.4/`, `include/8.5/`), `Core::init()`
+selects the set matching the *running* interpreter, and the few hand-declared
+values that moved between minors (`Core::ZEND_ACC_USE_GUARDS`, the
+`NodeKind::AST_*` kinds, the statics-ownership rules in `FunctionBodySwap`)
+are `PHP_VERSION_ID` conditionals. z-engine owns ALL of that complexity —
+consumers never deal with version-dependent headers.
+
+- Branch `8.4` (default) and `master` both carry the parallel 8.4 + 8.5
+  support; `master` is where support for the next minor lands first.
 - Branch `8.0` is the frozen legacy line for PHP 8.0.
 
-`Core::init()` enforces this at runtime and refuses to boot on the wrong minor.
-Do not try to defeat that guard.
+`Core::init()` enforces the supported range at runtime and refuses to boot on
+any other minor. Do not try to defeat that guard.
+
+When you add or change version-dependent behavior, it must work on EVERY minor
+the branch supports: express the difference as a `PHP_VERSION_ID` conditional
+(constants included — a kind that exists on only one minor gets a negative
+sentinel on the others, see `NodeKind`), and make sure CI's matrix exercises
+both sides of the branch you introduced.
 
 ## Branch model
 
@@ -30,13 +44,14 @@ never cherry-picked downward. The succession is declared in
 which opens a merge-up PR when a version branch is pushed.
 
 ```
-8.0 (frozen)      8.4  ──►  master (8.5)
+8.0 (frozen)      8.4 (default, PHP 8.4 + 8.5)  ──►  master (PHP 8.4 + 8.5)
 ```
 
-So a bug that exists in both 8.4 and 8.5 is fixed on `8.4`, and the cascade
-carries it into `master`. A bug that only exists on 8.5 is fixed on `master`
-directly. When resolving a merge-up conflict inside `include/`, do **not**
-merge the generated headers textually — regenerate them on the target branch
+Since the 8.4/8.5 unification both `8.4` and `master` support the same two
+minors; fixes land on `8.4` and the cascade carries them into `master`, which
+is also where support for the NEXT minor (8.6) will be added first. When
+resolving a merge-up conflict inside `include/`, do **not** merge the
+generated headers textually — regenerate them on the target branch
 (`composer gen-headers`) instead.
 
 ## Generated engine definitions — never hand-edit
@@ -53,13 +68,16 @@ Everything under `include/<minor>/<os>-<arch>-<ts>/` is generated:
 Regenerate them with:
 
 ```bash
-composer gen-headers          # all targets for this branch (needs Docker)
+composer gen-headers          # all targets for this branch: 8.4 AND 8.5 (needs Docker)
 ```
 
 The generator (`tools/generator/`) runs inside the official `php:<minor>` Docker
-image so the artifacts always match a real build. Regenerate whenever you:
+image so the artifacts always match a real build. The default target list in
+`tools/generator/generate.php` covers every supported minor — a symbol change
+regenerates all of them, never just the minor you happen to be running.
+Regenerate whenever you:
 
-- bump the branch to a new PHP minor,
+- add a new PHP minor to the branch,
 - add or remove an engine symbol in `tools/generator/symbols.php`,
 - or CI's `header-drift` job goes red.
 

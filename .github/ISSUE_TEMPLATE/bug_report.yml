@@ -34,7 +34,7 @@ body:
     id: z-engine-version
     attributes:
       label: z-engine version / branch
-      placeholder: 'dev-master (PHP 8.5), or the 8.4 branch'
+      placeholder: 'dev-master or the 8.4 branch (both support PHP 8.4 + 8.5)'
     validations:
       required: true
   - type: textarea

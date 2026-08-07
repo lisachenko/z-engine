@@ -7,9 +7,10 @@ humans and automated tools, and this document is the short human version.
 
 ## Before you start
 
-- **Match your PHP version to the branch.** `master` targets the newest
-  supported PHP minor, branch `8.4` targets PHP 8.4, and so on. Running against
-  the wrong minor crashes PHP — this is the single most important rule.
+- **Run only supported PHP minors.** The current line supports PHP 8.4 and
+  8.5 in parallel (both branch `8.4` and `master`); branch `8.0` is the frozen
+  legacy line. Running against an unsupported minor crashes PHP — this is the
+  single most important rule.
 - Develop against a **debug PHP build** when you can (`--enable-debug`, FFI
   enabled). It turns silent memory corruption into loud assertion failures. A
   ready-made image lives in `tools/docker/php-debug.Dockerfile`.
@@ -46,7 +47,7 @@ composer test:internal
 ## Pull request checklist
 
 - [ ] Targets the correct branch for the PHP version affected
-- [ ] `composer test` passes on the matching PHP minor
+- [ ] `composer test` passes on every supported PHP minor (CI runs 8.4 and 8.5)
 - [ ] `composer phpstan` and `composer cs:check` are green
 - [ ] Generated `include/` artifacts regenerated if engine symbols changed
 - [ ] Tests added or updated

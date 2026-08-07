@@ -40,16 +40,15 @@ FFI lets PHP load shared libraries, call C functions, and read C structures with
 - PHP with the **FFI** extension enabled
 - **x64, non-thread-safe (NTS)** builds
 
-Engine memory layouts change between every PHP minor version, so each PHP minor has its own generated definitions and its own branch.
+Engine memory layouts change between every PHP minor version. Z-Engine hides that complexity from you: it bundles generated, version-exact definitions for **every supported minor in parallel** (`include/8.4/`, `include/8.5/`) and `Core::init()` selects the set matching the *running* interpreter at boot. Install one release, run it on PHP 8.4 or 8.5 — no per-version branch juggling in your application.
 
 | PHP | OS / Arch / TS | Branch | Status |
 |-----|----------------|--------|--------|
-| 8.5 | linux-x64-nts | `master` | ✅ supported |
-| 8.4 | linux-x64-nts | `8.4` | ✅ supported |
+| 8.4 + 8.5 | linux-x64-nts | `8.4` / `master` | ✅ supported in parallel |
 | 8.0 | linux-x64-nts | `8.0` | 🧊 frozen (legacy) |
 | macOS / Windows / ZTS | — | — | 📋 [tracked in issues](https://github.com/lisachenko/z-engine/issues) |
 
-> **Version matching is not optional.** Running Z-Engine against a PHP minor it was not built for corrupts memory. `Core::init()` enforces the match and aborts with a clear message rather than letting you crash.
+> **Version matching is not optional.** Running Z-Engine against a PHP minor it has no bundled definitions for corrupts memory. `Core::init()` enforces the match and aborts with a clear message rather than letting you crash.
 
 ## Memory safety & long-running PHP
 
@@ -275,7 +274,7 @@ These libraries are built entirely on Z-Engine and make good, real-world reading
 
 ## Contributing
 
-Z-Engine has a couple of unusual rules — most importantly, **match your PHP version to the branch** and develop against a debug build. See **[CONTRIBUTING.md](CONTRIBUTING.md)** and **[AGENTS.md](AGENTS.md)** (the full contract for humans and automated tools). Engine definitions are generated from the PHP source by `tools/generator/` and never hand-edited.
+Z-Engine has a couple of unusual rules — most importantly, **run only PHP minors the branch bundles definitions for** (currently 8.4 and 8.5) and develop against a debug build. See **[CONTRIBUTING.md](CONTRIBUTING.md)** and **[AGENTS.md](AGENTS.md)** (the full contract for humans and automated tools). Engine definitions are generated from the PHP source by `tools/generator/` and never hand-edited.
 
 ```bash
 composer test        # safe suite
