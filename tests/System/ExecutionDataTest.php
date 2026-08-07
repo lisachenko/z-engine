@@ -67,6 +67,75 @@ class ExecutionDataTest extends TestCase
         $this->assertSame($expected, $return);
     }
 
+    public function testGetLocalVariables(): void
+    {
+        // Do not use constants here to prevent opcode optimization and inlining
+        $expected = microtime(true);
+        $another  = 'local-' . __FUNCTION__;
+
+        $locals = Core::$executor->getExecutionState()->getLocalVariables();
+
+        // $locals itself (and everything below) was still IS_UNDEF at observation
+        // time, so only the two assigned variables are visible
+        $this->assertSame(['expected', 'another'], array_keys($locals));
+        $locals['expected']->getNativeValue($expectedValue);
+        $locals['another']->getNativeValue($anotherValue);
+        $this->assertSame($expected, $expectedValue);
+        $this->assertSame($another, $anotherValue);
+    }
+
+    public function testGetLocalVariableByName(): void
+    {
+        $marker = 'observable-frame-value';
+
+        $state = Core::$executor->getExecutionState();
+        $state->getLocalVariable('marker')->getNativeValue($markerValue);
+        $this->assertSame($marker, $markerValue);
+    }
+
+    public function testGetLocalVariableObservesUndefSlot(): void
+    {
+        $probe = random_int(0, 0);
+        if ($probe > 0) {
+            $conditional = 'assigned only for a positive probe';
+        }
+
+        // The CV slot exists on the frame (compile-time allocation) but was never
+        // assigned on this code path: unlike getLocalVariables() the by-name reader
+        // exposes it so callers can distinguish "declared but unset"
+        $undefined = Core::$executor->getExecutionState()->getLocalVariable('conditional');
+        $this->assertSame(ReflectionValue::IS_UNDEF, $undefined->getType());
+    }
+
+    public function testGetLocalVariableRejectsUnknownName(): void
+    {
+        $this->expectException(\OutOfBoundsException::class);
+        $this->expectExceptionMessage('no compiled variable $missing');
+        Core::$executor->getExecutionState()->getLocalVariable('missing');
+    }
+
+    public function testGetLocalVariablesOfParentFrame(): void
+    {
+        $marker = 'parent-frame-marker';
+
+        $observed = (function (): array {
+            // The closure's own frame is the current state; its caller is this test
+            $parentFrame  = Core::$executor->getExecutionState()->getPrevious();
+            $parentLocals = $parentFrame->getLocalVariables();
+
+            $values = [];
+            foreach ($parentLocals as $name => $valueEntry) {
+                $valueEntry->getNativeValue($value);
+                $values[$name] = $value;
+                unset($value);
+            }
+
+            return $values;
+        })();
+
+        $this->assertSame(['marker' => $marker], $observed);
+    }
+
     #[DataProvider('argumentProvider')]
     public function testGetArguments($arg1 = null, $arg2 = null, $arg3 = null)
     {

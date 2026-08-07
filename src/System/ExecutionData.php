@@ -197,6 +197,75 @@ class ExecutionData
     }
 
     /**
+     * Returns the live frame variables (CV slots) of this frame, indexed by variable name
+     *
+     * Names come from the function's compiled-variable table (op_array->vars) and
+     * values are read directly from the frame's CV slots, so no symbol table has to
+     * be materialized. Declared-but-unset variables (IS_UNDEF slots: not yet assigned
+     * on this code path, or unset()) are skipped; use getLocalVariable() to observe
+     * them individually. Frames without a user function (internal calls, top-level
+     * pseudo frames) have no CV slots and yield an empty list.
+     *
+     * Values are BORROWED views into the live frame: they are valid only while the
+     * frame is on the VM stack (eg during an opcode handler or from a parent frame).
+     *
+     * @return ReflectionValue[] Frame variables indexed by variable name (no '$' sigil)
+     */
+    public function getLocalVariables(): array
+    {
+        $variables = [];
+        foreach ($this->getLocalVariableNames() as $slotNumber => $variableName) {
+            $valueEntry = ReflectionValue::fromValueEntry($this->getCallVariableByNumber($slotNumber));
+            if ($valueEntry->getType() === ReflectionValue::IS_UNDEF) {
+                continue;
+            }
+            $variables[$variableName] = $valueEntry;
+        }
+
+        return $variables;
+    }
+
+    /**
+     * Returns one live frame variable (CV slot) of this frame by its name
+     *
+     * Unlike getLocalVariables() this also returns declared-but-unset variables:
+     * check ReflectionValue::getType() against ReflectionValue::IS_UNDEF to
+     * distinguish "declared on the frame but not assigned" from a real value.
+     * The value is a BORROWED view into the live frame (see getLocalVariables()).
+     *
+     * @param string $variableName Variable name without the '$' sigil
+     */
+    public function getLocalVariable(string $variableName): ReflectionValue
+    {
+        $slotNumber = array_search($variableName, $this->getLocalVariableNames(), true);
+        if ($slotNumber === false) {
+            throw new \OutOfBoundsException(
+                "Frame has no compiled variable \${$variableName}: " .
+                'only declared variables of a user function occupy CV slots',
+            );
+        }
+
+        return ReflectionValue::fromValueEntry($this->getCallVariableByNumber($slotNumber));
+    }
+
+    /**
+     * Returns the compiled-variable names of this frame indexed by CV slot number
+     *
+     * Empty for frames that execute no user function (they have no CV slots).
+     *
+     * @return array<int, string>
+     */
+    private function getLocalVariableNames(): array
+    {
+        $functionEntry = $this->getFunctionEntry();
+        if ($functionEntry === null) {
+            return [];
+        }
+
+        return $functionEntry->getVariableNames();
+    }
+
+    /**
      * Checks if there is a previous execution entry (aka stack)
      */
     public function hasPrevious(): bool
