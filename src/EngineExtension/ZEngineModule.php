@@ -17,7 +17,6 @@ use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Memory\PersistentHeap;
 use ZEngine\Memory\PersistentHeapException;
-use ZEngine\Reflection\ReflectionExtension;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\PersistentHashTable;
 
@@ -167,7 +166,11 @@ final class ZEngineModule extends AbstractModule implements ModuleLifecycleInter
      */
     public function onHeapDestroyed(): void
     {
-        $anchorTyped = $this->anchorSlot()->u1;
+        $anchor = $this->getGlobals();
+        if ($anchor === null) {
+            throw new PersistentHeapException('The zengine module has no globals block');
+        }
+        $anchorTyped = $anchor->u1;
         assert($anchorTyped instanceof CData);
         $anchorTyped->type_info = ReflectionValue::IS_UNDEF;
 
@@ -175,11 +178,15 @@ final class ZEngineModule extends AbstractModule implements ModuleLifecycleInter
     }
 
     /**
-     * Recovers the heap registry from the anchor slot, minting it on first use
+     * Recovers the heap registry from the anchor slot (the zval-typed module globals),
+     * minting it on first use
      */
     private function recoverHeapRegistry(): PersistentHashTable
     {
-        $anchor      = $this->anchorSlot();
+        $anchor = $this->getGlobals();
+        if ($anchor === null) {
+            throw new PersistentHeapException('The zengine module has no globals block');
+        }
         $anchorTyped = $anchor->u1;
         assert($anchorTyped instanceof CData);
         $anchorValue = $anchor->value;
@@ -204,26 +211,5 @@ final class ZEngineModule extends AbstractModule implements ModuleLifecycleInter
         $anchorTyped->type_info = ReflectionValue::IS_PTR;
 
         return $registry;
-    }
-
-    /**
-     * Returns the anchor slot (zval*) inside the persistent module globals
-     *
-     * Bypasses AbstractModule::getGlobals(), whose cast targets the globals STRUCT type;
-     * the anchor is addressed as a zval pointer instead.
-     *
-     * @todo AbstractModule::getGlobals() cannot cast a raw globals pointer to a
-     *       zval-sized type ("attempt to cast to larger type" - FFI casts reinterpret
-     *       the 8-byte pointer variable, they do not dereference); once the base class
-     *       casts through a pointer type, this bypass can delegate to it.
-     */
-    private function anchorSlot(): CData
-    {
-        $rawGlobals = ReflectionExtension::getGlobals();
-        if ($rawGlobals === null) {
-            throw new PersistentHeapException('The zengine module has no globals block');
-        }
-
-        return Core::cast('zval *', $rawGlobals);
     }
 }
