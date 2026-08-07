@@ -865,12 +865,6 @@ parameters:
 			path: src/EngineExtension/AbstractModule.php
 
 		-
-			message: '#^Parameter \#1 \$type of static method ZEngine\\Core\:\:cast\(\) expects string, string\|null given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/EngineExtension/AbstractModule.php
-
-		-
 			message: '#^Parameter \#1 \$variable of static method ZEngine\\Core\:\:addr\(\) expects FFI\\CData, mixed given\.$#'
 			identifier: argument.type
 			count: 1
