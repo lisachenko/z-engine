@@ -15,6 +15,7 @@ namespace ZEngine\Type;
 
 use PHPUnit\Framework\TestCase;
 use ZEngine\Reflection\ReflectionValue;
+use ZEngine\Support\ResidentMemory;
 
 class PersistentHashTableTest extends TestCase
 {
@@ -170,18 +171,10 @@ class PersistentHashTableTest extends TestCase
 
     public function testDestroyReturnsProcessMemoryToTheAllocator(): void
     {
-        $residentKiloBytes = static function (): int {
-            foreach (file('/proc/self/status') ?: [] as $line) {
-                if (str_starts_with($line, 'VmRSS:')) {
-                    return (int) filter_var($line, FILTER_SANITIZE_NUMBER_INT);
-                }
-            }
-
-            return 0;
-        };
+        $residentKiloBytes = static fn(): int => ResidentMemory::kiloBytes();
 
         if ($residentKiloBytes() === 0) {
-            self::markTestSkipped('VmRSS is not readable on this platform');
+            self::markTestSkipped('Resident set size is not measurable on this platform');
         }
 
         $churn = static function (int $cycles): void {
