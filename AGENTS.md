@@ -93,10 +93,11 @@ php tools/generator/generate.php --native   # generates for the running interpre
 
 Native mode generates **for the interpreter that runs it only**: host needs
 `clang`, `cc`, `php-config` matching the exact running PHP version, and
-ext-ffi. For a `zts` target the running PHP must itself be a matching
-`--enable-zts` **release** build of the same minor (emit.php derives the
-thread-safety mode, the TSRM symbols and the layouts from the interpreter it
-runs under).
+ext-ffi (on Windows there is no `php-config`/`cc` — see the Windows section
+below for what replaces them). For a `zts` target the running PHP must itself
+be a matching `--enable-zts` **release** build of the same minor (emit.php
+derives the thread-safety mode, the TSRM symbols and the layouts from the
+interpreter it runs under).
 
 When changing `symbols.php`, first run native mode against the **committed**
 manifest and confirm `git diff` on `include/<minor>/<platform>/` is clean —
@@ -104,8 +105,8 @@ the output must be byte-identical to the Docker pipeline's (verified on
 Ubuntu clang-18 vs the trixie image: the emitter normalizes declarations from
 the clang AST, so compiler version does not leak into the artifacts). Only
 then apply the manifest change and regenerate for real. The `header-drift`
-CI jobs re-run the pipeline (Docker for linux, native for darwin) and fail on
-any divergence, so never skip the pre-check.
+CI jobs re-run the pipeline (Docker for linux, native for darwin and windows)
+and fail on any divergence, so never skip the pre-check.
 
 ### macOS (darwin) artifacts
 
@@ -128,6 +129,45 @@ refresh it with one `workflow_dispatch` run of the workflow on `master`.
 A leg whose thread-safety mode setup-php cannot provide (currently ZTS
 PHP 8.5 on Intel) skips cleanly and self-heals on a later run; the CI
 presence guards keep the gap visible as warnings.
+
+### Windows artifacts
+
+The `windows-x64-{nts,zts}` artifacts (issue #59) can only be generated on
+real Windows machines; the **"Generate windows headers"** workflow
+(`.github/workflows/generate-windows-headers.yml`) is the canonical way to
+create or refresh them, with the same trigger and commit semantics as the
+darwin workflow. x64 only — windows.php.net ships no arm64 builds.
+
+Windows differs from the POSIX platforms in four load-bearing ways:
+
+- **Symbol resolution needs the engine DLL.** There is no process-image
+  lookup (no `RTLD_DEFAULT`), so the generated `engine.h` carries
+  `#define FFI_LIB "php8.dll"` (NTS) / `"php8ts.dll"` (ZTS) for the
+  `FFI::load()` path, and `Core::init()` passes the same DLL name explicitly
+  to `FFI::cdef()` (which ignores the `FFI_LIB` define). The bare name binds
+  to the module `php.exe` has already loaded.
+- **`ZEND_FASTCALL` is `__vectorcall`.** MSVC decorates such x64 exports as
+  `name@@N` and PHP's FFI mangles its lookups to match — but only for the
+  `__vectorcall` *keyword*, which the emitter writes into the function
+  declarations. The `__attribute__((vectorcall))` spelling is silently
+  ignored by FFI and must never be emitted. Zero-argument `__vectorcall`
+  declarations crash PHP's FFI (upstream bug), so the emitter refuses them.
+- **Dev headers come from the devel pack.** There is no `php-config`;
+  `generate.php` resolves the matching `php-devel-pack-*.zip` via
+  `windows.php.net/downloads/releases/releases.json`, verifies its sha256 and
+  extracts it into the temp dir (override with `--php-dev=DIR`). clang (from
+  PATH) needs the MSVC/SDK `INCLUDE` environment — CI exports it via
+  `ilammy/msvc-dev-cmd`; locally run from a `vcvars64` shell.
+- **The PHP DLL does not export libc `free`.** The Windows manifest excludes
+  it; `Core::persistentFree()` binds `ucrtbase.dll` (the same process-wide
+  UCRT heap `pemalloc` draws from) instead.
+
+Not supported on Windows: the opcache file-cache relocator (issue #119, its
+tests self-skip and the CI legs carry no opcache non-skip gate) and
+`opcache.preload` (does not exist on Windows). As with darwin, the 8.4
+artifacts are maintained on the `8.4` branch; `include/8.5/windows-*` is
+maintained here - after changing the generator, refresh it with one
+`workflow_dispatch` run of the workflow on `master`.
 
 ## Running tests safely
 

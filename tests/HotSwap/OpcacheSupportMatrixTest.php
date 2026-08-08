@@ -56,6 +56,11 @@ class OpcacheSupportMatrixTest extends TestCase
      */
     public function testPreloadedClassMutationIsRejected(): void
     {
+        // Only this leg needs opcache.preload, which does not exist on Windows (issue #119)
+        if (\DIRECTORY_SEPARATOR !== '/') {
+            self::markTestSkipped('opcache.preload is not available on Windows (issue #119)');
+        }
+
         [$exitCode, $stdout, $report] = $this->runOpcacheChild(
             __DIR__ . '/scripts/opcache-preloaded.php',
             ['-d', 'opcache.preload=' . dirname(__DIR__) . '/Stub/specializationShmPreload.php'],

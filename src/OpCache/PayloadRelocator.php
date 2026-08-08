@@ -92,6 +92,18 @@ final class PayloadRelocator
     private readonly int $zendStringHeaderSize;
 
     /**
+     * Whether the relocator can handle payloads of the running build at all
+     *
+     * The exact predicate the constructor enforces, exposed so callers (and the tests
+     * covering them) can skip cleanly instead of provoking the throw. Windows payloads
+     * are tracked in issue #119, ZTS ones in issue #118.
+     */
+    public static function isSupported(): bool
+    {
+        return PHP_INT_SIZE === 8 && \DIRECTORY_SEPARATOR === '/' && !\ZEND_THREAD_SAFE;
+    }
+
+    /**
      * @param CData         $buffer   char[mem_size + str_size] holding the raw payload
      * @param CacheMetaInfo $metaInfo Parsed header describing the buffer regions
      */

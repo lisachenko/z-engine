@@ -198,6 +198,19 @@ class Core
     private static FFI $engine;
 
     /**
+     * Windows only: binding to the C runtime that owns the malloc heap, for persistentFree()
+     *
+     * The engine DLL exports no free() of its own - its api-ms-win-crt-heap imports forward to
+     * ucrtbase.dll, which is the same process-wide UCRT heap pemalloc(size, 1) allocates from,
+     * so freeing a persistent block straight through ucrtbase is the matching deallocation.
+     *
+     * Bound lazily on first use and kept for the process lifetime, exactly like self::$engine:
+     * re-cdef()ing would free the previous binding's type data while CData minted against it
+     * is still live (issue #108), and shutdown() deliberately keeps the FFI bindings alive.
+     */
+    private static ?FFI $windowsCrt = null;
+
+    /**
      * Cache of the generated per-version engine constants (constants.php)
      *
      * @var array<string, int>|null
@@ -283,7 +296,7 @@ class Core
                 if ($definition === false) {
                     throw new RuntimeException('Unable to read the engine definition file');
                 }
-                $engine = FFI::cdef($definition);
+                $engine = FFI::cdef($definition, self::engineLibrary());
             }
             self::$engine = $engine;
 
@@ -464,10 +477,15 @@ class Core
 
     /**
      * Platform selector for the generated per-ABI artifacts, e.g. "8.5/linux-x64-nts"
+     *
+     * @internal public for the artifact tests, which resolve the very same bundled
+     *           files and must not carry a second copy of this mapping
      */
-    private static function platformKey(): string
+    public static function platformKey(): string
     {
-        $arch = php_uname('m');
+        // Windows spells the machine type in upper case ("AMD64", "ARM64"), every
+        // other platform in lower case - normalize before matching
+        $arch = strtolower(php_uname('m'));
 
         return sprintf(
             '%d.%d/%s-%s-%s',
@@ -481,6 +499,27 @@ class Core
             },
             ZEND_THREAD_SAFE ? 'zts' : 'nts',
         );
+    }
+
+    /**
+     * Library FFI::cdef() must bind the engine definitions to, or null for the process image
+     *
+     * ELF and Mach-O hosts resolve engine symbols out of the running php binary itself
+     * (RTLD_DEFAULT), so no library is named. Windows has no such process-wide lookup: the
+     * engine lives in a DLL that php.exe has already loaded, and naming it makes LoadLibrary
+     * match the loaded module by base name instead of mapping a second copy.
+     *
+     * The generated Windows header carries the same name as `#define FFI_LIB "php8.dll"`, but
+     * that define is honoured by FFI::load()/FFI::scope() only - FFI::cdef() ignores it, hence
+     * this derivation. Both spellings must stay in sync (tools/generator emits the define).
+     */
+    private static function engineLibrary(): ?string
+    {
+        if (\DIRECTORY_SEPARATOR === '/') {
+            return null;
+        }
+
+        return 'php' . PHP_MAJOR_VERSION . (\ZEND_THREAD_SAFE ? 'ts' : '') . '.dll';
     }
 
     /**
@@ -721,6 +760,13 @@ class Core
      */
     public static function persistentFree(CData $pointer): void
     {
+        if (\DIRECTORY_SEPARATOR !== '/') {
+            self::$windowsCrt ??= FFI::cdef('void free(void *);', 'ucrtbase.dll');
+            self::$windowsCrt->free(self::cast('void *', $pointer));
+
+            return;
+        }
+
         self::call('free', self::cast('void *', $pointer));
     }
 

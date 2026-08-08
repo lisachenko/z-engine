@@ -250,11 +250,13 @@ class Executor
     {
         $timedOut = $this->pointer->timed_out;
         \assert($timedOut instanceof CData);
-        // FFI surfaces the atomic _Bool storage as an integer scalar
+        // C11 builds surface the atomic _Bool storage as an integer scalar;
+        // MSVC's fallback stores the flag in a char, which FFI reads back as
+        // a one-byte binary string
         $value = $timedOut->value;
-        \assert(\is_int($value) || \is_bool($value));
+        \assert(\is_int($value) || \is_bool($value) || \is_string($value));
 
-        return (bool) $value;
+        return \is_string($value) ? $value !== "\0" : (bool) $value;
     }
 
     /**

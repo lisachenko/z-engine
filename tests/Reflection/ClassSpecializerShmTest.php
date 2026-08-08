@@ -35,6 +35,11 @@ final class ClassSpecializerShmTest extends TestCase
         if (!extension_loaded('Zend OPcache')) {
             self::markTestSkipped('The opcache extension is required to build an immutable (SHM) template');
         }
+        // opcache.preload does not exist on Windows, so the template can never be
+        // persisted into shared memory there (issue #119)
+        if (\DIRECTORY_SEPARATOR !== '/') {
+            self::markTestSkipped('opcache.preload is not available on Windows (issue #119)');
+        }
     }
 
     public function testSpecializesImmutableSharedMemoryClass(): void
