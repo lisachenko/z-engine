@@ -138,13 +138,11 @@ jobs:
         if: steps.artifacts.outputs.present == 'true'
         run: composer test
 
-      # The opcache file-cache relocator has never been exercised on darwin
-      # (its payload surgery was developed against linux-x64 file caches), so
-      # its non-skip gate is informational until proven green here; the step
-      # is tightened to blocking as part of issue #58.
+      # Same gate as the Linux NTS leg (issue #124): the opcache/SHM tests
+      # must have RUN. The file-cache relocator's payload surgery is proven
+      # on darwin - both arches pass the full opcache group.
       - name: Opcache/SHM coverage must not silently skip
         if: steps.artifacts.outputs.present == 'true'
-        continue-on-error: true
         run: composer test:opcache
 
       - name: Worker-loop soak (flat memory after warm-up)
