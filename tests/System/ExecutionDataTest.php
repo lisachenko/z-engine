@@ -204,6 +204,7 @@ class ExecutionDataTest extends TestCase
     public function testGetThis()
     {
         $thisValue = Core::$executor->getExecutionState()->getThis();
+        $this->assertNotNull($thisValue);
         $thisValue->getNativeValue($instance);
         $this->assertSame($this, $instance);
 
@@ -213,7 +214,7 @@ class ExecutionDataTest extends TestCase
         $self->assertInstanceOf(\stdClass::class, $this);
     }
 
-    public function testHasThisAndGetThisObjectForInstanceMethodFrame(): void
+    public function testHasThisAndGetThisForInstanceMethodFrame(): void
     {
         $state = Core::$executor->getExecutionState();
 
@@ -221,13 +222,13 @@ class ExecutionDataTest extends TestCase
         // IS_OBJECT_EX plus call-info bits, never a bare IS_OBJECT
         $this->assertTrue($state->hasThis());
 
-        $thisObject = $state->getThisObject();
+        $thisObject = $state->getThis();
         $this->assertNotNull($thisObject);
         $thisObject->getNativeValue($instance);
         $this->assertSame($this, $instance);
     }
 
-    public function testHasThisAndGetThisObjectForStaticMethodFrame(): void
+    public function testHasThisAndGetThisForStaticMethodFrame(): void
     {
         [$hasThis, $thisObject] = self::observeFrameObjectScopeFromStaticMethod();
 
@@ -235,13 +236,13 @@ class ExecutionDataTest extends TestCase
         $this->assertNull($thisObject);
     }
 
-    public function testHasThisAndGetThisObjectForPlainFunctionFrame(): void
+    public function testHasThisAndGetThisForPlainFunctionFrame(): void
     {
         // A static closure frame is a plain function frame: no bound object scope
         [$hasThis, $thisObject] = (static function (): array {
             $state = Core::$executor->getExecutionState();
 
-            return [$state->hasThis(), $state->getThisObject()];
+            return [$state->hasThis(), $state->getThis()];
         })();
 
         $this->assertFalse($hasThis);
@@ -255,7 +256,7 @@ class ExecutionDataTest extends TestCase
     {
         $state = Core::$executor->getExecutionState();
 
-        return [$state->hasThis(), $state->getThisObject()];
+        return [$state->hasThis(), $state->getThis()];
     }
 
     public function testGetFunction()
