@@ -218,7 +218,7 @@ class ExecutionDataTest extends TestCase
         // frame cleanup from the one still referenced elsewhere, which corrupts the heap
         // on stricter allocators (PHP 8.5). Swapping is a real capability; not cleaning
         // up after it in the *live* frame is the bug.
-        Core::$executor->getExecutionState()->getThis()->setNativeValue($self);
+        $thisValue->setNativeValue($self);
         $self->assertSame($self, $this);
     }
 
