@@ -75,6 +75,80 @@ jobs:
       - name: Worker-loop soak (flat memory after warm-up)
         run: php -d ffi.enable=1 -d zend.assertions=1 -d opcache.jit=off tools/examples/worker-loop.php
 
+  tests-macos:
+    name: Tests (macOS ${{ matrix.arch }}, NTS)
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    steps:
+      - uses: actions/checkout@v4
+
+      # The darwin artifacts can only be generated on macOS runners (see the
+      # "Generate darwin headers" workflow). Until they are committed this leg
+      # warns and skips instead of failing, so the matrix keeps macOS visible
+      # without blocking unrelated work; once the artifacts land, every step
+      # below runs for real.
+      - name: Check the generated definitions are committed
+        id: artifacts
+        run: |
+          if [ -f "include/${PHP_MINOR}/darwin-${{ matrix.arch }}-nts/engine.h" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::include/${PHP_MINOR}/darwin-${{ matrix.arch }}-nts is not committed yet - run the 'Generate darwin headers' workflow (issue #58)"
+          fi
+
+      # Same setup as the Linux tests job: opcache loaded but inactive in the
+      # runner process, JIT off everywhere (see the comment there).
+      - name: Set up PHP
+        if: steps.artifacts.outputs.present == 'true'
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_MINOR }}
+          extensions: ffi, opcache
+          ini-values: ffi.enable=1, zend.assertions=1, opcache.enable=1, opcache.enable_cli=0, opcache.jit=off, opcache.jit_buffer_size=0
+          coverage: none
+
+      - name: Assert the opcache extension is available to the test runner
+        if: steps.artifacts.outputs.present == 'true'
+        run: |
+          php -r 'exit(extension_loaded("Zend OPcache") ? 0 : 1);' \
+            || { echo "::error::Zend OPcache is not loaded - the opcache tests would silently skip"; exit 1; }
+
+      # engine.h declares no FFI_LIB: symbols must resolve from the running
+      # php process image, which is the one genuinely platform-specific part
+      # of the runtime. Prove it up front with a clear diagnostic.
+      - name: FFI symbol-resolution preflight
+        if: steps.artifacts.outputs.present == 'true'
+        run: |
+          php -d ffi.enable=1 -r '$e = FFI::cdef("const char *get_zend_version(void);"); echo $e->get_zend_version(), PHP_EOL;' \
+            || { echo "::error::FFI cannot resolve engine symbols from the php process image on this build"; exit 1; }
+
+      - name: Install dependencies
+        if: steps.artifacts.outputs.present == 'true'
+        uses: ramsey/composer-install@v3
+
+      - name: Run test suite
+        if: steps.artifacts.outputs.present == 'true'
+        run: composer test
+
+      # Same gate as the Linux NTS leg (issue #124): the opcache/SHM tests
+      # must have RUN. The file-cache relocator's payload surgery is proven
+      # on darwin - both arches pass the full opcache group.
+      - name: Opcache/SHM coverage must not silently skip
+        if: steps.artifacts.outputs.present == 'true'
+        run: composer test:opcache
+
+      - name: Worker-loop soak (flat memory after warm-up)
+        if: steps.artifacts.outputs.present == 'true'
+        run: php -d ffi.enable=1 -d zend.assertions=1 -d opcache.jit=off tools/examples/worker-loop.php
+
   static-analysis:
     name: PHPStan (level max)
     runs-on: ubuntu-latest
@@ -207,5 +281,54 @@ jobs:
         run: |
           if ! git diff --exit-code -- include/; then
             echo "::error::Generated engine definitions are out of date. Run 'composer gen-headers' and commit the result."
+            exit 1
+          fi
+
+  # The darwin counterpart of header-drift: regenerates natively on a macOS
+  # runner (docker cannot produce darwin artifacts) and diffs only the dir the
+  # runner's own architecture can regenerate. The linux job above stays safe
+  # unscoped - linux regeneration never touches the darwin directories.
+  header-drift-darwin:
+    name: Generated darwin headers up to date (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the generated definitions are committed
+        id: artifacts
+        run: |
+          if [ -f "include/${PHP_MINOR}/darwin-${{ matrix.arch }}-nts/engine.h" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::include/${PHP_MINOR}/darwin-${{ matrix.arch }}-nts is not committed yet - run the 'Generate darwin headers' workflow (issue #58)"
+          fi
+
+      - name: Set up PHP
+        if: steps.artifacts.outputs.present == 'true'
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_MINOR }}
+          extensions: ffi
+          ini-values: ffi.enable=1
+          coverage: none
+
+      - name: Regenerate engine definitions natively
+        if: steps.artifacts.outputs.present == 'true'
+        run: php tools/generator/generate.php --native --php=${{ env.PHP_MINOR }} --ts=nts
+
+      - name: Fail if the committed artifacts are stale
+        if: steps.artifacts.outputs.present == 'true'
+        run: |
+          if ! git diff --exit-code -- "include/${PHP_MINOR}/darwin-${{ matrix.arch }}-nts"; then
+            echo "::error::Generated darwin engine definitions are out of date. Run the 'Generate darwin headers' workflow and merge its commit."
             exit 1
           fi

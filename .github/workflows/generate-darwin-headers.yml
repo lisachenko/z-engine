@@ -1,0 +1,121 @@
+name: Generate darwin headers
+
+# Generates the darwin-{x64,arm64}-nts FFI engine definitions on real macOS
+# runners and commits them back to the branch. Docker cannot produce these
+# (containers are Linux by construction), so this workflow is the canonical
+# way to create or refresh darwin artifacts (issue #58).
+#
+# Triggers:
+# - pull_request touching the generator: bootstraps/refreshes the artifacts on
+#   the PR branch itself (same-repo PRs only - fork PRs get the uploaded
+#   artifacts but no push).
+# - workflow_dispatch: manual refresh; run it against the branch whose
+#   artifacts need regenerating.
+#
+# A push made with GITHUB_TOKEN does not retrigger workflows, so the commit
+# job cannot loop; the next human push re-runs full CI against the artifacts.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tools/generator/**'
+      - '.github/workflows/generate-darwin-headers.yml'
+
+permissions:
+  contents: write
+
+# This branch targets PHP 8.5 only - engine structures are version-specific.
+env:
+  PHP_MINOR: '8.5'
+
+jobs:
+  generate:
+    name: Generate darwin-${{ matrix.arch }}-nts
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref }}
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_MINOR }}
+          extensions: ffi, opcache
+          ini-values: ffi.enable=1
+          coverage: none
+
+      - name: Assert the build matches the matrix leg (Darwin, NTS, ${{ matrix.arch }})
+        run: |
+          php -r 'exit(PHP_OS_FAMILY === "Darwin" && !ZEND_THREAD_SAFE ? 0 : 1);' \
+            || { echo "::error::expected a Darwin NTS build"; exit 1; }
+          php -r 'exit((php_uname("m") === "x86_64") === ("${{ matrix.arch }}" === "x64") ? 0 : 1);' \
+            || { echo "::error::runner architecture does not match the ${{ matrix.arch }} matrix leg"; exit 1; }
+
+      # engine.h declares no FFI_LIB: symbols must resolve from the running
+      # php process image. Prove that up front so a resolution problem fails
+      # here with a clear message instead of deep inside the validation stage.
+      - name: FFI symbol-resolution preflight
+        run: |
+          php -d ffi.enable=1 -r '$e = FFI::cdef("const char *get_zend_version(void);"); echo $e->get_zend_version(), PHP_EOL;' \
+            || { echo "::error::FFI cannot resolve engine symbols from the php process image on this build"; exit 1; }
+
+      - name: Generate darwin artifacts
+        run: php tools/generator/generate.php --native --php=${{ env.PHP_MINOR }} --ts=nts
+
+      - name: Smoke-check the artifacts
+        run: |
+          dir="include/${PHP_MINOR}/darwin-${{ matrix.arch }}-nts"
+          for file in engine.h constants.php layouts.json probe.c; do
+            test -s "${dir}/${file}" || { echo "::error::${dir}/${file} is missing or empty"; exit 1; }
+          done
+          grep -q 'FFI_SCOPE "ZEngine"' "${dir}/engine.h" \
+            || { echo "::error::${dir}/engine.h has no FFI_SCOPE declaration"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: darwin-${{ matrix.arch }}-nts
+          path: include/${{ env.PHP_MINOR }}/darwin-${{ matrix.arch }}-nts
+          if-no-files-found: error
+
+  # A single commit job (instead of each runner pushing) serializes the two
+  # architectures into one commit and eliminates the push race between them.
+  commit:
+    name: Commit generated artifacts
+    needs: generate
+    # Pushing requires same-repo credentials; fork PRs stop at the uploads.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: darwin-*-nts
+          path: include/${{ env.PHP_MINOR }}/
+
+      - name: Commit and push if the artifacts changed
+        env:
+          TARGET_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- "include/${PHP_MINOR}"
+          if git diff --cached --quiet; then
+            echo "Generated artifacts are identical to the committed ones - nothing to do."
+            exit 0
+          fi
+          git commit -m "Generate darwin FFI engine definitions for PHP ${PHP_MINOR} (#58)"
+          git pull --rebase origin "${TARGET_REF}"
+          git push origin "HEAD:${TARGET_REF}"

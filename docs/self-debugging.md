@@ -14,7 +14,7 @@ primitives.
 
 Environment ground rules apply as everywhere in z-engine: exact supported PHP minor,
 `ffi.enable=1`, **JIT off** (the JIT rewrites the executor internals these hooks plug
-into), linux-x64-nts, experimental status.
+into), a platform with generated definitions (e.g. linux-x64-nts, darwin-arm64-nts), experimental status.
 
 ## What Xdebug hooks, and what substitutes for it
 
@@ -280,7 +280,7 @@ command is the interrupt hook above.
 | JIT must be off | The JIT bypasses the rewritten executor internals |
 | Per-statement trampoline cost | Instrumentation must be scoped per file to stay usable; whole-process stepping is for short sessions |
 | Self-debugging shares the process | Debugger and debuggee share heap, output buffers, error handlers and limits: the observer perturbs the observed |
-| Platform envelope | Supported PHP minors, linux-x64-nts, `ffi.enable=1`, experimental |
+| Platform envelope | Supported PHP minors, platforms with generated definitions (linux-x64, darwin-x64/arm64), `ffi.enable=1`, experimental |
 
 ## Roadmap
 

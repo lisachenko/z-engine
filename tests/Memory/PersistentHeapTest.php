@@ -21,6 +21,7 @@ use ZEngine\Stub\DebuggableCloneable;
 use ZEngine\Stub\TestDynamicPropsHolder;
 use ZEngine\Stub\TestGraphNode;
 use ZEngine\Stub\TestPureEnum;
+use ZEngine\Support\ResidentMemory;
 use ZEngine\Type\PersistentHashTable;
 use ZEngine\Type\StringEntry;
 
@@ -369,18 +370,10 @@ class PersistentHeapTest extends TestCase
 
     public function testLeakPlateauOverRepeatedPutGetRemoveCycles(): void
     {
-        $residentKiloBytes = static function (): int {
-            foreach (file('/proc/self/status') ?: [] as $line) {
-                if (str_starts_with($line, 'VmRSS:')) {
-                    return (int) filter_var($line, FILTER_SANITIZE_NUMBER_INT);
-                }
-            }
-
-            return 0;
-        };
+        $residentKiloBytes = static fn(): int => ResidentMemory::kiloBytes();
 
         if ($residentKiloBytes() === 0) {
-            self::markTestSkipped('VmRSS is not readable on this platform');
+            self::markTestSkipped('Resident set size is not measurable on this platform');
         }
 
         $churn = function (int $cycles): void {

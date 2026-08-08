@@ -14,6 +14,7 @@ declare(strict_types=1);
 namespace ZEngine;
 
 use PHPUnit\Framework\TestCase;
+use ZEngine\Support\ResidentMemory;
 
 /**
  * Covers the low-level allocation primitives of Core: the tracked-block registry and the
@@ -38,18 +39,10 @@ final class CoreMemoryTest extends TestCase
 
     public function testPersistentFreeReleasesMallocBackedBlocks(): void
     {
-        $residentKiloBytes = static function (): int {
-            foreach (file('/proc/self/status') ?: [] as $line) {
-                if (str_starts_with($line, 'VmRSS:')) {
-                    return (int) filter_var($line, FILTER_SANITIZE_NUMBER_INT);
-                }
-            }
-
-            return 0;
-        };
+        $residentKiloBytes = static fn(): int => ResidentMemory::kiloBytes();
 
         if ($residentKiloBytes() === 0) {
-            self::markTestSkipped('VmRSS is not readable on this platform');
+            self::markTestSkipped('Resident set size is not measurable on this platform');
         }
 
         $churn = static function (int $cycles): void {
@@ -123,18 +116,10 @@ final class CoreMemoryTest extends TestCase
      */
     public function testPointerAtAddressDoesNotAllocatePerCall(): void
     {
-        $residentKiloBytes = static function (): int {
-            foreach (file('/proc/self/status') ?: [] as $line) {
-                if (str_starts_with($line, 'VmRSS:')) {
-                    return (int) filter_var($line, FILTER_SANITIZE_NUMBER_INT);
-                }
-            }
-
-            return 0;
-        };
+        $residentKiloBytes = static fn(): int => ResidentMemory::kiloBytes();
 
         if ($residentKiloBytes() === 0) {
-            self::markTestSkipped('VmRSS is not readable on this platform');
+            self::markTestSkipped('Resident set size is not measurable on this platform');
         }
 
         $block   = Core::trackedNew('char[64]', true);
