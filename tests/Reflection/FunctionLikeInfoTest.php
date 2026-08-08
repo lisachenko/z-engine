@@ -347,4 +347,50 @@ class FunctionLikeInfoTest extends TestCase
         $refFunction = new ReflectionFunction(__NAMESPACE__ . '\untypedInfoFunction');
         $this->assertSame([], $refFunction->getLiveRanges());
     }
+
+    public function testFileNameAndFunctionNameOfNamedFunction(): void
+    {
+        $refFunction = new ReflectionFunction(__NAMESPACE__ . '\argumentInfoFunction');
+
+        $this->assertSame(__FILE__, $refFunction->getFileName());
+        $this->assertSame(__NAMESPACE__ . '\argumentInfoFunction', $refFunction->getFunctionName());
+    }
+
+    public function testFileNameAndFunctionNameOfMethod(): void
+    {
+        $refMethod = new ReflectionMethod(self::class, __FUNCTION__);
+
+        $this->assertSame(__FILE__, $refMethod->getFileName());
+        // The engine stores the plain method name; the class is carried by the scope
+        $this->assertSame(__FUNCTION__, $refMethod->getFunctionName());
+    }
+
+    public function testFileNameAndFunctionNameOfClosure(): void
+    {
+        $closure = static function (): int {
+            return 42;
+        };
+
+        // The key case: the wrapper is built from the raw zend_function pointer without
+        // ever constructing native reflection (which can throw for closure-backed
+        // entries inside FFI callbacks), yet both accessors must serve real values
+        $closureEntry = new ClosureEntry($closure);
+        $refFunction  = ReflectionFunction::fromCData($closureEntry->getRawFunction());
+
+        $this->assertSame(__FILE__, $refFunction->getFileName());
+        $functionName = $refFunction->getFunctionName();
+        $this->assertNotNull($functionName);
+        $this->assertStringStartsWith('{closure', $functionName);
+    }
+
+    public function testFileNameAndFunctionNameOfInternalFunction(): void
+    {
+        $refFunction = new ReflectionFunction('strlen');
+
+        // Internal functions carry no op_array, hence no declaring file: this is a real
+        // null by definition, not a misuse - no exception is thrown
+        $this->assertNull($refFunction->getFileName());
+        // The name is still served through the common struct
+        $this->assertSame('strlen', $refFunction->getFunctionName());
+    }
 }
