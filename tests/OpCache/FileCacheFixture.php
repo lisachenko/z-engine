@@ -33,6 +33,12 @@ trait FileCacheFixture
         if (!extension_loaded('Zend OPcache')) {
             Assert::markTestSkipped('Zend OPcache extension is not loaded');
         }
+        if (\DIRECTORY_SEPARATOR !== '/') {
+            // The bin path below assumes opcache's POSIX file-cache layout. Windows
+            // inserts an extra accel_uname_id directory level and appends the script
+            // path with its drive prefix and backslashes - tracked in issue #119.
+            Assert::markTestSkipped('The file-cache fixture assumes the POSIX cache layout (issue #119)');
+        }
         $scriptPath     = $scriptPath ?? self::fixturePath();
         self::$cacheDir = sys_get_temp_dir() . '/zengine-opcache-' . bin2hex(random_bytes(6));
         if (!mkdir(self::$cacheDir, 0777, true)) {
@@ -117,18 +123,32 @@ trait FileCacheFixture
 
     private static function removeCacheDir(): void
     {
-        if (self::$cacheDir === '' || !is_dir(self::$cacheDir)) {
+        if (self::$cacheDir === '') {
+            return;
+        }
+        self::removeDirectory(self::$cacheDir);
+        self::$cacheDir = '';
+    }
+
+    /**
+     * Deletes a directory tree, in PHP so it works on every platform (no `rm -rf`)
+     *
+     * A missing directory is not an error: callers clean up cache dirs that a skipped
+     * or half-way failed test may never have created.
+     */
+    public static function removeDirectory(string $directory): void
+    {
+        if (!is_dir($directory)) {
             return;
         }
         $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator(self::$cacheDir, \FilesystemIterator::SKIP_DOTS),
+            new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
             \RecursiveIteratorIterator::CHILD_FIRST,
         );
         foreach ($iterator as $item) {
             assert($item instanceof \SplFileInfo);
             $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
         }
-        rmdir(self::$cacheDir);
-        self::$cacheDir = '';
+        rmdir($directory);
     }
 }

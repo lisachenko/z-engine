@@ -113,10 +113,13 @@ final class HeaderEmitter
 
         $body = implode("\n", array_map(static fn(array $declaration): string => $declaration['text'], $kept));
 
-        return self::cleanForFfi($body)
+        $header = self::cleanForFfi($body)
             . "\n\n/* Imported functions */\n" . implode("\n", $functionDeclarations)
             . "\n\n/* Imported globals */\n" . implode("\n", $variableDeclarations)
             . "\n";
+        self::assertNoZeroArgumentVectorcall($header);
+
+        return $header;
     }
 
     /**
@@ -276,14 +279,55 @@ final class HeaderEmitter
             throw new RuntimeException("Manifest function '{$name}' was not found in the engine headers");
         }
         $qualType = $declaration['type']['qualType'] ?? '';
-        if (!is_string($qualType) || ($position = strpos($qualType, '(')) === false) {
+        if (!is_string($qualType)) {
             throw new RuntimeException("Cannot parse type of function '{$name}': " . var_export($qualType, true));
         }
         $this->requireIdentifiersOf($qualType);
+
+        // ZEND_FASTCALL is __vectorcall on MSVC, which clang reports as a
+        // trailing attribute on the function type. PHP FFI only understands
+        // the keyword spelling: it parses __vectorcall and mangles the symbol
+        // lookup into the decorated export name (name@@N) MSVC produces, while
+        // __attribute__((vectorcall)) parses but is silently ignored - wrong
+        // calling convention and an undecorated, unresolvable symbol.
+        $count      = 0;
+        $qualType   = (string) preg_replace('/\s*__attribute__\s*\(\(vectorcall\)\)\s*$/', '', $qualType, 1, $count);
+        $vectorcall = $count > 0;
+
+        if (($position = strpos($qualType, '(')) === false) {
+            throw new RuntimeException("Cannot parse type of function '{$name}': " . var_export($qualType, true));
+        }
         $returnType = rtrim(substr($qualType, 0, $position));
         $parameters = substr($qualType, $position);
+        if (!$vectorcall) {
+            return "extern {$returnType} {$name}{$parameters};";
+        }
+        if (preg_match('/^\(\s*(?:void\s*)?\)$/', $parameters) === 1) {
+            throw new RuntimeException(
+                "Function '{$name}' is a zero-argument __vectorcall declaration, which crashes PHP FFI "
+                . '(NULL dereference while building the argument types) - it cannot be declared at all',
+            );
+        }
 
-        return "extern {$returnType} {$name}{$parameters};";
+        return "extern {$returnType} __vectorcall {$name}{$parameters};";
+    }
+
+    /**
+     * PHP FFI dereferences a NULL pointer while building the argument types of
+     * a zero-argument __vectorcall function, so such a declaration cannot even
+     * be parsed - it takes the whole process down. emitFunction() guards the
+     * declarations it writes itself; this scan additionally covers everything
+     * sliced verbatim out of the engine headers (a `void (__vectorcall *f)(void)`
+     * handler typedef would be just as fatal).
+     */
+    private static function assertNoZeroArgumentVectorcall(string $code): void
+    {
+        if (preg_match('/__vectorcall\b[^;]*?\(\s*(?:void\s*)?\)\s*(?:;|\z)/', $code, $matches) === 1) {
+            throw new RuntimeException(
+                'Emitted header contains a zero-argument __vectorcall declaration, which crashes PHP FFI: '
+                . trim($matches[0]),
+            );
+        }
     }
 
     private function emitVariable(string $name): string
@@ -331,6 +375,16 @@ final class HeaderEmitter
         $code = (string) preg_replace('/\b_Alignas\s*\((?:[^()]|\([^()]*\))*\)/', '', $code);
         // GCC keywords FFI does not know
         $code = (string) preg_replace('/\b(?:__extension__|__restrict__|__restrict|restrict|__volatile__|__inline__|__inline|__signed__)\b/', '', $code);
+        // MSVC keywords leaking in from the Windows SDK headers. __vectorcall
+        // is deliberately NOT in this list (FFI parses it and needs it to
+        // mangle x64 symbol lookups into MSVC's decorated name@@N exports), and
+        // neither is __declspec (FFI parses it too, and honours
+        // __declspec(align(N)) - jmp_buf's layout depends on it).
+        $code = (string) preg_replace('/\b(?:__forceinline|__ptr64|__unaligned|__stdcall|__cdecl|__fastcall|__thiscall)\b/', '', $code);
+        $code = (string) preg_replace('/\b__pragma\s*\((?:[^()]|\([^()]*\))*\)/', '', $code);
+        // MSVC's spelling of the 64-bit integer type; identical type, but FFI
+        // only knows the standard name.
+        $code = (string) preg_replace('/\b__int64\b/', 'long long', $code);
         // Static assertions are statements, not declarations
         $code = (string) preg_replace('/\b_Static_assert\s*\((?:[^()]|\([^()]*\))*\)\s*;/', '', $code);
 

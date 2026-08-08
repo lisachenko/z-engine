@@ -38,16 +38,15 @@ FFI lets PHP load shared libraries, call C functions, and read C structures with
 ## Requirements & support matrix
 
 - PHP with the **FFI** extension enabled
-- **x64/arm64** builds, **NTS and ZTS** (on ZTS the opcache file-cache relocator is not yet supported — [#118](https://github.com/lisachenko/z-engine/issues/118))
+- **x64/arm64** builds, **NTS and ZTS** (the opcache file-cache relocator is not yet supported on ZTS — [#118](https://github.com/lisachenko/z-engine/issues/118) — nor on Windows — [#119](https://github.com/lisachenko/z-engine/issues/119))
 
 Engine memory layouts change between every PHP minor version, so each PHP minor has its own generated definitions and its own branch.
 
 | PHP | OS / Arch / TS | Branch | Status |
 |-----|----------------|--------|--------|
-| 8.5 | linux-x64 (nts, zts), darwin-x64 (nts), darwin-arm64 (nts, zts) | `master` | ✅ supported¹ |
-| 8.4 | linux-x64 (nts, zts), darwin-x64 (nts, zts), darwin-arm64 (nts, zts) | `8.4` | ✅ supported |
+| 8.5 | linux-x64 (nts, zts), darwin-x64 (nts), darwin-arm64 (nts, zts), windows-x64 (nts, zts) | `master` | ✅ supported¹ |
+| 8.4 | linux-x64 (nts, zts), darwin-x64 (nts, zts), darwin-arm64 (nts, zts), windows-x64 (nts, zts) | `8.4` | ✅ supported |
 | 8.0 | linux-x64-nts | `8.0` | 🧊 frozen (legacy) |
-| Windows | — | — | 📋 [tracked in issues](https://github.com/lisachenko/z-engine/issues) |
 
 ¹ `darwin-x64-zts` on 8.5 lands as soon as a ZTS PHP 8.5 build exists for Intel macOS runners — the generation workflow picks it up automatically.
 

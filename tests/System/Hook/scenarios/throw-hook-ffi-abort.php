@@ -27,7 +27,12 @@ declare(strict_types=1);
  * First-chance exception interception from userland goes through
  * OpCode::setHandler(OpCode::THROW, ...) instead, which fires before the throw.
  */
-$engine = FFI::cdef('extern void (*zend_throw_exception_hook)(void *exception);');
+// Windows has no process-image symbol resolution: the raw cdef must name the
+// engine DLL there (the same one Core::init() binds), POSIX resolves as-is.
+$engine = FFI::cdef(
+    'extern void (*zend_throw_exception_hook)(void *exception);',
+    \DIRECTORY_SEPARATOR === '/' ? null : 'php' . PHP_MAJOR_VERSION . (\ZEND_THREAD_SAFE ? 'ts' : '') . '.dll',
+);
 
 $engine->zend_throw_exception_hook = static function (mixed $exception): void {
     echo 'HOOK-FIRED', PHP_EOL;
