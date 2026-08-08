@@ -154,6 +154,7 @@ class ReflectionValueTest extends TestCase
     public function testGetRawObject()
     {
         $thisValue = Core::$executor->getExecutionState()->getThis();
+        $this->assertNotNull($thisValue);
         $rawObject = $thisValue->getRawObject();
         $this->assertInstanceOf(CData::class, $rawObject);
 

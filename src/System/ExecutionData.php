@@ -144,13 +144,38 @@ class ExecutionData
     }
 
     /**
-     * Returns the current object scope
+     * Returns the bound $this object of this frame, or null when the frame has none
+     * (plain function, static call, main scope)
      *
-     * This contains following: this + call_info + num_args
+     * The This zval doubles as the frame's call-info word - its u1.type_info
+     * carries the ZEND_CALL_* frame flags packed next to the type, so it is never
+     * a bare IS_OBJECT and cannot be type-compared to detect a bound $this.
+     * This accessor checks the ZEND_CALL_HAS_THIS frame flag (see hasThis())
+     * before exposing the value, so a non-null result is always the real object.
      */
-    public function getThis(): ReflectionValue
+    public function getThis(): ?ReflectionValue
     {
+        if (!$this->hasThis()) {
+            return null;
+        }
+
         return ReflectionValue::fromValueEntry(Core::addr($this->pointer->This));
+    }
+
+    /**
+     * Checks whether this frame has a bound $this object
+     *
+     * The presence of an object scope is flagged by ZEND_CALL_HAS_THIS in the
+     * frame's call_info, which lives in the type_info of the This zval (see the
+     * getThis() warning). Plain function frames, static calls and the main scope
+     * carry no bound object.
+     */
+    public function hasThis(): bool
+    {
+        // ZEND_CALL_INFO(call): the frame flags live in the type_info of This
+        $callInfo = $this->getThisZvalShape()->u1->type_info;
+
+        return ($callInfo & Core::engineConstant('ZEND_CALL_HAS_THIS')) !== 0;
     }
 
     /**

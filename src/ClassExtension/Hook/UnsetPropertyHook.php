@@ -50,7 +50,12 @@ class UnsetPropertyHook extends AbstractPropertyHook
         $member    = $this->member;
         $cacheSlot = $this->cacheSlot;
 
-        $previousScope = Core::$executor->setFakeScope(Core::$executor->getExecutionState()->getThis()->getRawObject()->ce);
+        $callerThis = Core::$executor->getExecutionState()->getThis();
+        if ($callerThis === null) {
+            throw new \LogicException('Unset property hook expects a calling frame with a bound $this');
+        }
+
+        $previousScope = Core::$executor->setFakeScope($callerThis->getRawObject()->ce);
         ($originalHandler)($object, $member, $cacheSlot);
         Core::$executor->setFakeScope($previousScope);
     }

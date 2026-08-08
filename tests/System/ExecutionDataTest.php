@@ -204,6 +204,7 @@ class ExecutionDataTest extends TestCase
     public function testGetThis()
     {
         $thisValue = Core::$executor->getExecutionState()->getThis();
+        $this->assertNotNull($thisValue);
         $thisValue->getNativeValue($instance);
         $this->assertSame($this, $instance);
 
@@ -219,6 +220,51 @@ class ExecutionDataTest extends TestCase
         // up after it in the *live* frame is the bug.
         Core::$executor->getExecutionState()->getThis()->setNativeValue($self);
         $self->assertSame($self, $this);
+    }
+
+    public function testHasThisAndGetThisForInstanceMethodFrame(): void
+    {
+        $state = Core::$executor->getExecutionState();
+
+        // A method frame carries a bound object: its This zval reads as
+        // IS_OBJECT_EX plus call-info bits, never a bare IS_OBJECT
+        $this->assertTrue($state->hasThis());
+
+        $thisObject = $state->getThis();
+        $this->assertNotNull($thisObject);
+        $thisObject->getNativeValue($instance);
+        $this->assertSame($this, $instance);
+    }
+
+    public function testHasThisAndGetThisForStaticMethodFrame(): void
+    {
+        [$hasThis, $thisObject] = self::observeFrameObjectScopeFromStaticMethod();
+
+        $this->assertFalse($hasThis);
+        $this->assertNull($thisObject);
+    }
+
+    public function testHasThisAndGetThisForPlainFunctionFrame(): void
+    {
+        // A static closure frame is a plain function frame: no bound object scope
+        [$hasThis, $thisObject] = (static function (): array {
+            $state = Core::$executor->getExecutionState();
+
+            return [$state->hasThis(), $state->getThis()];
+        })();
+
+        $this->assertFalse($hasThis);
+        $this->assertNull($thisObject);
+    }
+
+    /**
+     * @return array{0: bool, 1: ?ReflectionValue}
+     */
+    private static function observeFrameObjectScopeFromStaticMethod(): array
+    {
+        $state = Core::$executor->getExecutionState();
+
+        return [$state->hasThis(), $state->getThis()];
     }
 
     public function testGetFunction()
