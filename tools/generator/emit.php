@@ -217,6 +217,9 @@ if (is_string($includeDirOption)) {
 $defines = [];
 if ($isWindows) {
     $defines = ['-DZEND_WIN32=1', '-DPHP_WIN32=1', '-DWIN32', '-D_MBCS'];
+    // ZEND_DEBUG likewise: #if treats the undefined macro as 0, so the
+    // headers preprocess either way, but the probe reads it as a C value
+    $defines[] = '-DZEND_DEBUG=' . (PHP_DEBUG ? '1' : '0');
     if (ZEND_THREAD_SAFE) {
         $defines[] = '-DZTS=1';
     }
