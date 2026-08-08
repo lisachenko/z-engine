@@ -50,6 +50,51 @@ trait FunctionLikeTrait
     }
 
     /**
+     * Returns the name of this function/method or null for main-scope/unnamed entries
+     * (callers render "{main}" for those)
+     *
+     * Unlike the native getName(), this accessor is purely pointer-based: it never
+     * constructs native reflection and never throws for a valid entry, so it is safe
+     * for closure-backed entries and inside FFI callbacks (where an uncaught throw
+     * from native reflection construction is fatal). Internal functions are served
+     * through the same common struct, which carries their name directly.
+     */
+    public function getFunctionName(): ?string
+    {
+        $functionName = $this->getCommonPointer()->function_name;
+        if ($functionName === null) {
+            return null;
+        }
+
+        return StringEntry::fromCData($functionName)->getStringValue();
+    }
+
+    /**
+     * Returns the file a user-defined function/method was declared in or null for
+     * internal functions
+     *
+     * Unlike the native accessor (which reports false for internal functions), this
+     * one is purely pointer-based and null-returning: it never constructs native
+     * reflection and never throws for a valid entry, so it is safe for closure-backed
+     * entries and inside FFI callbacks (where an uncaught throw from native reflection
+     * construction is fatal).
+     */
+    // @phpstan-ignore method.childReturnType (closure-safe nullable accessor instead of the native string|false)
+    #[\ReturnTypeWillChange]
+    public function getFileName(): ?string
+    {
+        if (!$this->isUserDefined()) {
+            return null;
+        }
+        $fileName = $this->getOpArrayPointer()->filename;
+        if ($fileName === null) {
+            return null;
+        }
+
+        return StringEntry::fromCData($fileName)->getStringValue();
+    }
+
+    /**
      * Marks this function as a closure or converts a closure-backed entry into a regular
      * function/method (toggles the ZEND_ACC_CLOSURE flag)
      *
