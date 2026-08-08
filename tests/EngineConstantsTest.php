@@ -110,20 +110,6 @@ final class EngineConstantsTest extends TestCase
      */
     private static function loadGeneratedConstants(): array
     {
-        $arch        = php_uname('m');
-        $platformKey = sprintf(
-            '%d.%d/%s-%s-%s',
-            PHP_MAJOR_VERSION,
-            PHP_MINOR_VERSION,
-            strtolower(PHP_OS_FAMILY),
-            match ($arch) {
-                'x86_64', 'amd64'  => 'x64',
-                'aarch64', 'arm64' => 'arm64',
-                default            => $arch,
-            },
-            ZEND_THREAD_SAFE ? 'zts' : 'nts',
-        );
-
-        return require __DIR__ . '/../include/' . $platformKey . '/constants.php';
+        return require __DIR__ . '/../include/' . Core::platformKey() . '/constants.php';
     }
 }
