@@ -57,7 +57,8 @@ jobs:
           phpts: ${{ matrix.ts == 'zts' && 'ts' || 'nts' }}
         with:
           php-version: ${{ env.PHP_MINOR }}
-          extensions: ffi, opcache
+          # zip: generate.php extracts the PHP devel pack with ZipArchive
+          extensions: ffi, opcache, zip
           ini-values: ffi.enable=1
           coverage: none
 

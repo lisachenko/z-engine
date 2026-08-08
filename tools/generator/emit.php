@@ -315,8 +315,10 @@ if ($runProbe) {
     $probeFile = $buildDir . ($isWindows ? '/probe.exe' : '/probe');
     run([$compiler, '-o', $probeFile, $buildDir . '/probe.c', ...$includes, '-I' . $buildDir, ...$defines]);
     // The probe writes constants.php and layouts.json into its working
-    // directory; Windows resolves a bare name against PATH, not against it.
-    run([$isWindows ? $probeFile : './probe'], $buildDir);
+    // directory. Invoke it by absolute path: proc_open resolves a relative
+    // program path against the PARENT's cwd on some platforms (macOS), so
+    // './probe' + cwd is not portable even though the cwd itself is honored.
+    run([$probeFile], $buildDir);
     $layoutsRaw = file_get_contents($buildDir . '/layouts.json');
     if ($layoutsRaw === false) {
         fail('Probe did not produce layouts.json');
