@@ -39,6 +39,13 @@ final class ResidentMemory
             return 0;
         }
 
+        // Windows has neither procfs nor ps, and a failing shell_exec() would emit
+        // the very warning phpunit is configured to fail on - report "not
+        // measurable" straight away, which every caller already skips on.
+        if (\DIRECTORY_SEPARATOR !== '/') {
+            return 0;
+        }
+
         // macOS/BSD have no procfs; ps reports rss in KiB with the same
         // "currently resident" semantics as VmRSS.
         $rss = shell_exec('ps -o rss= -p ' . getmypid() . ' 2>/dev/null');
