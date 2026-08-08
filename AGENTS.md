@@ -109,7 +109,7 @@ any divergence, so never skip the pre-check.
 
 ### macOS (darwin) artifacts
 
-The `darwin-x64-nts` / `darwin-arm64-nts` artifacts (issue #58) can only be
+The `darwin-{x64,arm64}-{nts,zts}` artifacts (issue #58) can only be
 generated on real macOS machines. The **"Generate darwin headers"** workflow
 (`.github/workflows/generate-darwin-headers.yml`) is the canonical way to
 create or refresh them: it runs `generate.php --native` on both macOS runner
@@ -118,9 +118,13 @@ both directories back to the branch in a single commit. It triggers
 automatically on pull requests that touch `tools/generator/**` (same-repo
 PRs), or manually via `workflow_dispatch` against any branch.
 
-Darwin scope is currently **NTS only** (Homebrew/setup-php default). Follow-up
-work: darwin ZTS, and generating darwin artifacts for the 8.5 line on
-`master` (one `workflow_dispatch` run once that branch's generator is ready).
+Darwin covers **NTS and ZTS**: the workflow's matrix crosses both
+architectures with both thread-safety modes (setup-php builds the ZTS PHP via
+`phpts: ts`). As on Linux, the ZTS artifacts reach EG/CG through the TSRM
+offsets, and the opcache file-cache relocator stays unsupported on ZTS
+(issue #118). After changing the generator on this branch, remember the 8.5
+line on `master` needs its own `workflow_dispatch` run to refresh its darwin
+artifacts.
 
 ## Running tests safely
 

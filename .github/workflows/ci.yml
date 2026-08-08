@@ -76,16 +76,15 @@ jobs:
         run: php -d ffi.enable=1 -d zend.assertions=1 -d opcache.jit=off tools/examples/worker-loop.php
 
   tests-macos:
-    name: Tests (macOS ${{ matrix.arch }}, NTS)
-    runs-on: ${{ matrix.runner }}
+    name: Tests (macOS ${{ matrix.runner-arch.arch }}, ${{ matrix.ts }})
+    runs-on: ${{ matrix.runner-arch.runner }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: macos-latest
-            arch: arm64
-          - runner: macos-15-intel
-            arch: x64
+        runner-arch:
+          - { runner: macos-latest, arch: arm64 }
+          - { runner: macos-15-intel, arch: x64 }
+        ts: [nts, zts]
     steps:
       - uses: actions/checkout@v4
 
@@ -97,11 +96,11 @@ jobs:
       - name: Check the generated definitions are committed
         id: artifacts
         run: |
-          if [ -f "include/${PHP_MINOR}/darwin-${{ matrix.arch }}-nts/engine.h" ]; then
+          if [ -f "include/${PHP_MINOR}/darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }}/engine.h" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::include/${PHP_MINOR}/darwin-${{ matrix.arch }}-nts is not committed yet - run the 'Generate darwin headers' workflow (issue #58)"
+            echo "::warning::include/${PHP_MINOR}/darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }} is not committed yet - run the 'Generate darwin headers' workflow (issue #58)"
           fi
 
       # Same setup as the Linux tests job: opcache loaded but inactive in the
@@ -109,11 +108,19 @@ jobs:
       - name: Set up PHP
         if: steps.artifacts.outputs.present == 'true'
         uses: shivammathur/setup-php@v2
+        env:
+          phpts: ${{ matrix.ts == 'zts' && 'ts' || 'nts' }}
         with:
           php-version: ${{ env.PHP_MINOR }}
           extensions: ffi, opcache
           ini-values: ffi.enable=1, zend.assertions=1, opcache.enable=1, opcache.enable_cli=0, opcache.jit=off, opcache.jit_buffer_size=0
           coverage: none
+
+      - name: Assert the thread-safety mode matches the matrix leg
+        if: steps.artifacts.outputs.present == 'true'
+        run: |
+          php -r 'exit(ZEND_THREAD_SAFE === ("'"${{ matrix.ts }}"'" === "zts") ? 0 : 1);' \
+            || { echo "::error::PHP thread-safety mode does not match the ${{ matrix.ts }} matrix leg"; exit 1; }
 
       - name: Assert the opcache extension is available to the test runner
         if: steps.artifacts.outputs.present == 'true'
@@ -138,12 +145,12 @@ jobs:
         if: steps.artifacts.outputs.present == 'true'
         run: composer test
 
-      # Same gate as the Linux NTS leg (issue #124): the opcache/SHM tests
-      # must have RUN. The file-cache relocator's payload surgery is proven
-      # on darwin - both arches pass the full opcache group.
+      # Same gates as the Linux legs (issue #124): the opcache/SHM tests must
+      # have RUN. As on Linux, the ZTS leg excludes the file-cache relocator
+      # group (no ZTS payload support yet, issue #118).
       - name: Opcache/SHM coverage must not silently skip
         if: steps.artifacts.outputs.present == 'true'
-        run: composer test:opcache
+        run: ${{ matrix.ts == 'zts' && 'composer test:opcache-zts' || 'composer test:opcache' }}
 
       - name: Worker-loop soak (flat memory after warm-up)
         if: steps.artifacts.outputs.present == 'true'
@@ -289,32 +296,33 @@ jobs:
   # runner's own architecture can regenerate. The linux job above stays safe
   # unscoped - linux regeneration never touches the darwin directories.
   header-drift-darwin:
-    name: Generated darwin headers up to date (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
+    name: Generated darwin headers up to date (${{ matrix.runner-arch.arch }}, ${{ matrix.ts }})
+    runs-on: ${{ matrix.runner-arch.runner }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: macos-latest
-            arch: arm64
-          - runner: macos-15-intel
-            arch: x64
+        runner-arch:
+          - { runner: macos-latest, arch: arm64 }
+          - { runner: macos-15-intel, arch: x64 }
+        ts: [nts, zts]
     steps:
       - uses: actions/checkout@v4
 
       - name: Check the generated definitions are committed
         id: artifacts
         run: |
-          if [ -f "include/${PHP_MINOR}/darwin-${{ matrix.arch }}-nts/engine.h" ]; then
+          if [ -f "include/${PHP_MINOR}/darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }}/engine.h" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::include/${PHP_MINOR}/darwin-${{ matrix.arch }}-nts is not committed yet - run the 'Generate darwin headers' workflow (issue #58)"
+            echo "::warning::include/${PHP_MINOR}/darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }} is not committed yet - run the 'Generate darwin headers' workflow (issue #58)"
           fi
 
       - name: Set up PHP
         if: steps.artifacts.outputs.present == 'true'
         uses: shivammathur/setup-php@v2
+        env:
+          phpts: ${{ matrix.ts == 'zts' && 'ts' || 'nts' }}
         with:
           php-version: ${{ env.PHP_MINOR }}
           extensions: ffi
@@ -323,12 +331,12 @@ jobs:
 
       - name: Regenerate engine definitions natively
         if: steps.artifacts.outputs.present == 'true'
-        run: php tools/generator/generate.php --native --php=${{ env.PHP_MINOR }} --ts=nts
+        run: php tools/generator/generate.php --native --php=${{ env.PHP_MINOR }} --ts=${{ matrix.ts }}
 
       - name: Fail if the committed artifacts are stale
         if: steps.artifacts.outputs.present == 'true'
         run: |
-          if ! git diff --exit-code -- "include/${PHP_MINOR}/darwin-${{ matrix.arch }}-nts"; then
+          if ! git diff --exit-code -- "include/${PHP_MINOR}/darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }}"; then
             echo "::error::Generated darwin engine definitions are out of date. Run the 'Generate darwin headers' workflow and merge its commit."
             exit 1
           fi

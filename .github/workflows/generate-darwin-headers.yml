@@ -1,9 +1,9 @@
 name: Generate darwin headers
 
-# Generates the darwin-{x64,arm64}-nts FFI engine definitions on real macOS
-# runners and commits them back to the branch. Docker cannot produce these
-# (containers are Linux by construction), so this workflow is the canonical
-# way to create or refresh darwin artifacts (issue #58).
+# Generates the darwin-{x64,arm64}-{nts,zts} FFI engine definitions on real
+# macOS runners and commits them back to the branch. Docker cannot produce
+# these (containers are Linux by construction), so this workflow is the
+# canonical way to create or refresh darwin artifacts (issue #58).
 #
 # Triggers:
 # - pull_request touching the generator: bootstraps/refreshes the artifacts on
@@ -31,16 +31,15 @@ env:
 
 jobs:
   generate:
-    name: Generate darwin-${{ matrix.arch }}-nts
+    name: Generate darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: macos-latest
-            arch: arm64
-          - runner: macos-15-intel
-            arch: x64
-    runs-on: ${{ matrix.runner }}
+        runner-arch:
+          - { runner: macos-latest, arch: arm64 }
+          - { runner: macos-15-intel, arch: x64 }
+        ts: [nts, zts]
+    runs-on: ${{ matrix.runner-arch.runner }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,18 +47,22 @@ jobs:
 
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
+        env:
+          phpts: ${{ matrix.ts == 'zts' && 'ts' || 'nts' }}
         with:
           php-version: ${{ env.PHP_MINOR }}
           extensions: ffi, opcache
           ini-values: ffi.enable=1
           coverage: none
 
-      - name: Assert the build matches the matrix leg (Darwin, NTS, ${{ matrix.arch }})
+      - name: Assert the build matches the matrix leg (Darwin, ${{ matrix.ts }}, ${{ matrix.runner-arch.arch }})
         run: |
-          php -r 'exit(PHP_OS_FAMILY === "Darwin" && !ZEND_THREAD_SAFE ? 0 : 1);' \
-            || { echo "::error::expected a Darwin NTS build"; exit 1; }
-          php -r 'exit((php_uname("m") === "x86_64") === ("${{ matrix.arch }}" === "x64") ? 0 : 1);' \
-            || { echo "::error::runner architecture does not match the ${{ matrix.arch }} matrix leg"; exit 1; }
+          php -r 'exit(PHP_OS_FAMILY === "Darwin" ? 0 : 1);' \
+            || { echo "::error::expected a Darwin build"; exit 1; }
+          php -r 'exit(ZEND_THREAD_SAFE === ("${{ matrix.ts }}" === "zts") ? 0 : 1);' \
+            || { echo "::error::PHP thread-safety mode does not match the ${{ matrix.ts }} matrix leg"; exit 1; }
+          php -r 'exit((php_uname("m") === "x86_64") === ("${{ matrix.runner-arch.arch }}" === "x64") ? 0 : 1);' \
+            || { echo "::error::runner architecture does not match the ${{ matrix.runner-arch.arch }} matrix leg"; exit 1; }
 
       # engine.h declares no FFI_LIB: symbols must resolve from the running
       # php process image. Prove that up front so a resolution problem fails
@@ -70,11 +73,26 @@ jobs:
             || { echo "::error::FFI cannot resolve engine symbols from the php process image on this build"; exit 1; }
 
       - name: Generate darwin artifacts
-        run: php tools/generator/generate.php --native --php=${{ env.PHP_MINOR }} --ts=nts
+        run: php tools/generator/generate.php --native --php=${{ env.PHP_MINOR }} --ts=${{ matrix.ts }}
+
+      # On failure, surface the intermediate build dir (emitted engine.h,
+      # preprocessed source, probe) so the broken declaration can be diagnosed
+      # from the run page without reproducing on macOS hardware.
+      - name: Stash the build directory for diagnosis
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/gen-debug"
+          cp -R "${TMPDIR:-/tmp}/"z-engine-generator-* "$RUNNER_TEMP/gen-debug/" 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: gen-debug-darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }}
+          path: ${{ runner.temp }}/gen-debug
+          if-no-files-found: ignore
 
       - name: Smoke-check the artifacts
         run: |
-          dir="include/${PHP_MINOR}/darwin-${{ matrix.arch }}-nts"
+          dir="include/${PHP_MINOR}/darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }}"
           for file in engine.h constants.php layouts.json probe.c; do
             test -s "${dir}/${file}" || { echo "::error::${dir}/${file} is missing or empty"; exit 1; }
           done
@@ -83,12 +101,12 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: darwin-${{ matrix.arch }}-nts
-          path: include/${{ env.PHP_MINOR }}/darwin-${{ matrix.arch }}-nts
+          name: darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }}
+          path: include/${{ env.PHP_MINOR }}/darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }}
           if-no-files-found: error
 
-  # A single commit job (instead of each runner pushing) serializes the two
-  # architectures into one commit and eliminates the push race between them.
+  # A single commit job (instead of each runner pushing) serializes all
+  # matrix legs into one commit and eliminates the push race between them.
   commit:
     name: Commit generated artifacts
     needs: generate
@@ -102,7 +120,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          pattern: darwin-*-nts
+          pattern: darwin-*
           path: include/${{ env.PHP_MINOR }}/
 
       - name: Commit and push if the artifacts changed
