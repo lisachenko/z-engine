@@ -163,6 +163,45 @@ class ReflectionValueTest extends TestCase
         $this->assertSame(spl_object_id($this), $object->getHandle());
     }
 
+    public function testDereferenceReturnsSameInstanceForPlainValue(): void
+    {
+        $refValue = new ReflectionValue(100);
+
+        // ZVAL_DEREF on a non-reference is an identity operation...
+        $this->assertSame($refValue, $refValue->dereference());
+        // ...and stays stable when applied repeatedly
+        $this->assertSame($refValue, $refValue->dereference()->dereference());
+    }
+
+    public function testDereferenceFollowsReferenceToInnerValue(): void
+    {
+        $variable = 42;
+        $this->assertReferenceArgumentDereferences($variable);
+        // The referenced variable is intact after inspection
+        $this->assertSame(42, $variable);
+    }
+
+    /**
+     * The frame argument inspection needs the value passed as a real by-ref argument,
+     * which makes the argument slot an IS_REFERENCE zval sharing the caller's variable
+     */
+    private function assertReferenceArgumentDereferences(mixed &$argument): void
+    {
+        $refValue = Core::$executor->getExecutionState()->getArgument(0);
+        $this->assertSame(ReflectionValue::IS_REFERENCE, $refValue->getBaseType());
+
+        $dereferenced = $refValue->dereference();
+        $this->assertNotSame($refValue, $dereferenced);
+        $this->assertSame(ReflectionValue::IS_LONG, $dereferenced->getBaseType());
+
+        $dereferenced->getNativeValue($nativeValue);
+        $this->assertSame(42, $nativeValue);
+
+        // Calling dereference() twice is stable: the inner value is not a reference,
+        // so the second call is an identity operation
+        $this->assertSame($dereferenced, $dereferenced->dereference());
+    }
+
     public function testGetRawString()
     {
         $value = self::class;

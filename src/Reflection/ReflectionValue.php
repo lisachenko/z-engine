@@ -445,6 +445,28 @@ class ReflectionValue implements ReferenceCountedInterface
     }
 
     /**
+     * Follows a reference to the value it points to (ZVAL_DEREF equivalent)
+     *
+     * Safe to call unconditionally, exactly like the C macro: for a non-reference value
+     * this is an identity operation and returns the SAME instance. For an IS_REFERENCE
+     * zval it returns a BORROWED view over the zend_reference's embedded `val` slot -
+     * nothing is addref'd or released, so the result stays valid only while the
+     * zend_reference itself is kept alive (by the referencing variables or by this
+     * wrapper's own payload reference).
+     *
+     * @see zend_types.h:ZVAL_DEREF(z) macro
+     */
+    public function dereference(): self
+    {
+        if ($this->getBaseType() !== self::IS_REFERENCE) {
+            return $this;
+        }
+
+        // Borrowed view over the inner val slot, same as ReferenceEntry::getValue()
+        return self::fromValueEntry($this->valueUnion()->ref->val);
+    }
+
+    /**
      * Type-friendly getter to return pointer
      */
     public function getRawPointer(): CData
