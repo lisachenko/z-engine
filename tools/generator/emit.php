@@ -248,6 +248,17 @@ if ($emitHeader) {
         ['clang', '-E', '-P', '-x', 'c', ...$includes, '-I' . $buildDir, ...$defines, $buildDir . '/input.c'],
         $buildDir . '/pre.c',
     );
+    if ($isWindows) {
+        // clang writes its -E output through the CRT in text mode, so pre.c
+        // arrives with CRLF line endings that would be sliced verbatim into
+        // engine.h. Normalize BEFORE the AST pass: clang then reports offsets
+        // into the normalized bytes, and the artifacts stay LF on every
+        // platform (the drift check compares against LF-normalized checkins).
+        file_put_contents(
+            $buildDir . '/pre.c',
+            str_replace("\r\n", "\n", (string) file_get_contents($buildDir . '/pre.c')),
+        );
+    }
     runTo(
         ['clang', '-x', 'c', '-std=c11', '-fsyntax-only', '-Xclang', '-ast-dump=json', ...$defines, $buildDir . '/pre.c'],
         $buildDir . '/ast.json',
