@@ -90,7 +90,7 @@ require __DIR__ . '/vendor/autoload.php';
 Core::init();
 ```
 
-For web (non-CLI) usage, enable FFI preloading by calling `Core::preload()` from the script named in your `opcache.preload` — this loads the engine definitions once at server start instead of per request.
+For web (non-CLI) usage, enable FFI preloading by calling `Core::preload()` from the script named in your `opcache.preload` — this loads the engine definitions once at server start instead of per request. (`opcache.preload` does not exist on Windows; there `Core::init()` in each process is the only path.)
 
 ### Hello, impossible
 
