@@ -167,7 +167,33 @@ final class ClangAstIndex
         $end   = $decl['range']['end']['offset'] + $decl['range']['end']['tokLen'];
         assert(is_int($begin) && is_int($end));
 
-        return substr($this->source, $begin, $end - $begin);
+        $text = substr($this->source, $begin, $end - $begin);
+
+        // Clang reports a truncated range for a typedef whose declarator
+        // carries a GNU attribute - e.g. PHP 8.5's tail-call VM handler type
+        // "typedef const zend_op *(__attribute__((preserve_none)) *
+        // zend_vm_opcode_handler_t)(...)" on clang builds ends at the
+        // declarator name, dropping the parameter list. A truncated
+        // declaration always has unbalanced parentheses: extend the slice up
+        // to the declaration's terminating top-level semicolon.
+        $depth = substr_count($text, '(') - substr_count($text, ')');
+        if ($depth > 0) {
+            $length = strlen($this->source);
+            for ($i = $end; $i < $length; $i++) {
+                $char = $this->source[$i];
+                if ($char === ';' && $depth === 0) {
+                    break;
+                }
+                if ($char === '(') {
+                    $depth++;
+                } elseif ($char === ')') {
+                    $depth--;
+                }
+                $text .= $char;
+            }
+        }
+
+        return $text;
     }
 
     /**
