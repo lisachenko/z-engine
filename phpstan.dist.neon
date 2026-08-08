@@ -90,6 +90,7 @@ parameters:
         ZvalTypeShape: 'stdClass&object{type: int, type_flags: int}'
         ZvalU1Shape: 'stdClass&object{v: ZvalTypeShape, type_info: int}'
         ZvalU2Shape: 'stdClass&object{constant_flags: int, extra: int, next: int}'
-        ZendValueShape: 'stdClass&object{lval: int, dval: float, str: FFI\CData, ptr: FFI\CData, counted: FFI\CData}'
+        ZendReferenceShape: 'stdClass&object{gc: FFI\CData, val: FFI\CData, sources: FFI\CData}'
+        ZendValueShape: 'stdClass&object{lval: int, dval: float, str: FFI\CData, ptr: FFI\CData, counted: FFI\CData, ref: ZendReferenceShape}'
         ZvalShape: 'stdClass&object{value: ZendValueShape, u1: ZvalU1Shape, u2: ZvalU2Shape}'
         ZendFileCacheMetaInfoShape: 'stdClass&object{magic: FFI\CData, system_id: FFI\CData, mem_size: int, str_size: int, script_offset: int, timestamp: int, checksum: int}'
