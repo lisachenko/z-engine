@@ -147,10 +147,49 @@ class ExecutionData
      * Returns the current object scope
      *
      * This contains following: this + call_info + num_args
+     *
+     * WARNING: the This zval doubles as the frame's call-info word - its
+     * u1.type_info carries the ZEND_CALL_* frame flags packed next to the type,
+     * so it is never a bare IS_OBJECT: a method frame reads as IS_OBJECT_EX plus
+     * call-info bits (776 and up), and a frame without a bound object still has
+     * flags there. Never compare getThis()->getType() against IS_OBJECT to detect
+     * a bound $this - use hasThis() / getThisObject() instead.
      */
     public function getThis(): ReflectionValue
     {
         return ReflectionValue::fromValueEntry(Core::addr($this->pointer->This));
+    }
+
+    /**
+     * Checks whether this frame has a bound $this object
+     *
+     * The presence of an object scope is flagged by ZEND_CALL_HAS_THIS in the
+     * frame's call_info, which lives in the type_info of the This zval (see the
+     * getThis() warning). Plain function frames, static calls and the main scope
+     * carry no bound object.
+     */
+    public function hasThis(): bool
+    {
+        // ZEND_CALL_INFO(call): the frame flags live in the type_info of This
+        $callInfo = $this->getThisZvalShape()->u1->type_info;
+
+        return ($callInfo & Core::engineConstant('ZEND_CALL_HAS_THIS')) !== 0;
+    }
+
+    /**
+     * Returns the bound $this object of this frame, or null when the frame has none
+     * (plain function, static call, main scope)
+     *
+     * Unlike getThis() this checks the ZEND_CALL_HAS_THIS frame flag first, so it
+     * is the safe way to observe the object scope of an arbitrary frame.
+     */
+    public function getThisObject(): ?ReflectionValue
+    {
+        if (!$this->hasThis()) {
+            return null;
+        }
+
+        return $this->getThis();
     }
 
     /**

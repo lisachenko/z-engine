@@ -213,6 +213,51 @@ class ExecutionDataTest extends TestCase
         $self->assertInstanceOf(\stdClass::class, $this);
     }
 
+    public function testHasThisAndGetThisObjectForInstanceMethodFrame(): void
+    {
+        $state = Core::$executor->getExecutionState();
+
+        // A method frame carries a bound object: its This zval reads as
+        // IS_OBJECT_EX plus call-info bits, never a bare IS_OBJECT
+        $this->assertTrue($state->hasThis());
+
+        $thisObject = $state->getThisObject();
+        $this->assertNotNull($thisObject);
+        $thisObject->getNativeValue($instance);
+        $this->assertSame($this, $instance);
+    }
+
+    public function testHasThisAndGetThisObjectForStaticMethodFrame(): void
+    {
+        [$hasThis, $thisObject] = self::observeFrameObjectScopeFromStaticMethod();
+
+        $this->assertFalse($hasThis);
+        $this->assertNull($thisObject);
+    }
+
+    public function testHasThisAndGetThisObjectForPlainFunctionFrame(): void
+    {
+        // A static closure frame is a plain function frame: no bound object scope
+        [$hasThis, $thisObject] = (static function (): array {
+            $state = Core::$executor->getExecutionState();
+
+            return [$state->hasThis(), $state->getThisObject()];
+        })();
+
+        $this->assertFalse($hasThis);
+        $this->assertNull($thisObject);
+    }
+
+    /**
+     * @return array{0: bool, 1: ?ReflectionValue}
+     */
+    private static function observeFrameObjectScopeFromStaticMethod(): array
+    {
+        $state = Core::$executor->getExecutionState();
+
+        return [$state->hasThis(), $state->getThisObject()];
+    }
+
     public function testGetFunction()
     {
         $reflectionFunction = Core::$executor->getExecutionState()->getFunction();
