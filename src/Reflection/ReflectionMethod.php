@@ -25,6 +25,12 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
 {
     use FunctionLikeTrait;
 
+    /**
+     * Keeps the anonymous publication-board instance (and thus its class entry) alive
+     * for the whole process
+     */
+    private static ?object $publicationBoard = null;
+
     public function __construct(string $className, string $methodName)
     {
         parent::__construct($className, $methodName);
@@ -94,10 +100,13 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      *
      * Property hook bodies are real zend_function entries, but the engine does not publish
      * them in the class function table - they are only reachable via zend_property_info.hooks.
-     * The native ReflectionMethod constructor resolves methods through the function table, so
-     * the hook is published there under its mangled name ("$prop::get"/"$prop::set") just for
-     * the duration of the native construction and then unpublished again. The transient entry
-     * is removed with the table destructor disabled, so the hook function itself is untouched.
+     * The native ReflectionMethod constructor resolves methods through a function table, so
+     * the hook is published under its mangled name ("$prop::get"/"$prop::set") just for the
+     * duration of the native construction and then unpublished again. The publication target
+     * is a process-local board class, never the declaring class itself - an opcache-immutable
+     * class keeps its function table in shared memory, where a transient insert corrupts the
+     * table for every process. The transient entry is removed with the table destructor
+     * disabled, so the hook function itself is untouched.
      *
      * @param CData $functionEntry Pointer to the hook zend_function structure
      */
@@ -116,12 +125,23 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
 
         $scope = $commonPointer->scope;
         assert($scope instanceof CData);
-        $functionTable = Core::addr($scope->function_table);
-        $methodTable   = HashTable::fromCData($functionTable);
+        $methodTable = HashTable::fromCData(Core::addr($scope->function_table));
         if ($methodTable->find($lowerName) !== null) {
             // Already published (eg by a future engine version) - use the regular path
             return static::fromCData($functionEntry);
         }
+
+        // The declaring class's own method table is NOT a valid publication target: with
+        // opcache the class may be immutable, its function table living in shared memory
+        // with an exactly-sized bucket array - inserting forces a resize that reallocates
+        // the shared arData with the request allocator, corrupting the table for every
+        // process that maps it. The transient entry goes into a process-local publication
+        // board instead: the native constructor resolves the function through the board
+        // but adopts the hook's own scope, so the reflection still reports the real
+        // declaring class, and no shared engine structure is ever written.
+        $boardName   = get_class(self::publicationBoard());
+        $methodTable = (new ReflectionClass($boardName))->getMethodTable();
+        $boardTable  = $methodTable->getRawValue();
 
         // The temporary container is released right after the engine copied it into a bucket
         $rawFunction = Core::cast('zend_function *', $functionEntry)[0];
@@ -130,16 +150,41 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
         $methodTable->add($lowerName, $valueEntry);
         $valueEntry->release();
         try {
-            return static::fromCData($functionEntry);
+            /** @var ReflectionMethod $reflectionMethod */
+            $reflectionMethod = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+            Core::callParentConstructor(
+                $reflectionMethod,
+                static::class,
+                $boardName,
+                StringEntry::fromCData($functionNamePtr)->getStringValue(),
+            );
+            $reflectionMethod->pointer = $functionEntry;
+
+            return $reflectionMethod;
         } finally {
             // Unpublish the transient entry without destroying the hook function: the table
             // destructor (zend_function_dtor) is disabled around the delete, so the bucket
             // removal releases nothing - the hook stays owned by zend_property_info.hooks
-            $previousDestructor         = $functionTable->pDestructor;
-            $functionTable->pDestructor = null;
+            $previousDestructor      = $boardTable->pDestructor;
+            $boardTable->pDestructor = null;
             $methodTable->delete($lowerName);
-            $functionTable->pDestructor = $previousDestructor;
+            $boardTable->pDestructor = $previousDestructor;
         }
+    }
+
+    /**
+     * Process-local class whose method table hosts transient hook publications
+     *
+     * An anonymous class is created at runtime and is therefore never persisted by
+     * opcache: unlike a file-declared class it can not become IMMUTABLE with its
+     * function table in shared memory, which is what makes it a safe mutation target.
+     * The instance is cached so the class entry stays alive for the whole process.
+     */
+    private static function publicationBoard(): object
+    {
+        self::$publicationBoard ??= new class {};
+
+        return self::$publicationBoard;
     }
 
     /**
