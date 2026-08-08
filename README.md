@@ -44,10 +44,12 @@ Engine memory layouts change between every PHP minor version, so each PHP minor 
 
 | PHP | OS / Arch / TS | Branch | Status |
 |-----|----------------|--------|--------|
-| 8.5 | linux-x64 (nts, zts), darwin-x64 (nts, zts), darwin-arm64 (nts, zts) | `master` | ✅ supported |
+| 8.5 | linux-x64 (nts, zts), darwin-x64 (nts), darwin-arm64 (nts, zts) | `master` | ✅ supported¹ |
 | 8.4 | linux-x64 (nts, zts), darwin-x64 (nts, zts), darwin-arm64 (nts, zts) | `8.4` | ✅ supported |
 | 8.0 | linux-x64-nts | `8.0` | 🧊 frozen (legacy) |
 | Windows | — | — | 📋 [tracked in issues](https://github.com/lisachenko/z-engine/issues) |
+
+¹ `darwin-x64-zts` on 8.5 lands as soon as a ZTS PHP 8.5 build exists for Intel macOS runners — the generation workflow picks it up automatically.
 
 > **Version matching is not optional.** Running Z-Engine against a PHP minor it was not built for corrupts memory. `Core::init()` enforces the match and aborts with a clear message rather than letting you crash.
 

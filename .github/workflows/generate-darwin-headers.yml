@@ -55,24 +55,40 @@ jobs:
           ini-values: ffi.enable=1
           coverage: none
 
-      - name: Assert the build matches the matrix leg (Darwin, ${{ matrix.ts }}, ${{ matrix.runner-arch.arch }})
+      - name: Assert the build matches the matrix leg (Darwin, ${{ matrix.runner-arch.arch }})
         run: |
           php -r 'exit(PHP_OS_FAMILY === "Darwin" ? 0 : 1);' \
             || { echo "::error::expected a Darwin build"; exit 1; }
-          php -r 'exit(ZEND_THREAD_SAFE === ("${{ matrix.ts }}" === "zts") ? 0 : 1);' \
-            || { echo "::error::PHP thread-safety mode does not match the ${{ matrix.ts }} matrix leg"; exit 1; }
           php -r 'exit((php_uname("m") === "x86_64") === ("${{ matrix.runner-arch.arch }}" === "x64") ? 0 : 1);' \
             || { echo "::error::runner architecture does not match the ${{ matrix.runner-arch.arch }} matrix leg"; exit 1; }
+
+      # setup-php cannot provide every thread-safety mode on every runner (a
+      # ZTS build of the newest minor may not exist for Intel yet). A leg whose
+      # requested mode is unavailable skips cleanly instead of failing: the
+      # commit job pushes whatever the other legs produced, and the missing
+      # artifacts self-heal on a later run once the build exists - CI's
+      # presence guards keep the gap visible as warnings, never silent green.
+      - name: Check the requested thread-safety mode is available
+        id: build
+        run: |
+          if php -r 'exit(ZEND_THREAD_SAFE === ("${{ matrix.ts }}" === "zts") ? 0 : 1);'; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::setup-php has no ${{ matrix.ts }} PHP ${PHP_MINOR} build for darwin-${{ matrix.runner-arch.arch }} - skipping this leg"
+          fi
 
       # engine.h declares no FFI_LIB: symbols must resolve from the running
       # php process image. Prove that up front so a resolution problem fails
       # here with a clear message instead of deep inside the validation stage.
       - name: FFI symbol-resolution preflight
+        if: steps.build.outputs.available == 'true'
         run: |
           php -d ffi.enable=1 -r '$e = FFI::cdef("const char *get_zend_version(void);"); echo $e->get_zend_version(), PHP_EOL;' \
             || { echo "::error::FFI cannot resolve engine symbols from the php process image on this build"; exit 1; }
 
       - name: Generate darwin artifacts
+        if: steps.build.outputs.available == 'true'
         run: php tools/generator/generate.php --native --php=${{ env.PHP_MINOR }} --ts=${{ matrix.ts }}
 
       # On failure, surface the intermediate build dir (emitted engine.h,
@@ -90,22 +106,8 @@ jobs:
           path: ${{ runner.temp }}/gen-debug
           if-no-files-found: ignore
 
-      # On failure, surface the intermediate build dir (emitted engine.h,
-      # preprocessed source, probe) so the broken declaration can be diagnosed
-      # from the run page without reproducing on macOS hardware.
-      - name: Stash the build directory for diagnosis
-        if: failure()
-        run: |
-          mkdir -p "$RUNNER_TEMP/gen-debug"
-          cp -R "${TMPDIR:-/tmp}/"z-engine-generator-* "$RUNNER_TEMP/gen-debug/" 2>/dev/null || true
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: gen-debug-darwin-${{ matrix.arch }}-nts
-          path: ${{ runner.temp }}/gen-debug
-          if-no-files-found: ignore
-
       - name: Smoke-check the artifacts
+        if: steps.build.outputs.available == 'true'
         run: |
           dir="include/${PHP_MINOR}/darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }}"
           for file in engine.h constants.php layouts.json probe.c; do
@@ -115,6 +117,7 @@ jobs:
             || { echo "::error::${dir}/engine.h has no FFI_SCOPE declaration"; exit 1; }
 
       - uses: actions/upload-artifact@v4
+        if: steps.build.outputs.available == 'true'
         with:
           name: darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }}
           path: include/${{ env.PHP_MINOR }}/darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }}
