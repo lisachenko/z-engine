@@ -229,7 +229,11 @@ $index = null;
 
 // --- 2. Preprocess the engine headers with clang and index the AST ---------
 if ($emitHeader) {
-    $inputC = <<<'C'
+    // PHP 8.5's Windows overflow helpers call intsafe.h functions
+    // (LongLongAdd &co), but the engine headers only pull <intsafe.h> in
+    // for MSVC proper - under clang the calls would parse as implicit
+    // declarations and fail the AST pass. Include it up front there.
+    $inputC = ($isWindows ? "#include <intsafe.h>\n" : '') . <<<'C'
     #include "php.h"
     #include "zend_ast.h"
     #include "zend_attributes.h"

@@ -33,7 +33,13 @@ final class ProbeGenerator
 
     public function generateProbeSource(string $supplementFile): string
     {
-        $lines   = [];
+        $lines = [];
+        if (PHP_OS_FAMILY === 'Windows') {
+            // The engine headers only pull <intsafe.h> in for MSVC proper;
+            // under clang the 8.5 overflow helpers (LongLongAdd &co) would
+            // otherwise parse as implicit declarations (see emit.php).
+            $lines[] = '#include <intsafe.h>';
+        }
         $lines[] = '#include "php.h"';
         $lines[] = '#include "zend_ast.h"';
         $lines[] = '#include "zend_attributes.h"';
