@@ -24,8 +24,11 @@ final class ReflectionOpcacheFileTest extends TestCase
 
     protected function setUp(): void
     {
-        if (\ZEND_THREAD_SAFE) {
-            self::markTestSkipped('The file-cache relocator does not support ZTS payloads yet (issue #118)');
+        if (!PayloadRelocator::isSupported()) {
+            self::markTestSkipped(
+                'The file-cache relocator supports 64-bit POSIX NTS payloads only'
+                . ' (ZTS is issue #118, Windows is issue #119)',
+            );
         }
     }
 

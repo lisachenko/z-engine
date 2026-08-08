@@ -156,6 +156,92 @@ jobs:
         if: steps.artifacts.outputs.present == 'true'
         run: php -d ffi.enable=1 -d zend.assertions=1 -d opcache.jit=off tools/examples/worker-loop.php
 
+  tests-windows:
+    name: Tests (Windows x64, ${{ matrix.ts }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { ts: nts, dll: php8.dll }
+          - { ts: zts, dll: php8ts.dll }
+    defaults:
+      run:
+        # Git Bash: keeps these step bodies identical to the other test jobs'.
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      # The windows artifacts can only be generated on Windows runners (see
+      # the "Generate windows headers" workflow). Until they are committed
+      # this leg warns and skips instead of failing, so the matrix keeps
+      # Windows visible without blocking unrelated work; once the artifacts
+      # land, every step below runs for real.
+      - name: Check the generated definitions are committed
+        id: artifacts
+        run: |
+          if [ -f "include/${PHP_MINOR}/windows-x64-${{ matrix.ts }}/engine.h" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::include/${PHP_MINOR}/windows-x64-${{ matrix.ts }} is not committed yet - run the 'Generate windows headers' workflow (issue #59)"
+          fi
+
+      # Same setup as the Linux tests job: opcache loaded but inactive in the
+      # runner process, JIT off everywhere (see the comment there).
+      - name: Set up PHP
+        if: steps.artifacts.outputs.present == 'true'
+        uses: shivammathur/setup-php@v2
+        env:
+          phpts: ${{ matrix.ts == 'zts' && 'ts' || 'nts' }}
+        with:
+          php-version: ${{ env.PHP_MINOR }}
+          extensions: ffi, opcache
+          ini-values: ffi.enable=1, zend.assertions=1, opcache.enable=1, opcache.enable_cli=0, opcache.jit=off, opcache.jit_buffer_size=0
+          coverage: none
+
+      - name: Assert the thread-safety mode matches the matrix leg
+        if: steps.artifacts.outputs.present == 'true'
+        run: |
+          php -r 'exit(ZEND_THREAD_SAFE === ("'"${{ matrix.ts }}"'" === "zts") ? 0 : 1);' \
+            || { echo "::error::PHP thread-safety mode does not match the ${{ matrix.ts }} matrix leg"; exit 1; }
+
+      - name: Assert the opcache extension is available to the test runner
+        if: steps.artifacts.outputs.present == 'true'
+        run: |
+          php -r 'exit(extension_loaded("Zend OPcache") ? 0 : 1);' \
+            || { echo "::error::Zend OPcache is not loaded - the opcache tests would silently skip"; exit 1; }
+
+      # Unlike Linux/macOS there is no process-image symbol resolution on
+      # Windows: FFI binds the engine DLL explicitly (Core passes it to
+      # FFI::cdef; the generated engine.h names it as FFI_LIB for the preload
+      # path). Prove the DLL binds and that this FFI build supports
+      # __vectorcall (ZEND_FASTCALL) with its @@N export mangling.
+      - name: FFI symbol-resolution preflight
+        if: steps.artifacts.outputs.present == 'true'
+        run: |
+          php -d ffi.enable=1 -r '$e = FFI::cdef("const char *get_zend_version(void);", "${{ matrix.dll }}"); echo $e->get_zend_version(), PHP_EOL;' \
+            || { echo "::error::FFI cannot resolve engine symbols from ${{ matrix.dll }} on this build"; exit 1; }
+          php -d ffi.enable=1 -r 'FFI::cdef("extern unsigned long long __vectorcall zend_string_hash_func(void *str);", "${{ matrix.dll }}");' \
+            || { echo "::error::FFI cannot bind a __vectorcall symbol from ${{ matrix.dll }} - this build lacks vectorcall support"; exit 1; }
+
+      - name: Install dependencies
+        if: steps.artifacts.outputs.present == 'true'
+        uses: ramsey/composer-install@v3
+
+      - name: Run test suite
+        if: steps.artifacts.outputs.present == 'true'
+        run: composer test
+
+      # No opcache/SHM non-skip gate here (unlike Linux/macOS): the file-cache
+      # relocator does not support Windows payloads and opcache.preload does
+      # not exist on Windows, so those tests self-skip by design. The gate
+      # lands together with the relocator port (issue #119).
+
+      - name: Worker-loop soak (flat memory after warm-up)
+        if: steps.artifacts.outputs.present == 'true'
+        run: php -d ffi.enable=1 -d zend.assertions=1 -d opcache.jit=off tools/examples/worker-loop.php
+
   static-analysis:
     name: PHPStan (level max)
     runs-on: ubuntu-latest
@@ -338,5 +424,66 @@ jobs:
         run: |
           if ! git diff --exit-code -- "include/${PHP_MINOR}/darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }}"; then
             echo "::error::Generated darwin engine definitions are out of date. Run the 'Generate darwin headers' workflow and merge its commit."
+            exit 1
+          fi
+
+  # The windows counterpart of header-drift: regenerates natively on a
+  # Windows runner (docker cannot produce windows artifacts) and diffs only
+  # the directory this runner can regenerate.
+  header-drift-windows:
+    name: Generated windows headers up to date (${{ matrix.ts }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ts: [nts, zts]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # The committed artifacts are LF; keep the checkout byte-exact so the
+      # regeneration diff below compares content, not line endings.
+      - name: Keep line endings byte-exact
+        run: git config --global core.autocrlf input
+      - uses: actions/checkout@v4
+
+      - name: Check the generated definitions are committed
+        id: artifacts
+        run: |
+          if [ -f "include/${PHP_MINOR}/windows-x64-${{ matrix.ts }}/engine.h" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::include/${PHP_MINOR}/windows-x64-${{ matrix.ts }} is not committed yet - run the 'Generate windows headers' workflow (issue #59)"
+          fi
+
+      - name: Set up PHP
+        if: steps.artifacts.outputs.present == 'true'
+        uses: shivammathur/setup-php@v2
+        env:
+          phpts: ${{ matrix.ts == 'zts' && 'ts' || 'nts' }}
+        with:
+          php-version: ${{ env.PHP_MINOR }}
+          extensions: ffi
+          ini-values: ffi.enable=1
+          coverage: none
+
+      # clang locates the MSVC CRT and Windows SDK headers through the INCLUDE
+      # environment variable this step exports.
+      - name: Set up the MSVC toolchain environment
+        if: steps.artifacts.outputs.present == 'true'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Regenerate engine definitions natively
+        if: steps.artifacts.outputs.present == 'true'
+        run: php tools/generator/generate.php --native --php=${{ env.PHP_MINOR }} --ts=${{ matrix.ts }}
+
+      - name: Fail if the committed artifacts are stale
+        if: steps.artifacts.outputs.present == 'true'
+        run: |
+          if ! git diff --exit-code -- "include/${PHP_MINOR}/windows-x64-${{ matrix.ts }}"; then
+            echo "::error::Generated windows engine definitions are out of date. Run the 'Generate windows headers' workflow and merge its commit."
             exit 1
           fi
