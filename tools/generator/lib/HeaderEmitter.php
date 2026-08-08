@@ -193,9 +193,28 @@ final class HeaderEmitter
         if ($typedef === null) {
             return null;
         }
+        $offset = $this->index->startOffset($typedef);
+
+        // An opaque typedef must never slice its source declaration when that
+        // declaration defines the record inline (Darwin's "typedef struct
+        // __sFILE { ... } FILE;" - unlike glibc, which forward-declares the
+        // tag separately): the slice would drag the full libc body and its
+        // by-value member types into the header. Synthesize the bodyless
+        // form instead; the zero-length range keeps the containment dedup
+        // from swallowing the record's own forward declaration.
+        $tag = $this->index->typedefUnderlyingTag($name);
+        if ($tag !== null && in_array($name, $this->opaque, true)) {
+            $keyword = $this->index->isUnion($tag) ? 'union' : 'struct';
+
+            return [
+                'offset' => $offset,
+                'end'    => $offset,
+                'text'   => "typedef {$keyword} {$tag} {$name};",
+            ];
+        }
 
         return [
-            'offset' => $this->index->startOffset($typedef),
+            'offset' => $offset,
             'end'    => $this->index->endOffset($typedef),
             'text'   => $this->index->sliceText($typedef) . ';',
         ];

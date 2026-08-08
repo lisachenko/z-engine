@@ -57,7 +57,7 @@ offsets instead of the plain extern symbols, see issue #60). Regenerate them
 with:
 
 ```bash
-composer gen-headers          # all targets for this branch (needs Docker)
+composer gen-headers          # all targets for this branch (needs Docker on Linux)
 ```
 
 The generator (`tools/generator/`) runs inside the official `php:<minor>` Docker
@@ -72,40 +72,55 @@ If you touch a struct the PHP code dereferences, add it to `layout_structs` in
 FFI-loads the header and asserts every offset against the C compiler, so a
 wrong header cannot be produced.
 
-### Regenerating without Docker (sandboxed/proxied environments)
+### Regenerating without Docker (native mode)
 
-When Docker or the Debian package mirrors are unreachable (as in restricted CI
-sandboxes), the generator can run directly on the host — the Docker image is a
-convenience, not a requirement. `emit.php` derives everything from the
+`generate.php --native` runs the pipeline directly on the host — no Docker.
+It is auto-selected on non-Linux hosts (a Docker container is Linux by
+construction, so it can never produce e.g. darwin artifacts) and is also the
+escape hatch for sandboxed/proxied Linux environments where Docker or the
+Debian package mirrors are unreachable. `emit.php` derives everything from the
 *running* PHP build (`php-config --includes`, clang over the real headers, a C
 probe compiled with `cc`); the php-src tree is only needed to slice the private
-structs (`Zend/zend_closures.c`, `ext/opcache/ZendAccelerator.h`,
-`ext/opcache/zend_file_cache.c`). Verified recipe:
+structs, and native mode fetches exactly those three files
+(`Zend/zend_closures.c`, `ext/opcache/ZendAccelerator.h`,
+`ext/opcache/zend_file_cache.c`) from
+`raw.githubusercontent.com/php/php-src/php-<version>/` automatically (or use
+`--php-src=DIR` to point at a matching tree).
 
-1. Host needs: `clang`, `cc`, `php-config` + dev headers for the exact running
-   PHP version, ext-ffi. Fetch the matching `Zend/zend_closures.c`,
-   `ext/opcache/ZendAccelerator.h` and `ext/opcache/zend_file_cache.c` (and
-   nothing else) from `raw.githubusercontent.com/php/php-src/php-<version>/`.
-   For the `zts` target the running PHP must itself be a matching
-   `--enable-zts` **release** build of the same minor (emit.php derives the
-   thread-safety mode, the TSRM symbols and the layouts from the interpreter
-   it runs under).
-2. First run against the **committed** `symbols.php` into a scratch directory
-   and `diff` against `include/<minor>/<platform>/` — the output must be
-   byte-identical (it was, verified on Ubuntu clang-18 vs the trixie image:
-   the emitter normalizes declarations from the clang AST, so compiler
-   version does not leak into the artifacts). If the diff is clean, host
-   regeneration is equivalent to the Docker/CI pipeline for this host. An
-   NTS pre-check validates the host pipeline for the ZTS target too — the
-   emitter and probe code paths are identical, only the manifest branch
-   differs.
-3. Only then apply the `symbols.php` change and regenerate into `include/`
-   for real: `php -d memory_limit=2G tools/generator/emit.php
-   --php-src=<dir> [--out=...]`.
+```bash
+php tools/generator/generate.php --native   # generates for the running interpreter
+```
 
-The byte-identical pre-check is what makes this safe: the `header-drift` CI
-job re-runs the Docker pipeline and fails on any divergence, so never skip
-step 2.
+Native mode generates **for the interpreter that runs it only**: host needs
+`clang`, `cc`, `php-config` matching the exact running PHP version, and
+ext-ffi. For a `zts` target the running PHP must itself be a matching
+`--enable-zts` **release** build of the same minor (emit.php derives the
+thread-safety mode, the TSRM symbols and the layouts from the interpreter it
+runs under).
+
+When changing `symbols.php`, first run native mode against the **committed**
+manifest and confirm `git diff` on `include/<minor>/<platform>/` is clean —
+the output must be byte-identical to the Docker pipeline's (verified on
+Ubuntu clang-18 vs the trixie image: the emitter normalizes declarations from
+the clang AST, so compiler version does not leak into the artifacts). Only
+then apply the manifest change and regenerate for real. The `header-drift`
+CI jobs re-run the pipeline (Docker for linux, native for darwin) and fail on
+any divergence, so never skip the pre-check.
+
+### macOS (darwin) artifacts
+
+The `darwin-x64-nts` / `darwin-arm64-nts` artifacts (issue #58) can only be
+generated on real macOS machines. The **"Generate darwin headers"** workflow
+(`.github/workflows/generate-darwin-headers.yml`) is the canonical way to
+create or refresh them: it runs `generate.php --native` on both macOS runner
+architectures, validates the header via FFI against the C probe, and commits
+both directories back to the branch in a single commit. It triggers
+automatically on pull requests that touch `tools/generator/**` (same-repo
+PRs), or manually via `workflow_dispatch` against any branch.
+
+Darwin scope is currently **NTS only** (Homebrew/setup-php default). The 8.4
+artifacts are maintained on the `8.4` branch; `include/8.5/darwin-*-nts` is
+maintained here. Follow-up work: darwin ZTS.
 
 ## Running tests safely
 
