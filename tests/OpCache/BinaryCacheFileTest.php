@@ -58,7 +58,7 @@ final class BinaryCacheFileTest extends TestCase
             self::assertSame($reference->metaInfo()->scriptOffset(), $file->metaInfo()->scriptOffset());
         } finally {
             $probe = $cacheDir . '/probe';
-            exec('rm -rf ' . escapeshellarg($cacheDir));
+            self::removeDirectory($cacheDir);
             self::assertDirectoryDoesNotExist($probe);
         }
     }

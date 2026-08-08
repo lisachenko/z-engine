@@ -6,12 +6,21 @@
  * ground truth from layouts.json. Run as a subprocess by emit.php so that a
  * parser failure or ABI mismatch fails the build instead of corrupting it.
  *
- * Usage: php -d ffi.enable=1 validate.php <build-dir>
+ * Usage: php -d ffi.enable=1 validate.php <build-dir> [library]
+ *
+ * The optional library is handed to FFI::cdef() as the module to resolve
+ * symbols against. Windows needs it (there is no process-image lookup like
+ * RTLD_DEFAULT), and it makes this stage a full symbol check: cdef() resolves
+ * EVERY declared function eagerly, including the __vectorcall ones whose
+ * lookups FFI mangles into MSVC's decorated name@@N exports. A wrong FFI_LIB
+ * or a botched calling convention therefore fails generation right here rather
+ * than at the user's first Core::init().
  */
 
 declare(strict_types=1);
 
 $buildDir = $argv[1] ?? '';
+$library  = $argv[2] ?? null;
 if (!is_dir($buildDir)) {
     fwrite(STDERR, "validate.php: build dir '{$buildDir}' not found\n");
     exit(1);
@@ -42,9 +51,10 @@ if ((bool) $layouts['meta']['zts'] !== (bool) ZEND_THREAD_SAFE) {
 }
 
 try {
-    $ffi = FFI::cdef($header);
+    $ffi = FFI::cdef($header, $library);
 } catch (Throwable $error) {
-    fwrite(STDERR, "validate.php: FFI cannot parse engine.h: {$error->getMessage()}\n");
+    $problem = $library === null ? 'cannot parse engine.h' : "cannot parse engine.h or resolve its symbols in {$library}";
+    fwrite(STDERR, "validate.php: FFI {$problem}: {$error->getMessage()}\n");
     // FFI parse errors carry a line number; print the surrounding header so a
     // CI log alone is enough to diagnose which declaration broke.
     if (preg_match('/at line (\d+)/', $error->getMessage(), $matches) === 1) {
@@ -91,4 +101,5 @@ if ($failures > 0) {
     exit(1);
 }
 
-echo '[validate] engine.h parsed by FFI; ' . count($layouts['structs']) . ' struct layouts match the C compiler exactly';
+echo '[validate] engine.h parsed by FFI' . ($library === null ? '' : " and fully resolved against {$library}")
+    . '; ' . count($layouts['structs']) . ' struct layouts match the C compiler exactly';

@@ -147,7 +147,10 @@ return [
         // request is already over (FFI::free needs the original owning CData, which is a
         // PHP static and therefore request-scoped). Used by Core::persistentFree for
         // persistent blocks minted by z-engine or by the engine's pemalloc(..., 1).
-        'free',
+        // Windows is the exception: symbols resolve through php8.dll there, and the
+        // engine DLL does not re-export the CRT - Core::persistentFree binds free()
+        // from ucrtbase.dll (the very heap the official builds allocate from) instead.
+        ...(PHP_OS_FAMILY === 'Windows' ? [] : ['free']),
         // TSRM (ZTS builds only): the exported accessor for the calling thread's
         // local-storage block. EG/CG live at tsrm_get_ls_cache() + *_globals_offset -
         // the same fast path the engine's own EG()/CG() macros compile to (issue #60).
@@ -284,6 +287,7 @@ return [
         'FILE',
         '_IO_FILE', // glibc
         '__sFILE',  // Darwin libc
+        '_iobuf',   // MSVC UCRT
     ],
 
     'opcode_header' => 'Zend/zend_vm_opcodes.h',
