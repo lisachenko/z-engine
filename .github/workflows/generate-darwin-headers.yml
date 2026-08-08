@@ -72,6 +72,21 @@ jobs:
       - name: Generate darwin artifacts
         run: php tools/generator/generate.php --native --php=${{ env.PHP_MINOR }} --ts=nts
 
+      # On failure, surface the intermediate build dir (emitted engine.h,
+      # preprocessed source, probe) so the broken declaration can be diagnosed
+      # from the run page without reproducing on macOS hardware.
+      - name: Stash the build directory for diagnosis
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/gen-debug"
+          cp -R "${TMPDIR:-/tmp}/"z-engine-generator-* "$RUNNER_TEMP/gen-debug/" 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: gen-debug-darwin-${{ matrix.arch }}-nts
+          path: ${{ runner.temp }}/gen-debug
+          if-no-files-found: ignore
+
       - name: Smoke-check the artifacts
         run: |
           dir="include/${PHP_MINOR}/darwin-${{ matrix.arch }}-nts"

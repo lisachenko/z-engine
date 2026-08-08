@@ -45,6 +45,15 @@ try {
     $ffi = FFI::cdef($header);
 } catch (Throwable $error) {
     fwrite(STDERR, "validate.php: FFI cannot parse engine.h: {$error->getMessage()}\n");
+    // FFI parse errors carry a line number; print the surrounding header so a
+    // CI log alone is enough to diagnose which declaration broke.
+    if (preg_match('/at line (\d+)/', $error->getMessage(), $matches) === 1) {
+        $lines = explode("\n", $header);
+        $line  = (int) $matches[1];
+        for ($i = max(0, $line - 6); $i < min(count($lines), $line + 5); $i++) {
+            fwrite(STDERR, sprintf("%s %4d | %s\n", $i + 1 === $line ? '>' : ' ', $i + 1, $lines[$i]));
+        }
+    }
     exit(1);
 }
 
