@@ -275,9 +275,15 @@ return [
     // would make the generated header non-reproducible across build hosts.
     // Emitting only a forward declaration keeps the header stable and is all
     // FFI needs for pointer usage.
+    //
+    // The list is a union across platforms: entries are matched by name
+    // against the build's clang AST, so a name that does not exist on the
+    // current libc (glibc's _IO_FILE on Darwin, Darwin's __sFILE on glibc)
+    // is simply never matched and does not affect the emitted header.
     'opaque' => [
         'FILE',
-        '_IO_FILE',
+        '_IO_FILE', // glibc
+        '__sFILE',  // Darwin libc
     ],
 
     'opcode_header' => 'Zend/zend_vm_opcodes.h',
