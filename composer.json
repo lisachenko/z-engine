@@ -50,7 +50,7 @@
         "phpstan": "Run static analysis at the maximum level",
         "cs:check": "Check coding standards without fixing",
         "cs:fix": "Fix coding standards",
-        "gen-headers": "Regenerate FFI engine definitions from the PHP source (requires docker)"
+        "gen-headers": "Regenerate FFI engine definitions from the PHP source (docker on Linux, native toolchain elsewhere)"
     },
     "config": {
         "sort-packages": true

@@ -27,7 +27,7 @@ body:
     id: platform
     attributes:
       label: OS and architecture
-      placeholder: 'Linux x86_64'
+      placeholder: 'Linux x86_64 / macOS arm64'
     validations:
       required: true
   - type: input

@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionValue;
+use ZEngine\Support\ResidentMemory;
 use ZEngine\Type\PersistentHashTable;
 
 require __DIR__ . '/../../../vendor/autoload.php';
@@ -25,15 +26,7 @@ Core::init();
  * behind. Sealed and mutable, string-keyed and index-keyed, empty and filled tables all
  * go through the same drop path.
  */
-$residentKiloBytes = static function (): int {
-    foreach (file('/proc/self/status') ?: [] as $line) {
-        if (str_starts_with($line, 'VmRSS:')) {
-            return (int) filter_var($line, FILTER_SANITIZE_NUMBER_INT);
-        }
-    }
-
-    return 0;
-};
+$residentKiloBytes = static fn(): int => ResidentMemory::kiloBytes();
 
 $cycle = static function (bool $sealed): void {
     $table = new PersistentHashTable();
