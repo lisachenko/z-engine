@@ -220,6 +220,10 @@ if ($isWindows) {
     // ZEND_DEBUG likewise: #if treats the undefined macro as 0, so the
     // headers preprocess either way, but the probe reads it as a C value
     $defines[] = '-DZEND_DEBUG=' . (PHP_DEBUG ? '1' : '0');
+    // The SDK's intsafe.h keeps its signed helpers (LongLongAdd &co, used by
+    // the 8.5 engine's overflow fast paths) behind this opt-in, which the
+    // real Windows PHP build defines in its CFLAGS
+    $defines[] = '-DENABLE_INTSAFE_SIGNED_FUNCTIONS';
     if (ZEND_THREAD_SAFE) {
         $defines[] = '-DZTS=1';
     }
@@ -229,11 +233,7 @@ $index = null;
 
 // --- 2. Preprocess the engine headers with clang and index the AST ---------
 if ($emitHeader) {
-    // PHP 8.5's Windows overflow helpers call intsafe.h functions
-    // (LongLongAdd &co), but the engine headers only pull <intsafe.h> in
-    // for MSVC proper - under clang the calls would parse as implicit
-    // declarations and fail the AST pass. Include it up front there.
-    $inputC = ($isWindows ? "#include <intsafe.h>\n" : '') . <<<'C'
+    $inputC = <<<'C'
     #include "php.h"
     #include "zend_ast.h"
     #include "zend_attributes.h"
