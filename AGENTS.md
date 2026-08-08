@@ -119,10 +119,8 @@ automatically on pull requests that touch `tools/generator/**` (same-repo
 PRs), or manually via `workflow_dispatch` against any branch.
 
 Darwin scope is currently **NTS only** (Homebrew/setup-php default). The 8.4
-artifacts are maintained on the `8.4` branch; `include/8.5/darwin-*-nts` does
-not exist yet - one `workflow_dispatch` run of the workflow on `master`
-bootstraps it (the macOS CI legs warn-and-skip until then). Follow-up work:
-darwin ZTS.
+artifacts are maintained on the `8.4` branch; `include/8.5/darwin-*-nts` is
+maintained here. Follow-up work: darwin ZTS.
 
 ## Running tests safely
 
