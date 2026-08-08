@@ -247,6 +247,15 @@ class Core
     private static bool $shutdownRegistered = false;
 
     /**
+     * Whether Core::init() has completed for this process/thread
+     *
+     * Set at the very end of init() only, so a boot that failed midway (unsupported
+     * environment, missing engine definitions, layout mismatch) never reports the
+     * bridge as ready.
+     */
+    private static bool $initialized = false;
+
+    /**
      * Performs Z-engine core initialization (idempotent per process)
      *
      * A repeated call - eg a worker manager re-booting z-engine after Core::shutdown()
@@ -307,6 +316,8 @@ class Core
         self::$isShutdown = false;
 
         self::preloadFrameworkClasses();
+
+        self::$initialized = true;
     }
 
     /**
@@ -321,6 +332,25 @@ class Core
 
         // Performs initialization of properties, otherwise we will get an error about uninitialized properties
         Core::init();
+    }
+
+    /**
+     * Checks if Core::init() (or preload(), which calls it) has completed for this
+     * process/thread - i.e. the engine bridge is ready to use.
+     *
+     * Embedders booting from auto_prepend_file (e.g. a debugger) use this to detect
+     * whether another component already initialized the bridge, instead of probing
+     * `isset(Core::$compiler)` and coupling to an implementation detail.
+     *
+     * Note on lifecycle: init() is deliberately re-invocable (it reuses the
+     * process-wide FFI binding, see its docblock), so calling it when this method
+     * returns true is safe. The flag stays true after Core::shutdown() - the binding
+     * and wrappers still exist; use isShutdown() to check whether engine writes have
+     * been stopped for the rest of the request.
+     */
+    public static function isInitialized(): bool
+    {
+        return self::$initialized;
     }
 
     /**
