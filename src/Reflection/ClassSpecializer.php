@@ -153,22 +153,18 @@ class ClassSpecializer
     public function evict(string $className): bool
     {
         $lowerName  = strtolower($className);
-        $classValue = Core::$executor->classTable->find($lowerName);
-        if ($classValue === null) {
+        $classEntry = $this->findClassEntry($className);
+        if ($classEntry === null) {
             return false;
         }
 
-        $classEntry = $classValue->getRawClass();
-        $sourceKind = $classEntry->type;
-        assert(is_string($sourceKind));
-        if (ord($sourceKind) !== Core::ZEND_USER_CLASS) {
+        $registeredClass = ReflectionClass::fromCData($classEntry);
+        if (!$registeredClass->isUserDefined()) {
             throw new ClassSpecializationException(
                 "Cannot evict internal class {$className}: only userland classes are supported",
             );
         }
-        $classFlags = $classEntry->ce_flags;
-        assert(is_int($classFlags));
-        if (($classFlags & (Core::ZEND_ACC_IMMUTABLE | Core::engineConstant('ZEND_ACC_PRELOADED'))) !== 0) {
+        if ($registeredClass->isImmutable() || $registeredClass->isPreloaded()) {
             throw new ClassSpecializationException(
                 "Cannot evict {$className}: its class entry lives in shared memory, which this "
                 . 'process must never dismantle',

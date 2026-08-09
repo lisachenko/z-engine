@@ -335,9 +335,17 @@ class Core
 
     /**
      * Preloads definition and Core for ffi.preload mode, should be called during preload stage for better performance
+     *
+     * Idempotent, like init(): bootstrap.php already runs this when it recognises the preload
+     * stage, so the explicit call an existing opcache.preload script makes right after
+     * `require vendor/autoload.php` finds the definitions published and returns.
      */
     public static function preload(): void
     {
+        if (self::$initialized) {
+            return;
+        }
+
         self::assertSupportedEnvironment();
         // The generated header is fully preprocessed and carries FFI_SCOPE, so
         // it can be loaded as-is
@@ -364,29 +372,6 @@ class Core
     public static function isInitialized(): bool
     {
         return self::$initialized;
-    }
-
-    /**
-     * Whether this environment can boot z-engine at all: ext-ffi loaded, ffi.enable set to a
-     * working value (`1` or `preload` - the latter needs an opcache.preload script calling
-     * Core::preload()), a supported PHP minor, and generated engine definitions for this
-     * platform.
-     *
-     * The non-throwing projection of the boot guard: init() explains a refusal, this one
-     * reports it. Dependants and test bootstraps that need "should the engine paths run
-     * here?" ask this instead of re-deriving the rule from ini_get('ffi.enable') - which is
-     * spelled several different ways and means different things per SAPI, so a hand-rolled
-     * check is wrong somewhere (a boolean filter rejects the supported `preload` mode).
-     */
-    public static function isUsable(): bool
-    {
-        try {
-            self::assertSupportedEnvironment();
-        } catch (RuntimeException) {
-            return false;
-        }
-
-        return true;
     }
 
     /**

@@ -211,25 +211,14 @@ inside the module; consumers see plain PHP values and framework wrapper objects
 it or convert it. This is what keeps the FFI blast radius confined to code that is
 audited for it.
 
-## Consuming z-engine from another package
-
-Dependant packages (userland-php-generics is the reference consumer) talk to z-engine through
-its documented public API and nothing else:
-
-- **Lifecycle**: `Core::init()`, `Core::preload()`, `Core::isInitialized()` (never probe
-  `isset(Core::$executor)` — the wrappers are assigned mid-boot, before the layout checks
-  pass, so the probe reports a half-booted bridge as ready), and `Core::isUsable()` for
-  "should the engine paths run in this environment at all" (never re-derive that from
-  `ini_get('ffi.enable')` — a boolean filter rejects the supported `preload` mode).
-- **Services and wrappers**: `ClassSpecializer` (including `evict()`), `HotSwap`,
-  `PersistentHeap`, the `Reflection\*` and `Type\*` wrapper objects, and the substitution
-  value objects (`TypeSubstitutionMap`, `SlotSubstitutionMap`, `TypeSlot`).
-
-Off-limits to dependants, without exception: the engine-global wrappers
-`Core::$executor` / `Core::$compiler` / `Core::$modules`, every method marked `@internal`,
-and anything returning a raw `FFI\CData`/`FFI\CType`. If a dependant needs an operation that
-only exists behind that line — as happened with class-table eviction and struct sizes — the
-fix is a named public API here, not a reach-through there.
+The same line holds for packages built **on** z-engine. What is off-limits to them is
+every method marked `@internal` and anything handing out a raw `FFI\CData`/`FFI\CType`
+(`Core::type()`, the `getRaw*()` escape hatches) — plus the engine-global wrappers
+`Core::$executor` / `Core::$compiler` / `Core::$modules`, which are core-layer state and
+not a consumer API. When a dependant needs an operation that only exists behind that
+line, the fix is a named public method here, not a reach-through there: class-table
+eviction became `ClassSpecializer::evict()` and `sizeof(type(...))` became
+`Core::sizeOfType()` for exactly that reason.
 
 ## Engine structs are owned by their reflection/type class, never poked from call sites
 
