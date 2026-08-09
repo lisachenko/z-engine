@@ -211,6 +211,26 @@ inside the module; consumers see plain PHP values and framework wrapper objects
 it or convert it. This is what keeps the FFI blast radius confined to code that is
 audited for it.
 
+## Consuming z-engine from another package
+
+Dependant packages (userland-php-generics is the reference consumer) talk to z-engine through
+its documented public API and nothing else:
+
+- **Lifecycle**: `Core::init()`, `Core::preload()`, `Core::isInitialized()` (never probe
+  `isset(Core::$executor)` — the wrappers are assigned mid-boot, before the layout checks
+  pass, so the probe reports a half-booted bridge as ready), and `Core::isUsable()` for
+  "should the engine paths run in this environment at all" (never re-derive that from
+  `ini_get('ffi.enable')` — a boolean filter rejects the supported `preload` mode).
+- **Services and wrappers**: `ClassSpecializer` (including `evict()`), `HotSwap`,
+  `PersistentHeap`, the `Reflection\*` and `Type\*` wrapper objects, and the substitution
+  value objects (`TypeSubstitutionMap`, `SlotSubstitutionMap`, `TypeSlot`).
+
+Off-limits to dependants, without exception: the engine-global wrappers
+`Core::$executor` / `Core::$compiler` / `Core::$modules`, every method marked `@internal`,
+and anything returning a raw `FFI\CData`/`FFI\CType`. If a dependant needs an operation that
+only exists behind that line — as happened with class-table eviction and struct sizes — the
+fix is a named public API here, not a reach-through there.
+
 ## Engine structs are owned by their reflection/type class, never poked from call sites
 
 This applies to EVERY class: if a class is responsible for a structure, then all external

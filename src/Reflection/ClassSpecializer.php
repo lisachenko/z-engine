@@ -129,6 +129,58 @@ class ClassSpecializer
     }
 
     /**
+     * Removes a runtime class from the engine class table, destroying its class entry NOW
+     *
+     * The counterpart of specialize(): deleting the class-table bucket runs the engine's own
+     * destroy_zend_class() over the entry immediately - tables, own property infos and
+     * constants, owned names - instead of at request shutdown, while everything the class
+     * shares with its source (method bodies through the op_array refcount) stays alive.
+     * Destroying a specialization while its template is still in use is exactly the moment
+     * the memory-ownership contract of the copy model is testable; see
+     * docs/class-specialization.md.
+     *
+     * Only classes the engine tears down through the request allocator are evictable. An
+     * internal class and an opcache-shared (ZEND_ACC_IMMUTABLE) or preloaded entry live in
+     * memory this process must never dismantle, so they are refused - eviction is for
+     * runtime-registered copies, which are always plain userland classes.
+     *
+     * @param string $className Name of the registered class to destroy
+     *
+     * @return bool false when no class of that name is registered, true after eviction
+     *
+     * @throws ClassSpecializationException When the registered class is not evictable
+     */
+    public function evict(string $className): bool
+    {
+        $lowerName  = strtolower($className);
+        $classValue = Core::$executor->classTable->find($lowerName);
+        if ($classValue === null) {
+            return false;
+        }
+
+        $classEntry = $classValue->getRawClass();
+        $sourceKind = $classEntry->type;
+        assert(is_string($sourceKind));
+        if (ord($sourceKind) !== Core::ZEND_USER_CLASS) {
+            throw new ClassSpecializationException(
+                "Cannot evict internal class {$className}: only userland classes are supported",
+            );
+        }
+        $classFlags = $classEntry->ce_flags;
+        assert(is_int($classFlags));
+        if (($classFlags & (Core::ZEND_ACC_IMMUTABLE | Core::engineConstant('ZEND_ACC_PRELOADED'))) !== 0) {
+            throw new ClassSpecializationException(
+                "Cannot evict {$className}: its class entry lives in shared memory, which this "
+                . 'process must never dismantle',
+            );
+        }
+
+        Core::$executor->classTable->delete($lowerName);
+
+        return true;
+    }
+
+    /**
      * Copies an opcache-shared (ZEND_ACC_IMMUTABLE) class entry out of shared memory into a
      * writable per-process copy published under the SAME name
      *

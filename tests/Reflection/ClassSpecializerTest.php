@@ -369,10 +369,10 @@ class ClassSpecializerTest extends TestCase
         $this->assertSame(11, $instance->getValue());
         unset($instance);
 
-        // Deleting the class-table bucket runs destroy_zend_class() with refcount 1:
-        // the full user-class teardown (tables, own infos/constants, owned names) is
-        // exercised NOW instead of at request shutdown
-        \ZEngine\Core::$executor->classTable->delete(strtolower($newName));
+        // Evicting runs destroy_zend_class() with refcount 1: the full user-class
+        // teardown (tables, own infos/constants, owned names) is exercised NOW
+        // instead of at request shutdown
+        $this->assertTrue((new ClassSpecializer())->evict($newName));
         $this->assertFalse(class_exists($newName, false));
 
         // The template stays fully intact: shared bodies, names and types survived
@@ -381,5 +381,17 @@ class ClassSpecializerTest extends TestCase
         $originalType = (new \ReflectionProperty(TestSpecializationTemplate::class, 'value'))->getType();
         $this->assertInstanceOf(\ReflectionNamedType::class, $originalType);
         $this->assertSame(self::PLACEHOLDER, $originalType->getName());
+    }
+
+    public function testEvictingAnUnknownNameReportsFalse(): void
+    {
+        $this->assertFalse((new ClassSpecializer())->evict('ZEngine\Stub\Specialized\NeverRegistered'));
+    }
+
+    public function testEvictingAnInternalClassIsRejected(): void
+    {
+        $this->expectException(ClassSpecializationException::class);
+        $this->expectExceptionMessage('Cannot evict internal class');
+        (new ClassSpecializer())->evict(\SplStack::class);
     }
 }

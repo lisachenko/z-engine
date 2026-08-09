@@ -367,6 +367,29 @@ class Core
     }
 
     /**
+     * Whether this environment can boot z-engine at all: ext-ffi loaded, ffi.enable set to a
+     * working value (`1` or `preload` - the latter needs an opcache.preload script calling
+     * Core::preload()), a supported PHP minor, and generated engine definitions for this
+     * platform.
+     *
+     * The non-throwing projection of the boot guard: init() explains a refusal, this one
+     * reports it. Dependants and test bootstraps that need "should the engine paths run
+     * here?" ask this instead of re-deriving the rule from ini_get('ffi.enable') - which is
+     * spelled several different ways and means different things per SAPI, so a hand-rolled
+     * check is wrong somewhere (a boolean filter rejects the supported `preload` mode).
+     */
+    public static function isUsable(): bool
+    {
+        try {
+            self::assertSupportedEnvironment();
+        } catch (RuntimeException) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Refuses to boot on any PHP build this branch has no verified structure definitions for.
      */
     private static function assertSupportedEnvironment(): void
@@ -613,6 +636,20 @@ class Core
     public static function sizeof($cType): int
     {
         return FFI::sizeof($cType);
+    }
+
+    /**
+     * Returns the size in bytes of an engine type, looked up by name
+     *
+     * The named form of the sizeof(type(...)) pair, and the one consumers should use: it
+     * answers "how big is a zend_op_array here?" without a raw FFI\CType ever crossing the
+     * API boundary.
+     *
+     * @param string $type Name of the engine type (eg "zend_class_entry")
+     */
+    public static function sizeOfType(string $type): int
+    {
+        return FFI::sizeof(self::$engine->type($type));
     }
 
     /**
@@ -916,6 +953,9 @@ class Core
      * Returns a CType definition for engine by type name
      *
      * @param string $type Name of the type
+     *
+     * @internal returns a raw FFI\CType, which must not cross the API boundary - consumers
+     *           wanting a size use sizeOfType()
      */
     public static function type(string $type): CType
     {
