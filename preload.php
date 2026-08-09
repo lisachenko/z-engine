@@ -9,13 +9,13 @@
  */
 declare(strict_types=1);
 
-include __DIR__.'/vendor/autoload.php';
-
-use ZEngine\Core;
-
 /**
  * This file should be loaded during the preload stage, which is defined by opcache.preload file.
- * Either include it manually, or just add following line into your init section.
+ *
+ * Requiring the autoloader is the whole script: z-engine's bootstrap recognises the preload
+ * stage and publishes the engine definitions under FFI_SCOPE for the life of the server. The
+ * explicit `Core::preload()` this file used to make is now redundant - it stays supported and
+ * idempotent for scripts that already call it.
  */
-Core::preload();
+include __DIR__.'/vendor/autoload.php';
 

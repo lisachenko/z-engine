@@ -18,15 +18,16 @@ use PHPUnit\Framework\TestCase;
 /**
  * Covers the boot-state introspection of Core: whether the engine bridge is ready.
  *
- * The negative (pre-init) case is not testable here: the suite bootstrap calls
- * Core::init(), and PHPUnit's process isolation re-runs that bootstrap in every
- * child process, so no test ever observes an uninitialized Core.
+ * The negative (pre-init) case is not testable here: autoloading boots the bridge and
+ * PHPUnit's process isolation re-runs the bootstrap in every child process, so no test
+ * ever observes an uninitialized Core.
  */
 final class CoreInitializationTest extends TestCase
 {
     public function testIsInitializedAfterSuiteBootstrap(): void
     {
-        // tests/bootstrap.php called Core::init() for this process
+        // Both the autoload bootstrap and the suite's own explicit init ran for this process;
+        // the automatic path is proven separately, in AutoBootTest's child processes
         $this->assertTrue(Core::isInitialized(), 'the suite bootstrap initialized the engine bridge');
     }
 
@@ -35,6 +36,15 @@ final class CoreInitializationTest extends TestCase
         // init() deliberately supports repeated calls (reuses the process-wide
         // FFI binding, issue #108); the flag must survive a re-init
         Core::init();
+        $this->assertTrue(Core::isInitialized());
+    }
+
+    public function testPreloadIsIdempotentAfterTheAutomaticBoot(): void
+    {
+        // An existing opcache.preload script calls Core::preload() right after requiring the
+        // autoloader, which has already published the definitions. The second call has to be
+        // a no-op rather than a second FFI::load().
+        Core::preload();
         $this->assertTrue(Core::isInitialized());
     }
 }

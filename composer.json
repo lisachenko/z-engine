@@ -24,7 +24,10 @@
     "autoload": {
         "psr-4": {
             "ZEngine\\": "src/"
-        }
+        },
+        "files": [
+            "bootstrap.php"
+        ]
     },
     "autoload-dev": {
         "psr-4": {
