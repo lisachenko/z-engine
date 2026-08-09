@@ -335,9 +335,17 @@ class Core
 
     /**
      * Preloads definition and Core for ffi.preload mode, should be called during preload stage for better performance
+     *
+     * Idempotent, like init(): bootstrap.php already runs this when it recognises the preload
+     * stage, so the explicit call an existing opcache.preload script makes right after
+     * `require vendor/autoload.php` finds the definitions published and returns.
      */
     public static function preload(): void
     {
+        if (self::$initialized) {
+            return;
+        }
+
         self::assertSupportedEnvironment();
         // The generated header is fully preprocessed and carries FFI_SCOPE, so
         // it can be loaded as-is
@@ -613,6 +621,20 @@ class Core
     public static function sizeof($cType): int
     {
         return FFI::sizeof($cType);
+    }
+
+    /**
+     * Returns the size in bytes of an engine type, looked up by name
+     *
+     * The named form of the sizeof(type(...)) pair, and the one consumers should use: it
+     * answers "how big is a zend_op_array here?" without a raw FFI\CType ever crossing the
+     * API boundary.
+     *
+     * @param string $type Name of the engine type (eg "zend_class_entry")
+     */
+    public static function sizeOfType(string $type): int
+    {
+        return FFI::sizeof(self::$engine->type($type));
     }
 
     /**
@@ -916,6 +938,9 @@ class Core
      * Returns a CType definition for engine by type name
      *
      * @param string $type Name of the type
+     *
+     * @internal returns a raw FFI\CType, which must not cross the API boundary - consumers
+     *           wanting a size use sizeOfType()
      */
     public static function type(string $type): CType
     {

@@ -27,7 +27,17 @@ $specialized = (new ClassSpecializer())->specialize(
 );
 
 $instance = $specialized->newInstance();     // or: new \App\Specialized\SomeTemplateInt()
+
+// The counterpart: destroy a runtime-registered class now, instead of at request shutdown
+(new ClassSpecializer())->evict('App\Specialized\SomeTemplateInt');   // true, or false if unknown
 ```
+
+`evict()` deletes the class-table bucket, which runs the engine's own
+`destroy_zend_class()` over the entry immediately while everything shared with the source
+(method bodies, via the op_array refcount) stays alive — the memory-ownership contract
+below is exercised at that moment rather than at request end. It refuses internal classes
+and shared-memory (immutable/preloaded) entries with a `ClassSpecializationException`;
+eviction is for runtime-registered copies, which are always plain userland classes.
 
 A *placeholder* is a class-like type name used in the template declaration (for example
 `public TPlaceholder $value;` where `TPlaceholder` is never defined as a real class).

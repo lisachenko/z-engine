@@ -483,6 +483,19 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
+     * Whether this class entry came from an opcache preload region
+     *
+     * A preloaded entry is shared memory that is republished into every request of the worker
+     * process rather than rebuilt, so - unlike an ordinary immutable entry, which can be copied
+     * out per request - its class-table bucket outlives any request-memory replacement put in
+     * its place. That makes it the one shape neither copy-out nor eviction may touch.
+     */
+    public function isPreloaded(): bool
+    {
+        return ($this->getFlags() & Core::ZEND_ACC_PRELOADED) !== 0;
+    }
+
+    /**
      * Copies this opcache-shared (immutable) class entry out of shared memory and rebinds
      * this reflection to the writable per-process copy
      *
