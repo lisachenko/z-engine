@@ -33,10 +33,17 @@ use PHPUnit\Framework\TestCase;
 #[Group('opcache')]
 final class AutoBootTest extends TestCase
 {
-    protected function setUp(): void
+    /**
+     * Only the two preload cases need it; the opt-out and silent-failure cases are plain
+     * autoload behaviour and run everywhere
+     */
+    private function requirePreloadSupport(): void
     {
         if (!extension_loaded('Zend OPcache')) {
             self::markTestSkipped('Preloading needs the opcache extension');
+        }
+        if (PHP_OS_FAMILY === 'Windows') {
+            self::markTestSkipped('opcache.preload is not available on Windows (issue #119)');
         }
     }
 
@@ -49,6 +56,8 @@ final class AutoBootTest extends TestCase
      */
     public function testPreloadingThroughTheAutoloaderServesTheFollowingRequest(): void
     {
+        $this->requirePreloadSupport();
+
         $result = $this->runWithPreload(
             dirname(__DIR__) . '/preload.php',
             'echo \ZEngine\Core::isInitialized() ? "booted" : "not booted";',
@@ -64,6 +73,8 @@ final class AutoBootTest extends TestCase
      */
     public function testAnExplicitPreloadCallOnTopOfTheAutomaticOneIsHarmless(): void
     {
+        $this->requirePreloadSupport();
+
         $script = $this->writeScratchPreloadScript('\ZEngine\Core::preload();');
 
         try {
