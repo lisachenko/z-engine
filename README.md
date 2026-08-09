@@ -80,17 +80,24 @@ allocations.
 composer require lisachenko/z-engine
 ```
 
-Initialize the library once, early in your bootstrap:
+There is nothing to initialize: the engine bridge is booted from Composer's autoloader, so
+`require __DIR__ . '/vendor/autoload.php'` is all a consumer needs. That includes the
+`opcache.preload` stage, which the bootstrap recognises and serves by publishing the engine
+definitions for the life of the server rather than for the preload request alone — pointing
+`opcache.preload` at a script that only requires the autoloader is enough to get the
+per-request cost down.
 
-```php
-use ZEngine\Core;
+`opcache.preload` does not exist on Windows, so there the definitions cannot be published once
+at server start: every process binds them for itself. That needs no change on your side either —
+it is the same autoload bootstrap, taking the other branch.
 
-require __DIR__ . '/vendor/autoload.php';
-
-Core::init();
-```
-
-For web (non-CLI) usage, enable FFI preloading by calling `Core::preload()` from the script named in your `opcache.preload` — this loads the engine definitions once at server start instead of per request. (`opcache.preload` does not exist on Windows; there `Core::init()` in each process is the only path.)
+`Core::init()` remains public, idempotent and re-invocable, for the cases that want it: booting
+explicitly at a chosen point, re-booting after `Core::shutdown()` inside a live worker, and
+turning "the engine is not available here" into its explanation. On a host that cannot run the
+engine at all — no ext-ffi, `ffi.enable=0`, an unsupported PHP minor or platform — autoloading
+stays silent and leaves `Core` uninitialized, so static analysis and test suites still load the
+package; ask `Core::isInitialized()` for the state, or call `Core::init()` to get the reason.
+Set `ZENGINE_AUTOBOOT=0` to skip the automatic boot entirely.
 
 ### Hello, impossible
 
@@ -98,12 +105,9 @@ For web (non-CLI) usage, enable FFI preloading by calling `Core::preload()` from
 <?php
 declare(strict_types=1);
 
-use ZEngine\Core;
 use ZEngine\Reflection\ReflectionClass;
 
 require __DIR__ . '/vendor/autoload.php';
-
-Core::init();
 
 final class Sealed {}
 

@@ -216,6 +216,15 @@ inside the module; consumers see plain PHP values and framework wrapper objects
 it or convert it. This is what keeps the FFI blast radius confined to code that is
 audited for it.
 
+The same line holds for packages built **on** z-engine. What is off-limits to them is
+every method marked `@internal` and anything handing out a raw `FFI\CData`/`FFI\CType`
+(`Core::type()`, the `getRaw*()` escape hatches) — plus the engine-global wrappers
+`Core::$executor` / `Core::$compiler` / `Core::$modules`, which are core-layer state and
+not a consumer API. When a dependant needs an operation that only exists behind that
+line, the fix is a named public method here, not a reach-through there: class-table
+eviction became `ClassSpecializer::evict()` and `sizeof(type(...))` became
+`Core::sizeOfType()` for exactly that reason.
+
 ## Engine structs are owned by their reflection/type class, never poked from call sites
 
 This applies to EVERY class: if a class is responsible for a structure, then all external
