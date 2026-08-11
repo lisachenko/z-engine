@@ -901,12 +901,6 @@ parameters:
 			path: src/Hook/HookInterface.php
 
 		-
-			message: '#^Parameter \#1 \$classEntry of static method ZEngine\\Reflection\\ReflectionClass\:\:fromCData\(\) expects FFI\\CData, ZEngine\\Generated\\zend_class_entry given\.$#'
-			identifier: argument.type
-			count: 2
-			path: src/HotSwap/HotSwap.php
-
-		-
 			message: '#^Method ZEngine\\Memory\\PersistentGraphCloner\:\:cloneArray\(\) should return FFI\\CData but returns ZEngine\\Generated\\HashTable\.$#'
 			identifier: return.type
 			count: 1
@@ -955,12 +949,6 @@ parameters:
 			path: src/Memory/PersistentGraphCloner.php
 
 		-
-			message: '#^Parameter \#1 \$classType of static method ZEngine\\Reflection\\ReflectionClass\:\:getObjectSize\(\) expects FFI\\CData, ZEngine\\Generated\\zend_class_entry given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Memory/PersistentHeap.php
-
-		-
 			message: '#^Parameter \#3 \$pointer of method ZEngine\\Memory\\PersistentHeap\:\:addPointerEntry\(\) expects FFI\\CData, FFI\\CData\|ZEngine\\Generated\\zend_string given\.$#'
 			identifier: argument.type
 			count: 1
@@ -1003,12 +991,6 @@ parameters:
 			path: src/Reflection/ClassSpecializer.php
 
 		-
-			message: '#^Parameter \#1 \$classEntry of static method ZEngine\\Reflection\\ReflectionClass\:\:fromCData\(\) expects FFI\\CData, ZEngine\\Generated\\zend_class_entry given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Reflection/ClassSpecializer.php
-
-		-
 			message: '#^Parameter \#1 \$sourceEntry of method ZEngine\\Reflection\\ClassSpecializer\:\:assertCopyableSource\(\) expects FFI\\CData, ZEngine\\Generated\\zend_class_entry given\.$#'
 			identifier: argument.type
 			count: 1
@@ -1021,109 +1003,19 @@ parameters:
 			path: src/Reflection/ClassSpecializer.php
 
 		-
-			message: '#^Parameter \#1 \$classEntry of static method ZEngine\\Reflection\\ReflectionClass\:\:fromCData\(\) expects FFI\\CData, ZEngine\\Generated\\zend_class_entry given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Reflection/FunctionBodySwap.php
-
-		-
 			message: '#^Access to an undefined property ZEngine\\Generated\\zend_function\|ZEngine\\Generated\\zend_internal_function\:\:\$common\.$#'
 			identifier: property.notFound
 			count: 1
 			path: src/Reflection/ReflectionClass.php
 
 		-
-			message: '#^Binary operation "&" between mixed and \-17 results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Binary operation "&" between mixed and \-33 results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Binary operation "&" between mixed and \-65 results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Binary operation "&" between mixed and 2048 results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Binary operation "&" between mixed and 8 results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 2
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Binary operation "&\=" between mixed and \-262145 results in an error\.$#'
-			identifier: assignOp.invalid
-			count: 1
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Binary operation "\-" between mixed and 0\|1 results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Binary operation "\|" between mixed and 32 results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Binary operation "\|" between mixed and 64 results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Binary operation "\|\=" between mixed and 262144 results in an error\.$#'
-			identifier: assignOp.invalid
-			count: 1
-			path: src/Reflection/ReflectionClass.php
-
-		-
 			message: '#^Cannot access offset int\<0, max\> on mixed\.$#'
 			identifier: offsetAccess.nonOffsetAccessible
-			count: 8
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Cannot access property \$cdata on mixed\.$#'
-			identifier: property.nonObject
-			count: 5
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Cannot access property \$filename on mixed\.$#'
-			identifier: property.nonObject
 			count: 2
 			path: src/Reflection/ReflectionClass.php
 
 		-
 			message: '#^Cannot access property \$lc_name on mixed\.$#'
-			identifier: property.nonObject
-			count: 2
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Cannot access property \$line_end on mixed\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Cannot access property \$line_start on mixed\.$#'
 			identifier: property.nonObject
 			count: 1
 			path: src/Reflection/ReflectionClass.php
@@ -1131,13 +1023,7 @@ parameters:
 		-
 			message: '#^Cannot access property \$name on mixed\.$#'
 			identifier: property.nonObject
-			count: 5
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Cannot access property \$user on mixed\.$#'
-			identifier: property.nonObject
-			count: 4
+			count: 2
 			path: src/Reflection/ReflectionClass.php
 
 		-
@@ -1201,18 +1087,6 @@ parameters:
 			path: src/Reflection/ReflectionClass.php
 
 		-
-			message: '#^Parameter \#1 \$character of function ord expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 2
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Parameter \#1 \$classEntry of method ZEngine\\Reflection\\ReflectionClass\:\:initLowLevelStructures\(\) expects FFI\\CData, ZEngine\\Generated\\zend_class_entry given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Reflection/ReflectionClass.php
-
-		-
 			message: '#^Parameter \#1 \$object of function get_class expects object, mixed given\.$#'
 			identifier: argument.type
 			count: 1
@@ -1237,31 +1111,7 @@ parameters:
 			path: src/Reflection/ReflectionClass.php
 
 		-
-			message: '#^Parameter \#1 \$pointer of static method ZEngine\\Core\:\:untrackAndFree\(\) expects object, mixed given\.$#'
-			identifier: argument.type
-			count: 5
-			path: src/Reflection/ReflectionClass.php
-
-		-
 			message: '#^Parameter \#1 \$string of function strtolower expects string, string\|false given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Parameter \#1 \$stringPointer of static method ZEngine\\Type\\StringEntry\:\:fromCData\(\) expects FFI\\CData\|ZEngine\\Generated\\zend_string, mixed given\.$#'
-			identifier: argument.type
-			count: 7
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Parameter \#1 \$valueEntry of static method ZEngine\\Reflection\\ReflectionValue\:\:fromValueEntry\(\) expects FFI\\CData\|ZEngine\\Generated\\zval, mixed given\.$#'
-			identifier: argument.type
-			count: 2
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Parameter \#1 \$variable of static method ZEngine\\Core\:\:addr\(\) expects object, array\<int\<0, max\>, mixed\>\|FFI\\CData\|null given\.$#'
 			identifier: argument.type
 			count: 1
 			path: src/Reflection/ReflectionClass.php
@@ -1269,7 +1119,7 @@ parameters:
 		-
 			message: '#^Parameter \#1 \$variable of static method ZEngine\\Core\:\:addr\(\) expects object, mixed given\.$#'
 			identifier: argument.type
-			count: 5
+			count: 2
 			path: src/Reflection/ReflectionClass.php
 
 		-
@@ -1279,49 +1129,7 @@ parameters:
 			path: src/Reflection/ReflectionClass.php
 
 		-
-			message: '#^Binary operation "&\=" between mixed and \-8 results in an error\.$#'
-			identifier: assignOp.invalid
-			count: 3
-			path: src/Reflection/ReflectionClassConstant.php
-
-		-
-			message: '#^Cannot access property \$constant_flags on mixed\.$#'
-			identifier: property.nonObject
-			count: 6
-			path: src/Reflection/ReflectionClassConstant.php
-
-		-
-			message: '#^Cannot access property \$name on mixed\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: src/Reflection/ReflectionClassConstant.php
-
-		-
-			message: '#^Cannot access property \$u2 on mixed\.$#'
-			identifier: property.nonObject
-			count: 6
-			path: src/Reflection/ReflectionClassConstant.php
-
-		-
 			message: '#^Parameter \#1 \$class of method ReflectionClassConstant\:\:__construct\(\) expects class\-string\|object, string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Reflection/ReflectionClassConstant.php
-
-		-
-			message: '#^Parameter \#1 \$classEntry of static method ZEngine\\Reflection\\ReflectionClass\:\:fromCData\(\) expects FFI\\CData, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Reflection/ReflectionClassConstant.php
-
-		-
-			message: '#^Parameter \#1 \$stringPointer of static method ZEngine\\Type\\StringEntry\:\:fromCData\(\) expects FFI\\CData\|ZEngine\\Generated\\zend_string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Reflection/ReflectionClassConstant.php
-
-		-
-			message: '#^Parameter \#1 \$valueEntry of static method ZEngine\\Reflection\\ReflectionValue\:\:fromValueEntry\(\) expects FFI\\CData\|ZEngine\\Generated\\zval, mixed given\.$#'
 			identifier: argument.type
 			count: 1
 			path: src/Reflection/ReflectionClassConstant.php
@@ -1417,37 +1225,7 @@ parameters:
 			path: src/Reflection/ReflectionMethod.php
 
 		-
-			message: '#^Binary operation "&\=" between mixed and \-17 results in an error\.$#'
-			identifier: assignOp.invalid
-			count: 1
-			path: src/Reflection/ReflectionProperty.php
-
-		-
-			message: '#^Binary operation "&\=" between mixed and \-8 results in an error\.$#'
-			identifier: assignOp.invalid
-			count: 3
-			path: src/Reflection/ReflectionProperty.php
-
-		-
-			message: '#^Binary operation "\|\=" between mixed and 16 results in an error\.$#'
-			identifier: assignOp.invalid
-			count: 1
-			path: src/Reflection/ReflectionProperty.php
-
-		-
 			message: '#^Parameter \#1 \$class of method ReflectionProperty\:\:__construct\(\) expects class\-string\|object, string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Reflection/ReflectionProperty.php
-
-		-
-			message: '#^Parameter \#1 \$classEntry of static method ZEngine\\Reflection\\ReflectionClass\:\:fromCData\(\) expects FFI\\CData, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Reflection/ReflectionProperty.php
-
-		-
-			message: '#^Parameter \#1 \$stringPointer of static method ZEngine\\Type\\StringEntry\:\:fromCData\(\) expects FFI\\CData\|ZEngine\\Generated\\zend_string, mixed given\.$#'
 			identifier: argument.type
 			count: 1
 			path: src/Reflection/ReflectionProperty.php
@@ -1867,12 +1645,6 @@ parameters:
 			path: src/Type/OpLine.php
 
 		-
-			message: '#^Parameter \#1 \$classType of static method ZEngine\\Reflection\\ReflectionClass\:\:getObjectSize\(\) expects FFI\\CData, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Type/PersistentObjectFactory.php
-
-		-
 			message: '#^Constructor of class ZEngine\\Type\\ReferenceEntry has an unused parameter \$reference\.$#'
 			identifier: constructor.unusedParameter
 			count: 1
@@ -1931,18 +1703,6 @@ parameters:
 			identifier: return.type
 			count: 1
 			path: tests/EngineLayoutTest.php
-
-		-
-			message: '#^Parameter \#1 \$classEntry of static method ZEngine\\Reflection\\ReflectionClass\:\:fromCData\(\) expects FFI\\CData, ZEngine\\Generated\\zend_class_entry given\.$#'
-			identifier: argument.type
-			count: 2
-			path: tests/HotSwap/scripts/opcache-matrix.php
-
-		-
-			message: '#^Parameter \#1 \$classType of static method ZEngine\\Reflection\\ReflectionClass\:\:getObjectSize\(\) expects FFI\\CData, ZEngine\\Generated\\zend_class_entry given\.$#'
-			identifier: argument.type
-			count: 1
-			path: tests/Memory/PersistentHeapTest.php
 
 		-
 			message: '#^Parameter \#1 \$object of function get_class expects object, mixed given\.$#'

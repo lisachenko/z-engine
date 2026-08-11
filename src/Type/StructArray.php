@@ -31,7 +31,7 @@ use ZEngine\Core;
  * pointer arithmetic (see AGENTS.md).
  *
  * The element type is the generic parameter T: callers parameterize the view with the
- * PHPStan object shape of the element (eg `StructArray<ZvalShape>` for a zval table) and
+ * generated struct stub of the element (eg `StructArray<\ZEngine\Generated\zval>` for a zval table) and
  * every read (`$structArray[$i]`, iteration) and `replace()` is typed as that shape, so
  * PHPStan carries the field types statically without any runtime assertion. T defaults to
  * FFI\CData when left unspecified.

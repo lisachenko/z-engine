@@ -68,7 +68,9 @@ final class PersistentObjectFactory
      */
     public static function persistentClone(CData $sourceObject): object
     {
-        $totalSize = ReflectionClass::getObjectSize($sourceObject->ce);
+        $sourceClass = $sourceObject->ce;
+        assert($sourceClass instanceof CData);
+        $totalSize = ReflectionClass::getObjectSize($sourceClass);
         $memory    = Core::trackedNew("char[{$totalSize}]", true);
         $object    = Core::cast(zend_object::class, $memory);
 

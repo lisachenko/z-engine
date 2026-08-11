@@ -639,10 +639,7 @@ class ReflectionValue implements ReferenceCountedInterface
     {
         $this->assertNotReleased();
 
-        /** @var ZvalU1Shape $u1 */
-        $u1 = $this->pointer->u1;
-
-        return $u1->v->type;
+        return $this->pointer->u1->v->type;
     }
 
     /**
