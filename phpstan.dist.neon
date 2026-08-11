@@ -11,6 +11,7 @@ parameters:
         - tools/generator/emit.php
         - tools/generator/generate.php
         - tools/generator/validate.php
+        - tools/phpstan
     excludePaths:
         - tests/phpstan/specialization-class-stubs.php
         # Compiled into the opcache file cache by child processes; the static
@@ -97,3 +98,11 @@ parameters:
         ZendValueShape: 'stdClass&object{lval: int, dval: float, str: FFI\CData, ptr: FFI\CData, counted: FFI\CData, ref: ZendReferenceShape}'
         ZvalShape: 'stdClass&object{value: ZendValueShape, u1: ZvalU1Shape, u2: ZvalU2Shape}'
         ZendFileCacheMetaInfoShape: 'stdClass&object{magic: FFI\CData, system_id: FFI\CData, mem_size: int, str_size: int, script_offset: int, timestamp: int, checksum: int}'
+
+# Resolves the typed Core entry points (new/trackedNew/cast/pointerAtAddress) by their
+# literal $type argument: stub class-strings type the handle as the generated stub
+# class, C type name strings stay FFI\CData (see the extension's class docblock)
+services:
+    -
+        class: ZEngine\PHPStan\TypedEntryPointReturnExtension
+        tags: [phpstan.broker.dynamicStaticMethodReturnTypeExtension]
