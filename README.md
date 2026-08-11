@@ -250,7 +250,8 @@ Engine error and VM interrupt hooks (`Core::setErrorCallbackHandler()`,
 `Core::setInterruptHandler()` + `Core::$executor->requestInterrupt()`) round out the
 breakpoint/pause primitives. See **[docs/self-debugging.md](docs/self-debugging.md)**
 for the full feasibility research: what an Xdebug-equivalent can and cannot do from
-pure PHP, and why.
+pure PHP, and why — and **[ZDebug](https://github.com/lisachenko/zdebug)** for the
+debugger built on it: a DBGp step debugger your IDE attaches to, with no C extension.
 
 ### Extensions written in PHP
 
