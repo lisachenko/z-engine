@@ -372,8 +372,8 @@ jobs:
           Z_ENGINE_BUILDX_CACHE_DIR: /tmp/.buildx-gen-cache
       - name: Fail if the committed artifacts are stale
         run: |
-          if ! git diff --exit-code -- include/; then
-            echo "::error::Generated engine definitions are out of date. Run 'composer gen-headers' and commit the result."
+          if ! git diff --exit-code -- include/ stubs/ .phpstorm.meta.php; then
+            echo "::error::Generated engine definitions (or the struct stubs / phpstorm meta) are out of date. Run 'composer gen-headers' and commit the result."
             exit 1
           fi
 

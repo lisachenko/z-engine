@@ -23,9 +23,12 @@ parameters:
         # pokes the raw engine symbol through an ad-hoc FFI::cdef on purpose
         - tests/System/Hook/scenarios/throw-hook-ffi-abort.php
     # Analysis-only declarations of the runtime-generated specialized classes and the
-    # deliberately-undefined placeholder type (see the file header for the rationale)
+    # deliberately-undefined placeholder type (see the file header for the rationale),
+    # plus the generated engine struct stubs (ZEngine\Generated\*, emitted by
+    # tools/generator into stubs/ - never autoloadable, visible to analysis only)
     scanFiles:
         - tests/phpstan/specialization-class-stubs.php
+        - stubs/zend-engine-structs.php
     # FFI\CData is dynamically typed - the engine structs it wraps are only
     # known at runtime from the loaded header, so field/method access on CData
     # cannot be statically resolved. Scope the unavoidable ignores tightly to
