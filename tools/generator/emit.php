@@ -34,6 +34,7 @@ namespace ZEngine\Generator;
 require __DIR__ . '/lib/ClangAstIndex.php';
 require __DIR__ . '/lib/HeaderEmitter.php';
 require __DIR__ . '/lib/ProbeGenerator.php';
+require __DIR__ . '/lib/StructStubEmitter.php';
 
 error_reporting(E_ALL);
 set_error_handler(static function (int $severity, string $message, string $file, int $line): bool {
@@ -140,7 +141,7 @@ foreach ([$out, $buildDir] as $directory) {
 
 echo '[generator] Target: PHP ' . PHP_VERSION . " ({$platformKey}), debug=" . (PHP_DEBUG ? 'yes' : 'no') . "\n";
 
-/** @var array{types: list<string>, functions: list<string>, variables: list<string>, defines: list<string>, enums: list<string>, opcode_header: string, layout_structs: list<string>, opaque?: list<string>} $manifest */
+/** @var array{types: list<string>, functions: list<string>, variables: list<string>, defines: list<string>, enums: list<string>, opcode_header: string, layout_structs: list<string>, opaque?: list<string>, stub_platform_fields: array<string, list<string>>} $manifest */
 $manifest = require __DIR__ . '/symbols.php';
 
 // --- 1. Supplement: slice private structs out of php-src C files -----------
@@ -316,6 +317,20 @@ if ($emitHeader) {
     $probe = new ProbeGenerator($manifest['defines'], $enumMembers, $opcodes, $layoutFields, $layoutIsUnion);
     file_put_contents($buildDir . '/probe.c', $probe->generateProbeSource($buildDir . '/supplement.h'));
     echo '[generator] Emitted engine.h (' . strlen($header) . " bytes) and probe.c\n";
+
+    // Analysis stub classes + PhpStorm meta, from the same AST the header was
+    // sliced from. Transient per-target artifacts: generate.php publishes the
+    // canonical target's copies (stubs/, .phpstorm.meta.php) and byte-compares
+    // every other target against them.
+    $stubEmitter = new StructStubEmitter(
+        $index,
+        $emitter->resolvedRecordTypes(),
+        $manifest['stub_platform_fields'],
+        $minor,
+    );
+    file_put_contents($buildDir . '/structs.php', $stubEmitter->emitStubsFile());
+    file_put_contents($buildDir . '/phpstorm.meta.php', $stubEmitter->emitPhpStormMeta());
+    echo "[generator] Emitted structs.php and phpstorm.meta.php\n";
 }
 
 // --- 4. Compile and run the probe: constants.php + layouts.json ------------
@@ -371,6 +386,8 @@ $artifacts = [];
 if ($emitHeader) {
     $artifacts[] = 'engine.h';
     $artifacts[] = 'probe.c';
+    $artifacts[] = 'structs.php';
+    $artifacts[] = 'phpstorm.meta.php';
 }
 if ($runProbe) {
     $artifacts[] = 'constants.php';

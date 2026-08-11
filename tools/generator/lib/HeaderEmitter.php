@@ -123,6 +123,31 @@ final class HeaderEmitter
     }
 
     /**
+     * Record type names (typedefs and struct/union tags) that resolved into
+     * the emitted header with a full definition - the manifest roots plus
+     * every transitively required record. Callable after emit(); the stub
+     * emitter derives the engine struct stub set from this list.
+     *
+     * @return list<string>
+     */
+    public function resolvedRecordTypes(): array
+    {
+        $names = [];
+        foreach (array_keys($this->neededTypedefs) as $name) {
+            if (!in_array($name, $this->opaque, true) && $this->index->resolveRecord($name) !== null) {
+                $names[$name] = true;
+            }
+        }
+        foreach (array_keys($this->neededRecords) as $tag) {
+            if (!in_array($tag, $this->opaque, true) && $this->index->fullRecordDefinition($tag) !== null) {
+                $names[$tag] = true;
+            }
+        }
+
+        return array_keys($names);
+    }
+
+    /**
      * Marks a type name (typedef, struct/union tag or enum tag) and all its
      * transitive dependencies as required.
      */

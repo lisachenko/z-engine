@@ -102,6 +102,107 @@ function developmentPackVersion(string $directory): ?string
     return preg_match('/#\s*define\s+PHP_VERSION\s+"([^"]+)"/', $contents, $matches) === 1 ? $matches[1] : null;
 }
 
+/**
+ * Publishes the per-target transient stub artifacts (structs.php and
+ * phpstorm.meta.php, emitted next to engine.h): the canonical target
+ * (linux-x64-nts) moves them to their committed locations (stubs/ and the
+ * repository root), every other target byte-compares its output against those
+ * committed files and fails on divergence - the enforcement that keeps the
+ * stubs identical across all supported targets. The transients are removed
+ * either way so include/<target>/ holds only the four per-target artifacts.
+ */
+function publishStubs(string $outputDir, string $repositoryRoot, bool $isCanonical): void
+{
+    $destinations = [
+        'structs.php'       => "{$repositoryRoot}/stubs/zend-engine-structs.php",
+        'phpstorm.meta.php' => "{$repositoryRoot}/.phpstorm.meta.php",
+    ];
+    foreach ($destinations as $transient => $committed) {
+        $generated = "{$outputDir}/{$transient}";
+        if (!is_file($generated)) {
+            abortWith("the generator did not produce {$transient} in {$outputDir}");
+        }
+        if ($isCanonical) {
+            if (!is_dir(dirname($committed)) && !mkdir(dirname($committed), 0777, true)) {
+                abortWith('cannot create ' . dirname($committed));
+            }
+            if (!rename($generated, $committed)) {
+                abortWith("cannot move {$generated} to {$committed}");
+            }
+            continue;
+        }
+        $expected = is_file($committed) ? (string) file_get_contents($committed) : null;
+        $actual   = (string) file_get_contents($generated);
+        unlink($generated);
+        if ($expected === null) {
+            abortWith("{$committed} is not committed yet - generate the canonical linux-x64-nts target first");
+        }
+        if ($expected !== $actual) {
+            reportStubDivergence($expected, $actual);
+            abortWith("{$transient} generated for this target diverges from the committed {$committed}: either "
+                . 'the committed file is stale (regenerate the canonical linux-x64-nts target and commit) or this '
+                . "target has #ifdef'd fields missing from 'stub_platform_fields' in tools/generator/symbols.php");
+        }
+    }
+}
+
+/**
+ * Prints a per-class summary of how a target's generated stubs differ from the
+ * committed canonical ones (or a first-difference fallback for non-class
+ * content such as the meta file).
+ */
+function reportStubDivergence(string $expected, string $actual): void
+{
+    $parseClasses = static function (string $content): array {
+        preg_match_all('/final class (\w+)\n\{\n(.*?)\n\}/s', $content, $matches, PREG_SET_ORDER);
+        $classes = [];
+        foreach ($matches as $match) {
+            $classes[$match[1]] = $match[2];
+        }
+
+        return $classes;
+    };
+    $expectedClasses = $parseClasses($expected);
+    $actualClasses   = $parseClasses($actual);
+    $reported        = false;
+    foreach (array_keys(array_diff_key($expectedClasses, $actualClasses)) as $name) {
+        fwrite(STDERR, "==> stub divergence: class {$name} is committed but not generated for this target\n");
+        $reported = true;
+    }
+    foreach (array_keys(array_diff_key($actualClasses, $expectedClasses)) as $name) {
+        fwrite(STDERR, "==> stub divergence: class {$name} is generated for this target but not committed\n");
+        $reported = true;
+    }
+    foreach (array_intersect_key($actualClasses, $expectedClasses) as $name => $body) {
+        if ($expectedClasses[$name] === $body) {
+            continue;
+        }
+        fwrite(STDERR, "==> stub divergence in class {$name}:\n");
+        $expectedLines = explode("\n", $expectedClasses[$name]);
+        $actualLines   = explode("\n", $body);
+        foreach (array_diff($expectedLines, $actualLines) as $line) {
+            fwrite(STDERR, '    committed only:   ' . trim($line) . "\n");
+        }
+        foreach (array_diff($actualLines, $expectedLines) as $line) {
+            fwrite(STDERR, '    this target only: ' . trim($line) . "\n");
+        }
+        $reported = true;
+    }
+    if (!$reported) {
+        $expectedLines = explode("\n", $expected);
+        $actualLines   = explode("\n", $actual);
+        $total         = max(count($expectedLines), count($actualLines));
+        for ($line = 0; $line < $total; $line++) {
+            if (($expectedLines[$line] ?? null) !== ($actualLines[$line] ?? null)) {
+                fwrite(STDERR, '==> first difference at line ' . ($line + 1) . ":\n");
+                fwrite(STDERR, '    committed:   ' . trim($expectedLines[$line] ?? '<eof>') . "\n");
+                fwrite(STDERR, '    this target: ' . trim($actualLines[$line] ?? '<eof>') . "\n");
+                break;
+            }
+        }
+    }
+}
+
 function removeDirectory(string $directory): void
 {
     if (!is_dir($directory)) {
@@ -366,6 +467,11 @@ if ($isNative) {
         fwrite(STDERR, "==> FAILED: {$runningMinor} {$runningTs} (exit {$exitCode})\n");
         exit(1);
     }
+    publishStubs(
+        "{$repositoryRoot}/include/{$runningMinor}/{$platform}",
+        $repositoryRoot,
+        PHP_OS_FAMILY === 'Linux' && $arch === 'x64' && $runningTs === 'nts',
+    );
     echo "==> OK: {$repositoryRoot}/include/{$runningMinor}/{$platform}\n";
     exit(0);
 }
@@ -440,6 +546,9 @@ foreach ($targets as $target) {
         passthru('rm -rf ' . escapeshellarg($targetCacheDir));
         passthru('mv ' . escapeshellarg("{$targetCacheDir}-new") . ' ' . escapeshellarg($targetCacheDir));
     }
+    // Docker containers are Linux by construction, so linux-<arch>-nts is the
+    // canonical stub target here; zts (and any foreign-arch run) byte-compares.
+    publishStubs($outputDir, $repositoryRoot, $target['ts'] === 'nts' && $arch === 'x64');
     echo "==> OK: {$outputDir}\n";
 }
 
