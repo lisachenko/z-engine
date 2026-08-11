@@ -103,13 +103,20 @@ function developmentPackVersion(string $directory): ?string
 }
 
 /**
- * Publishes the per-target transient stub artifacts (structs.php and
- * phpstorm.meta.php, emitted next to engine.h): the canonical target
- * (linux-x64-nts) moves them to their committed locations (stubs/ and the
- * repository root), every other target byte-compares its output against those
- * committed files and fails on divergence - the enforcement that keeps the
- * stubs identical across all supported targets. The transients are removed
- * either way so include/<target>/ holds only the four per-target artifacts.
+ * Publishes the transient stub artifacts (structs.php and phpstorm.meta.php,
+ * emitted next to engine.h) for the CANONICAL target only.
+ *
+ * The stubs are an analysis-only, branch-level artifact: their field *types*
+ * are IDE/PHPStan hints derived from one canonical build (linux-x64-nts), not
+ * a per-platform ABI record - that is layouts.json's job, and it stays
+ * per-target. A field's C spelling can genuinely differ across platforms
+ * (`zend_atomic_bool.value` is `_Atomic(_Bool)` on linux/darwin but
+ * `volatile char` on windows) without changing what the PHP code, which is
+ * platform-agnostic, may read. So the canonical build is authoritative and
+ * the other targets neither publish nor byte-compare the stubs; they just
+ * discard their transient copies so include/<target>/ keeps only its four
+ * per-target artifacts. Staleness of the committed stubs against the canonical
+ * engine is caught by the linux header-drift job (which diffs stubs/ too).
  */
 function publishStubs(string $outputDir, string $repositoryRoot, bool $isCanonical): void
 {
@@ -122,83 +129,17 @@ function publishStubs(string $outputDir, string $repositoryRoot, bool $isCanonic
         if (!is_file($generated)) {
             abortWith("the generator did not produce {$transient} in {$outputDir}");
         }
-        if ($isCanonical) {
-            if (!is_dir(dirname($committed)) && !mkdir(dirname($committed), 0777, true)) {
-                abortWith('cannot create ' . dirname($committed));
-            }
-            if (!rename($generated, $committed)) {
-                abortWith("cannot move {$generated} to {$committed}");
-            }
+        if (!$isCanonical) {
+            // Non-canonical target: the stubs are owned by the canonical build; drop the
+            // transient copy so include/<target>/ stays clean, without publishing or diffing.
+            unlink($generated);
             continue;
         }
-        $expected = is_file($committed) ? (string) file_get_contents($committed) : null;
-        $actual   = (string) file_get_contents($generated);
-        unlink($generated);
-        if ($expected === null) {
-            abortWith("{$committed} is not committed yet - generate the canonical linux-x64-nts target first");
+        if (!is_dir(dirname($committed)) && !mkdir(dirname($committed), 0777, true)) {
+            abortWith('cannot create ' . dirname($committed));
         }
-        if ($expected !== $actual) {
-            reportStubDivergence($expected, $actual);
-            abortWith("{$transient} generated for this target diverges from the committed {$committed}: either "
-                . 'the committed file is stale (regenerate the canonical linux-x64-nts target and commit) or this '
-                . "target has #ifdef'd fields missing from 'stub_platform_fields' in tools/generator/symbols.php");
-        }
-    }
-}
-
-/**
- * Prints a per-class summary of how a target's generated stubs differ from the
- * committed canonical ones (or a first-difference fallback for non-class
- * content such as the meta file).
- */
-function reportStubDivergence(string $expected, string $actual): void
-{
-    $parseClasses = static function (string $content): array {
-        preg_match_all('/final class (\w+)\n\{\n(.*?)\n\}/s', $content, $matches, PREG_SET_ORDER);
-        $classes = [];
-        foreach ($matches as $match) {
-            $classes[$match[1]] = $match[2];
-        }
-
-        return $classes;
-    };
-    $expectedClasses = $parseClasses($expected);
-    $actualClasses   = $parseClasses($actual);
-    $reported        = false;
-    foreach (array_keys(array_diff_key($expectedClasses, $actualClasses)) as $name) {
-        fwrite(STDERR, "==> stub divergence: class {$name} is committed but not generated for this target\n");
-        $reported = true;
-    }
-    foreach (array_keys(array_diff_key($actualClasses, $expectedClasses)) as $name) {
-        fwrite(STDERR, "==> stub divergence: class {$name} is generated for this target but not committed\n");
-        $reported = true;
-    }
-    foreach (array_intersect_key($actualClasses, $expectedClasses) as $name => $body) {
-        if ($expectedClasses[$name] === $body) {
-            continue;
-        }
-        fwrite(STDERR, "==> stub divergence in class {$name}:\n");
-        $expectedLines = explode("\n", $expectedClasses[$name]);
-        $actualLines   = explode("\n", $body);
-        foreach (array_diff($expectedLines, $actualLines) as $line) {
-            fwrite(STDERR, '    committed only:   ' . trim($line) . "\n");
-        }
-        foreach (array_diff($actualLines, $expectedLines) as $line) {
-            fwrite(STDERR, '    this target only: ' . trim($line) . "\n");
-        }
-        $reported = true;
-    }
-    if (!$reported) {
-        $expectedLines = explode("\n", $expected);
-        $actualLines   = explode("\n", $actual);
-        $total         = max(count($expectedLines), count($actualLines));
-        for ($line = 0; $line < $total; $line++) {
-            if (($expectedLines[$line] ?? null) !== ($actualLines[$line] ?? null)) {
-                fwrite(STDERR, '==> first difference at line ' . ($line + 1) . ":\n");
-                fwrite(STDERR, '    committed:   ' . trim($expectedLines[$line] ?? '<eof>') . "\n");
-                fwrite(STDERR, '    this target: ' . trim($actualLines[$line] ?? '<eof>') . "\n");
-                break;
-            }
+        if (!rename($generated, $committed)) {
+            abortWith("cannot move {$generated} to {$committed}");
         }
     }
 }

@@ -267,10 +267,17 @@ Two conventions back this up:
   `cast(zend_string::class, $p)` is a **pointer** cast to `zend_string*`. The raw string form of
   `cast()` stays the escape hatch for pointer arithmetic (`'char *'`) and the pointer-to-pointer /
   array / primitive forms (`'zend_ast **'`, `'char[N]'`, `'uintptr_t'`) that no stub models.
-  Fields whose set differs across targets (`#ifdef`'d engine fields) are listed in
-  `stub_platform_fields` in `symbols.php` and omitted on every target, keeping the stub file
-  byte-identical everywhere - the `header-drift` CI job diffs `stubs/` and `.phpstorm.meta.php`
-  alongside `include/`, and the darwin/windows generators byte-compare against the canonical copy.
+  The stubs are a **branch-level analysis artifact derived from one canonical build**
+  (`linux-x64-nts`), not a per-platform ABI record (that is `layouts.json`, which stays
+  per-target): a field's C spelling can genuinely differ across platforms (e.g.
+  `zend_atomic_bool.value` is `_Atomic(_Bool)` on linux/darwin but `volatile char` on
+  windows) without changing what the platform-agnostic PHP code may read. So only the
+  canonical build publishes `stubs/` and `.phpstorm.meta.php`; the darwin/windows generators
+  neither publish nor diff them. Staleness against the canonical engine is caught by the
+  linux `header-drift` job, which diffs `stubs/` and `.phpstorm.meta.php` alongside `include/`.
+  Fields that must never appear in a stub - platform-`#ifdef`'d ones, or ones with a
+  platform-divergent spelling the PHP code never reads - are listed in `stub_platform_fields`
+  in `symbols.php` and omitted everywhere.
 - **Contiguous struct arrays go through `Type\StructArray`.** zval tables (op_array
   literals, class default property/static tables) and pointer lists (resolved interfaces)
   use the generic `ArrayAccess`/`Countable` `StructArray<T>` view - callers reach elements
