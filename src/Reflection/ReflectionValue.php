@@ -16,6 +16,17 @@ namespace ZEngine\Reflection;
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
 use ZEngine\Core;
+use ZEngine\Generated\zend_array;
+use ZEngine\Generated\zend_class_entry;
+use ZEngine\Generated\zend_function;
+use ZEngine\Generated\zend_internal_function;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zend_refcounted_h;
+use ZEngine\Generated\zend_reference;
+use ZEngine\Generated\zend_resource;
+use ZEngine\Generated\zend_string;
+use ZEngine\Generated\zend_value;
+use ZEngine\Generated\zval;
 use ZEngine\Type\ReferenceCountedInterface;
 use ZEngine\Type\ReferenceCountedTrait;
 use ZEngine\Type\ReferenceEntry;
@@ -139,9 +150,12 @@ class ReflectionValue implements ReferenceCountedInterface
     private const Z_TYPE_FLAGS_MASK = 0xFF00;
 
     /**
-     * Stores the pointer to zval structure, associated with this variable
+     * Stores the pointer to the zval structure associated with this variable
+     *
+     * @var zval Typed view; the runtime value is the raw FFI\CData handle
+     *           (see stubs/zend-engine-structs.php)
      */
-    private CData $pointer;
+    private object $pointer;
 
     /**
      * Reversed class constants, containing names by number
@@ -164,8 +178,8 @@ class ReflectionValue implements ReferenceCountedInterface
         $selfExecutionState = Core::$executor->getExecutionState();
         $valueEntry         = $selfExecutionState->getArgument(0);
 
-        $container     = Core::new('zval', false);
-        $this->pointer = Core::addr($container);
+        $container     = Core::new(zval::class, false);
+        $this->pointer = Core::cast(zval::class, Core::addr($container));
         // copy() takes an own reference on refcounted payloads, exactly like ZVAL_COPY
         $valueEntry->copy($this->pointer);
 
@@ -176,12 +190,13 @@ class ReflectionValue implements ReferenceCountedInterface
     /**
      * Creates a reflection from the zval structure
      *
-     * @param CData $valueEntry Pointer to the structure
+     * @param CData|zval $valueEntry Pointer to the structure
      */
-    public static function fromValueEntry(CData $valueEntry): ReflectionValue
+    public static function fromValueEntry(object $valueEntry): ReflectionValue
     {
         /** @var ReflectionValue $reflectionValue */
-        $reflectionValue          = (new NativeReflectionClass(self::class))->newInstanceWithoutConstructor();
+        $reflectionValue = (new NativeReflectionClass(self::class))->newInstanceWithoutConstructor();
+        /** @var zval $valueEntry Narrowed to the stub view at the owning boundary */
         $reflectionValue->pointer = $valueEntry;
 
         return $reflectionValue;
@@ -190,18 +205,20 @@ class ReflectionValue implements ReferenceCountedInterface
     /**
      * Creates a new entry from it's type and value
      *
-     * @param int   $type Value type (base type constant, any type flags are recomputed from the payload)
-     * @param CData $value Value, should be zval-compatible
+     * @param int          $type Value type (base type constant, any type flags are recomputed from the payload)
+     * @param CData|object $value Value, should be zval-compatible (statically stub-typed views are accepted)
      *
      * @return ReflectionValue
      */
-    public static function newEntry(int $type, CData $value, bool $isPersistent = false): ReflectionValue
+    public static function newEntry(int $type, object $value, bool $isPersistent = false): ReflectionValue
     {
         // Allocate non-owned Zval
-        $entry = Core::new('zval', false, $isPersistent);
+        $entry = Core::new(zval::class, false, $isPersistent);
 
-        $entry->value->zv     = Core::cast('zval', $value);
-        $entry->u1->type_info = self::buildTypeInfo($type, $entry);
+        // The payload write goes through a raw view: zend_value member writes are
+        // FFI-level struct-to-pointer conversions the typed stubs do not model
+        Core::cast('zval *', Core::addr($entry))->value->zv = Core::cast('zval', $value);
+        $entry->u1->type_info                               = self::buildTypeInfo($type, $entry);
 
         $reflectionValue = self::fromValueEntry(Core::addr($entry));
         // The container is ours to free, the payload reference still belongs to the caller
@@ -219,7 +236,10 @@ class ReflectionValue implements ReferenceCountedInterface
      *
      * @see zend_types.h:IS_STRING_EX/IS_ARRAY_EX/IS_OBJECT_EX macro family
      */
-    private static function buildTypeInfo(int $type, CData $zvalEntry): int
+    /**
+     * @param CData|zval $zvalEntry
+     */
+    private static function buildTypeInfo(int $type, object $zvalEntry): int
     {
         $baseType = $type & Core::engineConstant('Z_TYPE_MASK');
 
@@ -229,7 +249,10 @@ class ReflectionValue implements ReferenceCountedInterface
         }
 
         // Immutable payloads (interned strings, immutable arrays, SHM data) are copied without refcounting
-        $gcTypeInfo = $zvalEntry->value->counted->gc->u->type_info;
+        /** @var zval $zvalEntry Narrowed to the stub view at the owning boundary */
+        $counted = $zvalEntry->value->counted;
+        assert($counted !== null);
+        $gcTypeInfo = $counted->gc->u->type_info;
         if (($gcTypeInfo & ReferenceCountedInterface::GC_IMMUTABLE) !== 0) {
             return $baseType;
         }
@@ -306,17 +329,20 @@ class ReflectionValue implements ReferenceCountedInterface
      * The previous content is saved aside and released only after the copy took its own
      * reference, so a self-assignment of a refcount-1 payload cannot use freed memory.
      */
-    private static function copyAndReleasePrevious(ReflectionValue $source, CData $dstZval): void
+    /**
+     * @param CData|zval $dstZval
+     */
+    private static function copyAndReleasePrevious(ReflectionValue $source, object $dstZval): void
     {
         // The destination may arrive as an embedded zval struct (16 bytes) or as a zval
         // pointer (8 bytes). FFI::typeof is avoided on purpose: probing a CData's kind and
         // then referencing it again leaks the FFI type structure, see Core::cast
-        if (\FFI::sizeof($dstZval) === Core::sizeof(Core::type('zval'))) {
+        if (Core::sizeof($dstZval) === Core::sizeOfType(zval::class)) {
             $dstZval = Core::addr($dstZval);
         }
 
-        $previousValue = Core::new('zval');
-        Core::memcpy($previousValue, $dstZval[0], Core::sizeof(Core::type('zval')));
+        $previousValue = Core::new(zval::class);
+        Core::memcpy($previousValue, $dstZval[0], Core::sizeOfType(zval::class));
 
         $source->copy($dstZval);
 
@@ -351,34 +377,46 @@ class ReflectionValue implements ReferenceCountedInterface
             throw new \UnexpectedValueException('Indirect entry available only for the type IS_INDIRECT');
         }
 
-        return self::fromValueEntry($this->pointer->value->zv);
+        $indirect = $this->pointer->value->zv;
+        assert($indirect !== null);
+
+        return self::fromValueEntry($indirect);
     }
 
     /**
      * Type-friendly getter to return zend_class_entry directly
      */
-    public function getRawClass(): CData
+    /**
+     * @return zend_class_entry
+     */
+    public function getRawClass(): object
     {
         if ($this->pointer->u1->v->type !== self::IS_PTR) {
             throw new \UnexpectedValueException('Class entry available only for the type IS_PTR');
         }
+        $classEntry = $this->pointer->value->ce;
+        assert($classEntry !== null);
 
-        return $this->pointer->value->ce;
+        return $classEntry;
     }
 
     /**
      * Type-friendly getter to return zend_function/zend_internal_function directly
      */
-    public function getRawFunction(): CData
+    /**
+     * @return zend_function|zend_internal_function
+     */
+    public function getRawFunction(): object
     {
         if ($this->pointer->u1->v->type !== self::IS_PTR) {
             throw new \UnexpectedValueException('Function entry available only for the type IS_PTR');
         }
 
         $function = $this->pointer->value->func;
+        assert($function !== null);
         // If we have an internal function, then we should cast it to the zend_internal_function
         if ($function->type === Core::ZEND_INTERNAL_FUNCTION) {
-            $function = Core::cast('zend_internal_function *', $function);
+            return Core::cast(zend_internal_function::class, $function);
         }
 
         return $function;
@@ -387,61 +425,86 @@ class ReflectionValue implements ReferenceCountedInterface
     /**
      * Type-friendly getter to return zend_string directly
      */
-    public function getRawString(): CData
+    /**
+     * @return zend_string
+     */
+    public function getRawString(): object
     {
         if ($this->pointer->u1->v->type !== self::IS_STRING) {
             throw new \UnexpectedValueException('String entry available only for the type IS_STRING');
         }
+        $string = $this->pointer->value->str;
+        assert($string !== null);
 
-        return $this->pointer->value->str;
+        return $string;
     }
 
     /**
      * Type-friendly getter to return zend_array directly
      */
-    public function getRawArray(): CData
+    /**
+     * @return zend_array
+     */
+    public function getRawArray(): object
     {
         if ($this->pointer->u1->v->type !== self::IS_ARRAY) {
             throw new \UnexpectedValueException('Array entry is available only for the type IS_ARRAY');
         }
+        $array = $this->pointer->value->arr;
+        assert($array !== null);
 
-        return $this->pointer->value->arr;
+        return $array;
     }
 
     /**
      * Type-friendly getter to return zend_object directly
      */
-    public function getRawObject(): CData
+    /**
+     * @return zend_object
+     */
+    public function getRawObject(): object
     {
         if ($this->pointer->u1->v->type !== self::IS_OBJECT) {
             throw new \UnexpectedValueException('Object entry available only for the type IS_OBJECT');
         }
+        $entry = $this->pointer->value->obj;
+        assert($entry !== null);
 
-        return $this->pointer->value->obj;
+        return $entry;
     }
 
     /**
      * Type-friendly getter to return zend_resource directly
      */
-    public function getRawResource(): CData
+    /**
+     * @return zend_resource
+     */
+    public function getRawResource(): object
     {
         if ($this->pointer->u1->v->type !== self::IS_RESOURCE) {
             throw new \UnexpectedValueException('Resource entry available only for the type IS_RESOURCE');
         }
+        $resource = $this->pointer->value->res;
+        assert($resource !== null);
 
-        return $this->pointer->value->res;
+        return $resource;
     }
 
     /**
      * Type-friendly getter to return zend_resource directly
      */
-    public function getRawReference(): CData
+    /**
+     * @return zend_reference
+     */
+    public function getRawReference(): object
     {
         if ($this->pointer->u1->v->type !== self::IS_REFERENCE) {
             throw new \UnexpectedValueException('Reference entry available only for the type IS_REFERENCE');
         }
+        $reference = $this->pointer->value->ref;
+        assert($reference !== null);
 
-        return $this->pointer->value->ref;
+        return $reference;
     }
 
     /**
@@ -463,7 +526,10 @@ class ReflectionValue implements ReferenceCountedInterface
         }
 
         // Borrowed view over the inner val slot, same as ReferenceEntry::getValue()
-        return self::fromValueEntry($this->valueUnion()->ref->val);
+        $reference = $this->valueUnion()->ref;
+        assert($reference !== null);
+
+        return self::fromValueEntry($reference->val);
     }
 
     /**
@@ -474,8 +540,10 @@ class ReflectionValue implements ReferenceCountedInterface
         if ($this->pointer->u1->v->type !== self::IS_PTR) {
             throw new \UnexpectedValueException('Pointer entry available only for the type IS_PTR');
         }
+        $pointer = $this->pointer->value->ptr;
+        assert($pointer !== null);
 
-        return $this->pointer->value->ptr;
+        return $pointer;
     }
 
     /**
@@ -485,7 +553,10 @@ class ReflectionValue implements ReferenceCountedInterface
      * state and writes go straight to the engine. Prefer the typed accessors
      * (getType(), getNativeValue(), equals()) over poking fields on the result.
      */
-    public function getRawValue(): CData
+    /**
+     * @return zval
+     */
+    public function getRawValue(): object
     {
         $this->assertNotReleased();
 
@@ -546,8 +617,12 @@ class ReflectionValue implements ReferenceCountedInterface
             case self::IS_DOUBLE:
                 return $thisValue->dval === $otherValue->dval;
             case self::IS_STRING:
-                return StringEntry::fromCData($thisValue->str)->getStringValue()
-                    === StringEntry::fromCData($otherValue->str)->getStringValue();
+                $thisString  = $thisValue->str;
+                $otherString = $otherValue->str;
+                assert($thisString !== null && $otherString !== null);
+
+                return StringEntry::fromCData($thisString)->getStringValue()
+                    === StringEntry::fromCData($otherString)->getStringValue();
             default:
                 // Arrays, objects and constant expressions: conservatively different
                 return false;
@@ -570,14 +645,11 @@ class ReflectionValue implements ReferenceCountedInterface
     /**
      * Returns the shaped value union (zend_value) of this zval
      *
-     * @return ZendValueShape
+     * @return zend_value
      */
     private function valueUnion(): object
     {
-        /** @var ZendValueShape $value */
-        $value = $this->pointer->value;
-
-        return $value;
+        return $this->pointer->value;
     }
 
     /**
@@ -641,9 +713,12 @@ class ReflectionValue implements ReferenceCountedInterface
      * Returns a zval POINTER for engine calls, whether this wrapper holds an embedded
      * zval struct (a table slot / constant value) or a zval pointer (a container)
      */
-    private function zvalPointer(): CData
+    /**
+     * @return CData|zval
+     */
+    private function zvalPointer(): object
     {
-        if (\FFI::sizeof($this->pointer) === Core::sizeof(Core::type('zval'))) {
+        if (Core::sizeof($this->pointer) === Core::sizeOfType(zval::class)) {
             return Core::addr($this->pointer);
         }
 
@@ -706,25 +781,27 @@ class ReflectionValue implements ReferenceCountedInterface
     /**
      * Performs copying of current value to another one
      *
-     * @param CData $dstZval Address to copy value to
+     * @param CData|zval $dstZval Address to copy value to
      *
      *@see zend_types.h:ZVAL_COPY(z, v) macro
      */
-    public function copy(CData $dstZval): void
+    public function copy(object $dstZval): void
     {
         $this->assertNotReleased();
+        /** @var zval $dst Narrowed to the stub view (the struct and pointer forms share it) */
+        $dst      = $dstZval;
         $typeInfo = $this->getType();
         $gc       = $this->pointer->value->counted;
 
         // Content of ZVAL_COPY_VALUE_EX
         if (PHP_INT_SIZE === 4) {                       // if SIZEOF_SIZE_T == 4
-            $w2                      = $this->pointer->value->ww->w2;        // uint32_t _w2 = v->value.ww.w2;
-            $dstZval->value->counted = $gc;             // Z_COUNTED_P(z) = gc;
-            $dstZval->value->ww->w2  = $w2;             // z->value.ww.w2 = _w2;
-            $dstZval->u1->type_info  = $typeInfo;       // Z_TYPE_INFO_P(z) = t;
+            $w2                  = $this->pointer->value->ww->w2;        // uint32_t _w2 = v->value.ww.w2;
+            $dst->value->counted = $gc;                 // Z_COUNTED_P(z) = gc;
+            $dst->value->ww->w2  = $w2;                 // z->value.ww.w2 = _w2;
+            $dst->u1->type_info  = $typeInfo;           // Z_TYPE_INFO_P(z) = t;
         } elseif (PHP_INT_SIZE === 8) {
-            $dstZval->value->counted = $gc;             // Z_COUNTED_P(z) = gc;
-            $dstZval->u1->type_info  = $typeInfo;       // Z_TYPE_INFO_P(z) = t;
+            $dst->value->counted = $gc;                 // Z_COUNTED_P(z) = gc;
+            $dst->u1->type_info  = $typeInfo;           // Z_TYPE_INFO_P(z) = t;
         } else {
             throw new \UnexpectedValueException('Unknown SIZEOF_SIZE_T');
         }
@@ -770,8 +847,10 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * @inheritDoc
+     *
+     * @return zend_refcounted_h
      */
-    protected function getGC(): CData
+    protected function getGC(): object
     {
         if (!$this->isTypeInfoRefCounted($this->getType())) {
             throw new \LogicException(
@@ -780,7 +859,10 @@ class ReflectionValue implements ReferenceCountedInterface
             );
         }
 
-        return $this->pointer->value->counted->gc;
+        $counted = $this->pointer->value->counted;
+        assert($counted !== null);
+
+        return $counted->gc;
     }
 
     /**

@@ -14,6 +14,9 @@ declare(strict_types=1);
 namespace ZEngine\Type;
 
 use FFI\CData;
+use ZEngine\Core;
+use ZEngine\Generated\zend_refcounted_h;
+use ZEngine\Generated\zend_resource;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionValue;
 
@@ -48,7 +51,11 @@ class ResourceEntry implements ReferenceCountedInterface
     use ReferenceCountedTrait;
     use ReleasableTrait;
 
-    private CData $pointer;
+    /**
+     * @var zend_resource Typed view of the wrapped engine resource; the runtime value is
+     *                    the raw FFI\CData handle (see stubs/zend-engine-structs.php)
+     */
+    private object $pointer;
 
     /**
      * Creates an owning entry: holds one reference on the resource for the wrapper lifetime
@@ -59,7 +66,7 @@ class ResourceEntry implements ReferenceCountedInterface
             throw new \InvalidArgumentException('Only resource type is accepted');
         }
         $reflectionValue = new ReflectionValue($resource);
-        $this->pointer   = $reflectionValue->getRawResource();
+        $this->pointer   = Core::cast(zend_resource::class, $reflectionValue->getRawResource());
         // Take our own reference while the temporary reflection value still holds one
         $this->incrementReferenceCount();
         $this->ownsReference = true;
@@ -69,10 +76,14 @@ class ResourceEntry implements ReferenceCountedInterface
     /**
      * Creates a resource entry from the zend_resource structure (borrowed, does not addref)
      */
-    public static function fromCData(CData $pointer): ResourceEntry
+    /**
+     * @param CData|zend_resource $pointer
+     */
+    public static function fromCData(object $pointer): ResourceEntry
     {
         /** @var ResourceEntry $resourceEntry */
-        $resourceEntry          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $resourceEntry = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        /** @var zend_resource $pointer Narrowed to the stub view at the owning boundary */
         $resourceEntry->pointer = $pointer;
 
         return $resourceEntry;
@@ -109,7 +120,11 @@ class ResourceEntry implements ReferenceCountedInterface
      */
     public function getRawData(): CData
     {
-        return $this->pointer->ptr;
+        $data = $this->pointer->ptr;
+        // Engine invariant: a live resource always carries its payload pointer
+        assert($data !== null);
+
+        return $data;
     }
 
     /**
@@ -148,9 +163,11 @@ class ResourceEntry implements ReferenceCountedInterface
     }
 
     /**
-     * This method should return an instance of zend_refcounted_h
+     * @inheritDoc
+     *
+     * @return zend_refcounted_h
      */
-    protected function getGC(): CData
+    protected function getGC(): object
     {
         return $this->pointer->gc;
     }

@@ -18,6 +18,11 @@ use IteratorAggregate;
 use ReflectionClass as NativeReflectionClass;
 use Traversable;
 use ZEngine\Core;
+use ZEngine\Generated\Bucket;
+use ZEngine\Generated\HashTable as HashTableStruct;
+use ZEngine\Generated\zend_function;
+use ZEngine\Generated\zend_internal_function;
+use ZEngine\Generated\zend_refcounted_h;
 use ZEngine\Reflection\ReflectionValue;
 
 /**
@@ -83,7 +88,11 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
      */
     private static ?CData $uninitializedBucket = null;
 
-    protected CData $pointer;
+    /**
+     * @var HashTableStruct Typed view of the wrapped engine hashtable; the runtime value
+     *                      is the raw FFI\CData handle (see stubs/zend-engine-structs.php)
+     */
+    protected object $pointer;
 
     /**
      * Creates a NEW empty engine-compatible hashtable OWNED by this wrapper
@@ -100,15 +109,12 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
      */
     public function __construct()
     {
-        $memory  = Core::trackedNew('HashTable', static::isPersistentAllocation());
-        $pointer = Core::cast('HashTable *', Core::addr($memory));
+        $memory  = Core::trackedNew(HashTableStruct::class, static::isPersistentAllocation());
+        $pointer = Core::cast(HashTableStruct::class, Core::addr($memory));
 
-        $gcHeader = $pointer->gc;
-        assert($gcHeader instanceof CData);
-        $gcInfo = $gcHeader->u;
-        assert($gcInfo instanceof CData);
+        $gcHeader   = $pointer->gc;
+        $gcInfo     = $gcHeader->u;
         $flagsUnion = $pointer->u;
-        assert($flagsUnion instanceof CData);
 
         $gcHeader->refcount        = 1;
         $gcInfo->type_info         = static::gcTypeInfo();
@@ -130,11 +136,14 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
      *
      * The caller guarantees the pointed table stays alive for the wrapper lifetime -
      * the standard borrowed construction of the framework (docs/long-running.md).
+     *
+     * @param CData|HashTableStruct $hashInstance
      */
-    public static function fromCData(CData $hashInstance): static
+    public static function fromCData(object $hashInstance): static
     {
         $table = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
         \assert($table instanceof static);
+        /** @var HashTableStruct $hashInstance Narrowed to the stub view at the owning boundary */
         $table->pointer = $hashInstance;
 
         return $table;
@@ -184,8 +193,10 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
      * @see zend_types.h:HT_SET_DATA_ADDR/HT_HASH_SIZE - for HT_MIN_MASK the hash part
      *      occupies two uint32_t slots, so arData points 8 bytes past the block start
      * @internal also used by ClassSpecializer to initialize the class-entry tables
+     *
+     * @return Bucket
      */
-    public static function uninitializedBucketData(): CData
+    public static function uninitializedBucketData(): object
     {
         if (self::$uninitializedBucket === null) {
             $block = Core::trackedNew('uint32_t[2]', true);
@@ -195,7 +206,7 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
             self::$uninitializedBucket = $block;
         }
 
-        return Core::pointerAtAddress('Bucket *', Core::addressOf(self::$uninitializedBucket) + 8);
+        return Core::pointerAtAddress(Bucket::class, Core::addressOf(self::$uninitializedBucket) + 8);
     }
 
     /**
@@ -208,18 +219,21 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
         $iterator = function () {
             $isPacked = (bool) ($this->pointer->u->flags & self::HASH_FLAG_PACKED);
             $numUsed  = $this->pointer->nNumUsed;
+            // Initialized tables always carry a data block (the shared sentinel at minimum)
+            $arPacked = $this->pointer->arPacked;
+            $arData   = $this->pointer->arData;
+            assert($arPacked !== null && $arData !== null);
             for ($index = 0; $index < $numUsed; $index++) {
                 if ($isPacked) {
                     // Since PHP 8.2 packed arrays store plain zvals with
                     // implicit integer keys instead of Bucket structures
-                    $value = $this->pointer->arPacked[$index];
+                    $value = $arPacked[$index];
                     if ($value->u1->v->type === ReflectionValue::IS_UNDEF) {
                         continue;
                     }
                     yield $index => ReflectionValue::fromValueEntry($value);
                 } else {
-                    $item = $this->pointer->arData[$index];
-                    assert($item instanceof CData);
+                    $item = $arData[$index];
                     if ($item->val->u1->v->type === ReflectionValue::IS_UNDEF) {
                         continue;
                     }
@@ -228,7 +242,6 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
                     } else {
                         // Integer-keyed bucket: the numeric key lives in the hash field
                         $key = $item->h;
-                        assert(is_int($key));
                     }
                     yield $key => ReflectionValue::fromValueEntry($item->val);
                 }
@@ -251,6 +264,7 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
         $pointer     = Core::call('zend_hash_find', $this->pointer, $stringEntry->getRawValue());
 
         if ($pointer !== null) {
+            assert($pointer instanceof CData);
             $pointer = ReflectionValue::fromValueEntry($pointer);
         }
 
@@ -346,13 +360,13 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
      * Keys are stored (and looked up) lowercased, matching how the engine keys function and
      * method tables - the declared function_name keeps its original case for display.
      *
-     * @param string $key         Function/method name (any case)
-     * @param CData  $rawFunction zend_function pointer to publish
+     * @param string                            $key         Function/method name (any case)
+     * @param CData|zend_function|zend_internal_function $rawFunction zend_function pointer to publish
      *
-     * @return CData The zend_function pointer stored in the table bucket
+     * @return zend_function|zend_internal_function The zend_function pointer stored in the table bucket
      * @internal
      */
-    public function addFunctionEntry(string $key, CData $rawFunction): CData
+    public function addFunctionEntry(string $key, object $rawFunction): object
     {
         $lowerKey = strtolower($key);
 
@@ -385,6 +399,7 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
         $pointer = Core::call('zend_hash_index_find', $this->pointer, $key);
 
         if ($pointer !== null) {
+            assert($pointer instanceof CData);
             $pointer = ReflectionValue::fromValueEntry($pointer);
         }
 
@@ -413,9 +428,11 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
 
     /**
      * Returns raw C value entry (HashTable *)
+     *
+     * @return HashTableStruct
      * @internal
      */
-    public function getRawValue(): CData
+    public function getRawValue(): object
     {
         return $this->pointer;
     }
@@ -426,9 +443,11 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
     }
 
     /**
-     * This method should return an instance of zend_refcounted_h
+     * @inheritDoc
+     *
+     * @return zend_refcounted_h
      */
-    protected function getGC(): CData
+    protected function getGC(): object
     {
         return $this->pointer->gc;
     }

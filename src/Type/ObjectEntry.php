@@ -16,6 +16,11 @@ namespace ZEngine\Type;
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
 use ZEngine\Core;
+use ZEngine\Generated\HashTable as HashTableStruct;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zend_object_handlers;
+use ZEngine\Generated\zend_refcounted_h;
+use ZEngine\Generated\zval;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionValue;
 
@@ -54,7 +59,11 @@ class ObjectEntry implements ReferenceCountedInterface
 
     private HashTable $properties;
 
-    private CData $pointer;
+    /**
+     * @var zend_object Typed view of the wrapped engine object; the runtime value is
+     *                  the raw FFI\CData handle (see stubs/zend-engine-structs.php)
+     */
+    private object $pointer;
 
     /**
      * Weak binding to the source PHP object for dangling-access detection (weakFor() entries only)
@@ -78,9 +87,9 @@ class ObjectEntry implements ReferenceCountedInterface
     /**
      * Creates an object entry from the zend_object structure (borrowed, does not addref)
      *
-     * @param CData $pointer Pointer to the structure
+     * @param CData|zend_object $pointer Pointer to the structure
      */
-    public static function fromCData(CData $pointer): ObjectEntry
+    public static function fromCData(object $pointer): ObjectEntry
     {
         /** @var ObjectEntry $objectEntry */
         $objectEntry = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
@@ -115,7 +124,11 @@ class ObjectEntry implements ReferenceCountedInterface
     {
         $this->assertObjectAlive();
 
-        return ReflectionClass::fromCData($this->pointer->ce);
+        $classEntry = $this->pointer->ce;
+        // Engine invariant: every live object carries its class entry
+        assert($classEntry !== null);
+
+        return ReflectionClass::fromCData(Core::cast('zend_class_entry *', $classEntry));
     }
 
     /**
@@ -234,7 +247,9 @@ class ObjectEntry implements ReferenceCountedInterface
     public function getPropertySlot(int $index): ReflectionValue
     {
         $this->assertObjectAlive();
-        $propertiesCount = $this->pointer->ce->default_properties_count;
+        $classEntry = $this->pointer->ce;
+        assert($classEntry !== null);
+        $propertiesCount = $classEntry->default_properties_count;
         if ($index < 0 || $index >= $propertiesCount) {
             throw new \OutOfBoundsException("Property slot {$index} is out of bounds 0.." . ($propertiesCount - 1));
         }
@@ -259,9 +274,11 @@ class ObjectEntry implements ReferenceCountedInterface
 
     /**
      * Returns the raw dynamic-properties HashTable pointer or null if it was never built
+     *
+     * @return HashTableStruct|null
      * @internal
      */
-    public function getDynamicPropertiesPointer(): ?CData
+    public function getDynamicPropertiesPointer(): ?object
     {
         $this->assertObjectAlive();
 
@@ -275,9 +292,13 @@ class ObjectEntry implements ReferenceCountedInterface
      * keeps ownership of both, exactly like setClass() does for class entries.
      * @internal
      */
-    public function setDynamicPropertiesPointer(?CData $hashTable): void
+    /**
+     * @param CData|HashTableStruct|null $hashTable
+     */
+    public function setDynamicPropertiesPointer(?object $hashTable): void
     {
         $this->assertObjectAlive();
+        /** @var HashTableStruct|null $hashTable Narrowed to the stub view at the owning boundary */
         $this->pointer->properties = $hashTable;
     }
 
@@ -291,13 +312,15 @@ class ObjectEntry implements ReferenceCountedInterface
     public function setHandlers(CData $handlers): void
     {
         $this->assertObjectAlive();
-        $this->pointer->handlers = Core::cast('zend_object_handlers *', $handlers);
+        $this->pointer->handlers = Core::cast(zend_object_handlers::class, $handlers);
     }
 
     /**
      * Returns raw C value entry
+     *
+     * @return zend_object
      */
-    public function getRawValue(): CData
+    public function getRawValue(): object
     {
         $this->assertObjectAlive();
 
@@ -335,9 +358,11 @@ class ObjectEntry implements ReferenceCountedInterface
     }
 
     /**
-     * This method should return an instance of zend_refcounted_h
+     * @inheritDoc
+     *
+     * @return zend_refcounted_h
      */
-    protected function getGC(): CData
+    protected function getGC(): object
     {
         $this->assertObjectAlive();
 
@@ -357,12 +382,15 @@ class ObjectEntry implements ReferenceCountedInterface
     /**
      * Performs low-level initialization of object
      */
-    private function initLowLevelStructures(CData $pointer): void
+    /**
+     * @param CData|zend_object $pointer
+     */
+    private function initLowLevelStructures(object $pointer): void
     {
+        /** @var zend_object $pointer Narrowed to the stub view at the owning boundary */
         $this->pointer = $pointer;
         $properties    = $this->pointer->properties;
         if ($properties !== null) {
-            assert($properties instanceof CData);
             $this->properties = HashTable::fromCData($properties);
         }
     }

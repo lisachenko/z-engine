@@ -748,13 +748,13 @@ class Core
      * Copies $size bytes from memory area $source to memory area $target.
      * $source may be any native data structure (FFI\CData) or PHP string.
      *
-     * @param CData $target
+     * @param CData|object $target Runtime value is always CData; statically stub-typed views are accepted
      * @param mixed $source
      * @param int $size
      */
-    public static function memcpy(CData $target, $source, int $size): void
+    public static function memcpy(object $target, $source, int $size): void
     {
-        FFI::memcpy($target, $source, $size);
+        FFI::memcpy(self::toCData($target), $source, $size);
     }
 
     /**
@@ -797,7 +797,10 @@ class Core
     /**
      * Checks if the given pointer refers to a block allocated by z-engine via trackedNew()
      */
-    public static function isTrackedBlock(CData $pointer): bool
+    /**
+     * @param CData|object $pointer Runtime value is always CData; statically stub-typed views are accepted
+     */
+    public static function isTrackedBlock(object $pointer): bool
     {
         return isset(self::$trackedBlocks[self::addressOf($pointer)]);
     }
@@ -808,7 +811,10 @@ class Core
      * Engine-original buffers are deliberately left alone: freeing memory that z-engine did
      * not allocate is exactly the wrong-allocator corruption this registry exists to prevent.
      */
-    public static function untrackAndFree(CData $pointer): void
+    /**
+     * @param CData|object $pointer Runtime value is always CData; statically stub-typed views are accepted
+     */
+    public static function untrackAndFree(object $pointer): void
     {
         $address = self::addressOf($pointer);
         if (!isset(self::$trackedBlocks[$address])) {
@@ -822,7 +828,10 @@ class Core
     /**
      * Removes a block from the registry without freeing it (ownership handed to the engine)
      */
-    public static function untrack(CData $pointer): void
+    /**
+     * @param CData|object $pointer Runtime value is always CData; statically stub-typed views are accepted
+     */
+    public static function untrack(object $pointer): void
     {
         unset(self::$trackedBlocks[self::addressOf($pointer)]);
     }
@@ -850,9 +859,10 @@ class Core
      * The two stay orthogonal: this method does not touch the tracked-block registry, so a
      * caller that frees a block allocated in the same request must Core::untrack() it too.
      *
-     * @param CData $pointer Pointer to the malloc-backed block to release
+     * @param CData|object $pointer Pointer to the malloc-backed block to release; runtime
+     *                              value is always CData, statically stub-typed views are accepted
      */
-    public static function persistentFree(CData $pointer): void
+    public static function persistentFree(object $pointer): void
     {
         if (\DIRECTORY_SEPARATOR !== '/') {
             self::$windowsCrt ??= FFI::cdef('void free(void *);', 'ucrtbase.dll');
@@ -999,11 +1009,13 @@ class Core
     }
 
     /**
-     * Returns the size of given type
+     * Releases an FFI-allocated block
+     *
+     * @param CData|object $variable Runtime value is always CData; statically stub-typed views are accepted
      */
-    public static function free(CData $variable): void
+    public static function free(object $variable): void
     {
-        FFI::free($variable);
+        FFI::free(self::toCData($variable));
     }
 
     /**
