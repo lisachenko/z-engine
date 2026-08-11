@@ -15,6 +15,7 @@ namespace ZEngine\Type;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_op;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\System\ExecutionData;
 use ZEngine\System\OpCode;
@@ -85,11 +86,17 @@ class OpLine
 
     /**
      * Stores the _zend_op * structure pointer
+     *
+     * @var zend_op Typed view; the runtime value is the raw FFI\CData handle
      */
-    private CData $opline;
+    private object $opline;
 
-    public function __construct(CData $opline, ?ExecutionData $context = null)
+    /**
+     * @param CData|zend_op $opline
+     */
+    public function __construct(object $opline, ?ExecutionData $context = null)
     {
+        /** @var zend_op $opline Narrowed to the stub view at the owning boundary */
         $this->opline  = $opline;
         $this->context = $context;
     }
@@ -99,7 +106,10 @@ class OpLine
      */
     public function getHandler(): CData
     {
-        return $this->opline->handler;
+        $handler = $this->opline->handler;
+        assert($handler instanceof CData);
+
+        return $handler;
     }
 
     public function getOp1Type(): int
@@ -114,23 +124,17 @@ class OpLine
 
     public function getOp1(): ?ReflectionValue
     {
-        $value = $this->getValuePointer($this->opline->op1, $this->opline->op1_type);
-
-        return $value;
+        return $this->getValuePointer($this->opline->op1, $this->opline->op1_type);
     }
 
     public function getOp2(): ?ReflectionValue
     {
-        $value = $this->getValuePointer($this->opline->op2, $this->opline->op2_type);
-
-        return $value;
+        return $this->getValuePointer($this->opline->op2, $this->opline->op2_type);
     }
 
     public function getResult(): ?ReflectionValue
     {
-        $value = $this->getValuePointer($this->opline->result, $this->opline->result_type);
-
-        return $value;
+        return $this->getValuePointer($this->opline->result, $this->opline->result_type);
     }
 
     /**
@@ -151,7 +155,7 @@ class OpLine
      */
     public function setCode(int $newCode): void
     {
-        $this->opline->opcode->cdata = $newCode;
+        $this->opline->opcode = $newCode;
     }
 
     /**
@@ -221,20 +225,20 @@ class OpLine
     /**
      * This utility function returns a pointer to value for given op_node and it's type
      *
-     * @param CData $node   Instance of op1/op2/result node
-     * @param int   $opType operation code type, eg IS_CONST, IS_CV...
+     * @param CData|object $node   Instance of op1/op2/result node (znode_op union view)
+     * @param int          $opType operation code type, eg IS_CONST, IS_CV...
      *
      * @return ReflectionValue|null Extracted value or null, if value could not be resolved (eg. not in runtime)
      *
      * @see zend_execute.c:zend_get_zval_ptr
      */
-    private function getValuePointer(CData $node, int $opType): ?ReflectionValue
+    private function getValuePointer(object $node, int $opType): ?ReflectionValue
     {
         $pointer = null;
 
         switch ($opType) {
             case self::IS_CONST:
-                $pointer = self::getRuntimeConstant($this->opline, $node);
+                $pointer = self::getRuntimeConstant(Core::cast('zend_op *', $this->opline), $node);
                 break;
             case self::IS_TMP_VAR:
             case self::IS_VAR:
@@ -242,7 +246,7 @@ class OpLine
             case self::IS_UNUSED: // For some opcodes IS_UNUSED still used, in most cases it points to an IS_UNDEF value
                 // All these types requires context to be present, otherwise we can't resolve such nodes
                 if (isset($this->context)) {
-                    $pointer = $this->context->getCallVariable($node->var);
+                    $pointer = $this->context->getCallVariable(Core::cast('znode_op *', $node)->var);
                 }
                 break;
             default:
@@ -260,12 +264,12 @@ class OpLine
      *
      * @return CData zval* pointer
      */
-    private static function getRuntimeConstant(CData $opline, CData $node): CData
+    private static function getRuntimeConstant(CData $opline, object $node): CData
     {
         // ((zval*)(((char*)(opline)) + (int32_t)(node).constant))
-        $pointer = Core::cast('char *', $opline) + $node->constant;
-        $value   = Core::cast('zval *', $pointer);
+        $constantOffset = Core::cast('znode_op *', $node)->constant;
+        $pointer        = Core::cast('char *', $opline) + $constantOffset;
 
-        return $value;
+        return Core::cast('zval *', $pointer);
     }
 }

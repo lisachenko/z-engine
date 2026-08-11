@@ -78,7 +78,9 @@ class Executor
     public function getExecutionState(): ExecutionData
     {
         // current_execute_data refers to the getExecutionState itself, so we move to the previous item
-        $executionState = new ExecutionData($this->pointer->current_execute_data->prev_execute_data);
+        $frame = $this->pointer->current_execute_data->prev_execute_data;
+        assert($frame instanceof CData);
+        $executionState = new ExecutionData($frame);
 
         return $executionState;
     }

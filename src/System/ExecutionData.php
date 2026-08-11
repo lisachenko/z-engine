@@ -15,6 +15,8 @@ namespace ZEngine\System;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_execute_data;
+use ZEngine\Generated\zval;
 use ZEngine\Reflection\FunctionLikeTrait;
 use ZEngine\Reflection\ReflectionFunction;
 use ZEngine\Reflection\ReflectionMethod;
@@ -68,10 +70,18 @@ use ZEngine\Type\OpLine;
  */
 class ExecutionData
 {
-    private CData $pointer;
+    /**
+     * @var zend_execute_data Typed view of the wrapped frame; the runtime value is
+     *                        the raw FFI\CData handle (see stubs/zend-engine-structs.php)
+     */
+    private object $pointer;
 
-    public function __construct(CData $pointer)
+    /**
+     * @param CData|zend_execute_data $pointer
+     */
+    public function __construct(object $pointer)
     {
+        /** @var zend_execute_data $pointer Narrowed to the stub view at the owning boundary */
         $this->pointer = $pointer;
     }
 
@@ -80,7 +90,10 @@ class ExecutionData
      */
     public function getOpline(): OpLine
     {
-        return new OpLine($this->pointer->opline, $this);
+        $opline = $this->pointer->opline;
+        assert($opline !== null);
+
+        return new OpLine($opline, $this);
     }
 
     /**
@@ -90,7 +103,11 @@ class ExecutionData
      */
     public function nextOpline(): void
     {
-        $this->pointer->opline++;
+        // Pointer arithmetic on the raw frame view: advancing opline by one zend_op.
+        // The raw CData view keeps the field reads/writes untyped (FFI handles the
+        // pointer arithmetic), the typed stub does not model pointer + int.
+        $rawFrame = Core::cast('zend_execute_data *', $this->pointer);
+        $rawFrame->opline++;
     }
 
     /**
@@ -98,7 +115,10 @@ class ExecutionData
      */
     public function getReturnValue(): ReflectionValue
     {
-        return ReflectionValue::fromValueEntry($this->pointer->return_value);
+        $returnValue = $this->pointer->return_value;
+        assert($returnValue !== null);
+
+        return ReflectionValue::fromValueEntry($returnValue);
     }
 
     /**
@@ -113,8 +133,8 @@ class ExecutionData
         }
 
         $functionEntry = $this->pointer->func;
-        assert($functionEntry instanceof CData);
-        if ($this->pointer->func->common->scope === null) {
+        assert($functionEntry !== null);
+        if ($functionEntry->common->scope === null) {
             $reflection = ReflectionFunction::fromCData($functionEntry);
         } else {
             $reflection = ReflectionMethod::fromCData($functionEntry);
@@ -380,14 +400,11 @@ class ExecutionData
      * flags (call_info in u1.type_info) and the argument count (u2.num_args)
      * next to the object scope
      *
-     * @return ZvalShape
+     * @return zval
      */
     private function getThisZvalShape(): object
     {
-        $thisZval = $this->pointer->This;
-
-        /** @var ZvalShape $thisZval */
-        return $thisZval;
+        return $this->pointer->This;
     }
 
     /**

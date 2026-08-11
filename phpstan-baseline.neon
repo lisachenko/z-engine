@@ -1297,30 +1297,6 @@ parameters:
 			path: src/System/ExecutionData.php
 
 		-
-			message: '#^Cannot access property \$common on mixed\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: src/System/ExecutionData.php
-
-		-
-			message: '#^Cannot access property \$num_args on mixed\.$#'
-			identifier: property.nonObject
-			count: 3
-			path: src/System/ExecutionData.php
-
-		-
-			message: '#^Cannot access property \$scope on mixed\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: src/System/ExecutionData.php
-
-		-
-			message: '#^Cannot access property \$u2 on mixed\.$#'
-			identifier: property.nonObject
-			count: 3
-			path: src/System/ExecutionData.php
-
-		-
 			message: '#^Cannot use \+\+ on mixed\.$#'
 			identifier: postInc.type
 			count: 1
@@ -1345,12 +1321,6 @@ parameters:
 			path: src/System/ExecutionData.php
 
 		-
-			message: '#^Method ZEngine\\System\\ExecutionData\:\:getNumberOfArguments\(\) should return int but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/System/ExecutionData.php
-
-		-
 			message: '#^PHPDoc tag @param references unknown parameter\: \$call$#'
 			identifier: parameter.notFound
 			count: 1
@@ -1359,30 +1329,6 @@ parameters:
 		-
 			message: '#^PHPDoc tag @return with type ZEngine\\Reflection\\FunctionLikeTrait is incompatible with native type ReflectionFunctionAbstract\.$#'
 			identifier: return.phpDocType
-			count: 1
-			path: src/System/ExecutionData.php
-
-		-
-			message: '#^Parameter \#1 \$opline of class ZEngine\\Type\\OpLine constructor expects FFI\\CData, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/System/ExecutionData.php
-
-		-
-			message: '#^Parameter \#1 \$pointer of class ZEngine\\System\\ExecutionData constructor expects FFI\\CData, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/System/ExecutionData.php
-
-		-
-			message: '#^Parameter \#1 \$valueEntry of static method ZEngine\\Reflection\\ReflectionValue\:\:fromValueEntry\(\) expects FFI\\CData\|ZEngine\\Generated\\zval, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/System/ExecutionData.php
-
-		-
-			message: '#^Parameter \#1 \$variable of static method ZEngine\\Core\:\:addr\(\) expects object, mixed given\.$#'
-			identifier: argument.type
 			count: 1
 			path: src/System/ExecutionData.php
 
@@ -1413,12 +1359,6 @@ parameters:
 		-
 			message: '#^PHPDoc tag @var for property ZEngine\\System\\Executor\:\:\$objectStore with type array\<ZEngine\\Type\\ObjectEntry\>\|ZEngine\\System\\ObjectStore is not subtype of native type ZEngine\\System\\ObjectStore\.$#'
 			identifier: property.phpDocType
-			count: 1
-			path: src/System/Executor.php
-
-		-
-			message: '#^Parameter \#1 \$pointer of class ZEngine\\System\\ExecutionData constructor expects FFI\\CData, mixed given\.$#'
-			identifier: argument.type
 			count: 1
 			path: src/System/Executor.php
 
@@ -1561,42 +1501,6 @@ parameters:
 			path: src/Type/OpLine.php
 
 		-
-			message: '#^Cannot access property \$cdata on mixed\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: src/Type/OpLine.php
-
-		-
-			message: '#^Method ZEngine\\Type\\OpLine\:\:getCode\(\) should return int but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Type/OpLine.php
-
-		-
-			message: '#^Method ZEngine\\Type\\OpLine\:\:getHandler\(\) should return FFI\\CData but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Type/OpLine.php
-
-		-
-			message: '#^Method ZEngine\\Type\\OpLine\:\:getLine\(\) should return int but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Type/OpLine.php
-
-		-
-			message: '#^Method ZEngine\\Type\\OpLine\:\:getOp1Type\(\) should return int but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Type/OpLine.php
-
-		-
-			message: '#^Method ZEngine\\Type\\OpLine\:\:getOp2Type\(\) should return int but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Type/OpLine.php
-
-		-
 			message: '#^Method ZEngine\\Type\\OpLine\:\:typeName\(\) should return string but returns mixed\.$#'
 			identifier: return.type
 			count: 1
@@ -1609,33 +1513,9 @@ parameters:
 			path: src/Type/OpLine.php
 
 		-
-			message: '#^Parameter \#1 \$node of method ZEngine\\Type\\OpLine\:\:getValuePointer\(\) expects FFI\\CData, mixed given\.$#'
-			identifier: argument.type
-			count: 3
-			path: src/Type/OpLine.php
-
-		-
-			message: '#^Parameter \#1 \$opCode of static method ZEngine\\System\\OpCode\:\:name\(\) expects int, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Type/OpLine.php
-
-		-
-			message: '#^Parameter \#1 \$opType of static method ZEngine\\Type\\OpLine\:\:typeName\(\) expects int, mixed given\.$#'
-			identifier: argument.type
-			count: 3
-			path: src/Type/OpLine.php
-
-		-
 			message: '#^Parameter \#1 \$variableOffset of method ZEngine\\System\\ExecutionData\:\:getCallVariable\(\) expects int, mixed given\.$#'
 			identifier: argument.type
 			count: 1
-			path: src/Type/OpLine.php
-
-		-
-			message: '#^Parameter \#2 \$opType of method ZEngine\\Type\\OpLine\:\:getValuePointer\(\) expects int, mixed given\.$#'
-			identifier: argument.type
-			count: 3
 			path: src/Type/OpLine.php
 
 		-
