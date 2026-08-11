@@ -297,11 +297,16 @@ return [
     ],
 
     // Verified against the committed engine.h of all 8 targets: these are the
-    // only member-set divergences. EG grows the max-execution-timer trio on
-    // linux-zts and the version-info record on windows; CG carries
-    // copied_functions_count on zts only; zend_module_entry spells its globals
-    // pointer globals_ptr (nts) / globals_id_ptr (zts).
+    // only stub divergences. Member-set differences: EG grows the
+    // max-execution-timer trio on linux-zts and the version-info record on
+    // windows; CG carries copied_functions_count on zts only; zend_module_entry
+    // spells its globals pointer globals_ptr (nts) / globals_id_ptr (zts).
+    // Field-TYPE difference: zend_atomic_bool.value is _Atomic(_Bool) on
+    // linux/darwin but `volatile char` on windows (same 1-byte atomic flag,
+    // different C spelling) - z-engine never reads it through the stub, so it
+    // is dropped everywhere to keep the stub file byte-identical.
     'stub_platform_fields' => [
+        'zend_atomic_bool'      => ['value'],
         'zend_compiler_globals' => ['copied_functions_count'],
         'zend_executor_globals' => ['max_execution_timer_timer', 'pid', 'oldact', 'windows_version_info'],
         'zend_module_entry'     => ['globals_ptr', 'globals_id_ptr'],

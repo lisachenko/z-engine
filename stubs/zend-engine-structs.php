@@ -619,8 +619,6 @@ final class zend_ast_zval implements \ArrayAccess
  */
 final class zend_atomic_bool implements \ArrayAccess
 {
-    public \FFI\CData $value;
-
     private function __construct() {}
 
     public function offsetExists(mixed $offset): bool
