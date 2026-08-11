@@ -8,9 +8,9 @@ first-chance exception breakpoints are partial. This document maps every Xdebug
 capability to the z-engine primitive that carries it, records what was verified on a
 live PHP 8.4 build (the statement hook, named frame locals, the error and interrupt
 hooks) and what is closed off by the engine itself (the observer API, the
-exception-throw hook), and sketches the wire protocol story. The debugger itself is
-expected to live in a separate package: z-engine's job, covered here, is the core
-primitives.
+exception-throw hook), and sketches the wire protocol story. The debugger itself lives
+in a separate package — [ZDebug](https://github.com/lisachenko/zdebug), which implements
+this study; z-engine's job, covered here, is the core primitives.
 
 Environment ground rules apply as everywhere in z-engine: exact supported PHP minor,
 `ffi.enable=1`, **JIT off** (the JIT rewrites the executor internals these hooks plug
@@ -91,8 +91,9 @@ Three properties of user opcode handlers shape the whole design
    (toggle the compiler option from a `zend_ast_process` hook based on
    `Compiler::getFileName()`), memoize an include/exclude decision per op_array
    address instead of the backtrace filter, and strip `EXT_STMT` oplines back to
-   `NOP` while no breakpoint targets their file. All three are design sketches for
-   the debugger package, not shipped features.
+   `NOP` while no breakpoint targets their file. ZDebug ships the middle one (its
+   `OpArrayGate` decides each op_array once, keyed by entry address); the compiler-option
+   gating and the `NOP` strip-back remain design sketches.
 3. **Reentrancy.** Opcodes executed inside `ZEngine\*` classes bypass user handlers
    by design, but that exclusion is class-prefix-based: top-level code, plain
    functions and closures of the debugger itself are *not* excluded. A debugger must
@@ -289,10 +290,16 @@ Shipped with this research: `getVariableNames()` + `getLocalVariables()`/
 `Core::setInterruptHandler()` + `Executor::requestInterrupt()`, the exported
 `zend_throw_exception_hook` symbol and its pinning test.
 
-For the debugger package (separate repository): the breakpoint table + suspend loop +
-DBGp transport over these primitives, per-file instrumentation gating, the
-EXT_STMT-vs-ticks benchmark, and the generator/fiber stepping experiment. Candidate
-z-engine follow-ups if that work needs them: exporting `zend_execute_ex` (call-depth
-events without walking `getPrevious()`), `zend_vm_set_opcode_handler` (handler-level
-retro-instrumentation), and a leaner statement-hook fast path that replaces the
-per-hit backtrace filter with a memoized per-op_array decision.
+The debugger package now exists: **[ZDebug](https://github.com/lisachenko/zdebug)**
+implements this study — the breakpoint table, the suspend loop and the DBGp transport
+over these primitives, the memoized per-op_array instrumentation decision, line /
+conditional / call / return and first-chance exception breakpoints, stepping, stack and
+variable inspection with write-back, `eval`, and return-value debugging. Still open
+there: the async `break` command over `Core::setInterruptHandler()`, the
+EXT_STMT-vs-ticks benchmark, and the generator/fiber stepping experiment.
+
+Candidate z-engine follow-ups if that work needs them: exporting `zend_execute_ex`
+(call-depth events without walking `getPrevious()`), `zend_vm_set_opcode_handler`
+(handler-level retro-instrumentation), a `zend_ast_process` hook for per-file
+`EXT_STMT` emission, and a leaner statement-hook fast path that replaces the per-hit
+backtrace filter with a memoized per-op_array decision.
