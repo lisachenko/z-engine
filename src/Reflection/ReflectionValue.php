@@ -581,7 +581,10 @@ class ReflectionValue implements ReferenceCountedInterface
      *
      * @internal used by the copy-out-of-SHM path
      */
-    public function setPointer(CData $pointer): void
+    /**
+     * @param CData|object $pointer Runtime value is always CData; statically stub-typed views are accepted
+     */
+    public function setPointer(object $pointer): void
     {
         $this->assertNotReleased();
         $this->valueUnion()->ptr = Core::cast('void *', $pointer);

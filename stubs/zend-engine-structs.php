@@ -72,7 +72,7 @@ final class HashTable implements \ArrayAccess
     public int $nTableSize;
     public int $nInternalPointer;
     public int $nNextFreeElement;
-    public ?\FFI\CData $pDestructor;
+    public \FFI\CData|\Closure|null $pDestructor;
 
     private function __construct() {}
 
@@ -197,7 +197,7 @@ final class HashTable_u_v implements \ArrayAccess
 final class _zend_function_entry implements \ArrayAccess
 {
     public ?\FFI\CData $fname;
-    public ?\FFI\CData $handler;
+    public \FFI\CData|\Closure|null $handler;
     public ?zend_internal_arg_info $arg_info;
     public int $num_args;
     public int $flags;
@@ -231,7 +231,7 @@ final class _zend_function_entry implements \ArrayAccess
  */
 final class _zend_ini_parser_param implements \ArrayAccess
 {
-    public ?\FFI\CData $ini_parser_cb;
+    public \FFI\CData|\Closure|null $ini_parser_cb;
     public ?\FFI\CData $arg;
 
     private function __construct() {}
@@ -365,7 +365,7 @@ final class zend_array implements \ArrayAccess
     public int $nTableSize;
     public int $nInternalPointer;
     public int $nNextFreeElement;
-    public ?\FFI\CData $pDestructor;
+    public \FFI\CData|\Closure|null $pDestructor;
 
     private function __construct() {}
 
@@ -904,12 +904,12 @@ final class zend_class_entry implements \ArrayAccess
     public ?zend_object_handlers $default_object_handlers;
     public ?zend_class_iterator_funcs $iterator_funcs_ptr;
     public ?zend_class_arrayaccess_funcs $arrayaccess_funcs_ptr;
-    public ?\FFI\CData $create_object;
-    public ?\FFI\CData $interface_gets_implemented;
-    public ?\FFI\CData $get_iterator;
-    public ?\FFI\CData $get_static_method;
-    public ?\FFI\CData $serialize;
-    public ?\FFI\CData $unserialize;
+    public \FFI\CData|\Closure|null $create_object;
+    public \FFI\CData|\Closure|null $interface_gets_implemented;
+    public \FFI\CData|\Closure|null $get_iterator;
+    public \FFI\CData|\Closure|null $get_static_method;
+    public \FFI\CData|\Closure|null $serialize;
+    public \FFI\CData|\Closure|null $unserialize;
     public int $num_interfaces;
     public int $num_traits;
     public int $num_hooked_props;
@@ -1145,7 +1145,7 @@ final class zend_closure implements \ArrayAccess
     public zend_function $func;
     public zval $this_ptr;
     public ?zend_class_entry $called_scope;
-    public ?\FFI\CData $orig_internal_handler;
+    public \FFI\CData|\Closure|null $orig_internal_handler;
 
     private function __construct() {}
 
@@ -1836,13 +1836,13 @@ final class zend_inheritance_cache_entry implements \ArrayAccess
 final class zend_ini_entry implements \ArrayAccess
 {
     public ?zend_string $name;
-    public ?\FFI\CData $on_modify;
+    public \FFI\CData|\Closure|null $on_modify;
     public ?\FFI\CData $mh_arg1;
     public ?\FFI\CData $mh_arg2;
     public ?\FFI\CData $mh_arg3;
     public ?zend_string $value;
     public ?zend_string $orig_value;
-    public ?\FFI\CData $displayer;
+    public \FFI\CData|\Closure|null $displayer;
     public int $module_number;
     public int $modifiable;
     public int $orig_modifiable;
@@ -1920,7 +1920,7 @@ final class zend_internal_function implements \ArrayAccess
     public ?zend_string $doc_comment;
     public int $T;
     public ?zend_property_info $prop_info;
-    public ?\FFI\CData $handler;
+    public \FFI\CData|\Closure|null $handler;
     public ?zend_module_entry $module;
     public ?zend_frameless_function_info $frameless_function_infos;
     public \FFI\CData $reserved;
@@ -1998,10 +1998,10 @@ final class zend_lex_state implements \ArrayAccess
     public int $script_org_size;
     public ?\FFI\CData $script_filtered;
     public int $script_filtered_size;
-    public ?\FFI\CData $input_filter;
-    public ?\FFI\CData $output_filter;
+    public \FFI\CData|\Closure|null $input_filter;
+    public \FFI\CData|\Closure|null $output_filter;
     public ?\FFI\CData $script_encoding;
-    public ?\FFI\CData $on_event;
+    public \FFI\CData|\Closure|null $on_event;
     public ?\FFI\CData $on_event_context;
     public ?zend_ast $ast;
     public ?zend_arena $ast_arena;
@@ -2068,7 +2068,7 @@ final class zend_llist implements \ArrayAccess
     public ?zend_llist_element $tail;
     public int $count;
     public int $size;
-    public ?\FFI\CData $dtor;
+    public \FFI\CData|\Closure|null $dtor;
     public int $persistent;
     public ?zend_llist_element $traverse_ptr;
 
@@ -2170,16 +2170,16 @@ final class zend_module_entry implements \ArrayAccess
     public ?zend_module_dep $deps;
     public ?\FFI\CData $name;
     public ?_zend_function_entry $functions;
-    public ?\FFI\CData $module_startup_func;
-    public ?\FFI\CData $module_shutdown_func;
-    public ?\FFI\CData $request_startup_func;
-    public ?\FFI\CData $request_shutdown_func;
-    public ?\FFI\CData $info_func;
+    public \FFI\CData|\Closure|null $module_startup_func;
+    public \FFI\CData|\Closure|null $module_shutdown_func;
+    public \FFI\CData|\Closure|null $request_startup_func;
+    public \FFI\CData|\Closure|null $request_shutdown_func;
+    public \FFI\CData|\Closure|null $info_func;
     public ?\FFI\CData $version;
     public int $globals_size;
-    public ?\FFI\CData $globals_ctor;
-    public ?\FFI\CData $globals_dtor;
-    public ?\FFI\CData $post_deactivate_func;
+    public \FFI\CData|\Closure|null $globals_ctor;
+    public \FFI\CData|\Closure|null $globals_dtor;
+    public \FFI\CData|\Closure|null $post_deactivate_func;
     public int $module_started;
     public int $type;
     public ?\FFI\CData $handle;
@@ -2249,30 +2249,30 @@ final class zend_object implements \ArrayAccess
 final class zend_object_handlers implements \ArrayAccess
 {
     public int $offset;
-    public ?\FFI\CData $free_obj;
-    public ?\FFI\CData $dtor_obj;
-    public ?\FFI\CData $clone_obj;
-    public ?\FFI\CData $read_property;
-    public ?\FFI\CData $write_property;
-    public ?\FFI\CData $read_dimension;
-    public ?\FFI\CData $write_dimension;
-    public ?\FFI\CData $get_property_ptr_ptr;
-    public ?\FFI\CData $has_property;
-    public ?\FFI\CData $unset_property;
-    public ?\FFI\CData $has_dimension;
-    public ?\FFI\CData $unset_dimension;
-    public ?\FFI\CData $get_properties;
-    public ?\FFI\CData $get_method;
-    public ?\FFI\CData $get_constructor;
-    public ?\FFI\CData $get_class_name;
-    public ?\FFI\CData $cast_object;
-    public ?\FFI\CData $count_elements;
-    public ?\FFI\CData $get_debug_info;
-    public ?\FFI\CData $get_closure;
-    public ?\FFI\CData $get_gc;
-    public ?\FFI\CData $do_operation;
-    public ?\FFI\CData $compare;
-    public ?\FFI\CData $get_properties_for;
+    public \FFI\CData|\Closure|null $free_obj;
+    public \FFI\CData|\Closure|null $dtor_obj;
+    public \FFI\CData|\Closure|null $clone_obj;
+    public \FFI\CData|\Closure|null $read_property;
+    public \FFI\CData|\Closure|null $write_property;
+    public \FFI\CData|\Closure|null $read_dimension;
+    public \FFI\CData|\Closure|null $write_dimension;
+    public \FFI\CData|\Closure|null $get_property_ptr_ptr;
+    public \FFI\CData|\Closure|null $has_property;
+    public \FFI\CData|\Closure|null $unset_property;
+    public \FFI\CData|\Closure|null $has_dimension;
+    public \FFI\CData|\Closure|null $unset_dimension;
+    public \FFI\CData|\Closure|null $get_properties;
+    public \FFI\CData|\Closure|null $get_method;
+    public \FFI\CData|\Closure|null $get_constructor;
+    public \FFI\CData|\Closure|null $get_class_name;
+    public \FFI\CData|\Closure|null $cast_object;
+    public \FFI\CData|\Closure|null $count_elements;
+    public \FFI\CData|\Closure|null $get_debug_info;
+    public \FFI\CData|\Closure|null $get_closure;
+    public \FFI\CData|\Closure|null $get_gc;
+    public \FFI\CData|\Closure|null $do_operation;
+    public \FFI\CData|\Closure|null $compare;
+    public \FFI\CData|\Closure|null $get_properties_for;
 
     private function __construct() {}
 
@@ -2333,14 +2333,14 @@ final class zend_object_iterator implements \ArrayAccess
  */
 final class zend_object_iterator_funcs implements \ArrayAccess
 {
-    public ?\FFI\CData $dtor;
-    public ?\FFI\CData $valid;
-    public ?\FFI\CData $get_current_data;
-    public ?\FFI\CData $get_current_key;
-    public ?\FFI\CData $move_forward;
-    public ?\FFI\CData $rewind;
-    public ?\FFI\CData $invalidate_current;
-    public ?\FFI\CData $get_gc;
+    public \FFI\CData|\Closure|null $dtor;
+    public \FFI\CData|\Closure|null $valid;
+    public \FFI\CData|\Closure|null $get_current_data;
+    public \FFI\CData|\Closure|null $get_current_key;
+    public \FFI\CData|\Closure|null $move_forward;
+    public \FFI\CData|\Closure|null $rewind;
+    public \FFI\CData|\Closure|null $invalidate_current;
+    public \FFI\CData|\Closure|null $get_gc;
 
     private function __construct() {}
 
@@ -2906,9 +2906,9 @@ final class zend_stream implements \ArrayAccess
 {
     public ?\FFI\CData $handle;
     public int $isatty;
-    public ?\FFI\CData $reader;
-    public ?\FFI\CData $fsizer;
-    public ?\FFI\CData $closer;
+    public \FFI\CData|\Closure|null $reader;
+    public \FFI\CData|\Closure|null $fsizer;
+    public \FFI\CData|\Closure|null $closer;
 
     private function __construct() {}
 

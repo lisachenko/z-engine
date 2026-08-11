@@ -13,7 +13,10 @@ declare(strict_types=1);
 
 namespace ZEngine\Reflection;
 
-use FFI\CData;
+use ZEngine\Generated\zend_function;
+use ZEngine\Generated\zend_function_common;
+use ZEngine\Generated\zend_internal_function;
+use ZEngine\Generated\zend_op_array;
 
 /**
  * Common low-level surface of a reflected function/method entry
@@ -29,20 +32,23 @@ interface FunctionLikeInterface
     /**
      * Shaped view over the entry's common struct (see FunctionLikeTrait::getCommonPointer())
      *
-     * @return ZendFunctionCommonShape
+     * @return zend_function_common|zend_internal_function
      */
     public function getCommonPointer(): object;
 
     /**
      * Shaped view over the entry's op_array (see FunctionLikeTrait::getOpArrayPointer())
      *
-     * @return ZendOpArrayShape
+     * @return zend_op_array
      */
     public function getOpArrayPointer(): object;
 
     public function getAddress(): int;
 
-    public function getEntryPointer(): CData;
+    /**
+     * @return zend_function|zend_internal_function
+     */
+    public function getEntryPointer(): object;
 
     public function isUserDefined(): bool;
 }

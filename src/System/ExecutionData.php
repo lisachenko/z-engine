@@ -112,10 +112,12 @@ class ExecutionData
             throw new \InvalidArgumentException('Function entry is not available in the current context');
         }
 
+        $functionEntry = $this->pointer->func;
+        assert($functionEntry instanceof CData);
         if ($this->pointer->func->common->scope === null) {
-            $reflection = ReflectionFunction::fromCData($this->pointer->func);
+            $reflection = ReflectionFunction::fromCData($functionEntry);
         } else {
-            $reflection = ReflectionMethod::fromCData($this->pointer->func);
+            $reflection = ReflectionMethod::fromCData($functionEntry);
         }
 
         return $reflection;

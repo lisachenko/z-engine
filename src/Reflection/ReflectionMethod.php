@@ -16,6 +16,9 @@ namespace ZEngine\Reflection;
 use FFI\CData;
 use ReflectionMethod as NativeReflectionMethod;
 use ZEngine\Core;
+use ZEngine\Generated\zend_function;
+use ZEngine\Generated\zend_internal_function;
+use ZEngine\Generated\zend_op;
 use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
@@ -58,39 +61,44 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      * the returned wrapper is low-level only (like fromClosureEntry() results) and is meant
      * to round-trip through the hook APIs, not to be introspected natively.
      *
-     * @param CData $functionEntry Pointer to the structure
+     * @param CData|zend_function|zend_internal_function $functionEntry Pointer to the structure
      *
      * @return ReflectionMethod
      */
-    public static function fromCData(CData $functionEntry): ReflectionMethod
+    public static function fromCData(object $functionEntry): ReflectionMethod
     {
         /** @var ReflectionMethod $reflectionMethod */
         $reflectionMethod = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
-        $isTrampoline     = false;
-        if ($functionEntry->type !== Core::ZEND_INTERNAL_FUNCTION) {
-            $commonPointer = $functionEntry->common;
-            assert($commonPointer instanceof CData);
+        /** @var zend_function|zend_internal_function $entry Narrowed to the stub views at the owning boundary */
+        $entry        = $functionEntry;
+        $isTrampoline = false;
+        if ($entry->type !== Core::ZEND_INTERNAL_FUNCTION) {
+            /** @var zend_function $userEntry */
+            $userEntry       = $entry;
+            $commonPointer   = $userEntry->common;
             $functionNamePtr = $commonPointer->function_name;
-            $scopeNamePtr    = $commonPointer->scope->name;
-            $functionFlags   = $commonPointer->fn_flags;
-            assert(is_int($functionFlags));
-            $isTrampoline = ($functionFlags & Core::ZEND_ACC_CALL_VIA_TRAMPOLINE) !== 0;
+            $scope           = $commonPointer->scope;
+            $isTrampoline    = ($commonPointer->fn_flags & Core::ZEND_ACC_CALL_VIA_TRAMPOLINE) !== 0;
         } else {
-            $functionNamePtr = $functionEntry->function_name;
-            $scopeNamePtr    = $functionEntry->scope->name;
+            /** @var zend_internal_function $internalEntry */
+            $internalEntry   = $entry;
+            $functionNamePtr = $internalEntry->function_name;
+            $scope           = $internalEntry->scope;
         }
 
         if (!$isTrampoline) {
-            $scopeName    = StringEntry::fromCData($scopeNamePtr);
-            $functionName = StringEntry::fromCData($functionNamePtr);
+            // Engine invariant: a non-trampoline method always carries its name and scope
+            assert($scope !== null && $functionNamePtr !== null);
+            $scopeNamePtr = $scope->name;
+            assert($scopeNamePtr !== null);
             Core::callParentConstructor(
                 $reflectionMethod,
                 static::class,
-                $scopeName->getStringValue(),
-                $functionName->getStringValue(),
+                StringEntry::fromCData($scopeNamePtr)->getStringValue(),
+                StringEntry::fromCData($functionNamePtr)->getStringValue(),
             );
         }
-        $reflectionMethod->pointer = $functionEntry;
+        $reflectionMethod->pointer = $entry;
 
         return $reflectionMethod;
     }
@@ -158,6 +166,7 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
                 $boardName,
                 StringEntry::fromCData($functionNamePtr)->getStringValue(),
             );
+            /** @var zend_function $functionEntry Narrowed to the stub view at the owning boundary */
             $reflectionMethod->pointer = $functionEntry;
 
             return $reflectionMethod;
@@ -215,10 +224,14 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      *
      * @internal used by the hot-swap machinery (ClassDelta)
      */
-    public static function fromRawEntry(CData $functionEntry): ReflectionMethod
+    /**
+     * @param CData|zend_function|zend_internal_function $functionEntry
+     */
+    public static function fromRawEntry(object $functionEntry): ReflectionMethod
     {
         /** @var ReflectionMethod $reflectionMethod */
-        $reflectionMethod          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionMethod = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        /** @var zend_function|zend_internal_function $functionEntry Narrowed to the stub views at the owning boundary */
         $reflectionMethod->pointer = $functionEntry;
 
         return $reflectionMethod;
@@ -231,7 +244,7 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
     ): ReflectionMethod {
         /** @var ReflectionMethod $reflectionMethod */
         $reflectionMethod          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
-        $reflectionMethod->pointer = Core::cast('zend_function *', Core::addr($closureEntry->getRawFunction()));
+        $reflectionMethod->pointer = Core::cast(zend_function::class, Core::addr($closureEntry->getRawFunction()));
 
         $reflectionMethod->setFunctionName($methodName);
         $reflectionMethod->setDeclaringClass($className);
@@ -310,11 +323,12 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      */
     public function getDeclaringClass(): ReflectionClass
     {
-        if ($this->getCommonPointer()->scope === null) {
+        $scope = $this->getCommonPointer()->scope;
+        if ($scope === null) {
             throw new \InvalidArgumentException('Not in a class scope');
         }
 
-        return ReflectionClass::fromCData($this->getCommonPointer()->scope);
+        return ReflectionClass::fromCData(Core::cast('zend_class_entry *', $scope));
     }
 
     /**
@@ -340,11 +354,12 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
     #[\ReturnTypeWillChange]
     public function getPrototype(): ?ReflectionMethod
     {
-        if ($this->getCommonPointer()->prototype === null) {
+        $prototype = $this->getCommonPointer()->prototype;
+        if ($prototype === null) {
             return null;
         }
 
-        return static::fromCData($this->getCommonPointer()->prototype);
+        return static::fromCData($prototype);
     }
 
     /**
@@ -370,9 +385,15 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
                 return false;
             }
         }
-        $opcodesSize = $thisOpArray->last * Core::sizeof(Core::type('zend_op'));
-        if ($opcodesSize > 0 && \FFI::memcmp($thisOpArray->opcodes, $otherOpArray->opcodes, $opcodesSize) !== 0) {
-            return false;
+        $opcodesSize = $thisOpArray->last * Core::sizeOfType(zend_op::class);
+        if ($opcodesSize > 0) {
+            $thisOpcodes  = $thisOpArray->opcodes;
+            $otherOpcodes = $otherOpArray->opcodes;
+            // A non-zero opcode count guarantees both opcode tables are present
+            assert($thisOpcodes !== null && $otherOpcodes !== null);
+            if (\FFI::memcmp(Core::cast('zend_op *', $thisOpcodes), Core::cast('zend_op *', $otherOpcodes), $opcodesSize) !== 0) {
+                return false;
+            }
         }
         $totalLiterals = $thisOpArray->last_literal;
         assert(is_int($totalLiterals) && $totalLiterals >= 0);

@@ -50,11 +50,15 @@ use ZEngine\Core;
 final class StructArray implements ArrayAccess, Countable, IteratorAggregate
 {
     /**
-     * @param CData $baseAddress Typed pointer to the first element
-     * @param int   $count       Number of elements behind the pointer (negatives read as empty)
+     * @param CData|\ArrayAccess<int, T> $baseAddress Typed pointer to the first element (runtime
+     *                                    value is always CData; statically stub-typed views,
+     *                                    which are indexable like the handles they stand for,
+     *                                    are accepted)
+     * @param int                        $count Number of elements behind the pointer
+     *                                          (negatives read as empty)
      */
     public function __construct(
-        private CData $baseAddress,
+        private object $baseAddress,
         private int $count,
     ) {}
 

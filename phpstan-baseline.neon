@@ -1213,18 +1213,6 @@ parameters:
 			path: src/Reflection/ReflectionClass.php
 
 		-
-			message: '#^Parameter \#1 \$functionEntry of static method ZEngine\\Reflection\\ReflectionMethod\:\:fromCData\(\) expects FFI\\CData, ZEngine\\Generated\\zend_function\|ZEngine\\Generated\\zend_internal_function given\.$#'
-			identifier: argument.type
-			count: 3
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Parameter \#1 \$functionEntry of static method ZEngine\\Reflection\\ReflectionMethod\:\:fromRawEntry\(\) expects FFI\\CData, ZEngine\\Generated\\zend_function\|ZEngine\\Generated\\zend_internal_function given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Reflection/ReflectionClass.php
-
-		-
 			message: '#^Parameter \#1 \$object of function get_class expects object, mixed given\.$#'
 			identifier: argument.type
 			count: 1
@@ -1375,12 +1363,6 @@ parameters:
 			path: src/Reflection/ReflectionExtension.php
 
 		-
-			message: '#^Binary operation "&" between mixed and 2 results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Reflection/ReflectionFunction.php
-
-		-
 			message: '#^Binary operation "\." between mixed and '' '' results in an error\.$#'
 			identifier: binaryOp.invalid
 			count: 1
@@ -1399,106 +1381,10 @@ parameters:
 			path: src/Reflection/ReflectionFunction.php
 
 		-
-			message: '#^Cannot access offset int on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Reflection/ReflectionFunction.php
-
-		-
-			message: '#^Cannot access offset int\<0, max\> on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 2
-			path: src/Reflection/ReflectionFunction.php
-
-		-
-			message: '#^Cannot access property \$function_name on mixed\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: src/Reflection/ReflectionFunction.php
-
-		-
-			message: '#^Cannot access property \$last on mixed\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: src/Reflection/ReflectionFunction.php
-
-		-
-			message: '#^Cannot access property \$last_literal on mixed\.$#'
-			identifier: property.nonObject
-			count: 3
-			path: src/Reflection/ReflectionFunction.php
-
-		-
-			message: '#^Cannot access property \$literals on mixed\.$#'
-			identifier: property.nonObject
-			count: 2
-			path: src/Reflection/ReflectionFunction.php
-
-		-
-			message: '#^Cannot access property \$opcodes on mixed\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: src/Reflection/ReflectionFunction.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionFunction\:\:copyMethodOutOfSharedMemory\(\) should return FFI\\CData but returns ZEngine\\Generated\\zend_function\|ZEngine\\Generated\\zend_internal_function\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Reflection/ReflectionFunction.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionFunction\:\:getNumberOfLiterals\(\) should return int but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Reflection/ReflectionFunction.php
-
-		-
 			message: '#^Offset ''args'' might not exist on array\{function\: string, line\?\: int, file\?\: string, class\?\: class\-string, type\?\: ''\-\>''\|''\:\:'', args\?\: list\<mixed\>, object\?\: object\}\.$#'
 			identifier: offsetAccess.notFound
 			count: 1
 			path: src/Reflection/ReflectionFunction.php
-
-		-
-			message: '#^Parameter \#1 \$functionEntry of static method ZEngine\\Reflection\\ReflectionFunction\:\:fromCData\(\) expects FFI\\CData, ZEngine\\Generated\\zend_function\|ZEngine\\Generated\\zend_internal_function given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Reflection/ReflectionFunction.php
-
-		-
-			message: '#^Parameter \#1 \$stringPointer of static method ZEngine\\Type\\StringEntry\:\:fromCData\(\) expects FFI\\CData\|ZEngine\\Generated\\zend_string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Reflection/ReflectionFunction.php
-
-		-
-			message: '#^Parameter \#1 \$valueEntry of static method ZEngine\\Reflection\\ReflectionValue\:\:fromValueEntry\(\) expects FFI\\CData\|ZEngine\\Generated\\zval, mixed given\.$#'
-			identifier: argument.type
-			count: 2
-			path: src/Reflection/ReflectionFunction.php
-
-		-
-			message: '#^Parameter \#1 \$variable of static method ZEngine\\Core\:\:addr\(\) expects object, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Reflection/ReflectionFunction.php
-
-		-
-			message: '#^Part \$lastLiteral \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Reflection/ReflectionFunction.php
-
-		-
-			message: '#^Property ZEngine\\Reflection\\ReflectionFunction\:\:\$pointer \(FFI\\CData\) does not accept ZEngine\\Generated\\zend_function\|ZEngine\\Generated\\zend_internal_function\.$#'
-			identifier: assign.propertyType
-			count: 1
-			path: src/Reflection/ReflectionFunction.php
-
-		-
-			message: '#^Binary operation "&" between mixed and 2 results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Reflection/ReflectionMethod.php
 
 		-
 			message: '#^Binary operation "\." between mixed and '' '' results in an error\.$#'
@@ -1519,92 +1405,14 @@ parameters:
 			path: src/Reflection/ReflectionMethod.php
 
 		-
-			message: '#^Cannot access offset int on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Reflection/ReflectionMethod.php
-
-		-
-			message: '#^Cannot access offset int\<0, max\> on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 2
-			path: src/Reflection/ReflectionMethod.php
-
-		-
-			message: '#^Cannot access property \$last on mixed\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: src/Reflection/ReflectionMethod.php
-
-		-
-			message: '#^Cannot access property \$last_literal on mixed\.$#'
-			identifier: property.nonObject
-			count: 3
-			path: src/Reflection/ReflectionMethod.php
-
-		-
-			message: '#^Cannot access property \$literals on mixed\.$#'
-			identifier: property.nonObject
-			count: 2
-			path: src/Reflection/ReflectionMethod.php
-
-		-
-			message: '#^Cannot access property \$name on mixed\.$#'
-			identifier: property.nonObject
-			count: 2
-			path: src/Reflection/ReflectionMethod.php
-
-		-
-			message: '#^Cannot access property \$opcodes on mixed\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: src/Reflection/ReflectionMethod.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionMethod\:\:copyMethodOutOfSharedMemory\(\) should return FFI\\CData but returns ZEngine\\Generated\\zend_function\|ZEngine\\Generated\\zend_internal_function\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Reflection/ReflectionMethod.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionMethod\:\:getNumberOfLiterals\(\) should return int but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Reflection/ReflectionMethod.php
-
-		-
 			message: '#^Offset ''args'' might not exist on array\{function\: string, line\?\: int, file\?\: string, class\?\: class\-string, type\?\: ''\-\>''\|''\:\:'', args\?\: list\<mixed\>, object\?\: object\}\.$#'
 			identifier: offsetAccess.notFound
 			count: 1
 			path: src/Reflection/ReflectionMethod.php
 
 		-
-			message: '#^Parameter \#1 \$stringPointer of static method ZEngine\\Type\\StringEntry\:\:fromCData\(\) expects FFI\\CData\|ZEngine\\Generated\\zend_string, mixed given\.$#'
-			identifier: argument.type
-			count: 2
-			path: src/Reflection/ReflectionMethod.php
-
-		-
-			message: '#^Parameter \#1 \$valueEntry of static method ZEngine\\Reflection\\ReflectionValue\:\:fromValueEntry\(\) expects FFI\\CData\|ZEngine\\Generated\\zval, mixed given\.$#'
-			identifier: argument.type
-			count: 2
-			path: src/Reflection/ReflectionMethod.php
-
-		-
 			message: '#^Parameter \#1 \$variable of static method ZEngine\\Core\:\:addr\(\) expects object, mixed given\.$#'
 			identifier: argument.type
-			count: 2
-			path: src/Reflection/ReflectionMethod.php
-
-		-
-			message: '#^Part \$lastLiteral \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Reflection/ReflectionMethod.php
-
-		-
-			message: '#^Property ZEngine\\Reflection\\ReflectionMethod\:\:\$pointer \(FFI\\CData\) does not accept ZEngine\\Generated\\zend_function\|ZEngine\\Generated\\zend_internal_function\.$#'
-			identifier: assign.propertyType
 			count: 1
 			path: src/Reflection/ReflectionMethod.php
 
@@ -1773,18 +1581,6 @@ parameters:
 		-
 			message: '#^PHPDoc tag @return with type ZEngine\\Reflection\\FunctionLikeTrait is incompatible with native type ReflectionFunctionAbstract\.$#'
 			identifier: return.phpDocType
-			count: 1
-			path: src/System/ExecutionData.php
-
-		-
-			message: '#^Parameter \#1 \$functionEntry of static method ZEngine\\Reflection\\ReflectionFunction\:\:fromCData\(\) expects FFI\\CData, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/System/ExecutionData.php
-
-		-
-			message: '#^Parameter \#1 \$functionEntry of static method ZEngine\\Reflection\\ReflectionMethod\:\:fromCData\(\) expects FFI\\CData, mixed given\.$#'
-			identifier: argument.type
 			count: 1
 			path: src/System/ExecutionData.php
 
@@ -2201,12 +1997,6 @@ parameters:
 			identifier: binaryOp.invalid
 			count: 1
 			path: tests/Memory/scenarios/property-read-hook.php
-
-		-
-			message: '#^Parameter \#1 \$functionEntry of static method ZEngine\\Reflection\\ReflectionFunction\:\:fromCData\(\) expects FFI\\CData, ZEngine\\Generated\\zend_function given\.$#'
-			identifier: argument.type
-			count: 2
-			path: tests/Reflection/FunctionLikeInfoTest.php
 
 		-
 			message: '#^Method ZEngine\\Stub\\TestClass@anonymous/tests/Reflection/ReflectionClassConstantTest\.php\:52\:\:getConstant\(\) has no return type specified\.$#'

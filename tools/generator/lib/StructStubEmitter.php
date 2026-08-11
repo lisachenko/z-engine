@@ -288,9 +288,10 @@ final class StructStubEmitter
         $qualType  = is_string($type['qualType'] ?? null) ? $strip($type['qualType']) : '';
         $desugared = is_string($type['desugaredQualType'] ?? null) ? $strip($type['desugaredQualType']) : $qualType;
 
-        // Function pointers (spelled or behind a typedef) are opaque handles
+        // Function pointers (spelled or behind a typedef): reads yield an opaque
+        // handle, writes additionally accept a PHP closure (FFI mints a trampoline)
         if (str_contains($qualType, '(*)') || str_contains($desugared, '(*)')) {
-            return '?\FFI\CData';
+            return '\FFI\CData|\Closure|null';
         }
         // Arrays (fixed, flexible or unsized) stay indexable CData views
         if (preg_match('/\[\d*\]$/', $qualType) === 1 || preg_match('/\[\d*\]$/', $desugared) === 1) {
