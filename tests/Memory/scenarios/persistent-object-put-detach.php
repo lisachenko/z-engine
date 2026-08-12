@@ -42,7 +42,7 @@ $store = Core::$executor->objectStore;
 for ($index = 0; $index < 500; $index++) {
     $handle = $store->put($clone);
 
-    $entry = ReflectionValue::newEntry(ReflectionValue::IS_OBJECT, $clone[0]);
+    $entry = ReflectionValue::newEntry(ReflectionValue::IS_OBJECT, \ZEngine\Type\StructArray::at($clone));
     $entry->getNativeValue($alias);
     $entry->release();
 

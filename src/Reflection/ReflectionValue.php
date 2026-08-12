@@ -32,6 +32,7 @@ use ZEngine\Type\ReferenceCountedTrait;
 use ZEngine\Type\ReferenceEntry;
 use ZEngine\Type\ReleasableTrait;
 use ZEngine\Type\StringEntry;
+use ZEngine\Type\StructArray;
 
 /**
  * Class ReflectionValue represents a value in PHP
@@ -342,7 +343,7 @@ class ReflectionValue implements ReferenceCountedInterface
         }
 
         $previousValue = Core::new(zval::class);
-        Core::memcpy($previousValue, $dstZval[0], Core::sizeOfType(zval::class));
+        Core::memcpy($previousValue, StructArray::at($dstZval), Core::sizeOfType(zval::class));
 
         $source->copy($dstZval);
 

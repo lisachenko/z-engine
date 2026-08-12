@@ -23,43 +23,23 @@ namespace ZEngine\Generated;
 /**
  * Analysis-only view of the engine C struct 'Bucket'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class Bucket implements \ArrayAccess
+final class Bucket
 {
     public zval $val;
     public int $h;
     public ?zend_string $key;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'HashTable'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class HashTable implements \ArrayAccess
+final class HashTable
 {
     public zend_refcounted_h $gc;
     public HashTable_u $u;
@@ -75,51 +55,20 @@ final class HashTable implements \ArrayAccess
     public \FFI\CData|\Closure|null $pDestructor;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'HashTableIterator'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class HashTableIterator implements \ArrayAccess
+final class HashTableIterator
 {
     public ?HashTable $ht;
     public int $pos;
     public int $next_copy;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
@@ -127,42 +76,22 @@ final class HashTableIterator implements \ArrayAccess
  *
  * C union - only one member is meaningful at a time; the discriminant lives elsewhere.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class HashTable_u implements \ArrayAccess
+final class HashTable_u
 {
     public HashTable_u_v $v;
     public int $flags;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'HashTable.u.v'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class HashTable_u_v implements \ArrayAccess
+final class HashTable_u_v
 {
     public int $flags;
     public int $_unused;
@@ -170,31 +99,14 @@ final class HashTable_u_v implements \ArrayAccess
     public int $_unused2;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct '_zend_function_entry'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class _zend_function_entry implements \ArrayAccess
+final class _zend_function_entry
 {
     public ?\FFI\CData $fname;
     public \FFI\CData|\Closure|null $handler;
@@ -205,154 +117,69 @@ final class _zend_function_entry implements \ArrayAccess
     public ?\FFI\CData $doc_comment;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct '_zend_ini_parser_param'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class _zend_ini_parser_param implements \ArrayAccess
+final class _zend_ini_parser_param
 {
     public \FFI\CData|\Closure|null $ini_parser_cb;
     public ?\FFI\CData $arg;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct '_zend_vm_stack'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class _zend_vm_stack implements \ArrayAccess
+final class _zend_vm_stack
 {
     public ?zval $top;
     public ?zval $end;
     public ?_zend_vm_stack $prev;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_arena'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_arena implements \ArrayAccess
+final class zend_arena
 {
     public ?\FFI\CData $ptr;
     public ?\FFI\CData $end;
     public ?zend_arena $prev;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_arg_info'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_arg_info implements \ArrayAccess
+final class zend_arg_info
 {
     public ?zend_string $name;
     public zend_type $type;
     public ?zend_string $default_value;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_array'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_array implements \ArrayAccess
+final class zend_array
 {
     public zend_refcounted_h $gc;
     public zend_array_u $u;
@@ -368,20 +195,6 @@ final class zend_array implements \ArrayAccess
     public \FFI\CData|\Closure|null $pDestructor;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
@@ -389,42 +202,22 @@ final class zend_array implements \ArrayAccess
  *
  * C union - only one member is meaningful at a time; the discriminant lives elsewhere.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_array_u implements \ArrayAccess
+final class zend_array_u
 {
     public zend_array_u_v $v;
     public int $flags;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_array.u.v'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_array_u_v implements \ArrayAccess
+final class zend_array_u_v
 {
     public int $flags;
     public int $_unused;
@@ -432,31 +225,14 @@ final class zend_array_u_v implements \ArrayAccess
     public int $_unused2;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_ast'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_ast implements \ArrayAccess
+final class zend_ast
 {
     public int $kind;
     public int $attr;
@@ -464,31 +240,14 @@ final class zend_ast implements \ArrayAccess
     public \FFI\CData $child;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_ast_decl'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_ast_decl implements \ArrayAccess
+final class zend_ast_decl
 {
     public int $kind;
     public int $attr;
@@ -500,31 +259,14 @@ final class zend_ast_decl implements \ArrayAccess
     public \FFI\CData $child;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_ast_list'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_ast_list implements \ArrayAccess
+final class zend_ast_list
 {
     public int $kind;
     public int $attr;
@@ -533,118 +275,50 @@ final class zend_ast_list implements \ArrayAccess
     public \FFI\CData $child;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_ast_ref'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_ast_ref implements \ArrayAccess
+final class zend_ast_ref
 {
     public zend_refcounted_h $gc;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_ast_zval'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_ast_zval implements \ArrayAccess
+final class zend_ast_zval
 {
     public int $kind;
     public int $attr;
     public zval $val;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_atomic_bool'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_atomic_bool implements \ArrayAccess
+final class zend_atomic_bool
 {
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_attribute'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_attribute implements \ArrayAccess
+final class zend_attribute
 {
     public ?zend_string $name;
     public ?zend_string $lcname;
@@ -655,61 +329,27 @@ final class zend_attribute implements \ArrayAccess
     public \FFI\CData $args;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_attribute_arg'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_attribute_arg implements \ArrayAccess
+final class zend_attribute_arg
 {
     public ?zend_string $name;
     public zval $value;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_brk_cont_element'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_brk_cont_element implements \ArrayAccess
+final class zend_brk_cont_element
 {
     public int $start;
     public int $cont;
@@ -718,61 +358,27 @@ final class zend_brk_cont_element implements \ArrayAccess
     public bool $is_switch;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_call_stack'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_call_stack implements \ArrayAccess
+final class zend_call_stack
 {
     public ?\FFI\CData $base;
     public int $max_size;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_class_arrayaccess_funcs'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_class_arrayaccess_funcs implements \ArrayAccess
+final class zend_class_arrayaccess_funcs
 {
     public ?zend_function $zf_offsetget;
     public ?zend_function $zf_offsetexists;
@@ -780,31 +386,14 @@ final class zend_class_arrayaccess_funcs implements \ArrayAccess
     public ?zend_function $zf_offsetunset;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_class_constant'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_class_constant implements \ArrayAccess
+final class zend_class_constant
 {
     public zval $value;
     public ?zend_string $doc_comment;
@@ -813,61 +402,27 @@ final class zend_class_constant implements \ArrayAccess
     public zend_type $type;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_class_dependency'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_class_dependency implements \ArrayAccess
+final class zend_class_dependency
 {
     public ?zend_string $name;
     public ?zend_class_entry $ce;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_class_entry'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_class_entry implements \ArrayAccess
+final class zend_class_entry
 {
     public string $type;
     public ?zend_string $name;
@@ -924,20 +479,6 @@ final class zend_class_entry implements \ArrayAccess
     public zend_class_entry_info $info;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
@@ -945,103 +486,49 @@ final class zend_class_entry implements \ArrayAccess
  *
  * C union - only one member is meaningful at a time; the discriminant lives elsewhere.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_class_entry_info implements \ArrayAccess
+final class zend_class_entry_info
 {
     public zend_class_entry_info_user $user;
     public zend_class_entry_info_internal $internal;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_class_entry.info.internal'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_class_entry_info_internal implements \ArrayAccess
+final class zend_class_entry_info_internal
 {
     public ?_zend_function_entry $builtin_functions;
     public ?zend_module_entry $module;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_class_entry.info.user'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_class_entry_info_user implements \ArrayAccess
+final class zend_class_entry_info_user
 {
     public ?zend_string $filename;
     public int $line_start;
     public int $line_end;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_class_iterator_funcs'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_class_iterator_funcs implements \ArrayAccess
+final class zend_class_iterator_funcs
 {
     public ?zend_function $zf_new_iterator;
     public ?zend_function $zf_valid;
@@ -1051,31 +538,14 @@ final class zend_class_iterator_funcs implements \ArrayAccess
     public ?zend_function $zf_rewind;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_class_mutable_data'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_class_mutable_data implements \ArrayAccess
+final class zend_class_mutable_data
 {
     public ?zval $default_properties_table;
     public ?HashTable $constants_table;
@@ -1083,61 +553,27 @@ final class zend_class_mutable_data implements \ArrayAccess
     public ?HashTable $backed_enum_table;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_class_name'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_class_name implements \ArrayAccess
+final class zend_class_name
 {
     public ?zend_string $name;
     public ?zend_string $lc_name;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_closure'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_closure implements \ArrayAccess
+final class zend_closure
 {
     public zend_object $std;
     public zend_function $func;
@@ -1146,31 +582,14 @@ final class zend_closure implements \ArrayAccess
     public \FFI\CData|\Closure|null $orig_internal_handler;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_compiler_globals'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_compiler_globals implements \ArrayAccess
+final class zend_compiler_globals
 {
     public zend_stack $loop_var_stack;
     public ?zend_class_entry $active_class_entry;
@@ -1222,90 +641,39 @@ final class zend_compiler_globals implements \ArrayAccess
     public zend_stack $short_circuiting_opnums;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_constant'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_constant implements \ArrayAccess
+final class zend_constant
 {
     public zval $value;
     public ?zend_string $name;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_declarables'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_declarables implements \ArrayAccess
+final class zend_declarables
 {
     public int $ticks;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_early_binding'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_early_binding implements \ArrayAccess
+final class zend_early_binding
 {
     public ?zend_string $lcname;
     public ?zend_string $rtd_key;
@@ -1313,31 +681,14 @@ final class zend_early_binding implements \ArrayAccess
     public int $cache_slot;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_error_info'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_error_info implements \ArrayAccess
+final class zend_error_info
 {
     public int $type;
     public int $lineno;
@@ -1345,31 +696,14 @@ final class zend_error_info implements \ArrayAccess
     public ?zend_string $message;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_execute_data'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_execute_data implements \ArrayAccess
+final class zend_execute_data
 {
     public ?zend_op $opline;
     public ?zend_execute_data $call;
@@ -1382,31 +716,14 @@ final class zend_execute_data implements \ArrayAccess
     public ?zend_array $extra_named_params;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_executor_globals'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_executor_globals implements \ArrayAccess
+final class zend_executor_globals
 {
     public zval $uninitialized_zval;
     public zval $error_zval;
@@ -1494,31 +811,14 @@ final class zend_executor_globals implements \ArrayAccess
     public \FFI\CData $reserved;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_file_cache_metainfo'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_file_cache_metainfo implements \ArrayAccess
+final class zend_file_cache_metainfo
 {
     public \FFI\CData $magic;
     public \FFI\CData $system_id;
@@ -1529,31 +829,14 @@ final class zend_file_cache_metainfo implements \ArrayAccess
     public int $checksum;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_file_context'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_file_context implements \ArrayAccess
+final class zend_file_context
 {
     public zend_declarables $declarables;
     public ?zend_string $current_namespace;
@@ -1565,31 +848,14 @@ final class zend_file_context implements \ArrayAccess
     public HashTable $seen_symbols;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_file_handle'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_file_handle implements \ArrayAccess
+final class zend_file_handle
 {
     public zend_file_handle_handle $handle;
     public ?zend_string $filename;
@@ -1601,20 +867,6 @@ final class zend_file_handle implements \ArrayAccess
     public int $len;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
@@ -1622,61 +874,27 @@ final class zend_file_handle implements \ArrayAccess
  *
  * C union - only one member is meaningful at a time; the discriminant lives elsewhere.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_file_handle_handle implements \ArrayAccess
+final class zend_file_handle_handle
 {
     public ?\FFI\CData $fp;
     public zend_stream $stream;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_frameless_function_info'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_frameless_function_info implements \ArrayAccess
+final class zend_frameless_function_info
 {
     public ?\FFI\CData $handler;
     public int $num_args;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
@@ -1684,12 +902,9 @@ final class zend_frameless_function_info implements \ArrayAccess
  *
  * C union - only one member is meaningful at a time; the discriminant lives elsewhere.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_function implements \ArrayAccess
+final class zend_function
 {
     public int $type;
     public int $quick_arg_flags;
@@ -1698,31 +913,14 @@ final class zend_function implements \ArrayAccess
     public zend_internal_function $internal_function;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_function.common'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_function_common implements \ArrayAccess
+final class zend_function_common
 {
     public int $type;
     public \FFI\CData $arg_flags;
@@ -1740,62 +938,28 @@ final class zend_function_common implements \ArrayAccess
     public ?zend_property_info $prop_info;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_get_gc_buffer'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_get_gc_buffer implements \ArrayAccess
+final class zend_get_gc_buffer
 {
     public ?zval $cur;
     public ?zval $end;
     public ?zval $start;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_inheritance_cache_entry'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_inheritance_cache_entry implements \ArrayAccess
+final class zend_inheritance_cache_entry
 {
     public ?zend_inheritance_cache_entry $next;
     public ?zend_class_entry $ce;
@@ -1807,31 +971,14 @@ final class zend_inheritance_cache_entry implements \ArrayAccess
     public \FFI\CData $traits_and_interfaces;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_ini_entry'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_ini_entry implements \ArrayAccess
+final class zend_ini_entry
 {
     public ?zend_string $name;
     public \FFI\CData|\Closure|null $on_modify;
@@ -1847,62 +994,28 @@ final class zend_ini_entry implements \ArrayAccess
     public int $modified;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_internal_arg_info'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_internal_arg_info implements \ArrayAccess
+final class zend_internal_arg_info
 {
     public ?\FFI\CData $name;
     public zend_type $type;
     public ?\FFI\CData $default_value;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_internal_function'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_internal_function implements \ArrayAccess
+final class zend_internal_function
 {
     public int $type;
     public \FFI\CData $arg_flags;
@@ -1924,60 +1037,26 @@ final class zend_internal_function implements \ArrayAccess
     public \FFI\CData $reserved;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_lazy_objects_store'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_lazy_objects_store implements \ArrayAccess
+final class zend_lazy_objects_store
 {
     public HashTable $infos;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_lex_state'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_lex_state implements \ArrayAccess
+final class zend_lex_state
 {
     public int $yy_leng;
     public ?\FFI\CData $yy_start;
@@ -2005,62 +1084,28 @@ final class zend_lex_state implements \ArrayAccess
     public ?zend_arena $ast_arena;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_live_range'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_live_range implements \ArrayAccess
+final class zend_live_range
 {
     public int $var;
     public int $start;
     public int $end;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_llist'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_llist implements \ArrayAccess
+final class zend_llist
 {
     public ?zend_llist_element $head;
     public ?zend_llist_element $tail;
@@ -2071,62 +1116,28 @@ final class zend_llist implements \ArrayAccess
     public ?zend_llist_element $traverse_ptr;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_llist_element'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_llist_element implements \ArrayAccess
+final class zend_llist_element
 {
     public ?zend_llist_element $next;
     public ?zend_llist_element $prev;
     public \FFI\CData $data;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_module_dep'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_module_dep implements \ArrayAccess
+final class zend_module_dep
 {
     public ?\FFI\CData $name;
     public ?\FFI\CData $rel;
@@ -2134,31 +1145,14 @@ final class zend_module_dep implements \ArrayAccess
     public int $type;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_module_entry'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_module_entry implements \ArrayAccess
+final class zend_module_entry
 {
     public int $size;
     public int $zend_api;
@@ -2185,31 +1179,14 @@ final class zend_module_entry implements \ArrayAccess
     public ?\FFI\CData $build_id;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_object'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_object implements \ArrayAccess
+final class zend_object
 {
     public zend_refcounted_h $gc;
     public int $handle;
@@ -2220,31 +1197,14 @@ final class zend_object implements \ArrayAccess
     public \FFI\CData $properties_table;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_object_handlers'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_object_handlers implements \ArrayAccess
+final class zend_object_handlers
 {
     public int $offset;
     public \FFI\CData|\Closure|null $free_obj;
@@ -2273,31 +1233,14 @@ final class zend_object_handlers implements \ArrayAccess
     public \FFI\CData|\Closure|null $get_properties_for;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_object_iterator'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_object_iterator implements \ArrayAccess
+final class zend_object_iterator
 {
     public zend_object $std;
     public zval $data;
@@ -2305,31 +1248,14 @@ final class zend_object_iterator implements \ArrayAccess
     public int $index;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_object_iterator_funcs'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_object_iterator_funcs implements \ArrayAccess
+final class zend_object_iterator_funcs
 {
     public \FFI\CData|\Closure|null $dtor;
     public \FFI\CData|\Closure|null $valid;
@@ -2341,31 +1267,14 @@ final class zend_object_iterator_funcs implements \ArrayAccess
     public \FFI\CData|\Closure|null $get_gc;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_objects_store'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_objects_store implements \ArrayAccess
+final class zend_objects_store
 {
     public ?\FFI\CData $object_buckets;
     public int $top;
@@ -2373,31 +1282,14 @@ final class zend_objects_store implements \ArrayAccess
     public int $free_list_head;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_op'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_op implements \ArrayAccess
+final class zend_op
 {
     public ?\FFI\CData $handler;
     public znode_op $op1;
@@ -2411,31 +1303,14 @@ final class zend_op implements \ArrayAccess
     public int $result_type;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_op_array'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_op_array implements \ArrayAccess
+final class zend_op_array
 {
     public int $type;
     public \FFI\CData $arg_flags;
@@ -2473,31 +1348,14 @@ final class zend_op_array implements \ArrayAccess
     public \FFI\CData $reserved;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_oparray_context'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_oparray_context implements \ArrayAccess
+final class zend_oparray_context
 {
     public ?zend_oparray_context $prev;
     public ?zend_op_array $op_array;
@@ -2515,31 +1373,14 @@ final class zend_oparray_context implements \ArrayAccess
     public bool $in_jmp_frameless_branch;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_persistent_script'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_persistent_script implements \ArrayAccess
+final class zend_persistent_script
 {
     public zend_script $script;
     public int $compiler_halt_offset;
@@ -2557,31 +1398,14 @@ final class zend_persistent_script implements \ArrayAccess
     public \FFI\CData $dynamic_members;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_property_info'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_property_info implements \ArrayAccess
+final class zend_property_info
 {
     public int $offset;
     public int $flags;
@@ -2594,20 +1418,6 @@ final class zend_property_info implements \ArrayAccess
     public ?\FFI\CData $hooks;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
@@ -2615,42 +1425,22 @@ final class zend_property_info implements \ArrayAccess
  *
  * C union - only one member is meaningful at a time; the discriminant lives elsewhere.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_property_info_source_list implements \ArrayAccess
+final class zend_property_info_source_list
 {
     public ?zend_property_info $ptr;
     public int $list;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_ptr_stack'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_ptr_stack implements \ArrayAccess
+final class zend_ptr_stack
 {
     public int $top;
     public int $max;
@@ -2659,79 +1449,31 @@ final class zend_ptr_stack implements \ArrayAccess
     public bool $persistent;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_refcounted'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_refcounted implements \ArrayAccess
+final class zend_refcounted
 {
     public zend_refcounted_h $gc;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_refcounted_h'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_refcounted_h implements \ArrayAccess
+final class zend_refcounted_h
 {
     public int $refcount;
     public zend_refcounted_h_u $u;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
@@ -2739,72 +1481,35 @@ final class zend_refcounted_h implements \ArrayAccess
  *
  * C union - only one member is meaningful at a time; the discriminant lives elsewhere.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_refcounted_h_u implements \ArrayAccess
+final class zend_refcounted_h_u
 {
     public int $type_info;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_reference'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_reference implements \ArrayAccess
+final class zend_reference
 {
     public zend_refcounted_h $gc;
     public zval $val;
     public zend_property_info_source_list $sources;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_resource'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_resource implements \ArrayAccess
+final class zend_resource
 {
     public zend_refcounted_h $gc;
     public int $handle;
@@ -2812,31 +1517,14 @@ final class zend_resource implements \ArrayAccess
     public ?\FFI\CData $ptr;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_script'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_script implements \ArrayAccess
+final class zend_script
 {
     public ?zend_string $filename;
     public zend_op_array $main_op_array;
@@ -2844,31 +1532,14 @@ final class zend_script implements \ArrayAccess
     public HashTable $class_table;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_stack'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_stack implements \ArrayAccess
+final class zend_stack
 {
     public int $size;
     public int $top;
@@ -2876,31 +1547,14 @@ final class zend_stack implements \ArrayAccess
     public ?\FFI\CData $elements;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_stream'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_stream implements \ArrayAccess
+final class zend_stream
 {
     public ?\FFI\CData $handle;
     public int $isatty;
@@ -2909,31 +1563,14 @@ final class zend_stream implements \ArrayAccess
     public \FFI\CData|\Closure|null $closer;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_string'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_string implements \ArrayAccess
+final class zend_string
 {
     public zend_refcounted_h $gc;
     public int $h;
@@ -2941,154 +1578,69 @@ final class zend_string implements \ArrayAccess
     public \FFI\CData $val;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_strtod_state'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_strtod_state implements \ArrayAccess
+final class zend_strtod_state
 {
     public \FFI\CData $freelist;
     public ?\FFI\CData $p5s;
     public ?\FFI\CData $result;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_trait_alias'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_trait_alias implements \ArrayAccess
+final class zend_trait_alias
 {
     public zend_trait_method_reference $trait_method;
     public ?zend_string $alias;
     public int $modifiers;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_trait_method_reference'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_trait_method_reference implements \ArrayAccess
+final class zend_trait_method_reference
 {
     public ?zend_string $method_name;
     public ?zend_string $class_name;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_trait_precedence'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_trait_precedence implements \ArrayAccess
+final class zend_trait_precedence
 {
     public zend_trait_method_reference $trait_method;
     public int $num_excludes;
     public \FFI\CData $exclude_class_names;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_try_catch_element'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_try_catch_element implements \ArrayAccess
+final class zend_try_catch_element
 {
     public int $try_op;
     public int $catch_op;
@@ -3096,80 +1648,32 @@ final class zend_try_catch_element implements \ArrayAccess
     public int $finally_end;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_type'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_type implements \ArrayAccess
+final class zend_type
 {
     public ?\FFI\CData $ptr;
     public int $type_mask;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_type_list'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_type_list implements \ArrayAccess
+final class zend_type_list
 {
     public int $num_types;
     public \FFI\CData $types;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
@@ -3177,12 +1681,9 @@ final class zend_type_list implements \ArrayAccess
  *
  * C union - only one member is meaningful at a time; the discriminant lives elsewhere.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_value implements \ArrayAccess
+final class zend_value
 {
     public int $lval;
     public float $dval;
@@ -3200,50 +1701,19 @@ final class zend_value implements \ArrayAccess
     public zend_value_ww $ww;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zend_value.ww'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zend_value_ww implements \ArrayAccess
+final class zend_value_ww
 {
     public int $w1;
     public int $w2;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
@@ -3251,12 +1721,9 @@ final class zend_value_ww implements \ArrayAccess
  *
  * C union - only one member is meaningful at a time; the discriminant lives elsewhere.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class znode_op implements \ArrayAccess
+final class znode_op
 {
     public int $constant;
     public int $var;
@@ -3265,51 +1732,20 @@ final class znode_op implements \ArrayAccess
     public int $jmp_offset;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zval'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zval implements \ArrayAccess
+final class zval
 {
     public zend_value $value;
     public zval_u1 $u1;
     public zval_u2 $u2;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
@@ -3317,62 +1753,28 @@ final class zval implements \ArrayAccess
  *
  * C union - only one member is meaningful at a time; the discriminant lives elsewhere.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zval_u1 implements \ArrayAccess
+final class zval_u1
 {
     public int $type_info;
     public zval_u1_v $v;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
  * Analysis-only view of the engine C struct 'zval.u1.v'; the runtime value is always FFI\CData.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zval_u1_v implements \ArrayAccess
+final class zval_u1_v
 {
     public int $type;
     public int $type_flags;
     public zval_u1_v_u $u;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
@@ -3380,30 +1782,13 @@ final class zval_u1_v implements \ArrayAccess
  *
  * C union - only one member is meaningful at a time; the discriminant lives elsewhere.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zval_u1_v_u implements \ArrayAccess
+final class zval_u1_v_u
 {
     public int $extra;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }
 
 /**
@@ -3411,12 +1796,9 @@ final class zval_u1_v_u implements \ArrayAccess
  *
  * C union - only one member is meaningful at a time; the discriminant lives elsewhere.
  *
- * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of
- * the pointed C array (the ArrayAccess shape is analysis-only, never executed).
- *
  * @internal
  */
-final class zval_u2 implements \ArrayAccess
+final class zval_u2
 {
     public int $next;
     public int $cache_slot;
@@ -3430,18 +1812,4 @@ final class zval_u2 implements \ArrayAccess
     public int $extra;
 
     private function __construct() {}
-
-    public function offsetExists(mixed $offset): bool
-    {
-        return true;
-    }
-
-    public function offsetGet(mixed $offset): static
-    {
-        return $this;
-    }
-
-    public function offsetSet(mixed $offset, mixed $value): void {}
-
-    public function offsetUnset(mixed $offset): void {}
 }

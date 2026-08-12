@@ -20,6 +20,7 @@ use ZEngine\Type\HashTable;
 use ZEngine\Type\OpLine;
 use ZEngine\Type\PersistentHashTable;
 use ZEngine\Type\StringEntry;
+use ZEngine\Type\StructArray;
 
 /**
  * Runtime class-entry specialization: deep-clones a linked userland zend_class_entry
@@ -1007,8 +1008,7 @@ class ClassSpecializer
             } else {
                 // Inherited entry: share the pointer exactly like zend_duplicate_function()
                 self::addOpArrayBodyReference($sourceOpArray);
-                $sharedView = $sourceFunction[0];
-                assert($sharedView instanceof CData);
+                $sharedView        = StructArray::at($sourceFunction);
                 $publishedFunction = $newTable->addFunctionEntry($methodName, $sharedView);
             }
             $functionMap[Core::addressOf($sourceFunction)] = $publishedFunction;

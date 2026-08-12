@@ -333,7 +333,7 @@ class ObjectEntry implements ReferenceCountedInterface
     public function getNativeValue(): object
     {
         $this->assertObjectAlive();
-        $entry = ReflectionValue::newEntry(ReflectionValue::IS_OBJECT, $this->pointer[0]);
+        $entry = ReflectionValue::newEntry(ReflectionValue::IS_OBJECT, StructArray::at($this->pointer));
         $entry->getNativeValue($realObject);
         $entry->release();
 

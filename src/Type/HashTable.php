@@ -220,9 +220,9 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
             $isPacked = (bool) ($this->pointer->u->flags & self::HASH_FLAG_PACKED);
             $numUsed  = $this->pointer->nNumUsed;
             // Initialized tables always carry a data block (the shared sentinel at minimum)
-            $arPacked = $this->pointer->arPacked;
-            $arData   = $this->pointer->arData;
-            assert($arPacked !== null && $arData !== null);
+            assert($this->pointer->arPacked !== null && $this->pointer->arData !== null);
+            $arPacked = new StructArray($this->pointer->arPacked, $numUsed);
+            $arData   = new StructArray($this->pointer->arData, $numUsed);
             for ($index = 0; $index < $numUsed; $index++) {
                 if ($isPacked) {
                     // Since PHP 8.2 packed arrays store plain zvals with

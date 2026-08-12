@@ -219,14 +219,15 @@ class ReflectionClass extends NativeReflectionClass
         // A non-zero interface count guarantees the matching table pointer is set
         $resolvedTable = $this->pointer->interfaces;
         $namesTable    = $this->pointer->interface_names;
+        $namesArray    = $namesTable !== null ? new StructArray($namesTable, $totalInterfaces) : null;
         for ($index = 0; $index < $totalInterfaces; $index++) {
             if ($isLinked) {
                 assert($resolvedTable !== null);
                 $rawInterfaceName = $resolvedTable[$index]->name;
                 assert($rawInterfaceName instanceof CData);
             } else {
-                assert($namesTable !== null);
-                $rawInterfaceName = $namesTable[$index]->name;
+                assert($namesArray !== null);
+                $rawInterfaceName = $namesArray[$index]->name;
                 assert($rawInterfaceName !== null);
             }
             $interfaceNames[] = StringEntry::fromCData($rawInterfaceName)->getStringValue();
@@ -985,8 +986,9 @@ class ReflectionClass extends NativeReflectionClass
         }
         $previousNames = $this->pointer->trait_names;
         assert($previousNames !== null);
+        $previousNamesArray = new StructArray($previousNames, $totalTraits);
         for ($index = 0, $destIndex = 0; $index < $totalTraits; $index++) {
-            $traitNameStruct = $previousNames[$index];
+            $traitNameStruct = $previousNamesArray[$index];
             if (!isset($indexesToRemove[$index])) {
                 assert($memory instanceof CData);
                 $memory[$destIndex++] = $traitNameStruct;
@@ -2172,8 +2174,10 @@ class ReflectionClass extends NativeReflectionClass
     {
         $iterator = function () {
             $propertyIndex = 0;
-            $table         = $this->pointer->default_properties_table;
-            while ($propertyIndex < $this->pointer->default_properties_count) {
+            $count         = $this->pointer->default_properties_count;
+            $rawTable      = $this->pointer->default_properties_table;
+            $table         = $rawTable !== null ? new StructArray($rawTable, $count) : null;
+            while ($propertyIndex < $count) {
                 assert($table !== null);
                 yield $propertyIndex => ReflectionValue::fromValueEntry($table[$propertyIndex]);
                 $propertyIndex++;
@@ -2192,8 +2196,10 @@ class ReflectionClass extends NativeReflectionClass
     {
         $iterator = function () {
             $propertyIndex = 0;
-            $table         = $this->pointer->default_static_members_table;
-            while ($propertyIndex < $this->pointer->default_static_members_count) {
+            $count         = $this->pointer->default_static_members_count;
+            $rawTable      = $this->pointer->default_static_members_table;
+            $table         = $rawTable !== null ? new StructArray($rawTable, $count) : null;
+            while ($propertyIndex < $count) {
                 assert($table !== null);
                 yield $propertyIndex => ReflectionValue::fromValueEntry($table[$propertyIndex]);
                 $propertyIndex++;

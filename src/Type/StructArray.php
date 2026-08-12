@@ -50,17 +50,34 @@ use ZEngine\Core;
 final class StructArray implements ArrayAccess, Countable, IteratorAggregate
 {
     /**
-     * @param CData|\ArrayAccess<int, T> $baseAddress Typed pointer to the first element (runtime
-     *                                    value is always CData; statically stub-typed views,
-     *                                    which are indexable like the handles they stand for,
-     *                                    are accepted)
-     * @param int                        $count Number of elements behind the pointer
-     *                                          (negatives read as empty)
+     * @param CData|T $baseAddress Typed pointer to the first element; the runtime value is
+     *                             always the raw CData handle, a stub-typed pointer view is
+     *                             accepted statically (see stubs/zend-engine-structs.php)
+     * @param int     $count       Number of elements behind the pointer (negatives read as empty)
      */
     public function __construct(
         private object $baseAddress,
         private int $count,
     ) {}
+
+    /**
+     * Raw dereference of one element of a C array/pointer, returning the bare CData.
+     *
+     * The single-element counterpart of the instance view: for the `*ptr` / `ptr[0]`
+     * deref that used to lean on the stubs' (now removed) ArrayAccess. Like the instance
+     * offsetGet(), this is the one audited place a raw pointer is indexed - the generated
+     * struct stubs are structs, not arrays, so callers never index them directly.
+     *
+     * @param CData|object $baseAddress Pointer whose runtime value is always CData; a stub-typed
+     *                                  pointer view is accepted statically
+     */
+    public static function at(object $baseAddress, int $index = 0): CData
+    {
+        /** @var CData $element */
+        $element = $baseAddress[$index];
+
+        return $element;
+    }
 
     /**
      * @param int $offset
@@ -83,6 +100,9 @@ final class StructArray implements ArrayAccess, Countable, IteratorAggregate
             );
         }
 
+        // The single audited raw pointer-index in the framework: the base is a CData handle
+        // at runtime (the stub views used statically do not model array access, by design -
+        // they are structs, not arrays), so this one read is scoped-ignored in phpstan.dist.neon.
         /** @var T $element */
         $element = $this->baseAddress[$offset];
 

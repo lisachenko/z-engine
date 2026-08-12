@@ -351,8 +351,8 @@ trait FunctionLikeTrait
         $opCodes      = [];
         $opcodeIndex  = 0;
         $totalOpcodes = $opArray->last;
-        $opcodes      = $opArray->opcodes;
-        assert($opcodes !== null);
+        assert($opArray->opcodes !== null);
+        $opcodes = new StructArray($opArray->opcodes, $totalOpcodes);
         while ($opcodeIndex < $totalOpcodes) {
             $opCodes[] = new OpLine(Core::addr($opcodes[$opcodeIndex++]));
         }
@@ -421,8 +421,8 @@ trait FunctionLikeTrait
         if ($index > $lastLiteral) {
             throw new \OutOfBoundsException("Literal index {$index} is out of bounds, last is {$lastLiteral}");
         }
-        $literals = $opArray->literals;
-        assert($literals !== null);
+        assert($opArray->literals !== null);
+        $literals = new StructArray($opArray->literals, $lastLiteral + 1);
 
         return ReflectionValue::fromValueEntry($literals[$index]);
     }
@@ -441,8 +441,8 @@ trait FunctionLikeTrait
             $opArray       = $this->getOpArrayPointer();
             $literalIndex  = 0;
             $totalLiterals = $opArray->last_literal;
-            $literals      = $opArray->literals;
-            assert($literals !== null);
+            assert($opArray->literals !== null);
+            $literals = new StructArray($opArray->literals, $totalLiterals);
             while ($literalIndex < $totalLiterals) {
                 yield ReflectionValue::fromValueEntry($literals[$literalIndex++]);
             }
@@ -573,8 +573,8 @@ trait FunctionLikeTrait
         $opArray       = $this->getOpArrayPointer();
         $totalElements = $opArray->last_try_catch;
         if ($totalElements > 0) {
-            $elementTable = $opArray->try_catch_array;
-            assert($elementTable !== null);
+            assert($opArray->try_catch_array !== null);
+            $elementTable = new StructArray($opArray->try_catch_array, $totalElements);
             for ($index = 0; $index < $totalElements; $index++) {
                 $rawElement = $elementTable[$index];
                 $elements[] = new TryCatchElement(
@@ -603,8 +603,8 @@ trait FunctionLikeTrait
         $opArray     = $this->getOpArrayPointer();
         $totalRanges = $opArray->last_live_range;
         if ($totalRanges > 0) {
-            $rangeTable = $opArray->live_range;
-            assert($rangeTable !== null);
+            assert($opArray->live_range !== null);
+            $rangeTable = new StructArray($opArray->live_range, $totalRanges);
             for ($index = 0; $index < $totalRanges; $index++) {
                 $rawRange     = $rangeTable[$index];
                 $liveRanges[] = new LiveRange($rawRange->var, $rawRange->start, $rawRange->end);

@@ -142,7 +142,7 @@ class ClosureEntry
         $thisPtr = Core::addr($this->pointer->this_ptr);
         // Release the previously bound $this (safe no-op for unbound IS_UNDEF/IS_NULL closures)
         Core::call('zval_ptr_dtor', $thisPtr);
-        Core::memcpy($this->pointer->this_ptr, $objectZval[0], Core::sizeOfType(zval::class));
+        Core::memcpy($this->pointer->this_ptr, StructArray::at($objectZval), Core::sizeOfType(zval::class));
         // The closure now holds its own reference on the new $this
         Core::call('zval_add_ref', $thisPtr);
     }

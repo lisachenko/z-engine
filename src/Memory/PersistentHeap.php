@@ -24,6 +24,7 @@ use ZEngine\Type\HashTable;
 use ZEngine\Type\PersistentHashTable;
 use ZEngine\Type\PersistentObjectFactory;
 use ZEngine\Type\StringEntry;
+use ZEngine\Type\StructArray;
 
 /**
  * A named in-process registry of object graphs that survive request shutdown
@@ -199,7 +200,7 @@ final class PersistentHeap
         $this->addPointerEntry($descriptor, self::SLOT_ARRAYS, $arraysTable->getRawValue());
         $this->addLongEntry($descriptor, self::SLOT_BYTES, $graph->bytes);
 
-        $descriptorValue = ReflectionValue::newEntry(ReflectionValue::IS_PTR, self::asCData($descriptor->getRawValue()[0]));
+        $descriptorValue = ReflectionValue::newEntry(ReflectionValue::IS_PTR, self::asCData(StructArray::at($descriptor->getRawValue())));
         $this->registry->addInterned($keyEntry, $descriptorValue);
         $descriptorValue->release();
     }

@@ -355,9 +355,6 @@ final class StructStubEmitter
             $docLines[] = ' * C union - only one member is meaningful at a time; the discriminant lives elsewhere.';
         }
         $docLines[] = ' *';
-        $docLines[] = ' * Indexable like the FFI handle it stands for: $view[$i] is the i-th element of';
-        $docLines[] = ' * the pointed C array (the ArrayAccess shape is analysis-only, never executed).';
-        $docLines[] = ' *';
         $docLines[] = ' * @internal';
 
         $body = '';
@@ -367,27 +364,10 @@ final class StructStubEmitter
         if ($body !== '') {
             $body .= "\n";
         }
-        $body .= <<<'PHP'
-            private function __construct() {}
-
-            public function offsetExists(mixed $offset): bool
-            {
-                return true;
-            }
-
-            public function offsetGet(mixed $offset): static
-            {
-                return $this;
-            }
-
-            public function offsetSet(mixed $offset, mixed $value): void {}
-
-            public function offsetUnset(mixed $offset): void {}
-
-        PHP;
+        $body .= "    private function __construct() {}\n";
 
         return "/**\n" . implode("\n", $docLines) . "\n */\n"
-            . "final class {$className} implements \\ArrayAccess\n{\n{$body}}\n";
+            . "final class {$className}\n{\n{$body}}\n";
     }
 
     private function stubsBanner(): string

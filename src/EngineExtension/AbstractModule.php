@@ -24,6 +24,7 @@ use ZEngine\EngineExtension\Hook\RequestShutdownHook;
 use ZEngine\EngineExtension\Hook\RequestStartupHook;
 use ZEngine\Reflection\ReflectionExtension;
 use ZEngine\Type\StringEntry;
+use ZEngine\Type\StructArray;
 
 /**
  * Base class for userland PHP extensions (engine modules)
@@ -413,8 +414,12 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
         $lowerName     = strtolower($this->moduleName);
 
         $numUsed = $registryTable->nNumUsed;
+        $arData  = $registryTable->arData;
+        assert($arData !== null || $numUsed === 0);
+        $buckets = $arData !== null ? new StructArray($arData, $numUsed) : null;
         for ($index = 0; $index < $numUsed; $index++) {
-            $bucket = Core::addr($registryTable->arData[$index]);
+            assert($buckets !== null);
+            $bucket = Core::addr($buckets[$index]);
             if ($bucket->key === null) {
                 continue;
             }
