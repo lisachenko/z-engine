@@ -21,46 +21,68 @@ exposes — scalars, pointers, structs and arrays alike. Because it is one opaqu
 final type, a C `struct` handled through FFI cannot be described to static
 analysis or IDEs, cannot participate in `instanceof`, and cannot carry methods.
 This RFC proposes an **opt-in, per-scope mapping** from C struct/union type names
-to user-declared `final` classes extending `FFI\CData`, so that handles of those
-types are minted as instances of the user's class. It is fully backward
-compatible and zero-overhead when unused.
+to user-declared classes extending `FFI\CData`, so that handles of those types
+are minted as instances of the user's class. It is fully backward compatible and
+zero-overhead when unused.
 
 ## Proposal
 
-When an FFI scope is created, the author may register a map from C type names to
-classes:
+An FFI scope takes an optional **`array $options`** configuration — the same
+shape SOAP already uses (`SoapServer`/`SoapClient` accept a `classmap`, and
+`SoapClient` additionally a `typemap`). Two keys are recognised:
+
+- **`classmap`** — maps a C struct/union type name to a userland class. Handles
+  of that C type are minted as instances of the class.
+- **`typemap`** — maps a C type name to conversion callbacks, for types that
+  should surface as something other than a raw `CData` handle (scalars/typedefs,
+  or a custom (de)serialization of a struct), analogous to `SoapClient`'s
+  `typemap`.
 
 ```php
-$ffi = FFI::cdef($code, $lib, classMap: [
-    'point' => \Geometry\Point::class,
+$ffi = FFI::cdef($code, $lib, options: [
+    'classmap' => [
+        'point' => \Geometry\Point::class,
+    ],
+    'typemap' => [
+        // C type name => how to marshal it to/from PHP
+        'timestamp_t' => [
+            'from_cdata' => fn(FFI\CData $c): \DateTimeImmutable => /* ... */,
+            'to_cdata'   => fn(\DateTimeImmutable $d, FFI\CData $c): void => /* ... */,
+        ],
+    ],
 ]);
 
 final class Point extends \FFI\CData
 {
-    public function distanceTo(Point $other): float { /* reads $this->x, ... */ }
+    // Fields may be exposed as typed property hooks over the underlying CData,
+    // and the class may carry ordinary methods.
+    public float $x { get => $this->readFloat('x'); set => $this->writeFloat('x', $value); }
+
+    public function distanceTo(Point $other): float { /* ... */ }
 }
 ```
 
-A registered class must be `final`, must extend `FFI\CData`, and must declare no
-instance properties and no constructor. Given the map, every `CData` ext/ffi
-mints for a mapped C type — `FFI::new()`, `FFI::cast()`, `FFI::addr()`,
-struct-field reads yielding nested structs/pointers, and function return values —
-is created as an instance of the mapped class. Its runtime representation is
-unchanged (it *is* an ext/ffi `zend_ffi_cdata`); only its class entry differs, so
-field access, casting, `sizeof`, GC and every existing behaviour are identical.
-The payoff: `get_class()` is truthful, `instanceof` works, native
-parameter/return types are enforced, and the class may carry methods.
-
-Three candidate spellings are on the table (a named `classMap:` argument on
-`cdef`/`load`, a `#[\FFI\CStruct('name')]` attribute on the class, or a fluent
-`FFI::mapType()`); the final choice is an open question below.
+A registered `classmap` class must extend `FFI\CData`. It **may** declare typed
+property hooks that read/write the underlying C fields through the raw CData, and
+it **may** declare methods — there is no "no properties, no constructor"
+restriction (the object's storage is still ext/ffi's `zend_ffi_cdata`, so a hook
+body operates on the raw structure rather than on a real backing store). Given
+the map, every `CData` ext/ffi mints for a mapped C type — `FFI::new()`,
+`FFI::cast()`, `FFI::addr()`, struct-field reads yielding nested structs/pointers,
+and function return values — is created as an instance of the mapped class. Its
+runtime representation is unchanged (it *is* an ext/ffi `zend_ffi_cdata`); only
+its class entry differs, so field access, casting, `sizeof`, GC and every
+existing behaviour are identical. The payoff: `get_class()` is truthful,
+`instanceof` works, native parameter/return types are enforced, and the class
+carries methods and hooked properties.
 
 ## Backward Incompatible Changes
 
-None. The feature is entirely opt-in: existing FFI code mints `FFI\CData` exactly
-as before. The only relaxation is that `FFI\CData` becomes extendable by classes
-that are registered in a scope's class map (an unregistered `extends FFI\CData`
-may remain an error).
+None. The feature is entirely opt-in: existing FFI code passes no `options` (or
+one without `classmap`/`typemap`) and mints `FFI\CData` exactly as before. The
+only relaxation is that `FFI\CData` becomes extendable by classes that are
+registered in a scope's `classmap` (an unregistered `extends FFI\CData` may
+remain an error).
 
 ## Proposed PHP Version(s)
 
@@ -72,25 +94,24 @@ PHP 8.6.
 - **To Opcache / preloading:** a mapped scope's registry must be re-resolved per
   request (the `zend_ffi_type *` keys are request/persistent-scoped), handled
   alongside the existing per-request scope materialization.
-- **To ext/ffi internals:** one `HashTable` per scope keyed on `zend_ffi_type *`,
-  consulted only when non-empty at the single `object_init_ex(…,
-  zend_ffi_cdata_ce)` mint site; registration-time validation of the target
-  class. Object layout and handlers are unchanged.
+- **To ext/ffi internals:** one `HashTable` per scope keyed on `zend_ffi_type *`
+  (populated from `classmap`), consulted only when non-empty at the single
+  `object_init_ex(…, zend_ffi_cdata_ce)` mint site; registration-time validation
+  of the target class; the optional `typemap` callbacks stored per resolved type.
+  Object layout and handlers are unchanged.
 
 ## Open Issues
 
-1. **API surface** — `classMap:` argument vs `#[\FFI\CStruct]` attribute vs
-   `FFI::mapType()`; possibly support more than one.
-2. **Mapping scalars / typedefs** — v1 restricts mapping to struct/union types;
-   whether to later allow scalar typedefs (e.g. a `Handle` wrapper over an `int`)
-   is deferred.
-3. **Unregistered `extends FFI\CData`** — hard error vs inert never-minted class.
-4. **`FFI::cast()` across scopes** — behaviour when casting a handle into a type
+1. **`typemap` callback shape** — the exact `from_cdata`/`to_cdata` signature and
+   when they fire (on every read/write vs. at boundary conversions only).
+2. **Unregistered `extends FFI\CData`** — hard error vs inert never-minted class.
+3. **`FFI::cast()` across scopes** — behaviour when casting a handle into a type
    mapped in a *different* scope.
+4. **Property-hook interaction** — confirming hook bodies on a `zend_ffi_cdata`
+   (which has no real property storage) compose cleanly with the field handlers.
 
 ## Future Scope
 
-- Methods and, potentially, mapped scalar wrappers.
 - A generator/attribute pathway so binding tools can emit mapped classes directly
   from C headers.
 

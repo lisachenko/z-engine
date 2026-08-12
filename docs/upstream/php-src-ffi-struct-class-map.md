@@ -53,28 +53,46 @@ everyone, in ~the same amount of C code these projects spend working around it.
 An optional class map attached to an FFI scope, mapping C struct/union **type
 names** to userland classes:
 
+The scope takes an optional **`array $options`** configuration, in the spirit of
+`SoapServer`/`SoapClient` (which accept a `classmap`, and `SoapClient` also a
+`typemap`). Two keys are recognised — `classmap` (C type → userland class) and
+`typemap` (C type → conversion callbacks):
+
 ```php
-// via FFI::cdef()
-$ffi = FFI::cdef($cCode, $lib, classMap: [
-    'zend_string'  => \My\Engine\ZendString::class,
-    'zend_value'   => \My\Engine\ZendValue::class,
+$ffi = FFI::cdef($cCode, $lib, options: [
+    'classmap' => [
+        'zend_string' => \My\Engine\ZendString::class,
+        'zend_value'  => \My\Engine\ZendValue::class,
+    ],
+    'typemap' => [
+        // C type name => how to marshal it to/from PHP (for types that should
+        // surface as something other than a raw CData handle)
+        'zend_bool' => [
+            'from_cdata' => fn(FFI\CData $c): bool => $c->cdata !== 0,
+            'to_cdata'   => fn(bool $v, FFI\CData $c): void => $c->cdata = $v ? 1 : 0,
+        ],
+    ],
 ]);
 
-// or, for a preloaded/scoped header, via an attribute on the class
-#[\FFI\CStruct('zend_string')]           // binds this class to the C type
-final class ZendString extends \FFI\CData {}
+final class ZendString extends \FFI\CData
+{
+    // Fields may be exposed as typed property hooks over the raw CData, and the
+    // class may carry ordinary methods.
+    public int $len { get => $this->readUint32('len'); }
+
+    public function toPhpString(): string { /* ... */ }
+}
 ```
 
-Rules for a mapped class:
+Rules for a `classmap` class:
 
-- it **must be `final`** and **extend `FFI\CData`** (the one place `CData`'s
-  finality is relaxed: a class may extend it only while it is registered in a
-  scope's class map),
-- it **declares no properties and no `__construct`** (the object layout is
-  ext/ffi's `zend_ffi_cdata`, allocated propertyless — a user property would
-  have nowhere to live),
-- it MAY declare methods, which then become available on every handle of that
-  type (this is the ergonomic payoff — `$string->toPhpString()`).
+- it **must extend `FFI\CData`** (the one place `CData`'s finality is relaxed: a
+  class may extend it only while it is registered in a scope's `classmap`),
+- it **may declare typed property hooks** whose bodies read/write the underlying
+  C fields through the raw CData, and it **may declare methods** — there is no
+  "no properties, no constructor" restriction; the object's storage stays ext/ffi's
+  `zend_ffi_cdata`, so a hook body operates on the raw structure rather than on a
+  real backing store.
 
 Given the map, **every handle ext/ffi mints for a mapped C type** — from
 `FFI::new()`, `FFI::cast()`, `FFI::addr()`, a struct-field read that yields a
@@ -91,10 +109,11 @@ differs.
 The change is localized to ext/ffi and is zero-overhead when unused:
 
 - **Registry.** Each `zend_ffi` scope gains a `HashTable *class_map` keyed on the
-  resolved `zend_ffi_type *` (populated at `cdef`/`load` time by resolving each
-  declared type name to its `zend_ffi_type`, and validating the target class:
-  `final`, `instanceof zend_ffi_cdata_ce` as a parent, no declared properties).
-  The table is `NULL`/empty for every existing user.
+  resolved `zend_ffi_type *` (populated from `options['classmap']` at `cdef`/`load`
+  time by resolving each declared type name to its `zend_ffi_type`, and validating
+  the target class extends `zend_ffi_cdata_ce`), plus an optional parallel
+  `typemap` table of conversion callbacks. Both are `NULL`/empty for every
+  existing user.
 - **Minting.** Today every cdata is created with
   `object_init_ex(&zv, zend_ffi_cdata_ce)` (in `zend_ffi_cdata_to_zval()` and
   the `FFI::new`/`FFI::cast` method handlers). Wrap that single choice: when the
@@ -109,16 +128,17 @@ The change is localized to ext/ffi and is zero-overhead when unused:
 - **Preloading.** For `opcache.preload`ed scopes the map must be re-resolved per
   request (the `zend_ffi_type *` pointers are request/persistent-scoped); the
   natural place is alongside the existing per-request scope materialization.
-- **Out of scope / unchanged:** serialization stays forbidden (as for any
-  cdata); scalar and pointer-to-scalar typedefs are not mapped in v1 (only
-  struct/union types); a mapped class with declared instance properties is a
-  registration-time error.
+- **Struct classes carrying methods / property hooks.** Because the mapped class
+  is an ordinary `ce` (only the object storage is `zend_ffi_cdata`), methods and
+  typed property hooks work with no extra machinery — a hook body just reads or
+  writes the underlying C field through the raw CData.
+- **Unchanged:** serialization stays forbidden (as for any cdata).
 
 ### Backward compatibility
 
 Fully opt-in and additive. No existing FFI program changes behaviour; the new
-`classMap` argument / `#[\FFI\CStruct]` attribute is the only surface, and both
-default to "no mapping". The only relaxation is that `FFI\CData` becomes
+`options` array (with its `classmap`/`typemap` keys) is the only surface, and it
+defaults to "no mapping". The only relaxation is that `FFI\CData` becomes
 extendable *for registered classes only* — a normal `class X extends FFI\CData`
 without registration can stay an error (or be allowed as an inert never-minted
 class, whichever the RFC prefers).
@@ -127,16 +147,7 @@ class, whichever the RFC prefers).
 
 I'd like to target **PHP 8.6, ahead of feature freeze**, and I'm volunteering to
 write the implementation PR (I have a working userland polyfill of the exact
-semantics in z-engine and a strong real-world test bed for it). Before I start
-on the patch I'd appreciate feedback on the **API shape** — the three candidates
-I see are:
-
-1. a `classMap:` named argument on `FFI::cdef()`/`FFI::load()` (shown above),
-2. a `#[\FFI\CStruct('name')]` attribute on the class, discovered at scope
-   creation,
-3. a fluent `FFI::mapType('name', Class::class)` call after scope creation.
-
-Happy to prototype whichever the maintainers prefer, or a combination.
-
----
-_Generated by [Claude Code](https://claude.ai/code)_
+semantics in z-engine and a strong real-world test bed for it). I'd welcome
+feedback on the exact shape of the `options` array — the `classmap`/`typemap`
+keys mirror SOAP, but the `typemap` callback contract (`from_cdata`/`to_cdata`,
+and when they fire) is the main open design point.
