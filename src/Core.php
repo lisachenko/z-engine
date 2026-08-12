@@ -440,8 +440,9 @@ class Core
      *
      * @param string $structName Globals struct type, e.g. "zend_executor_globals"
      * @param mixed  $offset     Engine-exported byte offset inside the TSRM block
+     * @return \FFI\CData
      */
-    private static function threadGlobals(string $structName, mixed $offset): CData
+    private static function threadGlobals(string $structName, mixed $offset): object
     {
         if (!\is_int($offset)) {
             throw new RuntimeException("The engine-exported TSRM offset for {$structName} is not an integer");
@@ -591,10 +592,68 @@ class Core
     }
 
     /**
-     * Internally cast a memory at given pointer to another type
+     * Namespace of the generated engine struct stub classes (stubs/zend-engine-structs.php):
+     * their short names ARE the raw C type names, which is what makes the ::class form of
+     * the typed entry points (new(zval::class), cast(zend_string::class, ...)) resolvable
+     * without the stub classes ever being loaded.
      */
-    public static function cast(string $type, CData $pointer): CData
+    private const STRUCT_STUB_NAMESPACE = 'ZEngine\\Generated\\';
+
+    /**
+     * Maps a generated struct stub class-string to the C type name it stands for; plain C
+     * type name strings pass through verbatim. Never autoloads anything: ::class constants
+     * of the (deliberately non-loadable) stub classes are plain strings at runtime.
+     *
+     * @param bool $asPointer whether a stub class maps to a pointer to the struct
+     *                        (cast()/pointerAtAddress() semantics) instead of the struct itself
+     */
+    private static function resolveCName(string $type, bool $asPointer = false): string
     {
+        if (!str_contains($type, '\\')) {
+            return $type;
+        }
+        if (!str_starts_with($type, self::STRUCT_STUB_NAMESPACE)) {
+            throw new \InvalidArgumentException(
+                'Only ZEngine\\Generated struct stub classes map to engine C types, got "' . $type . '"',
+            );
+        }
+        $cName = substr($type, strlen(self::STRUCT_STUB_NAMESPACE));
+
+        return $asPointer ? "{$cName} *" : $cName;
+    }
+
+    /**
+     * Runtime boundary check behind the object-widened entry points: values typed as
+     * generated struct stubs for the analyser are always FFI\CData handles at runtime,
+     * and anything else is a caller bug FFI itself would reject a step later anyway.
+     *
+     * @return \FFI\CData
+     */
+    private static function toCData(object $value): object
+    {
+        if (!$value instanceof CData) {
+            throw new \TypeError('Expected an FFI\CData handle, got ' . get_debug_type($value));
+        }
+
+        return $value;
+    }
+
+    /**
+     * Internally cast a memory at given pointer to another type
+     *
+     * Accepts either a C type name string (eg "zend_ast **", "char *") or a generated
+     * engine struct stub class, which means a POINTER cast: cast(zend_string::class, $p)
+     * casts to "zend_string *" - the dominant call form - and types the returned handle
+     * as the stub for static analysis while the runtime value stays an FFI\CData.
+     *
+     * @template T of object
+     * @param class-string<T>|string $type
+     * @param CData|object $pointer Runtime value is always CData; statically stub-typed views are accepted
+     * @return ($type is class-string<T> ? T : CData)
+     */
+    public static function cast(string $type, object $pointer): object
+    {
+        $pointer = self::toCData($pointer);
         // Since PHP 8.3 FFI::cast() reinterprets the *contents* of an array
         // instead of decaying it to a pointer to its data. Restore the decay
         // semantics explicitly, otherwise every buffer cast becomes a wild
@@ -612,7 +671,7 @@ class Core
             // Not an array: cast directly
         }
 
-        return self::$engine->cast($type, $pointer);
+        return self::$engine->cast(self::resolveCName($type, asPointer: true), $pointer);
     }
 
     /**
@@ -630,27 +689,32 @@ class Core
      * answers "how big is a zend_op_array here?" without a raw FFI\CType ever crossing the
      * API boundary.
      *
-     * @param string $type Name of the engine type (eg "zend_class_entry")
+     * @param class-string|string $type Name of the engine type (eg "zend_class_entry")
+     *                                  or a generated struct stub class
      */
     public static function sizeOfType(string $type): int
     {
-        return FFI::sizeof(self::$engine->type($type));
+        return FFI::sizeof(self::$engine->type(self::resolveCName($type)));
     }
 
     /**
      * Returns the size of given type
+     *
+     * @param CData|object $variable Runtime value is always CData; statically stub-typed views are accepted
+     * @return \FFI\CData
      */
-    public static function addr(CData $variable): CData
+    public static function addr(object $variable): object
     {
-        return FFI::addr($variable);
+        return FFI::addr(self::toCData($variable));
     }
 
     /**
      * Returns the numeric address of a pointer for use as a stable identity key
      *
-     * @param CData $pointer Pointer CData (eg zend_class_entry *)
+     * @param CData|object $pointer Pointer CData (eg zend_class_entry *); statically
+     *                              stub-typed views are accepted
      */
-    public static function addressOf(CData $pointer): int
+    public static function addressOf(object $pointer): int
     {
         return (int) self::cast('uintptr_t', $pointer)->cdata;
     }
@@ -673,35 +737,44 @@ class Core
      * The result needs no instanceof narrowing anymore: reading `$slot[0]` off a CData
      * array yielded an untyped value, while cast() is declared to return CData.
      *
-     * @param string $type    Pointer type of the result (eg "zend_arg_info *")
-     * @param int    $address Numeric address the pointer should point at
+     * @template T of object
+     * @param class-string<T>|string $type    Pointer type of the result (eg "zend_arg_info *")
+     *                                        or a stub class (a POINTER to it is implied)
+     * @param int                    $address Numeric address the pointer should point at
+     * @return ($type is class-string<T> ? T : CData)
      */
-    public static function pointerAtAddress(string $type, int $address): CData
+    public static function pointerAtAddress(string $type, int $address): object
     {
-        return self::$engine->cast($type, $address);
+        return self::$engine->cast(self::resolveCName($type, asPointer: true), $address);
     }
 
     /**
      * Copies $size bytes from memory area $source to memory area $target.
      * $source may be any native data structure (FFI\CData) or PHP string.
      *
-     * @param CData $target
+     * @param CData|object $target Runtime value is always CData; statically stub-typed views are accepted
      * @param mixed $source
      * @param int $size
      */
-    public static function memcpy(CData $target, $source, int $size): void
+    public static function memcpy(object $target, $source, int $size): void
     {
-        FFI::memcpy($target, $source, $size);
+        FFI::memcpy(self::toCData($target), $source, $size);
     }
 
     /**
      * Creates a new instance of specific type
      *
-     * @param string $type Name of the type
+     * Accepts either a C type name string (eg "zval", "char[16]") or a generated engine
+     * struct stub class (eg zval::class): the stub form types the returned handle for
+     * static analysis and IDE completion while the runtime value stays an FFI\CData.
+     *
+     * @template T of object
+     * @param class-string<T>|string $type Name of the type or a stub class
+     * @return ($type is class-string<T> ? T : CData)
      */
-    public static function new(string $type, bool $owned = true, bool $persistent = false): CData
+    public static function new(string $type, bool $owned = true, bool $persistent = false): object
     {
-        return self::$engine->new($type, $owned, $persistent);
+        return self::$engine->new(self::resolveCName($type), $owned, $persistent);
     }
 
     /**
@@ -712,9 +785,12 @@ class Core
      * frees a block if and only if z-engine allocated it, so engine-original arrays (including
      * shared-memory data of immutable classes) are never freed through the FFI allocator.
      *
-     * @param string $type Name of the type (eg "zend_class_entry *[4]")
+     * @template T of object
+     * @param class-string<T>|string $type Name of the type (eg "zend_class_entry *[4]")
+     *                                     or a stub class
+     * @return ($type is class-string<T> ? T : CData)
      */
-    public static function trackedNew(string $type, bool $persistent = false): CData
+    public static function trackedNew(string $type, bool $persistent = false): object
     {
         $memory                                                    = self::new($type, false, $persistent);
         self::$trackedBlocks[self::addressOf(self::addr($memory))] = $memory;
@@ -725,7 +801,10 @@ class Core
     /**
      * Checks if the given pointer refers to a block allocated by z-engine via trackedNew()
      */
-    public static function isTrackedBlock(CData $pointer): bool
+    /**
+     * @param CData|object $pointer Runtime value is always CData; statically stub-typed views are accepted
+     */
+    public static function isTrackedBlock(object $pointer): bool
     {
         return isset(self::$trackedBlocks[self::addressOf($pointer)]);
     }
@@ -736,7 +815,10 @@ class Core
      * Engine-original buffers are deliberately left alone: freeing memory that z-engine did
      * not allocate is exactly the wrong-allocator corruption this registry exists to prevent.
      */
-    public static function untrackAndFree(CData $pointer): void
+    /**
+     * @param CData|object $pointer Runtime value is always CData; statically stub-typed views are accepted
+     */
+    public static function untrackAndFree(object $pointer): void
     {
         $address = self::addressOf($pointer);
         if (!isset(self::$trackedBlocks[$address])) {
@@ -750,7 +832,10 @@ class Core
     /**
      * Removes a block from the registry without freeing it (ownership handed to the engine)
      */
-    public static function untrack(CData $pointer): void
+    /**
+     * @param CData|object $pointer Runtime value is always CData; statically stub-typed views are accepted
+     */
+    public static function untrack(object $pointer): void
     {
         unset(self::$trackedBlocks[self::addressOf($pointer)]);
     }
@@ -778,9 +863,10 @@ class Core
      * The two stay orthogonal: this method does not touch the tracked-block registry, so a
      * caller that frees a block allocated in the same request must Core::untrack() it too.
      *
-     * @param CData $pointer Pointer to the malloc-backed block to release
+     * @param CData|object $pointer Pointer to the malloc-backed block to release; runtime
+     *                              value is always CData, statically stub-typed views are accepted
      */
-    public static function persistentFree(CData $pointer): void
+    public static function persistentFree(object $pointer): void
     {
         if (\DIRECTORY_SEPARATOR !== '/') {
             self::$windowsCrt ??= FFI::cdef('void free(void *);', 'ucrtbase.dll');
@@ -927,11 +1013,13 @@ class Core
     }
 
     /**
-     * Returns the size of given type
+     * Releases an FFI-allocated block
+     *
+     * @param CData|object $variable Runtime value is always CData; statically stub-typed views are accepted
      */
-    public static function free(CData $variable): void
+    public static function free(object $variable): void
     {
-        FFI::free($variable);
+        FFI::free(self::toCData($variable));
     }
 
     /**
@@ -941,10 +1029,12 @@ class Core
      *
      * @internal returns a raw FFI\CType, which must not cross the API boundary - consumers
      *           wanting a size use sizeOfType()
+     *
+     * @param class-string|string $type Name of the type or a generated struct stub class
      */
     public static function type(string $type): CType
     {
-        return self::$engine->type($type);
+        return self::$engine->type(self::resolveCName($type));
     }
 
     /**
@@ -997,8 +1087,10 @@ class Core
 
     /**
      * Returns standard object handlers
+     *
+     * @return \FFI\CData
      */
-    public static function getStandardObjectHandlers(): CData
+    public static function getStandardObjectHandlers(): object
     {
         return self::$engine->std_object_handlers;
     }

@@ -102,8 +102,9 @@ class GetPropertiesHook extends AbstractHook
      * typedef HashTable *(*zend_object_get_properties_t)(zend_object *object);
      *
      * @inheritDoc
+     * @return \FFI\CData
      */
-    public function handle(...$rawArguments): CData
+    public function handle(...$rawArguments): object
     {
         [$object] = $rawArguments;
         assert($object instanceof CData);
@@ -219,8 +220,10 @@ class GetPropertiesHook extends AbstractHook
      * The pointer is harvested from a DateTime instance (the function itself is static
      * and not exported); the probe object is released right away, the C function address
      * has static lifetime.
+     *
+     * @return \FFI\CData
      */
-    private static function gcSafeGetGcPointer(): CData
+    private static function gcSafeGetGcPointer(): object
     {
         if (self::$gcSafeGetGc === null) {
             $probe    = new \DateTime();
@@ -241,8 +244,11 @@ class GetPropertiesHook extends AbstractHook
      *
      * Used for reentrant calls: the table anchored by the previous handle() run (or the
      * one the original handler builds into the object) is the engine's current view.
+     *
+     * @param \FFI\CData $object
+     * @return \FFI\CData
      */
-    private function currentEngineTable(CData $object): CData
+    private function currentEngineTable(object $object): object
     {
         $properties = $object->properties;
         if ($properties !== null) {

@@ -70,8 +70,9 @@ class GetMethodHook extends AbstractMethodResolutionHook
      *     zend_string *method, const zval *key);
      *
      * @inheritDoc
+     * @return \FFI\CData|null
      */
-    public function handle(...$rawArguments): ?CData
+    public function handle(...$rawArguments): ?object
     {
         [$objectPtr, $methodName, $key] = $rawArguments;
         assert($objectPtr instanceof CData && $methodName instanceof CData);

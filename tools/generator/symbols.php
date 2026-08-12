@@ -18,6 +18,12 @@ declare(strict_types=1);
  *                 (size + offset of every non-bitfield field). Every struct the
  *                 PHP code dereferences MUST be listed here - this is the
  *                 anti-segfault ground truth checked at Core::init().
+ *   - stub_platform_fields: struct fields that exist only on some targets
+ *                 (#ifdef'd in the engine). They are OMITTED from the generated
+ *                 analysis stubs (stubs/zend-engine-structs.php) on EVERY
+ *                 target, so the stub file stays byte-identical across
+ *                 platforms; nothing in src/ may touch them (they are invisible
+ *                 to the analyser by design). Keyed by stub class name.
  */
 return [
     'types' => [
@@ -288,6 +294,22 @@ return [
         '_IO_FILE', // glibc
         '__sFILE',  // Darwin libc
         '_iobuf',   // MSVC UCRT
+    ],
+
+    // Verified against the committed engine.h of all 8 targets: these are the
+    // only stub divergences. Member-set differences: EG grows the
+    // max-execution-timer trio on linux-zts and the version-info record on
+    // windows; CG carries copied_functions_count on zts only; zend_module_entry
+    // spells its globals pointer globals_ptr (nts) / globals_id_ptr (zts).
+    // Field-TYPE difference: zend_atomic_bool.value is _Atomic(_Bool) on
+    // linux/darwin but `volatile char` on windows (same 1-byte atomic flag,
+    // different C spelling) - z-engine never reads it through the stub, so it
+    // is dropped everywhere to keep the stub file byte-identical.
+    'stub_platform_fields' => [
+        'zend_atomic_bool'      => ['value'],
+        'zend_compiler_globals' => ['copied_functions_count'],
+        'zend_executor_globals' => ['max_execution_timer_timer', 'pid', 'oldact', 'windows_version_info'],
+        'zend_module_entry'     => ['globals_ptr', 'globals_id_ptr'],
     ],
 
     'opcode_header' => 'Zend/zend_vm_opcodes.h',

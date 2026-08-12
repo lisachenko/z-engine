@@ -16,6 +16,7 @@ namespace ZEngine\Reflection;
 use FFI\CData;
 use ReflectionClassConstant as NativeReflectionClassConstant;
 use ZEngine\Core;
+use ZEngine\Generated\zend_class_constant;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
 
@@ -31,7 +32,11 @@ use ZEngine\Type\StringEntry;
  */
 class ReflectionClassConstant extends NativeReflectionClassConstant
 {
-    private CData $pointer;
+    /**
+     * @var zend_class_constant Typed view of the wrapped constant entry; the runtime value
+     *                          is the raw FFI\CData handle (see stubs/zend-engine-structs.php)
+     */
+    private object $pointer;
 
     public function __construct(string $className, string $constantName)
     {
@@ -50,25 +55,29 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
             throw new \ReflectionException("Constant {$constantName} was not found in the class.");
         }
         $constantPointer = $constantEntry->getRawPointer();
-        $this->pointer   = Core::cast('zend_class_constant *', $constantPointer);
+        $this->pointer   = Core::cast(zend_class_constant::class, $constantPointer);
     }
 
     /**
      * Creates a reflection from the zend_class_constant structure
      *
-     * @param CData $constantEntry Pointer to the structure
+     * @param CData|zend_class_constant $constantEntry Pointer to the structure
      *
      * @return ReflectionClassConstant
      */
-    public static function fromCData(CData $constantEntry, string $constantName): ReflectionClassConstant
+    public static function fromCData(object $constantEntry, string $constantName): ReflectionClassConstant
     {
         /** @var ReflectionClassConstant $reflectionConstant */
         $reflectionConstant = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
-        $className          = StringEntry::fromCData($constantEntry->ce->name);
+        /** @var zend_class_constant $constantEntry Narrowed to the stub view at the owning boundary */
+        $classEntry = $constantEntry->ce;
+        assert($classEntry !== null);
+        $classNamePointer = $classEntry->name;
+        assert($classNamePointer !== null);
         Core::callParentConstructor(
             $reflectionConstant,
             static::class,
-            $className->getStringValue(),
+            StringEntry::fromCData($classNamePointer)->getStringValue(),
             $constantName,
         );
         $reflectionConstant->pointer = $constantEntry;
@@ -86,11 +95,14 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
      * usable, native introspection (getName()/getValue()) is not.
      *
      * @internal used by the hot-swap machinery (ClassDelta)
+     *
+     * @param CData|zend_class_constant $constantEntry
      */
-    public static function fromRawEntry(CData $constantEntry): ReflectionClassConstant
+    public static function fromRawEntry(object $constantEntry): ReflectionClassConstant
     {
         /** @var ReflectionClassConstant $reflectionConstant */
-        $reflectionConstant          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionConstant = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        /** @var zend_class_constant $constantEntry Narrowed at the boundary (may be a struct or a pointer view) */
         $reflectionConstant->pointer = $constantEntry;
 
         return $reflectionConstant;
@@ -101,8 +113,10 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
      *
      * The pointer is a live view into engine memory; prefer the typed accessors
      * (getReflectionValue(), equals(), getDeclaringClass()) over poking fields.
+     *
+     * @return zend_class_constant
      */
-    public function getRawValue(): CData
+    public function getRawValue(): object
     {
         return $this->pointer;
     }
@@ -129,10 +143,7 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
      */
     public function getAccessFlags(): int
     {
-        /** @var ZvalShape $value */
-        $value = $this->pointer->value;
-
-        return $value->u2->constant_flags;
+        return $this->pointer->value->u2->constant_flags;
     }
 
     /**
@@ -239,7 +250,10 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
      */
     public function getDeclaringClass(): ReflectionClass
     {
-        return ReflectionClass::fromCData($this->pointer->ce);
+        $classEntry = $this->pointer->ce;
+        assert($classEntry instanceof CData);
+
+        return ReflectionClass::fromCData($classEntry);
     }
 
     /**

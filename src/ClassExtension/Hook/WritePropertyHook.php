@@ -33,8 +33,9 @@ class WritePropertyHook extends AbstractPropertyHook
      * typedef zval *(*zend_object_write_property_t)(zend_object *object, zend_string *member, zval *value, void **cache_slot);
      *
      * @inheritDoc
+     * @return \FFI\CData
      */
-    public function handle(...$rawArguments): CData
+    public function handle(...$rawArguments): object
     {
         [$this->object, $this->member, $this->value, $this->cacheSlot] = $rawArguments;
 

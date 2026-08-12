@@ -72,7 +72,7 @@ class ReflectionConstant
      *
      * @param CData $constantEntry Pointer to the zend_constant structure
      */
-    public static function fromCData(CData $constantEntry): ReflectionConstant
+    public static function fromCData(object $constantEntry): ReflectionConstant
     {
         /** @var ReflectionConstant $reflectionConstant */
         $reflectionConstant          = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();

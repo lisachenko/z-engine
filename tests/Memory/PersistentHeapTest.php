@@ -307,9 +307,8 @@ class PersistentHeapTest extends TestCase
         $classesTable = $this->descriptorTable('missing-class', self::SLOT_OBJECT_CLASSES);
         $bogusName    = StringEntry::persistentInterned('zengine\stub\class_that_does_not_exist');
         $bogusRaw     = $bogusName->getRawValue();
-        $bogusView    = $bogusRaw[0];
-        assert($bogusView instanceof \FFI\CData);
-        $entry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $bogusView);
+        $bogusView    = \ZEngine\Type\StructArray::at($bogusRaw);
+        $entry        = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $bogusView);
         $classesTable->addIndex(0, $entry);
         $entry->release();
 
@@ -324,9 +323,8 @@ class PersistentHeapTest extends TestCase
         // Restore the real class name so the graph can be evicted cleanly
         $realName = StringEntry::persistentInterned(strtolower(TestGraphNode::class));
         $realRaw  = $realName->getRawValue();
-        $realView = $realRaw[0];
-        assert($realView instanceof \FFI\CData);
-        $entry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $realView);
+        $realView = \ZEngine\Type\StructArray::at($realRaw);
+        $entry    = ReflectionValue::newEntry(ReflectionValue::IS_PTR, $realView);
         $classesTable->addIndex(0, $entry);
         $entry->release();
 

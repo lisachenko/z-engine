@@ -40,8 +40,9 @@ class GetConstructorHook extends AbstractMethodResolutionHook
      * typedef zend_function *(*zend_object_get_constructor_t)(zend_object *object);
      *
      * @inheritDoc
+     * @return \FFI\CData|null
      */
-    public function handle(...$rawArguments): ?CData
+    public function handle(...$rawArguments): ?object
     {
         [$object] = $rawArguments;
         assert($object instanceof CData);

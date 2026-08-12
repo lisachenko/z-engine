@@ -27,8 +27,10 @@ class ExtensionConstructorHook extends AbstractHook
 
     /**
      * Returns a raw memory pointer
+     *
+     * @return \FFI\CData
      */
-    public function getMemoryPointer(): CData
+    public function getMemoryPointer(): object
     {
         return $this->globalMemoryPointer;
     }

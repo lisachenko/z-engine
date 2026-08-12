@@ -15,6 +15,11 @@ namespace ZEngine\Reflection;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_class_entry;
+use ZEngine\Generated\zend_function;
+use ZEngine\Generated\zend_function_common;
+use ZEngine\Generated\zend_internal_function;
+use ZEngine\Generated\zend_op_array;
 use ZEngine\OpCache\SharedMemoryException;
 use ZEngine\Type\ArgumentEntry;
 use ZEngine\Type\ClosureEntry;
@@ -27,7 +32,13 @@ use ZEngine\Type\TryCatchElement;
 
 trait FunctionLikeTrait
 {
-    private CData $pointer;
+    /**
+     * @var zend_function|zend_internal_function Typed view of the wrapped entry: the
+     *      union view for user functions, the internal-function view for internal
+     *      entries (matching ReflectionValue::getRawFunction()); the runtime value is
+     *      the raw FFI\CData handle (see stubs/zend-engine-structs.php)
+     */
+    private object $pointer;
 
     /**
      * Changes the name of this function/method
@@ -206,7 +217,9 @@ trait FunctionLikeTrait
             )->commit();
         } else {
             // For internal function we can simply adjust a handler
-            $this->pointer->handler = function (CData $executeData, CData $returnValue) use ($newCode): void {
+            /** @var zend_internal_function $internalEntry Internal entries hold the internal view */
+            $internalEntry          = $this->pointer;
+            $internalEntry->handler = function (CData $executeData, CData $returnValue) use ($newCode): void {
                 $rawValue   = ReflectionValue::fromValueEntry($returnValue);
                 $stackTrace = debug_backtrace(0, 2);
                 $result     = $newCode(...$stackTrace[1]['args']);
@@ -226,9 +239,9 @@ trait FunctionLikeTrait
      * request-lifetime block would dangle if the engine walked it after the FFI request
      * memory was reclaimed.
      *
-     * @return CData Writable zend_function pointer now published in the table
+     * @return zend_function Writable zend_function pointer now published in the table
      */
-    private function copyOutOfSharedMemory(): CData
+    private function copyOutOfSharedMemory(): object
     {
         $lowerKey    = strtolower($this->getName());
         $bucketValue = Core::$executor->functionTable->find($lowerKey);
@@ -236,13 +249,13 @@ trait FunctionLikeTrait
             throw SharedMemoryException::functionNotPublished($lowerKey);
         }
 
-        $writableEntry = Core::trackedNew('zend_function', true);
+        $writableEntry = Core::trackedNew(zend_function::class, true);
         Core::memcpy($writableEntry, $this->pointer, Core::sizeof($writableEntry));
 
         // The writable copy is not opcache-shared anymore; everything it points at
         // still is, so the body must be replaced (not freed) by the caller. The copy
         // is a user function, so its common struct carries the fn_flags word.
-        $writablePointer = Core::cast('zend_function *', Core::addr($writableEntry));
+        $writablePointer = Core::cast(zend_function::class, Core::addr($writableEntry));
         $writableCommon  = ReflectionFunction::fromCData($writablePointer)->getCommonPointer();
         $writableCommon->fn_flags &= (~Core::ZEND_ACC_IMMUTABLE);
 
@@ -262,13 +275,13 @@ trait FunctionLikeTrait
      * body swap targets the entry the copy publishes, which is a writable zend_op_array
      * struct still sharing the compiled body with shared memory.
      *
-     * @param CData $entryScope Shared-memory zend_class_entry this method is declared in
+     * @param CData|zend_class_entry $entryScope Shared-memory zend_class_entry this method is declared in
      *
-     * @return CData Writable zend_function pointer published in the copied method table
+     * @return zend_function|zend_internal_function Writable zend_function pointer published in the copied method table
      */
-    private function copyMethodOutOfSharedMemory(CData $entryScope): CData
+    private function copyMethodOutOfSharedMemory(object $entryScope): object
     {
-        $declaringClass = ReflectionClass::fromCData($entryScope);
+        $declaringClass = ReflectionClass::fromCData(Core::cast('zend_class_entry *', $entryScope));
         $declaringClass->copyOutOfSharedMemory();
 
         $methodName  = $this->getName();
@@ -334,14 +347,14 @@ trait FunctionLikeTrait
         if (!$this->isUserDefined()) {
             throw new \LogicException('Opcodes are available only for user-defined functions');
         }
+        $opArray      = $this->getOpArrayPointer();
         $opCodes      = [];
         $opcodeIndex  = 0;
-        $totalOpcodes = $this->pointer->op_array->last;
+        $totalOpcodes = $opArray->last;
+        assert($opArray->opcodes !== null);
+        $opcodes = new StructArray($opArray->opcodes, $totalOpcodes);
         while ($opcodeIndex < $totalOpcodes) {
-            $opCode = new OpLine(
-                Core::addr($this->pointer->op_array->opcodes[$opcodeIndex++]),
-            );
-            $opCodes[] = $opCode;
+            $opCodes[] = new OpLine(Core::addr($opcodes[$opcodeIndex++]));
         }
 
         return $opCodes;
@@ -388,9 +401,7 @@ trait FunctionLikeTrait
         if (!$this->isUserDefined()) {
             throw new \LogicException('Literals are available only for user-defined functions');
         }
-        $lastLiteral = $this->pointer->op_array->last_literal;
-
-        return $lastLiteral;
+        return $this->getOpArrayPointer()->last_literal;
     }
 
     /**
@@ -405,13 +416,15 @@ trait FunctionLikeTrait
         if (!$this->isUserDefined()) {
             throw new \LogicException('Literals are available only for user-defined functions');
         }
-        $lastLiteral = $this->pointer->op_array->last_literal;
+        $opArray     = $this->getOpArrayPointer();
+        $lastLiteral = $opArray->last_literal;
         if ($index > $lastLiteral) {
             throw new \OutOfBoundsException("Literal index {$index} is out of bounds, last is {$lastLiteral}");
         }
-        $literal = $this->pointer->op_array->literals[$index];
+        assert($opArray->literals !== null);
+        $literals = new StructArray($opArray->literals, $lastLiteral + 1);
 
-        return ReflectionValue::fromValueEntry($literal);
+        return ReflectionValue::fromValueEntry($literals[$index]);
     }
 
     /**
@@ -425,12 +438,13 @@ trait FunctionLikeTrait
             throw new \LogicException('Literals are available only for user-defined functions');
         }
         $literalValueGenerator = function () {
+            $opArray       = $this->getOpArrayPointer();
             $literalIndex  = 0;
-            $totalLiterals = $this->pointer->op_array->last_literal;
+            $totalLiterals = $opArray->last_literal;
+            assert($opArray->literals !== null);
+            $literals = new StructArray($opArray->literals, $totalLiterals);
             while ($literalIndex < $totalLiterals) {
-                $item = $this->pointer->op_array->literals[$literalIndex];
-                $literalIndex++;
-                yield ReflectionValue::fromValueEntry($item);
+                yield ReflectionValue::fromValueEntry($literals[$literalIndex++]);
             }
         };
 
@@ -532,20 +546,15 @@ trait FunctionLikeTrait
         if (!$this->isUserDefined()) {
             throw new \LogicException('Static variables are available only for user-defined functions');
         }
-        $opArray = $this->pointer->op_array;
-        assert($opArray instanceof CData);
+        $opArray   = $this->getOpArrayPointer();
         $liveTable = $opArray->static_variables_ptr__ptr;
-        if ($liveTable !== null) {
-            assert($liveTable instanceof CData);
-            if ((Core::addressOf($liveTable) & 1) === 0) {
-                return HashTable::fromCData($liveTable);
-            }
+        if ($liveTable !== null && (Core::addressOf($liveTable) & 1) === 0) {
+            return HashTable::fromCData($liveTable);
         }
         $defaultTable = $opArray->static_variables;
         if ($defaultTable === null) {
             return null;
         }
-        assert($defaultTable instanceof CData);
 
         return HashTable::fromCData($defaultTable);
     }
@@ -560,22 +569,21 @@ trait FunctionLikeTrait
         if (!$this->isUserDefined()) {
             throw new \LogicException('Try/catch elements are available only for user-defined functions');
         }
-        $elements = [];
-        $opArray  = $this->pointer->op_array;
-        assert($opArray instanceof CData);
+        $elements      = [];
+        $opArray       = $this->getOpArrayPointer();
         $totalElements = $opArray->last_try_catch;
-        assert(is_int($totalElements));
-        for ($index = 0; $index < $totalElements; $index++) {
-            $elementTable = $opArray->try_catch_array;
-            assert($elementTable instanceof CData);
-            $rawElement = $elementTable[$index];
-            assert($rawElement instanceof CData);
-            $tryOp      = $rawElement->try_op;
-            $catchOp    = $rawElement->catch_op;
-            $finallyOp  = $rawElement->finally_op;
-            $finallyEnd = $rawElement->finally_end;
-            assert(is_int($tryOp) && is_int($catchOp) && is_int($finallyOp) && is_int($finallyEnd));
-            $elements[] = new TryCatchElement($tryOp, $catchOp, $finallyOp, $finallyEnd);
+        if ($totalElements > 0) {
+            assert($opArray->try_catch_array !== null);
+            $elementTable = new StructArray($opArray->try_catch_array, $totalElements);
+            for ($index = 0; $index < $totalElements; $index++) {
+                $rawElement = $elementTable[$index];
+                $elements[] = new TryCatchElement(
+                    $rawElement->try_op,
+                    $rawElement->catch_op,
+                    $rawElement->finally_op,
+                    $rawElement->finally_end,
+                );
+            }
         }
 
         return $elements;
@@ -591,21 +599,16 @@ trait FunctionLikeTrait
         if (!$this->isUserDefined()) {
             throw new \LogicException('Live ranges are available only for user-defined functions');
         }
-        $liveRanges = [];
-        $opArray    = $this->pointer->op_array;
-        assert($opArray instanceof CData);
+        $liveRanges  = [];
+        $opArray     = $this->getOpArrayPointer();
         $totalRanges = $opArray->last_live_range;
-        assert(is_int($totalRanges));
-        for ($index = 0; $index < $totalRanges; $index++) {
-            $rangeTable = $opArray->live_range;
-            assert($rangeTable instanceof CData);
-            $rawRange = $rangeTable[$index];
-            assert($rawRange instanceof CData);
-            $var   = $rawRange->var;
-            $start = $rawRange->start;
-            $end   = $rawRange->end;
-            assert(is_int($var) && is_int($start) && is_int($end));
-            $liveRanges[] = new LiveRange($var, $start, $end);
+        if ($totalRanges > 0) {
+            assert($opArray->live_range !== null);
+            $rangeTable = new StructArray($opArray->live_range, $totalRanges);
+            for ($index = 0; $index < $totalRanges; $index++) {
+                $rawRange     = $rangeTable[$index];
+                $liveRanges[] = new LiveRange($rawRange->var, $rawRange->start, $rawRange->end);
+            }
         }
 
         return $liveRanges;
@@ -676,10 +679,11 @@ trait FunctionLikeTrait
     /**
      * Returns a pointer to the common structure (to work natively with zend_function and zend_internal_function)
      *
-     * The declared shape (see phpstan.dist.neon typeAliases and AGENTS.md) is the
-     * single narrowing point for every common-struct field this trait touches.
+     * Both returned views carry the identical common field prefix (function_name,
+     * scope, prototype, fn_flags, arg_info, ...), so consumers read the shared
+     * fields through the union type without caring which entry kind they hold.
      *
-     * @return ZendFunctionCommonShape
+     * @return zend_function_common|zend_internal_function
      *
      * @internal shared with the body-swap machinery (FunctionBodySwap)
      */
@@ -689,24 +693,24 @@ trait FunctionLikeTrait
         // The check goes through the low-level structure (not native isInternal()) so it
         // also works on wrappers whose native reflection state is not initialized yet
         if (!$this->isUserDefined()) {
+            /** @var zend_internal_function $pointer The stored handle IS the internal view here */
             $pointer = $this->pointer;
         } else {
             // zend_function uses "common" struct to store all important fields
-            $pointer = $this->pointer->common;
+            /** @var zend_function $entry User-defined entries always hold the union view */
+            $entry   = $this->pointer;
+            $pointer = $entry->common;
         }
 
-        /** @var ZendFunctionCommonShape $pointer */
         return $pointer;
     }
 
     /**
-     * Returns the shaped view of the op_array this user function executes
+     * Returns the typed view of the op_array this user function executes
      *
-     * The declared shape (see phpstan.dist.neon typeAliases and AGENTS.md) is the
-     * single narrowing point for the op_array fields the swap machinery touches.
      * Only user-defined functions carry an op_array.
      *
-     * @return ZendOpArrayShape
+     * @return zend_op_array
      *
      * @internal shared with the body-swap machinery (FunctionBodySwap)
      */
@@ -715,10 +719,10 @@ trait FunctionLikeTrait
         if (!$this->isUserDefined()) {
             throw new \LogicException('op_array is available only for user-defined functions');
         }
-        $opArray = $this->pointer->op_array;
+        /** @var zend_function $entry User-defined entries always hold the union view */
+        $entry = $this->pointer;
 
-        /** @var ZendOpArrayShape $opArray */
-        return $opArray;
+        return $entry->op_array;
     }
 
     /**
@@ -739,7 +743,10 @@ trait FunctionLikeTrait
      * @internal shared with the body-swap machinery (FunctionBodySwap), which performs
      *           the low-level engine surgery on the entry
      */
-    public function getEntryPointer(): CData
+    /**
+     * @return zend_function|zend_internal_function
+     */
+    public function getEntryPointer(): object
     {
         return $this->pointer;
     }

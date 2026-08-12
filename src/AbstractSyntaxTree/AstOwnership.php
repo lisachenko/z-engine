@@ -33,8 +33,12 @@ final class AstOwnership
     private ?CData $rootAst;
 
     private ?CData $arenaBuffer;
+    /**
+     * @param \FFI\CData|null $rootAst
+     * @param \FFI\CData|null $arenaBuffer
+     */
 
-    public function __construct(?CData $rootAst, ?CData $arenaBuffer)
+    public function __construct(?object $rootAst, ?object $arenaBuffer)
     {
         $this->rootAst     = $rootAst;
         $this->arenaBuffer = $arenaBuffer;

@@ -15,6 +15,8 @@ namespace ZEngine\Type;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zend_object_handlers;
 use ZEngine\Reflection\ReflectionClass;
 
 /**
@@ -62,13 +64,15 @@ final class PersistentObjectFactory
      *
      * @param CData $sourceObject zend_object* to clone (must use std_object_handlers)
      *
-     * @return CData zend_object* in persistent memory, not yet registered in the store
+     * @return zend_object zend_object* in persistent memory, not yet registered in the store
      */
-    public static function persistentClone(CData $sourceObject): CData
+    public static function persistentClone(object $sourceObject): object
     {
-        $totalSize = ReflectionClass::getObjectSize($sourceObject->ce);
+        $sourceClass = $sourceObject->ce;
+        assert($sourceClass instanceof CData);
+        $totalSize = ReflectionClass::getObjectSize($sourceClass);
         $memory    = Core::trackedNew("char[{$totalSize}]", true);
-        $object    = Core::cast('zend_object *', $memory);
+        $object    = Core::cast(zend_object::class, $memory);
 
         Core::memcpy($memory, Core::cast('char *', $sourceObject), $totalSize);
 
@@ -82,7 +86,7 @@ final class PersistentObjectFactory
         // flags are the belt-and-braces layer for buckets that leak past a missed detach.
         $object->extra_flags |= Core::engineConstant('IS_OBJ_DESTRUCTOR_CALLED')
             | Core::engineConstant('IS_OBJ_FREE_CALLED');
-        $object->handlers   = Core::addr(Core::getStandardObjectHandlers());
+        $object->handlers   = Core::cast(zend_object_handlers::class, Core::addr(Core::getStandardObjectHandlers()));
         $object->properties = null;
 
         return $object;
@@ -91,9 +95,17 @@ final class PersistentObjectFactory
     /**
      * Checks that an object uses the engine's std_object_handlers block, the only
      * handlers pointer that stays valid across requests
+     *
+     * @param CData|zend_object $object
      */
-    public static function usesStandardHandlers(CData $object): bool
+    public static function usesStandardHandlers(object $object): bool
     {
-        return Core::addressOf($object->handlers) === Core::addressOf(Core::addr(Core::getStandardObjectHandlers()));
+        /** @var zend_object $entry Narrowed to the stub view at the owning boundary */
+        $entry    = $object;
+        $handlers = $entry->handlers;
+        // Engine invariant: every live object carries a handlers block
+        assert($handlers !== null);
+
+        return Core::addressOf($handlers) === Core::addressOf(Core::addr(Core::getStandardObjectHandlers()));
     }
 }

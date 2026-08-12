@@ -29,7 +29,7 @@ class NodeFactory
      *
      * @return NodeInterface
      */
-    public static function fromCData(CData $node, ?AstOwnership $owner = null): NodeInterface
+    public static function fromCData(object $node, ?AstOwnership $owner = null): NodeInterface
     {
         $kind = $node->kind;
         switch (true) {

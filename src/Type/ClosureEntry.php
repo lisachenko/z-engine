@@ -16,6 +16,10 @@ namespace ZEngine\Type;
 use FFI\CData;
 use ReflectionClass as NativeReflectionClass;
 use ZEngine\Core;
+use ZEngine\Generated\zend_class_entry;
+use ZEngine\Generated\zend_closure;
+use ZEngine\Generated\zend_function;
+use ZEngine\Generated\zval;
 
 /**
  * Class ClosureEntry
@@ -45,24 +49,29 @@ use ZEngine\Core;
  */
 class ClosureEntry
 {
-    private CData $pointer;
+    /**
+     * @var zend_closure Typed view of the owned engine structure; the runtime value is
+     *                   the raw FFI\CData handle (see stubs/zend-engine-structs.php)
+     */
+    private object $pointer;
 
     public function __construct(\Closure $closure)
     {
         $selfExecutionState = Core::$executor->getExecutionState();
         $closureEntry       = $selfExecutionState->getArgument(0)->getRawObject();
-        $this->pointer      = Core::cast('zend_closure *', $closureEntry);
+        $this->pointer      = Core::cast(zend_closure::class, $closureEntry);
     }
 
     /**
      * Creates a closure entry from the zend_closure structure
      *
-     * @param CData $pointer Pointer to the structure
+     * @param CData|zend_closure $pointer Pointer to the structure
      */
-    public static function fromCData(CData $pointer): ClosureEntry
+    public static function fromCData(object $pointer): ClosureEntry
     {
         /** @var ClosureEntry $closureEntry */
-        $closureEntry          = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $closureEntry = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
+        /** @var zend_closure $pointer Narrowed to the stub view at the owning boundary */
         $closureEntry->pointer = $pointer;
 
         return $closureEntry;
@@ -81,13 +90,15 @@ class ClosureEntry
      */
     public function getCalledScope(): ?string
     {
-        if ($this->pointer->called_scope === null) {
+        $calledScope = $this->pointer->called_scope;
+        if ($calledScope === null) {
             return null;
         }
+        // Engine invariant: every registered class entry carries a name
+        $scopeName = $calledScope->name;
+        assert($scopeName !== null);
 
-        $calledScopeName = StringEntry::fromCData($this->pointer->called_scope->name);
-
-        return $calledScopeName->getStringValue();
+        return StringEntry::fromCData($scopeName)->getStringValue();
     }
 
     /**
@@ -108,7 +119,7 @@ class ClosureEntry
         if ($classEntryValue === null) {
             throw new \ReflectionException("Class {$newScope} was not found");
         }
-        $this->pointer->called_scope = $classEntryValue->getRawClass();
+        $this->pointer->called_scope = Core::cast(zend_class_entry::class, $classEntryValue->getRawClass());
     }
 
     /**
@@ -131,15 +142,17 @@ class ClosureEntry
         $thisPtr = Core::addr($this->pointer->this_ptr);
         // Release the previously bound $this (safe no-op for unbound IS_UNDEF/IS_NULL closures)
         Core::call('zval_ptr_dtor', $thisPtr);
-        Core::memcpy($this->pointer->this_ptr, $objectZval[0], Core::sizeof(Core::type('zval')));
+        Core::memcpy($this->pointer->this_ptr, StructArray::at($objectZval), Core::sizeOfType(zval::class));
         // The closure now holds its own reference on the new $this
         Core::call('zval_add_ref', $thisPtr);
     }
 
     /**
      * Returns raw zend_function data for this closure
+     *
+     * @return zend_function
      */
-    public function getRawFunction(): CData
+    public function getRawFunction(): object
     {
         return $this->pointer->func;
     }

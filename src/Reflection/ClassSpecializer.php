@@ -20,6 +20,7 @@ use ZEngine\Type\HashTable;
 use ZEngine\Type\OpLine;
 use ZEngine\Type\PersistentHashTable;
 use ZEngine\Type\StringEntry;
+use ZEngine\Type\StructArray;
 
 /**
  * Runtime class-entry specialization: deep-clones a linked userland zend_class_entry
@@ -253,8 +254,10 @@ class ClassSpecializer
 
     /**
      * Looks up a zend_class_entry pointer by class name (null when not registered)
+     *
+     * @return \FFI\CData|null
      */
-    private function findClassEntry(string $className): ?CData
+    private function findClassEntry(string $className): ?object
     {
         $classValue = Core::$executor->classTable->find(strtolower($className));
 
@@ -263,8 +266,10 @@ class ClassSpecializer
 
     /**
      * Support matrix: every unsupported source fails here, before any allocation
+     *
+     * @param \FFI\CData $sourceEntry
      */
-    private function assertSupportedSource(CData $sourceEntry, string $sourceClassName, string $newClassName): void
+    private function assertSupportedSource(object $sourceEntry, string $sourceClassName, string $newClassName): void
     {
         if ($newClassName === '') {
             throw new ClassSpecializationException('Specialized class name can not be empty');
@@ -282,8 +287,10 @@ class ClassSpecializer
      *
      * Shared by specialize() (copy under a new name) and by copyOutOfSharedMemory() (copy
      * under the original name), which is why it knows nothing about the target name.
+     *
+     * @param \FFI\CData $sourceEntry
      */
-    private function assertCopyableSource(CData $sourceEntry, string $sourceClassName): void
+    private function assertCopyableSource(object $sourceEntry, string $sourceClassName): void
     {
         $sourceKind = $sourceEntry->type;
         assert(is_string($sourceKind));
@@ -347,9 +354,11 @@ class ClassSpecializer
     /**
      * Refuses substitutions that would either mutate shared (inherited) declarations or
      * require rewriting inside union/intersection type lists
+     *
+     * @param \FFI\CData $sourceEntry
      */
     private function assertSubstitutionsApplicable(
-        CData $sourceEntry,
+        object $sourceEntry,
         string $sourceClassName,
         TypeSubstitutionMap $substitutions,
     ): void {
@@ -493,7 +502,7 @@ class ClassSpecializer
      *
      * @param CData $sourceOpArray zend_op_array * of the method declaring the return type
      */
-    private function assertReturnTypeIsEnforceable(CData $sourceOpArray, string $context): void
+    private function assertReturnTypeIsEnforceable(object $sourceOpArray, string $context): void
     {
         if (self::everyReturnIsVerified($sourceOpArray)) {
             return;
@@ -515,8 +524,10 @@ class ClassSpecializer
      * return whose expression it already proved satisfies the type. Testing merely that the
      * method *contains* a check is not enough: even a `mixed` method carries one in its implicit
      * `return null` epilogue, so the guarded-return relation is what has to hold.
+     *
+     * @param \FFI\CData $opArray
      */
-    private static function everyReturnIsVerified(CData $opArray): bool
+    private static function everyReturnIsVerified(object $opArray): bool
     {
         $total = $opArray->last;
         assert(is_int($total));
@@ -601,9 +612,10 @@ class ClassSpecializer
      * Validates one zend_type against the substitution map
      *
      * @param bool $isOwn Whether the containing declaration will be copied (own member)
+     * @param \FFI\CData $type
      */
     private function assertTypeSubstitutable(
-        CData $type,
+        object $type,
         TypeSubstitutionMap $substitutions,
         bool $isOwn,
         string $context,
@@ -628,8 +640,10 @@ class ClassSpecializer
 
     /**
      * Checks (recursively for type lists) whether a zend_type references a placeholder name
+     *
+     * @param \FFI\CData $type
      */
-    private function typeContainsPlaceholder(CData $type, TypeSubstitutionMap $substitutions): bool
+    private function typeContainsPlaceholder(object $type, TypeSubstitutionMap $substitutions): bool
     {
         $typeMask = $type->type_mask;
         assert(is_int($typeMask));
@@ -655,14 +669,18 @@ class ClassSpecializer
 
     /**
      * Builds the specialized zend_class_entry (fully materialized, not yet registered)
+     *
+     * @param \FFI\CData $sourceEntry
+     * @param \FFI\CData|null $reusedName
+     * @return \FFI\CData
      */
     private function copyClassEntry(
-        CData $sourceEntry,
+        object $sourceEntry,
         string $newClassName,
         TypeSubstitutionMap $substitutions,
         SlotSubstitutionMap $slotSubstitutions,
-        ?CData $reusedName = null,
-    ): CData {
+        ?object $reusedName = null,
+    ): object {
         // The class entry itself mimics a compiler-arena allocation: destroy_zend_class()
         // dismantles the tables but never frees the struct of a userland class, and the
         // request allocator reclaims the block at request end
@@ -730,8 +748,11 @@ class ClassSpecializer
 
     /**
      * Copies the default (non-static) property value table with an owned reference per slot
+     *
+     * @param \FFI\CData $sourceEntry
+     * @param \FFI\CData $newEntry
      */
-    private function copyDefaultPropertiesTable(CData $sourceEntry, CData $newEntry): void
+    private function copyDefaultPropertiesTable(object $sourceEntry, object $newEntry): void
     {
         $totalSlots = $sourceEntry->default_properties_count;
         assert(is_int($totalSlots));
@@ -749,8 +770,11 @@ class ClassSpecializer
      * Copies the default static member table; IS_INDIRECT views into the parent's storage
      * are copied as-is (zval_add_ref does not touch non-refcounted slots) and re-resolve
      * against the same parent when the copy materializes its live statics
+     *
+     * @param \FFI\CData $sourceEntry
+     * @param \FFI\CData $newEntry
      */
-    private function copyDefaultStaticMembersTable(CData $sourceEntry, CData $newEntry): void
+    private function copyDefaultStaticMembersTable(object $sourceEntry, object $newEntry): void
     {
         $totalSlots = $sourceEntry->default_static_members_count;
         assert(is_int($totalSlots));
@@ -764,8 +788,11 @@ class ClassSpecializer
 
     /**
      * Duplicates an engine zval table into request memory, taking one owned reference per slot
+     *
+     * @param \FFI\CData $sourceTable
+     * @return \FFI\CData
      */
-    private function copyZvalTable(CData $sourceTable, int $totalSlots): CData
+    private function copyZvalTable(object $sourceTable, int $totalSlots): object
     {
         $zvalSize = Core::sizeof(Core::type('zval'));
         $memory   = Core::new("zval[{$totalSlots}]", false);
@@ -781,8 +808,11 @@ class ClassSpecializer
 
     /**
      * Copies the resolved interface list (destroy_zend_class() efree()s it per class)
+     *
+     * @param \FFI\CData $sourceEntry
+     * @param \FFI\CData $newEntry
      */
-    private function copyInterfaceList(CData $sourceEntry, CData $newEntry): void
+    private function copyInterfaceList(object $sourceEntry, object $newEntry): void
     {
         $totalInterfaces = $sourceEntry->num_interfaces;
         assert(is_int($totalInterfaces));
@@ -799,8 +829,11 @@ class ClassSpecializer
      * Deep-copies the trait metadata (names, aliases, precedences): the engine releases
      * every stored name and efree()s every block per class, so sharing them with the
      * source would double-free at teardown
+     *
+     * @param \FFI\CData $sourceEntry
+     * @param \FFI\CData $newEntry
      */
-    private function copyTraitInfo(CData $sourceEntry, CData $newEntry): void
+    private function copyTraitInfo(object $sourceEntry, object $newEntry): void
     {
         $totalTraits = $sourceEntry->num_traits;
         assert(is_int($totalTraits));
@@ -874,8 +907,10 @@ class ClassSpecializer
 
     /**
      * Takes owned references on the method/class names of a copied trait reference
+     *
+     * @param \FFI\CData $traitMethodRef
      */
-    private function addTraitMethodReferenceNames(CData $traitMethodRef): void
+    private function addTraitMethodReferenceNames(object $traitMethodRef): void
     {
         $methodName = $traitMethodRef->method_name;
         if ($methodName !== null) {
@@ -893,8 +928,9 @@ class ClassSpecializer
      * Packs copied adaptation structures into a NULL-terminated pointer list block
      *
      * @param list<CData> $items
+     * @return \FFI\CData
      */
-    private function packPointerList(string $itemType, array $items): CData
+    private function packPointerList(string $itemType, array $items): object
     {
         $totalItems = count($items);
         $memory     = Core::new("{$itemType} *[" . ($totalItems + 1) . ']', false);
@@ -912,8 +948,10 @@ class ClassSpecializer
      * analysis cannot see - hence the explicit impurity marker.
      *
      * @phpstan-impure
+     * @param \FFI\CData $arrayMemory
+     * @param \FFI\CData|null $pointer
      */
-    private static function storePointerSlot(CData $arrayMemory, int $slot, ?CData $pointer): void
+    private static function storePointerSlot(object $arrayMemory, int $slot, ?object $pointer): void
     {
         $arrayMemory[$slot] = $pointer;
     }
@@ -927,8 +965,10 @@ class ClassSpecializer
      * pointers at inherited shared entries stay as-is.
      *
      * @param array<int, CData> $functionMap Source zend_function address => copy pointer
+     * @param \FFI\CData $sourceEntry
+     * @param \FFI\CData $newEntry
      */
-    private function copyIteratorFunctionCaches(CData $sourceEntry, CData $newEntry, array $functionMap): void
+    private function copyIteratorFunctionCaches(object $sourceEntry, object $newEntry, array $functionMap): void
     {
         $sourceIteratorFuncs = $sourceEntry->iterator_funcs_ptr;
         if ($sourceIteratorFuncs !== null) {
@@ -954,8 +994,10 @@ class ClassSpecializer
      * Copies one cached zend_function pointer slot, re-targeting it through the method map
      *
      * @param array<int, CData> $functionMap Source zend_function address => copy pointer
+     * @param \FFI\CData $sourceFuncs
+     * @param \FFI\CData $targetFuncs
      */
-    private function remapFunctionSlot(CData $sourceFuncs, CData $targetFuncs, string $slotName, array $functionMap): void
+    private function remapFunctionSlot(object $sourceFuncs, object $targetFuncs, string $slotName, array $functionMap): void
     {
         $sourceFunction = $sourceFuncs->{$slotName};
         if ($sourceFunction === null) {
@@ -974,10 +1016,12 @@ class ClassSpecializer
      * own zend_duplicate_function() performs during inheritance.
      *
      * @return array<int, CData> Source zend_function address => zend_function pointer on the copy
+     * @param \FFI\CData $sourceEntry
+     * @param \FFI\CData $newEntry
      */
     private function copyFunctionTable(
-        CData $sourceEntry,
-        CData $newEntry,
+        object $sourceEntry,
+        object $newEntry,
         TypeSubstitutionMap $substitutions,
         SlotSubstitutionMap $slotSubstitutions,
     ): array {
@@ -1007,8 +1051,7 @@ class ClassSpecializer
             } else {
                 // Inherited entry: share the pointer exactly like zend_duplicate_function()
                 self::addOpArrayBodyReference($sourceOpArray);
-                $sharedView = $sourceFunction[0];
-                assert($sharedView instanceof CData);
+                $sharedView        = StructArray::at($sourceFunction);
                 $publishedFunction = $newTable->addFunctionEntry($methodName, $sharedView);
             }
             $functionMap[Core::addressOf($sourceFunction)] = $publishedFunction;
@@ -1021,15 +1064,18 @@ class ClassSpecializer
      * Duplicates one own method into the new class (trait-clone model)
      *
      * @param HashTable $newTable Method table of the copy
+     * @param \FFI\CData $sourceOpArray
+     * @param \FFI\CData $newEntry
+     * @return \FFI\CData
      */
     private function duplicateMethod(
-        CData $sourceOpArray,
-        CData $newEntry,
+        object $sourceOpArray,
+        object $newEntry,
         TypeSubstitutionMap $substitutions,
         SlotSubstitutionMap $slotSubstitutions,
         HashTable $newTable,
         string $methodName,
-    ): CData {
+    ): object {
         $opArrayCopy = Core::new('zend_op_array', false);
         Core::memcpy($opArrayCopy, $sourceOpArray, Core::sizeof(Core::type('zend_op_array')));
 
@@ -1066,8 +1112,10 @@ class ClassSpecializer
     /**
      * Applies the engine's zend_duplicate_function() reference semantics to a user function:
      * bump the shared-body refcount and take one owned reference on the display name
+     *
+     * @param \FFI\CData $opArray
      */
-    private static function addOpArrayBodyReference(CData $opArray): void
+    private static function addOpArrayBodyReference(object $opArray): void
     {
         $bodyRefcount = $opArray->refcount;
         if ($bodyRefcount !== null) {
@@ -1085,8 +1133,10 @@ class ClassSpecializer
 
     /**
      * Checks whether any argument/return type of the method references a placeholder
+     *
+     * @param \FFI\CData $opArray
      */
-    private function methodNeedsArgInfoSubstitution(CData $opArray, TypeSubstitutionMap $substitutions): bool
+    private function methodNeedsArgInfoSubstitution(object $opArray, TypeSubstitutionMap $substitutions): bool
     {
         foreach ($this->argInfoEntries($opArray) as $argInfo) {
             $argumentType = $argInfo->type;
@@ -1106,10 +1156,13 @@ class ClassSpecializer
      * shared body refcount drops to zero, so exactly one of the sibling blocks is
      * released through the engine; the other block stays allocated until the request
      * allocator reclaims it (bounded: one block per substituted method).
+     *
+     * @param \FFI\CData $opArrayCopy
+     * @param \FFI\CData $sourceOpArray
      */
     private function duplicateArgInfo(
-        CData $opArrayCopy,
-        CData $sourceOpArray,
+        object $opArrayCopy,
+        object $sourceOpArray,
         TypeSubstitutionMap $substitutions,
         SlotSubstitutionMap $slotSubstitutions,
         string $methodName,
@@ -1176,10 +1229,13 @@ class ClassSpecializer
      *
      * The opcodes are shared with the template by design, so they are copied before being
      * written. See duplicateOpcodes() for what that copy has to fix up.
+     *
+     * @param \FFI\CData $opArrayCopy
+     * @param \FFI\CData $sourceOpArray
      */
     private function patchReceiveOpcodes(
-        CData $opArrayCopy,
-        CData $sourceOpArray,
+        object $opArrayCopy,
+        object $sourceOpArray,
         string $methodName,
         SlotSubstitutionMap $slotSubstitutions,
     ): void {
@@ -1261,8 +1317,10 @@ class ClassSpecializer
      * source is safe because it is only ever read - the copy is what gets written.
      *
      * @return CData The copied zend_op[] block
+     * @param \FFI\CData $opArrayCopy
+     * @param \FFI\CData $sourceOpArray
      */
-    private function duplicateOpcodes(CData $opArrayCopy, CData $sourceOpArray, int $total): CData
+    private function duplicateOpcodes(object $opArrayCopy, object $sourceOpArray, int $total): object
     {
         $sourceOpcodes = $sourceOpArray->opcodes;
         assert($sourceOpcodes instanceof CData);
@@ -1319,10 +1377,13 @@ class ClassSpecializer
      * zend.assertions=1 and compiles out in production: a wrong relocation rule is the one
      * mistake here that would otherwise surface as memory corruption at some later call rather
      * than as a failure at specialization time.
+     *
+     * @param \FFI\CData $sourceOpcodes
+     * @param \FFI\CData $copiedOpcodes
      */
     private static function opcodeCopyResolvesIdentically(
-        CData $sourceOpcodes,
-        CData $copiedOpcodes,
+        object $sourceOpcodes,
+        object $copiedOpcodes,
         int $total,
         int $opcodeSize,
     ): bool {
@@ -1388,10 +1449,12 @@ class ClassSpecializer
      * (with type substitution), inherited entries stay shared with the declaring class
      *
      * @return array<int, CData> Source zend_property_info address => copy pointer
+     * @param \FFI\CData $sourceEntry
+     * @param \FFI\CData $newEntry
      */
     private function copyPropertiesInfo(
-        CData $sourceEntry,
-        CData $newEntry,
+        object $sourceEntry,
+        object $newEntry,
         TypeSubstitutionMap $substitutions,
         SlotSubstitutionMap $slotSubstitutions,
     ): array {
@@ -1466,8 +1529,10 @@ class ClassSpecializer
      * the shared pointers. The block mimics the compiler arena (never freed by the engine).
      *
      * @param array<int, CData> $propertyMap Source zend_property_info address => copy pointer
+     * @param \FFI\CData $sourceEntry
+     * @param \FFI\CData $newEntry
      */
-    private function copyPropertiesInfoTable(CData $sourceEntry, CData $newEntry, array $propertyMap): void
+    private function copyPropertiesInfoTable(object $sourceEntry, object $newEntry, array $propertyMap): void
     {
         $sourceTable = $sourceEntry->properties_info_table;
         if ($sourceTable === null) {
@@ -1495,8 +1560,11 @@ class ClassSpecializer
      * Rebuilds the constants table: constants owned by the source class (declared there,
      * or lazily materialized inherited AST constants carrying CONST_OWNED) are copied
      * with an owned value reference; the rest stay shared with the declaring class
+     *
+     * @param \FFI\CData $sourceEntry
+     * @param \FFI\CData $newEntry
      */
-    private function copyConstantsTable(CData $sourceEntry, CData $newEntry): void
+    private function copyConstantsTable(object $sourceEntry, object $newEntry): void
     {
         $this->initEmbeddedTable($sourceEntry, $newEntry, 'constants_table');
         $sourceAddress     = Core::addressOf($sourceEntry);
@@ -1549,8 +1617,9 @@ class ClassSpecializer
      * method table (inherited pointers map onto the shared entries and stay unchanged)
      *
      * @param array<int, CData> $functionMap Source zend_function address => copy pointer
+     * @param \FFI\CData $newEntry
      */
-    private function relinkFunctionPointers(CData $newEntry, array $functionMap): void
+    private function relinkFunctionPointers(object $newEntry, array $functionMap): void
     {
         foreach (self::FUNCTION_POINTER_FIELDS as $fieldName) {
             $currentFunction = $newEntry->{$fieldName};
@@ -1569,8 +1638,11 @@ class ClassSpecializer
      * Initializes one embedded class-entry HashTable of the copy in the engine's
      * uninitialized state (field-for-field port of _zend_hash_init_int for request
      * tables), keeping the destructor of the corresponding source table
+     *
+     * @param \FFI\CData $sourceEntry
+     * @param \FFI\CData $newEntry
      */
-    private function initEmbeddedTable(CData $sourceEntry, CData $newEntry, string $tableField): void
+    private function initEmbeddedTable(object $sourceEntry, object $newEntry, string $tableField): void
     {
         $sourceTable = $sourceEntry->{$tableField};
         $targetTable = $newEntry->{$tableField};
@@ -1601,8 +1673,9 @@ class ClassSpecializer
      * ADDRESS of the given structure view in the zval it builds.
      *
      * @param HashTable $table Table on the copy
+     * @param \FFI\CData $pointer
      */
-    private function publishPointerEntry(HashTable $table, string $key, CData $pointer): void
+    private function publishPointerEntry(HashTable $table, string $key, object $pointer): void
     {
         $structureView = $pointer[0];
         assert($structureView instanceof CData);
@@ -1623,8 +1696,10 @@ class ClassSpecializer
      * Nullability is taken from the replacement (`?int`) rather than preserved from the slot:
      * a slot-addressed substitution states the whole type, and `mixed` implies null, so
      * preserving would silently turn every `mixed` slot into a nullable one.
+     *
+     * @param \FFI\CData $type
      */
-    private static function writeTypeInPlace(CData $type, string $replacement): void
+    private static function writeTypeInPlace(object $type, string $replacement): void
     {
         $isNullable = str_starts_with($replacement, '?');
         $typeName   = $isNullable ? substr($replacement, 1) : $replacement;
@@ -1658,8 +1733,10 @@ class ClassSpecializer
      * Copies one zend_type in place on an already-memcpy'd owner structure: substitutes
      * matching single-name placeholder types, takes owned name references for kept names
      * and duplicates type lists into request memory
+     *
+     * @param \FFI\CData $type
      */
-    private function copyTypeInPlace(CData $type, TypeSubstitutionMap $substitutions): void
+    private function copyTypeInPlace(object $type, TypeSubstitutionMap $substitutions): void
     {
         $typeMask = $type->type_mask;
         assert(is_int($typeMask));
@@ -1706,8 +1783,10 @@ class ClassSpecializer
      * copy releases the contained names but never frees the block itself - it is
      * reclaimed by the request allocator, mimicking the compiler-arena lists of
      * runtime-compiled classes (and never touching a possibly shared source list).
+     *
+     * @param \FFI\CData $type
      */
-    private function copyTypeListInPlace(CData $type, TypeSubstitutionMap $substitutions): void
+    private function copyTypeListInPlace(object $type, TypeSubstitutionMap $substitutions): void
     {
         $rawList = $type->ptr;
         assert($rawList instanceof CData);
@@ -1768,8 +1847,10 @@ class ClassSpecializer
     /**
      * Takes one owned reference on an engine string with interned/immutable awareness
      * (the exact counterpart of the release the engine performs at teardown)
+     *
+     * @param \FFI\CData $stringPointer
      */
-    private static function addStringReference(CData $stringPointer): void
+    private static function addStringReference(object $stringPointer): void
     {
         $stringEntry = StringEntry::fromCData($stringPointer);
         if (!$stringEntry->isImmutable()) {
@@ -1780,8 +1861,10 @@ class ClassSpecializer
     /**
      * Takes one owned reference on an engine hashtable with immutable awareness
      * (zend_hash_release skips immutable tables symmetrically)
+     *
+     * @param \FFI\CData $tablePointer
      */
-    private static function addHashTableReference(CData $tablePointer): void
+    private static function addHashTableReference(object $tablePointer): void
     {
         $table = HashTable::fromCData($tablePointer);
         if (!$table->isImmutable()) {
@@ -1793,8 +1876,9 @@ class ClassSpecializer
      * Borrowed view over the source method table
      *
      * @return HashTable
+     * @param \FFI\CData $classEntry
      */
-    private function methodTable(CData $classEntry): HashTable
+    private function methodTable(object $classEntry): HashTable
     {
         $tableStruct = $classEntry->function_table;
         assert($tableStruct instanceof CData);
@@ -1806,8 +1890,9 @@ class ClassSpecializer
      * Borrowed view over the source properties-info table
      *
      * @return HashTable
+     * @param \FFI\CData $classEntry
      */
-    private function propertiesTable(CData $classEntry): HashTable
+    private function propertiesTable(object $classEntry): HashTable
     {
         $tableStruct = $classEntry->properties_info;
         assert($tableStruct instanceof CData);
@@ -1819,8 +1904,9 @@ class ClassSpecializer
      * Borrowed view over the source constants table
      *
      * @return HashTable
+     * @param \FFI\CData $classEntry
      */
-    private function constantsTable(CData $classEntry): HashTable
+    private function constantsTable(object $classEntry): HashTable
     {
         $tableStruct = $classEntry->constants_table;
         assert($tableStruct instanceof CData);
@@ -1833,8 +1919,9 @@ class ClassSpecializer
      * when a return type is declared), all declared parameters and the variadic entry
      *
      * @return iterable<CData>
+     * @param \FFI\CData $opArray
      */
-    private function argInfoEntries(CData $opArray): iterable
+    private function argInfoEntries(object $opArray): iterable
     {
         $argInfoTable = $opArray->arg_info;
         if ($argInfoTable === null) {
@@ -1861,8 +1948,9 @@ class ClassSpecializer
      * Iterates the zend_type entries of a type list
      *
      * @return iterable<CData>
+     * @param \FFI\CData $type
      */
-    private function typeListEntries(CData $type): iterable
+    private function typeListEntries(object $type): iterable
     {
         $rawList = $type->ptr;
         assert($rawList instanceof CData);
@@ -1881,8 +1969,11 @@ class ClassSpecializer
     /**
      * Returns a freely indexable pointer to the flexible exclude_class_names array of a
      * zend_trait_precedence (the declared 1-element FFI view is bounds-checked)
+     *
+     * @param \FFI\CData $precedenceEntry
+     * @return \FFI\CData
      */
-    private static function precedenceExcludeNames(CData $precedenceEntry): CData
+    private static function precedenceExcludeNames(object $precedenceEntry): object
     {
         $excludeOffset = Core::type('zend_trait_precedence')->getStructFieldOffset('exclude_class_names');
 
