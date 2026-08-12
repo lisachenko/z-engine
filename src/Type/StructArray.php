@@ -70,8 +70,10 @@ final class StructArray implements ArrayAccess, Countable, IteratorAggregate
      *
      * @param CData|object $baseAddress Pointer whose runtime value is always CData; a stub-typed
      *                                  pointer view is accepted statically
+     *
+     * @return \FFI\CData
      */
-    public static function at(object $baseAddress, int $index = 0): CData
+    public static function at(object $baseAddress, int $index = 0): object
     {
         /** @var CData $element */
         $element = $baseAddress[$index];
@@ -139,7 +141,7 @@ final class StructArray implements ArrayAccess, Countable, IteratorAggregate
      *
      * @return CData The previous element value, detached as an independent byte copy
      */
-    public function replace(int $position, mixed $value): CData
+    public function replace(int $position, mixed $value): object
     {
         // The slot and the incoming value are raw engine memory (T is only the static
         // element shape); the byte-level copy operates on them as plain CData

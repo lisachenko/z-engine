@@ -40,8 +40,11 @@ final class ReflectionAttributeEntry
      * Pointer to the zend_attribute structure (borrowed from the engine attributes table)
      */
     private CData $pointer;
+    /**
+     * @param \FFI\CData $attributePointer
+     */
 
-    private function __construct(CData $attributePointer)
+    private function __construct(object $attributePointer)
     {
         $this->pointer = $attributePointer;
     }
@@ -51,7 +54,7 @@ final class ReflectionAttributeEntry
      *
      * @param CData $attributePointer Pointer to the zend_attribute structure
      */
-    public static function fromCData(CData $attributePointer): self
+    public static function fromCData(object $attributePointer): self
     {
         return new self(Core::cast('zend_attribute *', $attributePointer));
     }

@@ -118,7 +118,7 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      *
      * @param CData $functionEntry Pointer to the hook zend_function structure
      */
-    public static function fromHookCData(CData $functionEntry): ReflectionMethod
+    public static function fromHookCData(object $functionEntry): ReflectionMethod
     {
         if ($functionEntry->type === Core::ZEND_INTERNAL_FUNCTION) {
             $functionEntry = Core::cast('zend_internal_function *', $functionEntry);

@@ -31,8 +31,11 @@ final class ObjectStore implements Countable, ArrayAccess
      * Holds an internal pointer to the EG(objects_store)
      */
     private CData $pointer;
+    /**
+     * @param \FFI\CData $pointer
+     */
 
-    public function __construct(CData $pointer)
+    public function __construct(object $pointer)
     {
         $this->pointer = $pointer;
     }
@@ -188,8 +191,9 @@ final class ObjectStore implements Countable, ArrayAccess
      * Checks if the given object pointer is valid or not
      *
      * @see zend_objects_API.h:IS_OBJ_VALID macro
+     * @param \FFI\CData|null $objectPointer
      */
-    private function isObjectValid(?CData $objectPointer): bool
+    private function isObjectValid(?object $objectPointer): bool
     {
         if ($objectPointer === null) {
             return false;

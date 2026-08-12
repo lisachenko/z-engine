@@ -557,8 +557,10 @@ final class PersistentHeap
      *
      * The cache is a plain request-allocated HashTable the engine builds lazily for
      * var_dump/foreach/get_object_vars; the object owns exactly one reference on it.
+     *
+     * @param \FFI\CData $objectPointer
      */
-    private function releasePropertiesCache(CData $objectPointer): void
+    private function releasePropertiesCache(object $objectPointer): void
     {
         $properties = $objectPointer->properties;
         if ($properties === null) {
@@ -588,8 +590,10 @@ final class PersistentHeap
      * The object's handle field alone is not trusted: it may be a recycled number from
      * an earlier request. The handle counts only when the store bucket it names is valid
      * AND points back at this very object.
+     *
+     * @param \FFI\CData $objectPointer
      */
-    private function currentValidHandle(ObjectStore $store, CData $objectPointer): ?int
+    private function currentValidHandle(ObjectStore $store, object $objectPointer): ?int
     {
         $handle = $objectPointer->handle;
         // Valid handles are 1..top-1 == 1..count($store); anything else is out of range
@@ -626,8 +630,10 @@ final class PersistentHeap
 
     /**
      * Stores an IS_PTR entry under an integer key (engine copies the zval bytes)
+     *
+     * @param \FFI\CData $pointer
      */
-    private function addPointerEntry(PersistentHashTable $table, int $index, CData $pointer): void
+    private function addPointerEntry(PersistentHashTable $table, int $index, object $pointer): void
     {
         // newEntry() stores the ADDRESS of the passed (dereferenced) struct view
         $entry = ReflectionValue::newEntry(ReflectionValue::IS_PTR, self::asCData($pointer[0]));
@@ -718,8 +724,10 @@ final class PersistentHeap
      * Engine struct members read through ext/ffi carry no static type information; the
      * generated header is the runtime ground truth, so the narrowing can never fail on
      * a verified layout (ZENGINE_STRICT_LAYOUT_CHECK).
+     *
+     * @return \FFI\CData
      */
-    private static function asCData(mixed $value): CData
+    private static function asCData(mixed $value): object
     {
         assert($value instanceof CData);
 

@@ -228,8 +228,9 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
      * like a C array expression, so indexing keeps working.
      *
      * @inheritDoc
+     * @return \FFI\CData|null
      */
-    final public function getGlobals(): ?CData
+    final public function getGlobals(): ?object
     {
         $rawPointer = parent::getGlobals();
         if ($rawPointer !== null) {
@@ -354,8 +355,10 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
      *
      * The array and its strings are persistent: the module registry references them for the
      * rest of the process (immortal-by-design, docs/long-running.md).
+     *
+     * @param \FFI\CData $module
      */
-    private function attachDependencies(CData $module): void
+    private function attachDependencies(object $module): void
     {
         $dependencies = $this->getModuleDependencies();
         if ($dependencies === []) {
@@ -387,8 +390,10 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
 
     /**
      * Allocates a persistent NUL-terminated C string tracked in the z-engine block registry
+     *
+     * @return \FFI\CData
      */
-    private static function newPersistentString(string $value): CData
+    private static function newPersistentString(string $value): object
     {
         $length = strlen($value) + 1;
         $buffer = Core::trackedNew("char[{$length}]", true);

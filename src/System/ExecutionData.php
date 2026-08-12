@@ -366,7 +366,7 @@ class ExecutionData
      * @see zend_compile.h:ZEND_CALL_VAR(call, n) macro
      * @internal
      */
-    public function getCallVariable(int $variableOffset): CData
+    public function getCallVariable(int $variableOffset): object
     {
         // ((zval*)(((char*)(call)) + ((int)(n))))
         $pointer = Core::cast('char *', $this->pointer) + $variableOffset;
@@ -387,7 +387,7 @@ class ExecutionData
      * @see zend_compile.h:ZEND_CALL_VAR_NUM(call, n) macro
      * @internal
      */
-    public function getCallVariableByNumber(int $variableNum): CData
+    public function getCallVariableByNumber(int $variableNum): object
     {
         // (((zval*)(call)) + (ZEND_CALL_FRAME_SLOT + ((int)(n))))
         $pointer = Core::cast('zval *', $this->pointer);

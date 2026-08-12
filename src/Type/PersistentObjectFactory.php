@@ -66,7 +66,7 @@ final class PersistentObjectFactory
      *
      * @return zend_object zend_object* in persistent memory, not yet registered in the store
      */
-    public static function persistentClone(CData $sourceObject): object
+    public static function persistentClone(object $sourceObject): object
     {
         $sourceClass = $sourceObject->ce;
         assert($sourceClass instanceof CData);

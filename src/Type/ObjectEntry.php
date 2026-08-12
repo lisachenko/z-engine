@@ -264,8 +264,9 @@ class ObjectEntry implements ReferenceCountedInterface
      * Returns a raw pointer (zval *) to the first inline property slot, eg for snapshotting
      * the whole properties_table with memcpy
      * @internal
+     * @return \FFI\CData
      */
-    public function getPropertyTablePointer(): CData
+    public function getPropertyTablePointer(): object
     {
         $this->assertObjectAlive();
 
@@ -308,8 +309,9 @@ class ObjectEntry implements ReferenceCountedInterface
      * Handler blocks are not refcounted engine structures, so replacing the pointer
      * transfers no ownership (same contract as setClass()).
      * @internal
+     * @param \FFI\CData $handlers
      */
-    public function setHandlers(CData $handlers): void
+    public function setHandlers(object $handlers): void
     {
         $this->assertObjectAlive();
         $this->pointer->handlers = Core::cast(zend_object_handlers::class, $handlers);

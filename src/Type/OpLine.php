@@ -103,8 +103,10 @@ class OpLine
 
     /**
      * Returns a raw pointer to the opcode handler
+     *
+     * @return \FFI\CData
      */
-    public function getHandler(): CData
+    public function getHandler(): object
     {
         $handler = $this->opline->handler;
         assert($handler instanceof CData);
@@ -263,8 +265,9 @@ class OpLine
      * @see zend_compile.h:RT_CONSTANT macro definition
      *
      * @return CData zval* pointer
+     * @param \FFI\CData $opline
      */
-    private static function getRuntimeConstant(CData $opline, object $node): CData
+    private static function getRuntimeConstant(object $opline, object $node): object
     {
         // ((zval*)(((char*)(opline)) + (int32_t)(node).constant))
         $constantOffset = Core::cast('znode_op *', $node)->constant;

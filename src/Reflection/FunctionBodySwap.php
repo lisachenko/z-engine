@@ -250,7 +250,7 @@ final class FunctionBodySwap
      *
      * @internal
      */
-    public static function adoptFunctionForPublishing(CData $container, FunctionLikeInterface $donor, ReflectionClass $newScope): void
+    public static function adoptFunctionForPublishing(object $container, FunctionLikeInterface $donor, ReflectionClass $newScope): void
     {
         Core::memcpy($container, $donor->getEntryPointer(), Core::sizeOfType(zend_function::class));
 
@@ -338,8 +338,10 @@ final class FunctionBodySwap
      * A bare counter cell is neither a struct array nor a hashtable, so this offset
      * read cannot be expressed through a shaped view; the numeric narrowing for
      * body-refcount dereferences is centralized here.
+     *
+     * @param \FFI\CData $counterPointer
      */
-    private static function counterValue(CData $counterPointer): int
+    private static function counterValue(object $counterPointer): int
     {
         $counterValue = $counterPointer[0];
         assert(is_int($counterValue));
@@ -431,7 +433,7 @@ final class FunctionBodySwap
      *
      * @internal called by PendingBodySwap::commit()
      */
-    public static function destroyPreviousBody(CData $previousBody, int $entryAddress, int $releasedShares): void
+    public static function destroyPreviousBody(object $previousBody, int $entryAddress, int $releasedShares): void
     {
         $previousFunction = ReflectionFunction::fromCData(Core::cast('zend_function *', Core::addr($previousBody)));
         $previousOpArray  = $previousFunction->getOpArrayPointer();

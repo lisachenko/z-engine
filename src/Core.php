@@ -440,8 +440,9 @@ class Core
      *
      * @param string $structName Globals struct type, e.g. "zend_executor_globals"
      * @param mixed  $offset     Engine-exported byte offset inside the TSRM block
+     * @return \FFI\CData
      */
-    private static function threadGlobals(string $structName, mixed $offset): CData
+    private static function threadGlobals(string $structName, mixed $offset): object
     {
         if (!\is_int($offset)) {
             throw new RuntimeException("The engine-exported TSRM offset for {$structName} is not an integer");
@@ -625,8 +626,10 @@ class Core
      * Runtime boundary check behind the object-widened entry points: values typed as
      * generated struct stubs for the analyser are always FFI\CData handles at runtime,
      * and anything else is a caller bug FFI itself would reject a step later anyway.
+     *
+     * @return \FFI\CData
      */
-    private static function toCData(object $value): CData
+    private static function toCData(object $value): object
     {
         if (!$value instanceof CData) {
             throw new \TypeError('Expected an FFI\CData handle, got ' . get_debug_type($value));
@@ -698,8 +701,9 @@ class Core
      * Returns the size of given type
      *
      * @param CData|object $variable Runtime value is always CData; statically stub-typed views are accepted
+     * @return \FFI\CData
      */
-    public static function addr(object $variable): CData
+    public static function addr(object $variable): object
     {
         return FFI::addr(self::toCData($variable));
     }
@@ -1083,8 +1087,10 @@ class Core
 
     /**
      * Returns standard object handlers
+     *
+     * @return \FFI\CData
      */
-    public static function getStandardObjectHandlers(): CData
+    public static function getStandardObjectHandlers(): object
     {
         return self::$engine->std_object_handlers;
     }

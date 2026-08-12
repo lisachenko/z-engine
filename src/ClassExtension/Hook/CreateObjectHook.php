@@ -28,16 +28,20 @@ class CreateObjectHook extends AbstractHook
 
     /**
      * Returns a raw class type (zend_class_entry)
+     *
+     * @return \FFI\CData
      */
-    public function getClassType(): CData
+    public function getClassType(): object
     {
         return $this->classType;
     }
 
     /**
      * Changes a class type to create
+     *
+     * @param \FFI\CData $classType
      */
-    public function setClassType(CData $classType): void
+    public function setClassType(object $classType): void
     {
         $this->classType = $classType;
     }
@@ -46,8 +50,9 @@ class CreateObjectHook extends AbstractHook
      * zend_object* (*create_object)(zend_class_entry *class_type);
      *
      * @inheritDoc
+     * @return \FFI\CData
      */
-    public function handle(...$rawArguments): CData
+    public function handle(...$rawArguments): object
     {
         [$this->classType] = $rawArguments;
 
@@ -56,8 +61,10 @@ class CreateObjectHook extends AbstractHook
 
     /**
      * Proceeds with object creation
+     *
+     * @return \FFI\CData
      */
-    public function proceed(): CData
+    public function proceed(): object
     {
         if ($this->originalHandler === null) {
             $object = ReflectionClass::newInstanceRaw($this->classType);

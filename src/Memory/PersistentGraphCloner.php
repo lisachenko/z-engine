@@ -196,8 +196,10 @@ final class PersistentGraphCloner
 
     /**
      * Validates one source zval (given as zval*) against the supported-type matrix
+     *
+     * @param \FFI\CData $zval
      */
-    private function validateValue(CData $zval, string $path): void
+    private function validateValue(object $zval, string $path): void
     {
         $type = self::zvalType($zval);
         switch ($type) {
@@ -237,8 +239,10 @@ final class PersistentGraphCloner
 
     /**
      * Validates every element of a source array (shared arrays are walked once)
+     *
+     * @param \FFI\CData $sourceArray
      */
-    private function validateArray(CData $sourceArray, string $path): void
+    private function validateArray(object $sourceArray, string $path): void
     {
         $address = Core::addressOf($sourceArray);
         if (isset($this->seenSourceArrays[$address])) {
@@ -256,8 +260,11 @@ final class PersistentGraphCloner
      *
      * The identity map entry is recorded BEFORE the slots are rewritten, so a back-edge
      * (cycle) or a shared DAG node resolves to the same clone instead of recursing.
+     *
+     * @param \FFI\CData $sourceObject
+     * @return \FFI\CData
      */
-    private function cloneObject(CData $sourceObject): CData
+    private function cloneObject(object $sourceObject): object
     {
         $address = Core::addressOf($sourceObject);
         if (isset($this->objectMap[$address])) {
@@ -291,8 +298,10 @@ final class PersistentGraphCloner
     /**
      * Rewrites one clone-owned zval in place: request-lifetime payload pointers are
      * replaced by persistent ones, scalar byte copies are left untouched
+     *
+     * @param \FFI\CData $zval
      */
-    private function rewriteValue(CData $zval): void
+    private function rewriteValue(object $zval): void
     {
         $type      = self::zvalType($zval);
         $zvalValue = self::asCData($zval->value);
@@ -317,8 +326,11 @@ final class PersistentGraphCloner
 
     /**
      * Mints (or returns the already minted) sealed persistent copy of one source array
+     *
+     * @param \FFI\CData $sourceArray
+     * @return \FFI\CData
      */
-    private function cloneArray(CData $sourceArray): CData
+    private function cloneArray(object $sourceArray): object
     {
         $address = Core::addressOf($sourceArray);
         if (isset($this->arrayMap[$address])) {
@@ -381,8 +393,9 @@ final class PersistentGraphCloner
      * keys (unlike HashTable::getIterator, which drops integer keys of hashed tables)
      *
      * @param \Closure(int|string, CData): void $visitor Receives the key and a zval* view
+     * @param \FFI\CData $sourceArray
      */
-    private function walkArray(CData $sourceArray, \Closure $visitor): void
+    private function walkArray(object $sourceArray, \Closure $visitor): void
     {
         $isPacked = (self::asInt(self::asCData($sourceArray->u)->flags) & Core::engineConstant('HASH_FLAG_PACKED')) !== 0;
         $numUsed  = self::asInt($sourceArray->nNumUsed);
@@ -411,8 +424,10 @@ final class PersistentGraphCloner
 
     /**
      * Reads the base type byte of a zval (given as zval*)
+     *
+     * @param \FFI\CData $zval
      */
-    private static function zvalType(CData $zval): int
+    private static function zvalType(object $zval): int
     {
         return self::asInt(self::asCData(self::asCData($zval->u1)->v)->type);
     }
@@ -423,8 +438,10 @@ final class PersistentGraphCloner
      * Engine struct members read through ext/ffi carry no static type information; the
      * generated header is the runtime ground truth, so the narrowing can never fail on
      * a verified layout (ZENGINE_STRICT_LAYOUT_CHECK).
+     *
+     * @return \FFI\CData
      */
-    private static function asCData(mixed $value): CData
+    private static function asCData(mixed $value): object
     {
         assert($value instanceof CData);
 

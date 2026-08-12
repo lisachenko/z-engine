@@ -302,7 +302,7 @@ class StringEntry implements ReferenceCountedInterface
      *
      * @see zend_types.h:ZSTR_SET_CE_CACHE
      */
-    public function setCachedClassEntry(CData $classEntry): void
+    public function setCachedClassEntry(object $classEntry): void
     {
         if (!$this->hasClassEntryCache()) {
             throw new \LogicException('This string does not carry an engine class-entry cache slot');

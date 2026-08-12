@@ -54,8 +54,11 @@ class Executor
      * Holds an internal pointer to the executor_globals structure
      */
     private CData $pointer;
+    /**
+     * @param \FFI\CData $pointer
+     */
 
-    public function __construct(CData $pointer)
+    public function __construct(object $pointer)
     {
         $this->pointer = $pointer;
 
@@ -89,8 +92,9 @@ class Executor
      * Set a new fake scope and returns previous value (to restore it later)
      *
      * @return CData|null
+     * @param \FFI\CData|null $newScope
      */
-    public function setFakeScope(?CData $newScope): ?CData
+    public function setFakeScope(?object $newScope): ?object
     {
         $oldScope                  = $this->pointer->fake_scope;
         $this->pointer->fake_scope = $newScope;
@@ -339,8 +343,10 @@ class Executor
      * Memory contract: the slot is read through a BORROWED ReflectionValue view; an unset
      * handler (IS_UNDEF) yields null, otherwise the returned callable holds its own regular
      * reference while the engine slot stays untouched (refcount-neutral).
+     *
+     * @param \FFI\CData $handlerValue
      */
-    private function materializeHandler(CData $handlerValue): ?callable
+    private function materializeHandler(object $handlerValue): ?callable
     {
         $reflectionValue = ReflectionValue::fromValueEntry($handlerValue);
         if ($reflectionValue->getType() === ReflectionValue::IS_UNDEF) {

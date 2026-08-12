@@ -76,8 +76,9 @@ class Node implements NodeInterface
      * Node static constructor.
      *
      * @param AstOwnership|null $owner Ownership handle that must stay alive while this node is used
+     * @param \FFI\CData $node
      */
-    public static function fromCData(CData $node, ?AstOwnership $owner = null): Node
+    public static function fromCData(object $node, ?AstOwnership $owner = null): Node
     {
         /** @var self $instance */
         $instance = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();

@@ -38,8 +38,9 @@ class ReadPropertyHook extends AbstractPropertyHook
      * typedef zval *(*zend_object_read_property_t)(zend_object *object, zend_string *member, int type, void **cache_slot, zval *rv);
      *
      * @inheritDoc
+     * @return \FFI\CData
      */
-    public function handle(...$rawArguments): CData
+    public function handle(...$rawArguments): object
     {
         [$this->object, $this->member, $this->type, $this->cacheSlot, $this->rv] = $rawArguments;
 

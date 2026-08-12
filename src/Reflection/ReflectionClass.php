@@ -1365,8 +1365,10 @@ class ReflectionClass extends NativeReflectionClass
     /**
      * Mints an owned engine string in the allocation class of this class entry and hands
      * the reference over to the engine sink that will store it
+     *
+     * @return \FFI\CData
      */
-    private function newOwnedNamePointer(string $name, bool $isPersistent): CData
+    private function newOwnedNamePointer(string $name, bool $isPersistent): object
     {
         $stringEntry = $isPersistent ? StringEntry::persistent($name) : StringEntry::fromString($name);
 
@@ -1390,8 +1392,11 @@ class ReflectionClass extends NativeReflectionClass
      *
      * The FFI view of the declared zend_string *exclude_class_names[1] field is
      * bounds-checked, so the runtime-sized tail is addressed through the raw field offset.
+     *
+     * @param \FFI\CData $precedenceEntry
+     * @return \FFI\CData
      */
-    private static function precedenceExcludeNames(CData $precedenceEntry): CData
+    private static function precedenceExcludeNames(object $precedenceEntry): object
     {
         $excludeOffset = Core::type('zend_trait_precedence')->getStructFieldOffset('exclude_class_names');
 
@@ -1409,8 +1414,9 @@ class ReflectionClass extends NativeReflectionClass
      * @param mixed  $list     Current NULL-terminated list (CData or null)
      * @param string $itemType Engine structure name of the list items
      * @param CData  $item     Pointer to the structure to append
+     * @return \FFI\CData
      */
-    private function appendToTraitAdaptationList(mixed $list, string $itemType, CData $item): CData
+    private function appendToTraitAdaptationList(mixed $list, string $itemType, object $item): object
     {
         // Collect the existing entries first: every value that leaves the CData boundary
         // is asserted, and the source list may disappear right after the copy
@@ -1444,8 +1450,10 @@ class ReflectionClass extends NativeReflectionClass
      * analysis cannot see - hence the explicit impurity marker.
      *
      * @phpstan-impure
+     * @param \FFI\CData $listMemory
+     * @param \FFI\CData $item
      */
-    private static function storeAdaptationListSlot(CData $listMemory, int $position, CData $item): void
+    private static function storeAdaptationListSlot(object $listMemory, int $position, object $item): void
     {
         $listMemory[$position] = $item;
     }
@@ -1454,8 +1462,9 @@ class ReflectionClass extends NativeReflectionClass
      * Rebuilds a NULL-terminated adaptation list without the given position
      *
      * @return CData|null New list, or null when the last entry was removed
+     * @param \FFI\CData $list
      */
-    private function removeFromTraitAdaptationList(CData $list, string $itemType, int $removeIndex): ?CData
+    private function removeFromTraitAdaptationList(object $list, string $itemType, int $removeIndex): ?object
     {
         $survivingItems = [];
         for ($index = 0; $list[$index] !== null; $index++) {
@@ -1490,8 +1499,10 @@ class ReflectionClass extends NativeReflectionClass
      * engine request memory (emalloc), released exactly like destroy_zend_class() would.
      * Engine-original structures of persistent classes are left alone - z-engine cannot
      * know their allocator, and such classes cannot carry traits in practice.
+     *
+     * @param \FFI\CData $adaptationPointer
      */
-    private function freeTraitAdaptation(CData $adaptationPointer): void
+    private function freeTraitAdaptation(object $adaptationPointer): void
     {
         if (Core::isTrackedBlock($adaptationPointer)) {
             Core::untrackAndFree($adaptationPointer);
@@ -1790,8 +1801,9 @@ class ReflectionClass extends NativeReflectionClass
      * Returns the zval stored in the given slot of an engine zval table
      *
      * @param CData|zval $table
+     * @return \FFI\CData
      */
-    private static function zvalTableSlot(object $table, int $slot): CData
+    private static function zvalTableSlot(object $table, int $slot): object
     {
         $slotValue = $table[$slot];
         assert($slotValue instanceof CData);
@@ -1801,8 +1813,10 @@ class ReflectionClass extends NativeReflectionClass
 
     /**
      * Checks if the given zval is an IS_INDIRECT view into another storage location
+     *
+     * @param \FFI\CData $zvalEntry
      */
-    private static function isIndirectZval(CData $zvalEntry): bool
+    private static function isIndirectZval(object $zvalEntry): bool
     {
         $typeUnion = $zvalEntry->u1;
         assert($typeUnion instanceof CData);
@@ -1814,8 +1828,10 @@ class ReflectionClass extends NativeReflectionClass
 
     /**
      * Overwrites the type of the given zval with IS_UNDEF (without releasing anything)
+     *
+     * @param \FFI\CData $zvalEntry
      */
-    private static function markZvalUndef(CData $zvalEntry): void
+    private static function markZvalUndef(object $zvalEntry): void
     {
         $typeUnion = $zvalEntry->u1;
         assert($typeUnion instanceof CData);
@@ -1830,8 +1846,10 @@ class ReflectionClass extends NativeReflectionClass
      * cannot see - hence the explicit impurity marker.
      *
      * @phpstan-impure
+     * @param \FFI\CData $infoTable
+     * @param \FFI\CData|null $propertyInfo
      */
-    private static function storePropertyInfoSlot(CData $infoTable, int $slot, ?CData $propertyInfo): void
+    private static function storePropertyInfoSlot(object $infoTable, int $slot, ?object $propertyInfo): void
     {
         $infoTable[$slot] = $propertyInfo;
     }
@@ -1960,7 +1978,7 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @param CData $parentEntry zend_class_entry of the new parent
      */
-    private function assertParentFitsPropertyTables(CData $parentEntry): void
+    private function assertParentFitsPropertyTables(object $parentEntry): void
     {
         if ($this->pointer->properties_info_table === null) {
             return;
@@ -2033,8 +2051,10 @@ class ReflectionClass extends NativeReflectionClass
 
     /**
      * Checks if the given zval slot is IS_UNDEF
+     *
+     * @param \FFI\CData $zvalEntry
      */
-    private static function isUndefZval(CData $zvalEntry): bool
+    private static function isUndefZval(object $zvalEntry): bool
     {
         $typeUnion = $zvalEntry->u1;
         assert($typeUnion instanceof CData);
@@ -2053,7 +2073,7 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @param CData $parentEntry zend_class_entry of the freshly attached parent
      */
-    private function refillPropertiesInfoTable(CData $parentEntry): void
+    private function refillPropertiesInfoTable(object $parentEntry): void
     {
         $infoTable = $this->pointer->properties_info_table;
         if ($infoTable === null) {
@@ -2782,7 +2802,7 @@ class ReflectionClass extends NativeReflectionClass
      * @return CData Instance of zend_object *
      * @see zend_objects.c:zend_objects_new
      */
-    public static function newInstanceRaw(CData $classType, bool $persistent = false): CData
+    public static function newInstanceRaw(object $classType, bool $persistent = false): object
     {
         $objectSize = Core::sizeof(Core::type('zend_object'));
         $totalSize  = $objectSize + self::getObjectPropertiesSize($classType);
@@ -2849,7 +2869,7 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @return ReflectionMethod
      */
-    private function addRawMethod(string $methodName, CData $rawFunction): ReflectionMethod
+    private function addRawMethod(string $methodName, object $rawFunction): ReflectionMethod
     {
         // Shared publish path with ReflectionFunction::addFunction(): the engine copies the
         // temporary container into its own bucket and returns the pointer it stores, which
@@ -2883,8 +2903,9 @@ class ReflectionClass extends NativeReflectionClass
      * otherwise it is impossible because object handlers field is declared as "const"
      *
      * @param CData|zend_class_entry $classType zend_class_entry type to get object handlers
+     * @return \FFI\CData
      */
-    private static function getObjectHandlers(object $classType): CData
+    private static function getObjectHandlers(object $classType): object
     {
         $classEntryAddress = Core::addressOf($classType);
         if (!isset(self::$objectHandlers[$classEntryAddress])) {
@@ -2896,8 +2917,10 @@ class ReflectionClass extends NativeReflectionClass
 
     /**
      * Allocates a new zend_object_handlers structure for a class as a copy of std_object_handlers
+     *
+     * @return \FFI\CData
      */
-    private static function allocateClassObjectHandlers(): CData
+    private static function allocateClassObjectHandlers(): object
     {
         $handlers    = Core::trackedNew('zend_object_handlers', true);
         $stdHandlers = Core::getStandardObjectHandlers();

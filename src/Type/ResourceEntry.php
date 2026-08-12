@@ -117,8 +117,10 @@ class ResourceEntry implements ReferenceCountedInterface
 
     /**
      * Returns the low-level raw data, associated with this resource
+     *
+     * @return \FFI\CData
      */
-    public function getRawData(): CData
+    public function getRawData(): object
     {
         $data = $this->pointer->ptr;
         // Engine invariant: a live resource always carries its payload pointer

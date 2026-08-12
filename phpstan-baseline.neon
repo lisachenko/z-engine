@@ -853,12 +853,6 @@ parameters:
 			path: src/Core.php
 
 		-
-			message: '#^Offset int\<0, max\> might not exist on ZEngine\\Generated\\Bucket\|null\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: src/EngineExtension/AbstractModule.php
-
-		-
 			message: '#^Parameter \#1 \$string of function strtolower expects string, string\|null given\.$#'
 			identifier: argument.type
 			count: 1

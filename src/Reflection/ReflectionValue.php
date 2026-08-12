@@ -535,8 +535,10 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * Type-friendly getter to return pointer
+     *
+     * @return \FFI\CData
      */
-    public function getRawPointer(): CData
+    public function getRawPointer(): object
     {
         if ($this->pointer->u1->v->type !== self::IS_PTR) {
             throw new \UnexpectedValueException('Pointer entry available only for the type IS_PTR');

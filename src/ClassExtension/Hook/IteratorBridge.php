@@ -91,8 +91,10 @@ final class IteratorBridge implements HookInterface
      *
      * The returned zend_object_iterator* carries refcount 1 which is handed over to the
      * engine caller (FE_RESET semantics); the engine releases it through the objects store.
+     *
+     * @return \FFI\CData
      */
-    public static function create(Iterator $userIterator): CData
+    public static function create(Iterator $userIterator): object
     {
         self::instance()->install();
 
@@ -228,8 +230,10 @@ final class IteratorBridge implements HookInterface
      * Called by the objects store free handler right before it efree()s the iterator
      * memory: releases the cached current-value reference and drops the registry entry
      * (which releases the wrapped userland Iterator through normal PHP refcounting).
+     *
+     * @param \FFI\CData $iterator
      */
-    private static function iteratorDtor(CData $iterator): void
+    private static function iteratorDtor(object $iterator): void
     {
         $address = Core::addressOf($iterator);
         if (!isset(self::$activeIterators[$address])) {
@@ -243,8 +247,10 @@ final class IteratorBridge implements HookInterface
      * Releases the reference cached in iter->data and stamps the slot IS_UNDEF
      *
      * The defensive IS_UNDEF stamp makes a hypothetical second release pass a no-op.
+     *
+     * @param \FFI\CData $iterator
      */
-    private static function releaseCurrentData(CData $iterator): void
+    private static function releaseCurrentData(object $iterator): void
     {
         $data = $iterator->data;
         assert($data instanceof CData);
@@ -256,8 +262,10 @@ final class IteratorBridge implements HookInterface
 
     /**
      * zend_result (*valid)(zend_object_iterator *iter)
+     *
+     * @param \FFI\CData $iterator
      */
-    private static function iteratorValid(CData $iterator): int
+    private static function iteratorValid(object $iterator): int
     {
         $state = self::$activeIterators[Core::addressOf($iterator)] ?? null;
         if ($state === null || $state['broken']) {
@@ -278,8 +286,11 @@ final class IteratorBridge implements HookInterface
      * Writes the userland current() value into the engine-owned iter->data slot (previous
      * value released with full assignment semantics) and returns the slot address. A NULL
      * return (broken iteration) makes the engine exit the loop cleanly.
+     *
+     * @param \FFI\CData $iterator
+     * @return \FFI\CData|null
      */
-    private static function iteratorCurrentData(CData $iterator): ?CData
+    private static function iteratorCurrentData(object $iterator): ?object
     {
         $state = self::$activeIterators[Core::addressOf($iterator)] ?? null;
         if ($state === null || $state['broken']) {
@@ -304,8 +315,11 @@ final class IteratorBridge implements HookInterface
      *
      * The key slot is an uninitialized engine output zval: exactly one owned reference is
      * written into it (the engine releases it), never a released/previous value.
+     *
+     * @param \FFI\CData $iterator
+     * @param \FFI\CData $key
      */
-    private static function iteratorCurrentKey(CData $iterator, CData $key): void
+    private static function iteratorCurrentKey(object $iterator, object $key): void
     {
         $state    = self::$activeIterators[Core::addressOf($iterator)] ?? null;
         $keyValue = null;
@@ -322,8 +336,10 @@ final class IteratorBridge implements HookInterface
 
     /**
      * void (*move_forward)(zend_object_iterator *iter)
+     *
+     * @param \FFI\CData $iterator
      */
-    private static function iteratorMoveForward(CData $iterator): void
+    private static function iteratorMoveForward(object $iterator): void
     {
         $state = self::$activeIterators[Core::addressOf($iterator)] ?? null;
         if ($state === null || $state['broken']) {
@@ -338,8 +354,10 @@ final class IteratorBridge implements HookInterface
 
     /**
      * void (*rewind)(zend_object_iterator *iter)
+     *
+     * @param \FFI\CData $iterator
      */
-    private static function iteratorRewind(CData $iterator): void
+    private static function iteratorRewind(object $iterator): void
     {
         $state = self::$activeIterators[Core::addressOf($iterator)] ?? null;
         if ($state === null || $state['broken']) {
@@ -357,8 +375,10 @@ final class IteratorBridge implements HookInterface
      *
      * The iteration is marked broken - valid() reports the end from now on, so the engine
      * terminates the loop cleanly - and the swallowed Throwable is surfaced as a warning.
+     *
+     * @param \FFI\CData $iterator
      */
-    private static function breakIteration(CData $iterator, string $method, Throwable $error): void
+    private static function breakIteration(object $iterator, string $method, Throwable $error): void
     {
         $address = Core::addressOf($iterator);
         if (isset(self::$activeIterators[$address])) {
