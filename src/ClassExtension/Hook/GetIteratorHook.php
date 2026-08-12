@@ -70,8 +70,9 @@ class GetIteratorHook extends AbstractHook
      * zend_object_iterator *(*get_iterator)(zend_class_entry *ce, zval *object, int by_ref);
      *
      * @inheritDoc
+     * @return \FFI\CData|null
      */
-    public function handle(...$rawArguments): ?CData
+    public function handle(...$rawArguments): ?object
     {
         [$classType, $object, $byRef] = $rawArguments;
         assert($classType instanceof CData && $object instanceof CData && is_int($byRef));
@@ -128,7 +129,7 @@ class GetIteratorHook extends AbstractHook
      *
      * @return CData|null zend_object_iterator* produced by the original handler
      */
-    public function proceed(): ?CData
+    public function proceed(): ?object
     {
         $result = ($this->getOriginalCallable())($this->classType, $this->object, $this->byRef);
         assert($result === null || $result instanceof CData);

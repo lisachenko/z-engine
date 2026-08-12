@@ -47,8 +47,9 @@ class CloneObjectHook extends AbstractHook
      * typedef zend_object* (*zend_object_clone_obj_t)(zend_object *object);
      *
      * @inheritDoc
+     * @return \FFI\CData
      */
-    public function handle(...$rawArguments): CData
+    public function handle(...$rawArguments): object
     {
         [$object] = $rawArguments;
         assert($object instanceof CData);

@@ -11,6 +11,7 @@ parameters:
         - tools/generator/emit.php
         - tools/generator/generate.php
         - tools/generator/validate.php
+        - tools/phpstan
     excludePaths:
         - tests/phpstan/specialization-class-stubs.php
         # Compiled into the opcache file cache by child processes; the static
@@ -23,31 +24,36 @@ parameters:
         # pokes the raw engine symbol through an ad-hoc FFI::cdef on purpose
         - tests/System/Hook/scenarios/throw-hook-ffi-abort.php
     # Analysis-only declarations of the runtime-generated specialized classes and the
-    # deliberately-undefined placeholder type (see the file header for the rationale)
+    # deliberately-undefined placeholder type (see the file header for the rationale),
+    # plus the generated engine struct stubs (ZEngine\Generated\*, emitted by
+    # tools/generator into stubs/ - never autoloadable, visible to analysis only)
     scanFiles:
         - tests/phpstan/specialization-class-stubs.php
+        - stubs/zend-engine-structs.php
     # FFI\CData is dynamically typed - the engine structs it wraps are only
     # known at runtime from the loaded header, so field/method access on CData
     # cannot be statically resolved. Scope the unavoidable ignores tightly to
     # CData/FFI so all non-FFI code is still held to level max.
     ignoreErrors:
+        # Direct field reads off a raw CData handle: the generated struct stubs
+        # (stubs/zend-engine-structs.php) type every field the wrappers touch, but the
+        # low-level pointer-surgery zones below still read undeclared fields directly.
         -
             identifier: property.notFound
             message: '#Access to an undefined property FFI\\CData::#'
-        -
-            identifier: method.nonObject
-            message: '#Cannot call method \w+\(\) on FFI\\CData#'
-        -
-            identifier: property.nonObject
-            message: '#Cannot access property \S+ on FFI\\CData#'
-        # C arrays and pointers are indexed through the same CData handles
+        # Raw CData buffers (locally-allocated `T[N]` arrays used with memcpy/addr and
+        # indexed in place) are genuine C arrays; the generated struct stubs deliberately do
+        # NOT implement ArrayAccess (they are structs, not arrays - typed contiguous arrays
+        # go through Type\StructArray instead).
         -
             identifier: offsetAccess.nonOffsetAccessible
             message: '#Cannot access offset .+ on FFI\\CData#'
-        # Core::call()/Core::new() proxy arbitrary engine functions via __call
+        # Type\StructArray is the single audited pointer-index primitive: its base is a raw
+        # CData handle at runtime (typed `object` so a stub pointer view is accepted), so the
+        # two in-class base indexes (offsetGet + the static at() deref) are scoped-ignored here.
         -
-            identifier: method.notFound
-            message: '#Call to an undefined method FFI::#'
+            identifier: offsetAccess.nonOffsetAccessible
+            path: src/Type/StructArray.php
         # PayloadRelocator is the file-cache pointer-surgery machinery: it walks
         # engine structs field by field through FFI\CData, so a chained access
         # (`$zval->u1->v->type`) resolves to `mixed` after the first hop and the
@@ -77,20 +83,11 @@ parameters:
             path: src/OpCache/ReflectionOpcacheFile.php
     reportUnmatchedIgnoredErrors: false
     treatPhpDocTypesAsCertain: false
-    # Named engine-struct shapes (see AGENTS.md "Engine structs are typed by shape").
-    # A shaped accessor lives on the reflection/type class that owns the struct and
-    # declares the matching alias on its @return (FunctionLikeTrait::getCommonPointer()
-    # and getOpArrayPointer()). FFI\CData is final, so the aliases intersect stdClass
-    # instead of CData, which keeps every shape property readable AND writable for the
-    # analysis while the runtime value stays the CData handle; the accessor narrows a
-    # nested field read (already `mixed` via the CData ignores below) to the shape.
-    typeAliases:
-        ZendFunctionCommonShape: 'stdClass&object{function_name: FFI\CData|null, scope: FFI\CData|null, prototype: FFI\CData|null, fn_flags: int, num_args: int, arg_info: FFI\CData|null, attributes: FFI\CData|null}'
-        ZendOpArrayShape: 'stdClass&object{fn_flags: int, refcount: FFI\CData|null, cache_size: int, run_time_cache__ptr: FFI\CData|null, static_variables: FFI\CData|null, static_variables_ptr__ptr: FFI\CData|null, function_name: FFI\CData|null, filename: FFI\CData|null, opcodes: FFI\CData, literals: FFI\CData|null, last: int, last_var: int, last_literal: int, T: int, num_args: int, required_num_args: int, vars: FFI\CData|null}'
-        ZvalTypeShape: 'stdClass&object{type: int, type_flags: int}'
-        ZvalU1Shape: 'stdClass&object{v: ZvalTypeShape, type_info: int}'
-        ZvalU2Shape: 'stdClass&object{constant_flags: int, extra: int, next: int}'
-        ZendReferenceShape: 'stdClass&object{gc: FFI\CData, val: FFI\CData, sources: FFI\CData}'
-        ZendValueShape: 'stdClass&object{lval: int, dval: float, str: FFI\CData, ptr: FFI\CData, counted: FFI\CData, ref: ZendReferenceShape}'
-        ZvalShape: 'stdClass&object{value: ZendValueShape, u1: ZvalU1Shape, u2: ZvalU2Shape}'
-        ZendFileCacheMetaInfoShape: 'stdClass&object{magic: FFI\CData, system_id: FFI\CData, mem_size: int, str_size: int, script_offset: int, timestamp: int, checksum: int}'
+
+# Resolves the typed Core entry points (new/trackedNew/cast/pointerAtAddress) by their
+# literal $type argument: stub class-strings type the handle as the generated stub
+# class, C type name strings stay FFI\CData (see the extension's class docblock)
+services:
+    -
+        class: ZEngine\PHPStan\TypedEntryPointReturnExtension
+        tags: [phpstan.broker.dynamicStaticMethodReturnTypeExtension]

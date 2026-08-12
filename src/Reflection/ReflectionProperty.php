@@ -16,6 +16,7 @@ namespace ZEngine\Reflection;
 use FFI\CData;
 use ReflectionProperty as NativeReflectionProperty;
 use ZEngine\Core;
+use ZEngine\Generated\zend_property_info;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
 
@@ -36,7 +37,11 @@ use ZEngine\Type\StringEntry;
  */
 class ReflectionProperty extends NativeReflectionProperty
 {
-    private CData $pointer;
+    /**
+     * @var zend_property_info Typed view of the wrapped property info; the runtime value
+     *                         is the raw FFI\CData handle (see stubs/zend-engine-structs.php)
+     */
+    private object $pointer;
 
     public function __construct(string $className, string $propertyName)
     {
@@ -55,23 +60,25 @@ class ReflectionProperty extends NativeReflectionProperty
             throw new \ReflectionException("Property {$propertyName} was not found in the class.");
         }
         $propertyPointer = $propertyEntry->getRawPointer();
-        $this->pointer   = Core::cast('zend_property_info *', $propertyPointer);
+        $this->pointer   = Core::cast(zend_property_info::class, $propertyPointer);
     }
 
     /**
      * Creates a reflection from the zend_property_info structure
      *
-     * @param CData $propertyEntry Pointer to the structure
+     * @param CData|zend_property_info $propertyEntry Pointer to the structure
      */
-    public static function fromCData(CData $propertyEntry): ReflectionProperty
+    public static function fromCData(object $propertyEntry): ReflectionProperty
     {
         /** @var ReflectionProperty $reflectionProperty */
         $reflectionProperty = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
-        $propertyName       = StringEntry::fromCData($propertyEntry->name);
+        /** @var zend_property_info $propertyEntry Narrowed to the stub view at the owning boundary */
+        $propertyNamePointer = $propertyEntry->name;
+        assert($propertyNamePointer !== null);
         Core::callParentConstructor(
             $reflectionProperty,
             static::class,
-            $propertyName->getStringValue(),
+            StringEntry::fromCData($propertyNamePointer)->getStringValue(),
         );
         $reflectionProperty->pointer = $propertyEntry;
 
@@ -88,11 +95,14 @@ class ReflectionProperty extends NativeReflectionProperty
      * native introspection is not.
      *
      * @internal used by the hot-swap machinery (HotSwap/ClassDelta)
+     *
+     * @param CData|zend_property_info $propertyInfo
      */
-    public static function fromRawEntry(CData $propertyInfo): ReflectionProperty
+    public static function fromRawEntry(object $propertyInfo): ReflectionProperty
     {
         /** @var ReflectionProperty $reflectionProperty */
-        $reflectionProperty          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionProperty = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        /** @var zend_property_info $propertyInfo Narrowed at the boundary (may be a struct or a pointer view) */
         $reflectionProperty->pointer = $propertyInfo;
 
         return $reflectionProperty;
@@ -272,7 +282,10 @@ class ReflectionProperty extends NativeReflectionProperty
      */
     public function getDeclaringClass(): ReflectionClass
     {
-        return ReflectionClass::fromCData($this->pointer->ce);
+        $classEntry = $this->pointer->ce;
+        assert($classEntry instanceof CData);
+
+        return ReflectionClass::fromCData($classEntry);
     }
 
     /**

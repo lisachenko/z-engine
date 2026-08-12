@@ -64,6 +64,9 @@ use ZEngine\ClassExtension\ObjectUnsetPropertyInterface;
 use ZEngine\ClassExtension\ObjectWriteDimensionInterface;
 use ZEngine\ClassExtension\ObjectWritePropertyInterface;
 use ZEngine\Core;
+use ZEngine\Generated\zend_class_entry;
+use ZEngine\Generated\zend_class_name;
+use ZEngine\Generated\zval;
 use ZEngine\OpCache\SharedMemoryException;
 use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\HashTable;
@@ -100,7 +103,11 @@ class ReflectionClass extends NativeReflectionClass
      */
     private ?HashTable $attributesTable;
 
-    private CData $pointer;
+    /**
+     * @var zend_class_entry Typed view of the wrapped class entry; the runtime value is
+     *                       the raw FFI\CData handle (see stubs/zend-engine-structs.php)
+     */
+    private object $pointer;
 
     /**
      * Function pointers in zend_class_entry that are grafted from the parent during inheritance
@@ -166,16 +173,19 @@ class ReflectionClass extends NativeReflectionClass
     /**
      * Creates a reflection from the zend_class_entry structure
      *
-     * @param CData $classEntry Pointer to the structure
+     * @param CData|zend_class_entry $classEntry Pointer to the structure
      *
      * @return ReflectionClass
      */
-    public static function fromCData(CData $classEntry): ReflectionClass
+    public static function fromCData(object $classEntry): ReflectionClass
     {
         /** @var ReflectionClass $reflectionClass */
         $reflectionClass = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
+        /** @var zend_class_entry $classEntry Narrowed to the stub view at the owning boundary */
         $reflectionClass->initLowLevelStructures($classEntry);
-        $classNameValue = StringEntry::fromCData($classEntry->name);
+        $className = $classEntry->name;
+        assert($className !== null);
+        $classNameValue = StringEntry::fromCData($className);
         try {
             Core::callParentConstructor($reflectionClass, static::class, $classNameValue->getStringValue());
         } catch (\ReflectionException $e) {
@@ -191,7 +201,11 @@ class ReflectionClass extends NativeReflectionClass
     #[\ReturnTypeWillChange]
     public function getName()
     {
-        return StringEntry::fromCData($this->pointer->name)->getStringValue();
+        $className = $this->pointer->name;
+        // Engine invariant: every registered class entry carries a name
+        assert($className !== null);
+
+        return StringEntry::fromCData($className)->getStringValue();
     }
 
     /**
@@ -199,16 +213,24 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function getInterfaceNames(): array
     {
-        $interfaceNames = [];
-        $isLinked       = (bool) ($this->pointer->ce_flags & Core::ZEND_ACC_LINKED);
-        for ($index = 0; $index < $this->pointer->num_interfaces; $index++) {
+        $interfaceNames  = [];
+        $isLinked        = (bool) ($this->pointer->ce_flags & Core::ZEND_ACC_LINKED);
+        $totalInterfaces = $this->pointer->num_interfaces;
+        // A non-zero interface count guarantees the matching table pointer is set
+        $resolvedTable = $this->pointer->interfaces;
+        $namesTable    = $this->pointer->interface_names;
+        $namesArray    = $namesTable !== null ? new StructArray($namesTable, $totalInterfaces) : null;
+        for ($index = 0; $index < $totalInterfaces; $index++) {
             if ($isLinked) {
-                $rawInterfaceName = $this->pointer->interfaces[$index]->name;
+                assert($resolvedTable !== null);
+                $rawInterfaceName = $resolvedTable[$index]->name;
+                assert($rawInterfaceName instanceof CData);
             } else {
-                $rawInterfaceName = $this->pointer->interface_names[$index]->name;
+                assert($namesArray !== null);
+                $rawInterfaceName = $namesArray[$index]->name;
+                assert($rawInterfaceName !== null);
             }
-            $interfaceNameValue = StringEntry::fromCData($rawInterfaceName);
-            $interfaceNames[]   = $interfaceNameValue->getStringValue();
+            $interfaceNames[] = StringEntry::fromCData($rawInterfaceName)->getStringValue();
         }
 
         return $interfaceNames;
@@ -268,7 +290,9 @@ class ReflectionClass extends NativeReflectionClass
 
         // Free the previous buffer if z-engine allocated it; engine-original arrays are left alone
         if ($totalInterfaces > 0) {
-            Core::untrackAndFree($this->pointer->interfaces);
+            $previousTable = $this->pointer->interfaces;
+            assert($previousTable !== null);
+            Core::untrackAndFree($previousTable);
         }
         $this->pointer->interfaces = Core::cast('zend_class_entry **', Core::addr($memory));
 
@@ -305,23 +329,26 @@ class ReflectionClass extends NativeReflectionClass
         $isPersistent = $this->isPersistentAllocation();
 
         // If we remove all interfaces then just clear $this->pointer->interfaces field
+        $previousTable = $this->pointer->interfaces;
         if ($numResultInterfaces === 0) {
             if ($totalInterfaces > 0) {
-                Core::untrackAndFree($this->pointer->interfaces);
+                assert($previousTable !== null);
+                Core::untrackAndFree($previousTable);
             }
             // We should also clean ZEND_ACC_RESOLVED_INTERFACES
             $this->pointer->interfaces = null;
             $this->pointer->ce_flags &= (~ Core::ZEND_ACC_RESOLVED_INTERFACES);
         } else {
+            assert($previousTable !== null);
             // Allocate tracked memory, either persistent (for internal classes) or not (for user-defined)
             $memory = Core::trackedNew("zend_class_entry *[$numResultInterfaces]", $isPersistent);
             for ($index = 0, $destIndex = 0; $index < $this->pointer->num_interfaces; $index++) {
                 if (!isset($indexesToRemove[$index])) {
-                    $memory[$destIndex++] = $this->pointer->interfaces[$index];
+                    $memory[$destIndex++] = $previousTable[$index];
                 }
             }
             if ($totalInterfaces > 0) {
-                Core::untrackAndFree($this->pointer->interfaces);
+                Core::untrackAndFree($previousTable);
             }
             $this->pointer->interfaces = Core::cast('zend_class_entry **', Core::addr($memory));
         }
@@ -554,7 +581,10 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @internal shared with the hot-swap machinery (ClassDelta/HotSwap)
      */
-    public function getRawValue(): CData
+    /**
+     * @return zend_class_entry
+     */
+    public function getRawValue(): object
     {
         return $this->pointer;
     }
@@ -915,10 +945,12 @@ class ReflectionClass extends NativeReflectionClass
         }
         // Free the previous buffer if z-engine allocated it; engine-original arrays are left alone
         if ($totalTraits > 0) {
-            Core::untrackAndFree($this->pointer->trait_names);
+            $previousNames = $this->pointer->trait_names;
+            assert($previousNames !== null);
+            Core::untrackAndFree($previousNames);
         }
 
-        $this->pointer->trait_names = Core::cast('zend_class_name *', Core::addr($memory));
+        $this->pointer->trait_names = Core::cast(zend_class_name::class, Core::addr($memory));
         $this->pointer->num_traits  = $numResultTraits;
     }
 
@@ -952,23 +984,31 @@ class ReflectionClass extends NativeReflectionClass
         } else {
             $memory = null;
         }
+        $previousNames = $this->pointer->trait_names;
+        assert($previousNames !== null);
+        $previousNamesArray = new StructArray($previousNames, $totalTraits);
         for ($index = 0, $destIndex = 0; $index < $totalTraits; $index++) {
-            $traitNameStruct = $this->pointer->trait_names[$index];
+            $traitNameStruct = $previousNamesArray[$index];
             if (!isset($indexesToRemove[$index])) {
+                assert($memory instanceof CData);
                 $memory[$destIndex++] = $traitNameStruct;
             } else {
                 // Clean strings to prevent memory leaks
                 // Drop the class entry's own reference on the removed trait names with
                 // engine semantics (previously this was a wrong-allocator FFI free)
-                StringEntry::fromCData($traitNameStruct->name)->releaseReference();
-                StringEntry::fromCData($traitNameStruct->lc_name)->releaseReference();
+                $removedName   = $traitNameStruct->name;
+                $removedLcName = $traitNameStruct->lc_name;
+                assert($removedName !== null && $removedLcName !== null);
+                StringEntry::fromCData($removedName)->releaseReference();
+                StringEntry::fromCData($removedLcName)->releaseReference();
             }
         }
         if ($totalTraits > 0) {
-            Core::untrackAndFree($this->pointer->trait_names);
+            Core::untrackAndFree($previousNames);
         }
         if ($numResultTraits > 0) {
-            $this->pointer->trait_names = Core::cast('zend_class_name *', Core::addr($memory));
+            assert($memory instanceof CData);
+            $this->pointer->trait_names = Core::cast(zend_class_name::class, Core::addr($memory));
         } else {
             $this->pointer->trait_names = null;
         }
@@ -1325,8 +1365,10 @@ class ReflectionClass extends NativeReflectionClass
     /**
      * Mints an owned engine string in the allocation class of this class entry and hands
      * the reference over to the engine sink that will store it
+     *
+     * @return \FFI\CData
      */
-    private function newOwnedNamePointer(string $name, bool $isPersistent): CData
+    private function newOwnedNamePointer(string $name, bool $isPersistent): object
     {
         $stringEntry = $isPersistent ? StringEntry::persistent($name) : StringEntry::fromString($name);
 
@@ -1350,8 +1392,11 @@ class ReflectionClass extends NativeReflectionClass
      *
      * The FFI view of the declared zend_string *exclude_class_names[1] field is
      * bounds-checked, so the runtime-sized tail is addressed through the raw field offset.
+     *
+     * @param \FFI\CData $precedenceEntry
+     * @return \FFI\CData
      */
-    private static function precedenceExcludeNames(CData $precedenceEntry): CData
+    private static function precedenceExcludeNames(object $precedenceEntry): object
     {
         $excludeOffset = Core::type('zend_trait_precedence')->getStructFieldOffset('exclude_class_names');
 
@@ -1369,8 +1414,9 @@ class ReflectionClass extends NativeReflectionClass
      * @param mixed  $list     Current NULL-terminated list (CData or null)
      * @param string $itemType Engine structure name of the list items
      * @param CData  $item     Pointer to the structure to append
+     * @return \FFI\CData
      */
-    private function appendToTraitAdaptationList(mixed $list, string $itemType, CData $item): CData
+    private function appendToTraitAdaptationList(mixed $list, string $itemType, object $item): object
     {
         // Collect the existing entries first: every value that leaves the CData boundary
         // is asserted, and the source list may disappear right after the copy
@@ -1404,8 +1450,10 @@ class ReflectionClass extends NativeReflectionClass
      * analysis cannot see - hence the explicit impurity marker.
      *
      * @phpstan-impure
+     * @param \FFI\CData $listMemory
+     * @param \FFI\CData $item
      */
-    private static function storeAdaptationListSlot(CData $listMemory, int $position, CData $item): void
+    private static function storeAdaptationListSlot(object $listMemory, int $position, object $item): void
     {
         $listMemory[$position] = $item;
     }
@@ -1414,8 +1462,9 @@ class ReflectionClass extends NativeReflectionClass
      * Rebuilds a NULL-terminated adaptation list without the given position
      *
      * @return CData|null New list, or null when the last entry was removed
+     * @param \FFI\CData $list
      */
-    private function removeFromTraitAdaptationList(CData $list, string $itemType, int $removeIndex): ?CData
+    private function removeFromTraitAdaptationList(object $list, string $itemType, int $removeIndex): ?object
     {
         $survivingItems = [];
         for ($index = 0; $list[$index] !== null; $index++) {
@@ -1450,8 +1499,10 @@ class ReflectionClass extends NativeReflectionClass
      * engine request memory (emalloc), released exactly like destroy_zend_class() would.
      * Engine-original structures of persistent classes are left alone - z-engine cannot
      * know their allocator, and such classes cannot carry traits in practice.
+     *
+     * @param \FFI\CData $adaptationPointer
      */
-    private function freeTraitAdaptation(CData $adaptationPointer): void
+    private function freeTraitAdaptation(object $adaptationPointer): void
     {
         if (Core::isTrackedBlock($adaptationPointer)) {
             Core::untrackAndFree($adaptationPointer);
@@ -1472,10 +1523,13 @@ class ReflectionClass extends NativeReflectionClass
 
         // For linked class we should look at parent name directly
         if ($this->pointer->ce_flags & Core::ZEND_ACC_LINKED) {
-            $rawParentName = $this->pointer->parent->name;
+            $parent = $this->pointer->parent;
+            assert($parent !== null);
+            $rawParentName = $parent->name;
         } else {
             $rawParentName = $this->pointer->parent_name;
         }
+        assert($rawParentName !== null);
 
         $parentNameValue = StringEntry::fromCData($rawParentName);
         $classReflection = new ReflectionClass($parentNameValue->getStringValue());
@@ -1722,9 +1776,10 @@ class ReflectionClass extends NativeReflectionClass
      * vacated tail is neutralized to IS_UNDEF so no stale zval bytes can ever be
      * interpreted - or double-released - again.
      *
+     * @param CData|zval      $table            Base pointer of the zval table
      * @param array<int, int> $newSlotByOldSlot Surviving slots, old slot => new slot (ascending)
      */
-    private function compactZvalTable(CData $table, int $totalSlots, array $newSlotByOldSlot, int $zvalSize): void
+    private function compactZvalTable(object $table, int $totalSlots, array $newSlotByOldSlot, int $zvalSize): void
     {
         $nextSlot = count($newSlotByOldSlot);
         for ($slot = 0; $slot < $totalSlots; $slot++) {
@@ -1744,8 +1799,11 @@ class ReflectionClass extends NativeReflectionClass
 
     /**
      * Returns the zval stored in the given slot of an engine zval table
+     *
+     * @param CData|zval $table
+     * @return \FFI\CData
      */
-    private static function zvalTableSlot(CData $table, int $slot): CData
+    private static function zvalTableSlot(object $table, int $slot): object
     {
         $slotValue = $table[$slot];
         assert($slotValue instanceof CData);
@@ -1755,8 +1813,10 @@ class ReflectionClass extends NativeReflectionClass
 
     /**
      * Checks if the given zval is an IS_INDIRECT view into another storage location
+     *
+     * @param \FFI\CData $zvalEntry
      */
-    private static function isIndirectZval(CData $zvalEntry): bool
+    private static function isIndirectZval(object $zvalEntry): bool
     {
         $typeUnion = $zvalEntry->u1;
         assert($typeUnion instanceof CData);
@@ -1768,8 +1828,10 @@ class ReflectionClass extends NativeReflectionClass
 
     /**
      * Overwrites the type of the given zval with IS_UNDEF (without releasing anything)
+     *
+     * @param \FFI\CData $zvalEntry
      */
-    private static function markZvalUndef(CData $zvalEntry): void
+    private static function markZvalUndef(object $zvalEntry): void
     {
         $typeUnion = $zvalEntry->u1;
         assert($typeUnion instanceof CData);
@@ -1784,8 +1846,10 @@ class ReflectionClass extends NativeReflectionClass
      * cannot see - hence the explicit impurity marker.
      *
      * @phpstan-impure
+     * @param \FFI\CData $infoTable
+     * @param \FFI\CData|null $propertyInfo
      */
-    private static function storePropertyInfoSlot(CData $infoTable, int $slot, ?CData $propertyInfo): void
+    private static function storePropertyInfoSlot(object $infoTable, int $slot, ?object $propertyInfo): void
     {
         $infoTable[$slot] = $propertyInfo;
     }
@@ -1839,13 +1903,15 @@ class ReflectionClass extends NativeReflectionClass
      * offsets (low bit set, opcache-shared classes) and the legacy case where the map ptr
      * aliases default_static_members_table are reported as null - nothing extra to fix then.
      */
-    private function getMaterializedStaticMembersTable(): ?CData
+    /**
+     * @return zval|null Pointer to the first zval slot of the materialized table
+     */
+    private function getMaterializedStaticMembersTable(): ?object
     {
         $materialized = $this->pointer->static_members_table__ptr;
         if ($materialized === null) {
             return null;
         }
-        assert($materialized instanceof CData);
         $materializedAddress = Core::addressOf($materialized);
         if (($materializedAddress & 1) !== 0) {
             return null;
@@ -1912,7 +1978,7 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @param CData $parentEntry zend_class_entry of the new parent
      */
-    private function assertParentFitsPropertyTables(CData $parentEntry): void
+    private function assertParentFitsPropertyTables(object $parentEntry): void
     {
         if ($this->pointer->properties_info_table === null) {
             return;
@@ -1985,8 +2051,10 @@ class ReflectionClass extends NativeReflectionClass
 
     /**
      * Checks if the given zval slot is IS_UNDEF
+     *
+     * @param \FFI\CData $zvalEntry
      */
-    private static function isUndefZval(CData $zvalEntry): bool
+    private static function isUndefZval(object $zvalEntry): bool
     {
         $typeUnion = $zvalEntry->u1;
         assert($typeUnion instanceof CData);
@@ -2005,7 +2073,7 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @param CData $parentEntry zend_class_entry of the freshly attached parent
      */
-    private function refillPropertiesInfoTable(CData $parentEntry): void
+    private function refillPropertiesInfoTable(object $parentEntry): void
     {
         $infoTable = $this->pointer->properties_info_table;
         if ($infoTable === null) {
@@ -2053,9 +2121,9 @@ class ReflectionClass extends NativeReflectionClass
     public function setFinal(bool $isFinal = true): void
     {
         if ($isFinal) {
-            $this->pointer->ce_flags->cdata = ($this->pointer->ce_flags | Core::ZEND_ACC_FINAL);
+            $this->pointer->ce_flags |= Core::ZEND_ACC_FINAL;
         } else {
-            $this->pointer->ce_flags->cdata = ($this->pointer->ce_flags & (~Core::ZEND_ACC_FINAL));
+            $this->pointer->ce_flags &= (~Core::ZEND_ACC_FINAL);
         }
     }
 
@@ -2067,10 +2135,10 @@ class ReflectionClass extends NativeReflectionClass
     public function setAbstract(bool $isAbstract = true): void
     {
         if ($isAbstract) {
-            $this->pointer->ce_flags->cdata = ($this->pointer->ce_flags | Core::ZEND_ACC_EXPLICIT_ABSTRACT_CLASS);
+            $this->pointer->ce_flags |= Core::ZEND_ACC_EXPLICIT_ABSTRACT_CLASS;
         } else {
-            $this->pointer->ce_flags->cdata = ($this->pointer->ce_flags & (~Core::ZEND_ACC_EXPLICIT_ABSTRACT_CLASS));
-            $this->pointer->ce_flags->cdata = ($this->pointer->ce_flags & (~Core::ZEND_ACC_IMPLICIT_ABSTRACT_CLASS));
+            $this->pointer->ce_flags &= (~Core::ZEND_ACC_EXPLICIT_ABSTRACT_CLASS);
+            $this->pointer->ce_flags &= (~Core::ZEND_ACC_IMPLICIT_ABSTRACT_CLASS);
         }
     }
 
@@ -2126,9 +2194,12 @@ class ReflectionClass extends NativeReflectionClass
     {
         $iterator = function () {
             $propertyIndex = 0;
-            while ($propertyIndex < $this->pointer->default_properties_count) {
-                $value = $this->pointer->default_properties_table[$propertyIndex];
-                yield $propertyIndex => ReflectionValue::fromValueEntry($value);
+            $count         = $this->pointer->default_properties_count;
+            $rawTable      = $this->pointer->default_properties_table;
+            $table         = $rawTable !== null ? new StructArray($rawTable, $count) : null;
+            while ($propertyIndex < $count) {
+                assert($table !== null);
+                yield $propertyIndex => ReflectionValue::fromValueEntry($table[$propertyIndex]);
                 $propertyIndex++;
             }
         };
@@ -2145,9 +2216,12 @@ class ReflectionClass extends NativeReflectionClass
     {
         $iterator = function () {
             $propertyIndex = 0;
-            while ($propertyIndex < $this->pointer->default_static_members_count) {
-                $value = $this->pointer->default_static_members_table[$propertyIndex];
-                yield $propertyIndex => ReflectionValue::fromValueEntry($value);
+            $count         = $this->pointer->default_static_members_count;
+            $rawTable      = $this->pointer->default_static_members_table;
+            $table         = $rawTable !== null ? new StructArray($rawTable, $count) : null;
+            while ($propertyIndex < $count) {
+                assert($table !== null);
+                yield $propertyIndex => ReflectionValue::fromValueEntry($table[$propertyIndex]);
                 $propertyIndex++;
             }
         };
@@ -2728,7 +2802,7 @@ class ReflectionClass extends NativeReflectionClass
      * @return CData Instance of zend_object *
      * @see zend_objects.c:zend_objects_new
      */
-    public static function newInstanceRaw(CData $classType, bool $persistent = false): CData
+    public static function newInstanceRaw(object $classType, bool $persistent = false): object
     {
         $objectSize = Core::sizeof(Core::type('zend_object'));
         $totalSize  = $objectSize + self::getObjectPropertiesSize($classType);
@@ -2746,11 +2820,11 @@ class ReflectionClass extends NativeReflectionClass
      * Returns the full allocation size of an instance: zend_object plus the inline
      * properties_table slots for a given class type
      *
-     * @param CData $classType zend_class_entry type to measure
+     * @param CData|zend_class_entry $classType zend_class_entry type to measure
      *
      * @see zend_objects_API.h:zend_objects_store_put (callers size allocations this way)
      */
-    public static function getObjectSize(CData $classType): int
+    public static function getObjectSize(object $classType): int
     {
         return Core::sizeof(Core::type('zend_object')) + self::getObjectPropertiesSize($classType);
     }
@@ -2768,8 +2842,12 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @param CData $classEntry
      */
-    private function initLowLevelStructures(CData $classEntry): void
+    /**
+     * @param CData|zend_class_entry $classEntry
+     */
+    private function initLowLevelStructures(object $classEntry): void
     {
+        /** @var zend_class_entry $classEntry Narrowed to the stub view at the owning boundary */
         $this->pointer         = $classEntry;
         $this->methodTable     = HashTable::fromCData(Core::addr($classEntry->function_table));
         $this->propertiesTable = HashTable::fromCData(Core::addr($classEntry->properties_info));
@@ -2777,7 +2855,6 @@ class ReflectionClass extends NativeReflectionClass
 
         $classAttributes = $classEntry->attributes;
         if ($classAttributes !== null) {
-            assert($classAttributes instanceof CData);
             $this->attributesTable = HashTable::fromCData($classAttributes);
         } else {
             $this->attributesTable = null;
@@ -2792,7 +2869,7 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @return ReflectionMethod
      */
-    private function addRawMethod(string $methodName, CData $rawFunction): ReflectionMethod
+    private function addRawMethod(string $methodName, object $rawFunction): ReflectionMethod
     {
         // Shared publish path with ReflectionFunction::addFunction(): the engine copies the
         // temporary container into its own bucket and returns the pointer it stores, which
@@ -2805,18 +2882,18 @@ class ReflectionClass extends NativeReflectionClass
     /**
      * Returns the size of memory required for storing properties for a given class type
      *
-     * @param CData $classType zend_class_entry type to get object property size
+     * @param CData|zend_class_entry $classType zend_class_entry type to get object property size
      *
      * @see zend_objects_API.h:zend_object_properties_size
      */
-    private static function getObjectPropertiesSize(CData $classType): int
+    private static function getObjectPropertiesSize(object $classType): int
     {
-        $zvalSize  = Core::sizeof(Core::type('zval'));
-        $useGuards = (bool) ($classType->ce_flags & Core::ZEND_ACC_USE_GUARDS);
+        /** @var zend_class_entry $classEntry Narrowed to the stub view at the owning boundary */
+        $classEntry = $classType;
+        $zvalSize   = Core::sizeOfType(zval::class);
+        $useGuards  = (bool) ($classEntry->ce_flags & Core::ZEND_ACC_USE_GUARDS);
 
-        $totalSize = $zvalSize * ($classType->default_properties_count - ($useGuards ? 0 : 1));
-
-        return $totalSize;
+        return $zvalSize * ($classEntry->default_properties_count - ($useGuards ? 0 : 1));
     }
 
     /**
@@ -2825,9 +2902,10 @@ class ReflectionClass extends NativeReflectionClass
      * We always create our own object handlers structure to have an ability to adjust callbacks in runtime,
      * otherwise it is impossible because object handlers field is declared as "const"
      *
-     * @param CData $classType zend_class_entry type to get object handlers
+     * @param CData|zend_class_entry $classType zend_class_entry type to get object handlers
+     * @return \FFI\CData
      */
-    private static function getObjectHandlers(CData $classType): CData
+    private static function getObjectHandlers(object $classType): object
     {
         $classEntryAddress = Core::addressOf($classType);
         if (!isset(self::$objectHandlers[$classEntryAddress])) {
@@ -2839,8 +2917,10 @@ class ReflectionClass extends NativeReflectionClass
 
     /**
      * Allocates a new zend_object_handlers structure for a class as a copy of std_object_handlers
+     *
+     * @return \FFI\CData
      */
-    private static function allocateClassObjectHandlers(): CData
+    private static function allocateClassObjectHandlers(): object
     {
         $handlers    = Core::trackedNew('zend_object_handlers', true);
         $stdHandlers = Core::getStandardObjectHandlers();

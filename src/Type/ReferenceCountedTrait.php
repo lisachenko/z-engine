@@ -15,6 +15,8 @@ namespace ZEngine\Type;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_refcounted;
+use ZEngine\Generated\zend_refcounted_h;
 
 /**
  * Trait RefcountedTrait
@@ -98,7 +100,7 @@ trait ReferenceCountedTrait
             if ($this->isPersistent()) {
                 return;
             }
-            Core::call('rc_dtor_func', Core::cast('zend_refcounted *', Core::addr($this->getGC())));
+            Core::call('rc_dtor_func', Core::cast(zend_refcounted::class, Core::addr($this->getGC())));
         }
     }
 
@@ -135,14 +137,14 @@ trait ReferenceCountedTrait
      */
     protected function hasGcFlag(int $flagMask): bool
     {
-        $typeInfo = $this->getGC()->u->type_info;
-        assert(is_int($typeInfo));
-
-        return ($typeInfo & $flagMask) !== 0;
+        return ($this->getGC()->u->type_info & $flagMask) !== 0;
     }
 
     /**
-     * This method should return an instance of zend_refcounted_h
+     * This method should return the zend_refcounted_h header of the wrapped payload
+     * (the runtime value is the raw CData view of it)
+     *
+     * @return zend_refcounted_h
      */
-    abstract protected function getGC(): CData;
+    abstract protected function getGC(): object;
 }

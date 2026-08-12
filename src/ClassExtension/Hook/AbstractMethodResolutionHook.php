@@ -48,8 +48,10 @@ abstract class AbstractMethodResolutionHook extends AbstractHook
 
     /**
      * Wraps a raw zend_function* handed back by the original handler
+     *
+     * @param \FFI\CData $rawFunction
      */
-    final protected function wrapRawFunction(CData $rawFunction): ReflectionMethod
+    final protected function wrapRawFunction(object $rawFunction): ReflectionMethod
     {
         $wrapper = ReflectionMethod::fromCData($rawFunction);
 
@@ -65,8 +67,10 @@ abstract class AbstractMethodResolutionHook extends AbstractHook
      * The wrapper returned by proceed() resolves to the exact pointer the original handler
      * produced; any other reflection is resolved through the method table of its class
      * entry, which owns the returned function for the whole class lifetime.
+     *
+     * @return \FFI\CData
      */
-    final protected function resolveRawFunction(\ReflectionMethod $method): CData
+    final protected function resolveRawFunction(\ReflectionMethod $method): object
     {
         if ($this->proceedRawFunction !== null && $method === $this->proceedResult) {
             return $this->proceedRawFunction;

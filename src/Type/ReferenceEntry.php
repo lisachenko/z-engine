@@ -15,6 +15,8 @@ namespace ZEngine\Type;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_refcounted_h;
+use ZEngine\Generated\zend_reference;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionValue;
 
@@ -46,7 +48,11 @@ class ReferenceEntry implements ReferenceCountedInterface
     use ReferenceCountedTrait;
     use ReleasableTrait;
 
-    private CData $pointer;
+    /**
+     * @var zend_reference Typed view of the wrapped engine reference; the runtime value is
+     *                     the raw FFI\CData handle (see stubs/zend-engine-structs.php)
+     */
+    private object $pointer;
 
     /**
      * Creates an owning entry: holds one reference on the zend_reference for the wrapper lifetime
@@ -55,8 +61,7 @@ class ReferenceEntry implements ReferenceCountedInterface
     {
         // This code is used to extract a Zval for our $value argument and use its internal pointer
         $valueArgument = Core::$executor->getExecutionState()->getArgument(0);
-        $pointer       = $valueArgument->getRawReference();
-        $this->pointer = $pointer;
+        $this->pointer = Core::cast(zend_reference::class, $valueArgument->getRawReference());
         $this->incrementReferenceCount();
         $this->ownsReference = true;
     }
@@ -74,12 +79,13 @@ class ReferenceEntry implements ReferenceCountedInterface
     /**
      * Creates a reference entry from the zend_reference structure (borrowed, does not addref)
      *
-     * @param CData $pointer Pointer to the structure
+     * @param CData|zend_reference $pointer Pointer to the structure
      */
-    public static function fromCData(CData $pointer): ReferenceEntry
+    public static function fromCData(object $pointer): ReferenceEntry
     {
         /** @var ReferenceEntry $referenceEntry */
-        $referenceEntry          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $referenceEntry = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        /** @var zend_reference $pointer Narrowed to the stub view at the owning boundary */
         $referenceEntry->pointer = $pointer;
 
         return $referenceEntry;
@@ -107,9 +113,11 @@ class ReferenceEntry implements ReferenceCountedInterface
     }
 
     /**
-     * This method should return an instance of zend_refcounted_h
+     * @inheritDoc
+     *
+     * @return zend_refcounted_h
      */
-    protected function getGC(): CData
+    protected function getGC(): object
     {
         return $this->pointer->gc;
     }

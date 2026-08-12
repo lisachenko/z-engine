@@ -76,7 +76,7 @@ class ReflectionExtension extends NativeReflectionExtension
      *
      * @param CData $moduleEntry Pointer to the `zend_module_entry` structure
      */
-    public static function fromCData(CData $moduleEntry): self
+    public static function fromCData(object $moduleEntry): self
     {
         /** @var self $extension */
         $extension              = (new NativeReflectionClass(self::class))->newInstanceWithoutConstructor();
@@ -111,8 +111,10 @@ class ReflectionExtension extends NativeReflectionExtension
      * On ZTS builds the entry stores a TSRM resource id instead of a direct pointer;
      * the returned view is the CALLING thread's globals block, resolved the same way
      * as the engine's ZEND_MODULE_GLOBALS_ACCESSOR (entry->storage[id - 1]).
+     *
+     * @return \FFI\CData|null
      */
-    public function getGlobals(): ?CData
+    public function getGlobals(): ?object
     {
         if (!\ZEND_THREAD_SAFE) {
             return $this->moduleEntry->globals_ptr;

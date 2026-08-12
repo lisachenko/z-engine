@@ -38,8 +38,9 @@ class ReadDimensionHook extends AbstractDimensionHook
      * typedef zval *(*zend_object_read_dimension_t)(zend_object *object, zval *offset, int type, zval *rv);
      *
      * @inheritDoc
+     * @return \FFI\CData
      */
-    public function handle(...$rawArguments): CData
+    public function handle(...$rawArguments): object
     {
         [$object, $offset, $type, $rv] = $rawArguments;
         assert($object instanceof CData && ($offset === null || $offset instanceof CData));
