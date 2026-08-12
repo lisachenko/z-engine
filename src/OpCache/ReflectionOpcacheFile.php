@@ -36,7 +36,10 @@ use ZEngine\Type\StringEntry;
  */
 final class ReflectionOpcacheFile
 {
-    public function __construct(private readonly CData $script) {}
+    /**
+     * @param \FFI\CData $script
+     */
+    public function __construct(private readonly object $script) {}
 
     /**
      * The cached script's source path (parity with ReflectionClass::getFileName())

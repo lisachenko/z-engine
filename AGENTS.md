@@ -50,6 +50,15 @@ Everything under `include/<minor>/<os>-<arch>-<ts>/` is generated:
 | `layouts.json` | `sizeof`/`offsetof` of every dereferenced struct, from the C compiler |
 | `probe.c` | the generated C probe (kept so a probe-only run can reuse it) |
 
+Two more generated artifacts live at the branch level (not per-platform) and come
+out of the same pipeline — the canonical `linux-x64-nts` target publishes them and
+every other target byte-compares against them (see the struct-stub note below):
+
+| File | What it is |
+|------|-----------|
+| `stubs/zend-engine-structs.php` | one analysis-only PHP class per engine struct (`ZEngine\Generated\*`), never loaded — see "Engine structs are typed by generated stub classes" |
+| `.phpstorm.meta.php` | PhpStorm type map for the `Core::new()/cast()` legacy string literals |
+
 This branch maintains **two thread-safety targets**: `linux-x64-nts` and
 `linux-x64-zts` (the manifest in `tools/generator/symbols.php` is
 thread-safety-aware — on ZTS the per-thread EG/CG are reached through the TSRM
@@ -245,26 +254,48 @@ body-swap surgery); prefer a typed accessor over calling it.
 
 Two conventions back this up:
 
-- **Named shapes for engine structs.** A struct's fields are described once as a PHPStan
-  object shape (`ZendFunctionCommonShape`, `ZendOpArrayShape`, ...) via
-  `parameters.typeAliases` in `phpstan.dist.neon`, surfaced by a `: object` accessor on the
-  owning class (`FunctionLikeTrait::getCommonPointer()/getOpArrayPointer()`) that narrows a
-  nested field read - already `mixed` via the CData ignores - to the shape. PHPStan then
-  carries the field types statically with no runtime assertion. `FFI\CData` is `final`, so a
-  shape can NOT be attached to a plain `: CData` return and there is no runtime
-  `asStructView()` wrapper. If a field is missing from a shape, extend the alias in the
-  config; never spell a shape out inline.
+- **Engine structs are typed by generated stub classes.** Every engine struct/union has one
+  analysis-only PHP class in `stubs/zend-engine-structs.php` (namespace `ZEngine\Generated`,
+  whose short names ARE the raw C type names), each C field declared as a real typed public
+  property - scalars as `int`/`float`/`bool`/`string`, pointers as `?otherStub`, embedded
+  records as the nested stub, arrays/opaque pointers as `\FFI\CData`. The file is **generated**
+  from the same clang AST as `engine.h` (`tools/generator/lib/StructStubEmitter.php`); never
+  hand-edit it, and if a field is missing, regenerate with `composer gen-headers`. The classes
+  are **never loadable** (`stubs/` is outside the PSR-4 roots), never instantiated and never
+  `instanceof`'d - the only legal runtime use is the `::class` constant, which does not trigger
+  autoloading. An owning class stores its `$pointer` as `private object` typed to the stub via
+  a `@var` docblock, and narrows once at the boundary (`fromCData()` and friends accept
+  `CData|Stub` and carry a `/** @var Stub */` at the assignment) - that single narrowing point
+  is unchanged from the old shape convention, only the mechanism (stub class, not neon alias)
+  changed. `Core::new()/cast()/type()/trackedNew()/sizeOfType()` accept a stub `::class` as
+  well as the legacy C type-name string: `new(zval::class)` allocates a `zval`,
+  `cast(zend_string::class, $p)` is a **pointer** cast to `zend_string*`. The raw string form of
+  `cast()` stays the escape hatch for pointer arithmetic (`'char *'`) and the pointer-to-pointer /
+  array / primitive forms (`'zend_ast **'`, `'char[N]'`, `'uintptr_t'`) that no stub models.
+  The stubs are a **branch-level analysis artifact derived from one canonical build**
+  (`linux-x64-nts`), not a per-platform ABI record (that is `layouts.json`, which stays
+  per-target): a field's C spelling can genuinely differ across platforms (e.g.
+  `zend_atomic_bool.value` is `_Atomic(_Bool)` on linux/darwin but `volatile char` on
+  windows) without changing what the platform-agnostic PHP code may read. So only the
+  canonical build publishes `stubs/` and `.phpstorm.meta.php`; the darwin/windows generators
+  neither publish nor diff them. Staleness against the canonical engine is caught by the
+  linux `header-drift` job, which diffs `stubs/` and `.phpstorm.meta.php` alongside `include/`.
+  Fields that must never appear in a stub - platform-`#ifdef`'d ones, or ones with a
+  platform-divergent spelling the PHP code never reads - are listed in `stub_platform_fields`
+  in `symbols.php` and omitted everywhere.
 - **Contiguous struct arrays go through `Type\StructArray`.** zval tables (op_array
   literals, class default property/static tables) and pointer lists (resolved interfaces)
   use the generic `ArrayAccess`/`Countable` `StructArray<T>` view - callers reach elements
-  with `$structArray[$i]` (typed as the element shape `T`, defaulting to `CData`) and
+  with `$structArray[$i]` (typed as the element stub `T`, defaulting to `CData`) and
   `replace()` for an in-place slot overwrite, never hand-rolled pointer arithmetic. A single
   element read that must be wrapped for typed access goes straight through the owning
   reflection object (eg `ReflectionValue::fromValueEntry($table[$i])`) rather than being
   poked out by index at the call site.
 
-Runtime guards that check actual engine invariants (refcount floors, table consistency)
-are not static noise and stay.
+Runtime guards that check actual engine invariants (refcount floors, table consistency,
+non-null pointer fields the engine guarantees) are not static noise and stay - the stub
+migration replaces weak `assert($x instanceof CData)` scaffolding with these, it does not
+delete real checks.
 
 ## Exceptions are raised through static named constructors
 

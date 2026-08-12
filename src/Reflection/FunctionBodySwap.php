@@ -15,6 +15,8 @@ namespace ZEngine\Reflection;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_class_entry;
+use ZEngine\Generated\zend_function;
 use ZEngine\Type\StringEntry;
 
 /**
@@ -229,17 +231,17 @@ final class FunctionBodySwap
      *
      * @internal
      */
-    public static function adoptFunctionForPublishing(CData $container, FunctionLikeInterface $donor, ReflectionClass $newScope): void
+    public static function adoptFunctionForPublishing(object $container, FunctionLikeInterface $donor, ReflectionClass $newScope): void
     {
-        Core::memcpy($container, $donor->getEntryPointer(), Core::sizeof(Core::type('zend_function')));
+        Core::memcpy($container, $donor->getEntryPointer(), Core::sizeOfType(zend_function::class));
 
-        $containerFunction      = ReflectionFunction::fromCData(Core::cast('zend_function *', Core::addr($container)));
+        $containerFunction      = ReflectionFunction::fromCData(Core::cast(zend_function::class, Core::addr($container)));
         $containerCommon        = $containerFunction->getCommonPointer();
-        $containerCommon->scope = $newScope->getRawValue();
+        $containerCommon->scope = Core::cast(zend_class_entry::class, $newScope->getRawValue());
 
         // The published bucket owns one reference on the name and one body share
         $namePointer = $containerCommon->function_name;
-        assert($namePointer instanceof CData);
+        assert($namePointer !== null);
         StringEntry::fromCData($namePointer)->copy();
 
         self::addBodyReference($containerFunction);
@@ -317,8 +319,10 @@ final class FunctionBodySwap
      * A bare counter cell is neither a struct array nor a hashtable, so this offset
      * read cannot be expressed through a shaped view; the numeric narrowing for
      * body-refcount dereferences is centralized here.
+     *
+     * @param \FFI\CData $counterPointer
      */
-    private static function counterValue(CData $counterPointer): int
+    private static function counterValue(object $counterPointer): int
     {
         $counterValue = $counterPointer[0];
         assert(is_int($counterValue));
@@ -405,7 +409,7 @@ final class FunctionBodySwap
      *
      * @internal called by PendingBodySwap::commit()
      */
-    public static function destroyPreviousBody(CData $previousBody, int $entryAddress, int $releasedShares): void
+    public static function destroyPreviousBody(object $previousBody, int $entryAddress, int $releasedShares): void
     {
         $previousFunction = ReflectionFunction::fromCData(Core::cast('zend_function *', Core::addr($previousBody)));
         $previousOpArray  = $previousFunction->getOpArrayPointer();

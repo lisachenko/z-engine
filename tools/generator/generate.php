@@ -106,6 +106,48 @@ function developmentPackVersion(string $directory): ?string
     return preg_match('/#\s*define\s+PHP_VERSION\s+"([^"]+)"/', $contents, $matches) === 1 ? $matches[1] : null;
 }
 
+/**
+ * Publishes the transient stub artifacts (structs.php and phpstorm.meta.php,
+ * emitted next to engine.h) for the CANONICAL target only.
+ *
+ * The stubs are an analysis-only, branch-level artifact: their field *types*
+ * are IDE/PHPStan hints derived from one canonical build (linux-x64-nts), not
+ * a per-platform ABI record - that is layouts.json's job, and it stays
+ * per-target. A field's C spelling can genuinely differ across platforms
+ * (`zend_atomic_bool.value` is `_Atomic(_Bool)` on linux/darwin but
+ * `volatile char` on windows) without changing what the PHP code, which is
+ * platform-agnostic, may read. So the canonical build is authoritative and
+ * the other targets neither publish nor byte-compare the stubs; they just
+ * discard their transient copies so include/<target>/ keeps only its four
+ * per-target artifacts. Staleness of the committed stubs against the canonical
+ * engine is caught by the linux header-drift job (which diffs stubs/ too).
+ */
+function publishStubs(string $outputDir, string $repositoryRoot, bool $isCanonical): void
+{
+    $destinations = [
+        'structs.php'       => "{$repositoryRoot}/stubs/zend-engine-structs.php",
+        'phpstorm.meta.php' => "{$repositoryRoot}/.phpstorm.meta.php",
+    ];
+    foreach ($destinations as $transient => $committed) {
+        $generated = "{$outputDir}/{$transient}";
+        if (!is_file($generated)) {
+            abortWith("the generator did not produce {$transient} in {$outputDir}");
+        }
+        if (!$isCanonical) {
+            // Non-canonical target: the stubs are owned by the canonical build; drop the
+            // transient copy so include/<target>/ stays clean, without publishing or diffing.
+            unlink($generated);
+            continue;
+        }
+        if (!is_dir(dirname($committed)) && !mkdir(dirname($committed), 0777, true)) {
+            abortWith('cannot create ' . dirname($committed));
+        }
+        if (!rename($generated, $committed)) {
+            abortWith("cannot move {$generated} to {$committed}");
+        }
+    }
+}
+
 function removeDirectory(string $directory): void
 {
     if (!is_dir($directory)) {
@@ -370,6 +412,11 @@ if ($isNative) {
         fwrite(STDERR, "==> FAILED: {$runningMinor} {$runningTs} (exit {$exitCode})\n");
         exit(1);
     }
+    publishStubs(
+        "{$repositoryRoot}/include/{$runningMinor}/{$platform}",
+        $repositoryRoot,
+        PHP_OS_FAMILY === 'Linux' && $arch === 'x64' && $runningTs === 'nts',
+    );
     echo "==> OK: {$repositoryRoot}/include/{$runningMinor}/{$platform}\n";
     exit(0);
 }
@@ -444,6 +491,9 @@ foreach ($targets as $target) {
         passthru('rm -rf ' . escapeshellarg($targetCacheDir));
         passthru('mv ' . escapeshellarg("{$targetCacheDir}-new") . ' ' . escapeshellarg($targetCacheDir));
     }
+    // Docker containers are Linux by construction, so linux-<arch>-nts is the
+    // canonical stub target here; zts (and any foreign-arch run) byte-compares.
+    publishStubs($outputDir, $repositoryRoot, $target['ts'] === 'nts' && $arch === 'x64');
     echo "==> OK: {$outputDir}\n";
 }
 

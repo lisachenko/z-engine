@@ -17,6 +17,8 @@ use Closure;
 use FFI\CData;
 use ReflectionFunction as NativeReflectionFunction;
 use ZEngine\Core;
+use ZEngine\Generated\zend_function;
+use ZEngine\Generated\zend_internal_function;
 use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\StringEntry;
 
@@ -39,18 +41,24 @@ class ReflectionFunction extends NativeReflectionFunction implements FunctionLik
     /**
      * Creates a reflection from the zend_function structure
      *
-     * @param CData $functionEntry Pointer to the structure
+     * @param CData|zend_function|zend_internal_function $functionEntry Pointer to the structure
      *
      * @return ReflectionFunction
      */
-    public static function fromCData(CData $functionEntry): ReflectionFunction
+    public static function fromCData(object $functionEntry): ReflectionFunction
     {
         /** @var ReflectionFunction $reflectionFunction */
         $reflectionFunction = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
-        if ($functionEntry->type === Core::ZEND_INTERNAL_FUNCTION) {
-            $functionNamePtr = $functionEntry->function_name;
+        /** @var zend_function|zend_internal_function $entry Narrowed to the stub views at the owning boundary */
+        $entry = $functionEntry;
+        if ($entry->type === Core::ZEND_INTERNAL_FUNCTION) {
+            /** @var zend_internal_function $internalEntry */
+            $internalEntry   = $entry;
+            $functionNamePtr = $internalEntry->function_name;
         } else {
-            $functionNamePtr = $functionEntry->common->function_name;
+            /** @var zend_function $userEntry */
+            $userEntry       = $entry;
+            $functionNamePtr = $userEntry->common->function_name;
         }
         if ($functionNamePtr !== null) {
             $functionName = StringEntry::fromCData($functionNamePtr);
@@ -65,7 +73,7 @@ class ReflectionFunction extends NativeReflectionFunction implements FunctionLik
                 // native reflection state stays uninitialized. The pointer-level API still works.
             }
         }
-        $reflectionFunction->pointer = $functionEntry;
+        $reflectionFunction->pointer = $entry;
 
         return $reflectionFunction;
     }
@@ -133,7 +141,7 @@ class ReflectionFunction extends NativeReflectionFunction implements FunctionLik
     {
         /** @var ReflectionFunction $reflectionFunction */
         $reflectionFunction          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
-        $reflectionFunction->pointer = Core::cast('zend_function *', Core::addr($closureEntry->getRawFunction()));
+        $reflectionFunction->pointer = Core::cast(zend_function::class, Core::addr($closureEntry->getRawFunction()));
 
         $reflectionFunction->setFunctionName($functionName);
         // A free function has no class scope; clear whatever scope the closure captured

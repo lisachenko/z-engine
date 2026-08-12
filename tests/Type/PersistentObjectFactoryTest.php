@@ -55,7 +55,7 @@ class PersistentObjectFactoryTest extends TestCase
         $this->assertTrue(isset($store[$handle]));
 
         // Materialize a userland alias of the persistent clone
-        $entry = ReflectionValue::newEntry(ReflectionValue::IS_OBJECT, $clone[0]);
+        $entry = ReflectionValue::newEntry(ReflectionValue::IS_OBJECT, \ZEngine\Type\StructArray::at($clone));
         $entry->getNativeValue($restored);
         $entry->release();
 

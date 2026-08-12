@@ -45,8 +45,9 @@ class GetClassNameHook extends AbstractHook
      * typedef zend_string *(*zend_object_get_class_name_t)(const zend_object *object);
      *
      * @inheritDoc
+     * @return \FFI\CData
      */
-    public function handle(...$rawArguments): CData
+    public function handle(...$rawArguments): object
     {
         [$object] = $rawArguments;
         assert($object instanceof CData);

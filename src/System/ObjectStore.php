@@ -17,6 +17,7 @@ use ArrayAccess;
 use Countable;
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_object;
 use ZEngine\Type\ObjectEntry;
 
 final class ObjectStore implements Countable, ArrayAccess
@@ -30,8 +31,11 @@ final class ObjectStore implements Countable, ArrayAccess
      * Holds an internal pointer to the EG(objects_store)
      */
     private CData $pointer;
+    /**
+     * @param \FFI\CData $pointer
+     */
 
-    public function __construct(CData $pointer)
+    public function __construct(object $pointer)
     {
         $this->pointer = $pointer;
     }
@@ -77,6 +81,7 @@ final class ObjectStore implements Countable, ArrayAccess
         if (!$this->isObjectValid($object)) {
             return null;
         }
+        assert($object instanceof CData);
 
         $objectEntry = ObjectEntry::fromCData($object);
 
@@ -115,16 +120,18 @@ final class ObjectStore implements Countable, ArrayAccess
      * for objects allocated outside zend_object_std_init (eg persistent clones) that must
      * become visible to the engine for the current request.
      *
-     * @param CData $object zend_object* to register
+     * @param CData|zend_object $object zend_object* to register
      *
      * @return int The handle assigned by the engine (== spl_object_id)
      * @internal
      */
-    public function put(CData $object): int
+    public function put(object $object): int
     {
-        Core::call('zend_objects_store_put', $object);
+        /** @var zend_object $entry Narrowed to the stub view at the owning boundary */
+        $entry = $object;
+        Core::call('zend_objects_store_put', $entry);
 
-        return $object->handle;
+        return $entry->handle;
     }
 
     /**
@@ -184,8 +191,9 @@ final class ObjectStore implements Countable, ArrayAccess
      * Checks if the given object pointer is valid or not
      *
      * @see zend_objects_API.h:IS_OBJ_VALID macro
+     * @param \FFI\CData|null $objectPointer
      */
-    private function isObjectValid(?CData $objectPointer): bool
+    private function isObjectValid(?object $objectPointer): bool
     {
         if ($objectPointer === null) {
             return false;

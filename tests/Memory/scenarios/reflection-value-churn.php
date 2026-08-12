@@ -28,7 +28,7 @@ for ($index = 0; $index < 1000; $index++) {
     unset($auto);
 
     // Borrowed entries own nothing and must stay free of side effects
-    $container = ReflectionValue::newEntry(ReflectionValue::IS_STRING, (new ReflectionValue('temp ' . $index))->getRawString()[0]);
+    $container = ReflectionValue::newEntry(ReflectionValue::IS_STRING, \ZEngine\Type\StructArray::at((new ReflectionValue('temp ' . $index))->getRawString()));
     $container->release();
 }
 

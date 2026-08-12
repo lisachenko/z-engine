@@ -57,8 +57,9 @@ class GetDebugInfoHook extends AbstractHook
      * typedef HashTable *(*zend_object_get_debug_info_t)(zend_object *object, int *is_temp);
      *
      * @inheritDoc
+     * @return \FFI\CData
      */
-    public function handle(...$rawArguments): CData
+    public function handle(...$rawArguments): object
     {
         [$object, $isTemp] = $rawArguments;
         assert($object instanceof CData && $isTemp instanceof CData);

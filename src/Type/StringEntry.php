@@ -16,6 +16,8 @@ namespace ZEngine\Type;
 use FFI\CData;
 use ReflectionClass;
 use ZEngine\Core;
+use ZEngine\Generated\zend_refcounted_h;
+use ZEngine\Generated\zend_string;
 use ZEngine\Reflection\ReflectionValue;
 
 /**
@@ -54,7 +56,11 @@ class StringEntry implements ReferenceCountedInterface
     use ReferenceCountedTrait;
     use ReleasableTrait;
 
-    private CData $pointer;
+    /**
+     * @var zend_string Typed view of the wrapped engine string; the runtime value is
+     *                  the raw FFI\CData handle (see stubs/zend-engine-structs.php)
+     */
+    private object $pointer;
 
     /**
      * Creates a string entry from the PHP string
@@ -69,7 +75,7 @@ class StringEntry implements ReferenceCountedInterface
         // other construction path - the old struct form broke getStringValue() on constructed
         // entries and could not be passed to engine functions expecting zend_string*
         $valueArgument = Core::$executor->getExecutionState()->getArgument(0);
-        $this->pointer = $valueArgument->getRawString();
+        $this->pointer = Core::cast(zend_string::class, $valueArgument->getRawString());
         if (!$this->isInterned()) {
             $this->incrementReferenceCount();
             $this->ownsReference = true;
@@ -79,12 +85,13 @@ class StringEntry implements ReferenceCountedInterface
     /**
      * Creates a string entry from the zend_string structure (borrowed, does not addref)
      *
-     * @param CData $stringPointer Pointer to the structure
+     * @param CData|zend_string $stringPointer Pointer to the structure
      */
-    public static function fromCData(CData $stringPointer): StringEntry
+    public static function fromCData(object $stringPointer): StringEntry
     {
         /** @var StringEntry $stringEntry */
-        $stringEntry          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $stringEntry = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        /** @var zend_string $stringPointer Narrowed to the stub view at the owning boundary */
         $stringEntry->pointer = $stringPointer;
 
         return $stringEntry;
@@ -101,6 +108,7 @@ class StringEntry implements ReferenceCountedInterface
     public static function fromString(string $value): StringEntry
     {
         $rawString = Core::call('zend_string_concat2', $value, strlen($value), '', 0);
+        assert($rawString instanceof CData);
 
         $stringEntry                = static::fromCData($rawString);
         $stringEntry->ownsReference = true;
@@ -119,16 +127,20 @@ class StringEntry implements ReferenceCountedInterface
     public static function persistent(string $value): StringEntry
     {
         $length    = strlen($value);
-        $valOffset = Core::type('zend_string')->getStructFieldOffset('val');
+        $valOffset = Core::type(zend_string::class)->getStructFieldOffset('val');
 
         $buffer = Core::new('char[' . ($valOffset + $length + 1) . ']', false, true);
-        $string = Core::cast('zend_string *', $buffer);
+        $string = Core::cast(zend_string::class, $buffer);
 
         $string->gc->refcount     = 1;
         $string->gc->u->type_info = Core::engineConstant('GC_STRING') | Core::engineConstant('GC_PERSISTENT');
         $string->len              = $length;
-        Core::memcpy(Core::cast('char *', $buffer) + $valOffset, $value . "\0", $length + 1);
-        $string->h = Core::call('zend_string_hash_func', $string);
+        $valPointer               = Core::cast('char *', $buffer) + $valOffset;
+        assert($valPointer instanceof CData);
+        Core::memcpy($valPointer, $value . "\0", $length + 1);
+        $hash = Core::call('zend_string_hash_func', $string);
+        assert(is_int($hash));
+        $string->h = $hash;
 
         $stringEntry                = static::fromCData($string);
         $stringEntry->ownsReference = true;
@@ -167,8 +179,10 @@ class StringEntry implements ReferenceCountedInterface
 
     /**
      * Returns raw C value entry
+     *
+     * @return zend_string
      */
-    public function getRawValue(): CData
+    public function getRawValue(): object
     {
         return $this->pointer;
     }
@@ -194,7 +208,7 @@ class StringEntry implements ReferenceCountedInterface
      */
     public function getStringValue(): string
     {
-        $entry = ReflectionValue::newEntry(ReflectionValue::IS_STRING, $this->pointer[0]);
+        $entry = ReflectionValue::newEntry(ReflectionValue::IS_STRING, StructArray::at($this->pointer));
         $entry->getNativeValue($realString);
         $entry->release();
 
@@ -271,7 +285,7 @@ class StringEntry implements ReferenceCountedInterface
             return false;
         }
         // ZSTR_VALID_CE_CACHE(): the slot must be inside the area allocated so far
-        $slotIndex = intdiv($this->getReferenceCount() - 1, Core::sizeof(Core::type('void *')));
+        $slotIndex = intdiv($this->getReferenceCount() - 1, Core::sizeOfType('void *'));
 
         return $slotIndex < Core::$compiler->getMapPointerLast();
     }
@@ -288,7 +302,7 @@ class StringEntry implements ReferenceCountedInterface
      *
      * @see zend_types.h:ZSTR_SET_CE_CACHE
      */
-    public function setCachedClassEntry(CData $classEntry): void
+    public function setCachedClassEntry(object $classEntry): void
     {
         if (!$this->hasClassEntryCache()) {
             throw new \LogicException('This string does not carry an engine class-entry cache slot');
@@ -312,9 +326,11 @@ class StringEntry implements ReferenceCountedInterface
     }
 
     /**
-     * This method should return an instance of zend_refcounted_h
+     * @inheritDoc
+     *
+     * @return zend_refcounted_h
      */
-    protected function getGC(): CData
+    protected function getGC(): object
     {
         return $this->pointer->gc;
     }

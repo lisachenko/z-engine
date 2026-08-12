@@ -47,7 +47,7 @@ for ($index = 0; $index < 200; $index++) {
 // them from userland must produce no request-memory leaks either
 $registry->markImmutable();
 for ($index = 0; $index < 200; $index++) {
-    $entry = ReflectionValue::newEntry(ReflectionValue::IS_ARRAY, $registry->getRawValue()[0]);
+    $entry = ReflectionValue::newEntry(ReflectionValue::IS_ARRAY, \ZEngine\Type\StructArray::at($registry->getRawValue()));
     $entry->getNativeValue($native);
     $entry->release();
 

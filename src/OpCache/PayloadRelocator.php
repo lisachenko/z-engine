@@ -107,7 +107,7 @@ final class PayloadRelocator
      * @param CData         $buffer   char[mem_size + str_size] holding the raw payload
      * @param CacheMetaInfo $metaInfo Parsed header describing the buffer regions
      */
-    public function __construct(private readonly CData $buffer, private readonly CacheMetaInfo $metaInfo)
+    public function __construct(private readonly object $buffer, private readonly CacheMetaInfo $metaInfo)
     {
         if (PHP_INT_SIZE !== 8 || \DIRECTORY_SEPARATOR !== '/') {
             throw OpCacheException::unsupportedPayload('the relocator supports 64-bit non-Windows builds only');
@@ -127,8 +127,10 @@ final class PayloadRelocator
     /**
      * Rewrites the buffer in place, converting every stored offset to a real
      * address, and returns a typed pointer to the embedded zend_persistent_script.
+     *
+     * @return \FFI\CData
      */
-    public function relocate(): CData
+    public function relocate(): object
     {
         $this->sharedOpcodes = [];
         $script              = Core::pointerAtAddress('zend_persistent_script *', $this->base + $this->metaInfo->scriptOffset());
@@ -188,8 +190,10 @@ final class PayloadRelocator
      * Reads a pointer field's stored value through a raw integer view of its
      * storage, so it works for every pointee type including void* (which
      * Core::addressOf cannot cast). 0 when the C NULL surfaces as PHP null.
+     *
+     * @param \FFI\CData $owner
      */
-    private function ptrValue(CData $owner, string $field): int
+    private function ptrValue(object $owner, string $field): int
     {
         if ($owner->$field === null) {
             return 0;
@@ -197,8 +201,11 @@ final class PayloadRelocator
 
         return (int) Core::cast('uintptr_t *', FFI::addr($owner->$field))[0];
     }
+    /**
+     * @param \FFI\CData $owner
+     */
 
-    private function writePtrField(CData $owner, string $field, int $address): void
+    private function writePtrField(object $owner, string $field, int $address): void
     {
         // Only ever called for a currently non-null field, so FFI::addr is safe
         $slot    = Core::cast('uintptr_t *', FFI::addr($owner->$field));
@@ -217,7 +224,10 @@ final class PayloadRelocator
     }
 
     /** UNSERIALIZE_PTR on a struct field, returning the resolved address (0 if null) */
-    private function unPtr(CData $owner, string $field): int
+    /**
+     * @param \FFI\CData $owner
+     */
+    private function unPtr(object $owner, string $field): int
     {
         $stored = $this->ptrValue($owner, $field);
         if ($stored === 0) {
@@ -230,7 +240,10 @@ final class PayloadRelocator
     }
 
     /** SERIALIZE_PTR on a struct field, returning the pre-serialization address (0 if null) */
-    private function serPtr(CData $owner, string $field): int
+    /**
+     * @param \FFI\CData $owner
+     */
+    private function serPtr(object $owner, string $field): int
     {
         $address = $this->ptrValue($owner, $field);
         if ($address === 0) {
@@ -242,8 +255,11 @@ final class PayloadRelocator
     }
 
     // --- interned-string primitives (UNSERIALIZE_STR / SERIALIZE_STR) ------
+    /**
+     * @param \FFI\CData $owner
+     */
 
-    private function unStr(CData $owner, string $field): void
+    private function unStr(object $owner, string $field): void
     {
         $stored = $this->ptrValue($owner, $field);
         if ($stored === 0) {
@@ -258,8 +274,11 @@ final class PayloadRelocator
         // GC flag normalization is deliberately skipped (see class docblock)
         $this->writePtrField($owner, $field, $address);
     }
+    /**
+     * @param \FFI\CData $owner
+     */
 
-    private function serStr(CData $owner, string $field): void
+    private function serStr(object $owner, string $field): void
     {
         $address = $this->ptrValue($owner, $field);
         if ($address === 0) {
@@ -295,8 +314,11 @@ final class PayloadRelocator
     }
 
     // --- hashes (zend_file_cache_(un)serialize_hash) -----------------------
+    /**
+     * @param \FFI\CData $ht
+     */
 
-    private function unserializeHash(CData $ht, callable $each): void
+    private function unserializeHash(object $ht, callable $each): void
     {
         if (($ht->u->flags & self::HASH_FLAG_UNINITIALIZED) !== 0) {
             return;
@@ -325,8 +347,11 @@ final class PayloadRelocator
             }
         }
     }
+    /**
+     * @param \FFI\CData $ht
+     */
 
-    private function serializeHash(CData $ht, callable $each): void
+    private function serializeHash(object $ht, callable $each): void
     {
         if (($ht->u->flags & self::HASH_FLAG_UNINITIALIZED) !== 0) {
             $this->writePtrField($ht, 'arData', 0);
@@ -359,8 +384,11 @@ final class PayloadRelocator
     }
 
     // --- zvals -------------------------------------------------------------
+    /**
+     * @param \FFI\CData $zval
+     */
 
-    private function unserializeZval(CData $zval): void
+    private function unserializeZval(object $zval): void
     {
         switch ($zval->u1->v->type) {
             case self::IS_STRING:
@@ -389,8 +417,11 @@ final class PayloadRelocator
                 break;
         }
     }
+    /**
+     * @param \FFI\CData $zval
+     */
 
-    private function serializeZval(CData $zval): void
+    private function serializeZval(object $zval): void
     {
         switch ($zval->u1->v->type) {
             case self::IS_STRING:
@@ -505,8 +536,11 @@ final class PayloadRelocator
     }
 
     // --- attributes --------------------------------------------------------
+    /**
+     * @param \FFI\CData $owner
+     */
 
-    private function unserializeAttributes(CData $owner, string $field): void
+    private function unserializeAttributes(object $owner, string $field): void
     {
         $stored = $this->ptrValue($owner, $field);
         if ($stored === 0 || $this->isUnserialized($stored)) {
@@ -518,8 +552,11 @@ final class PayloadRelocator
             $this->unserializeAttribute(...),
         );
     }
+    /**
+     * @param \FFI\CData $owner
+     */
 
-    private function serializeAttributes(CData $owner, string $field): void
+    private function serializeAttributes(object $owner, string $field): void
     {
         $stored = $this->ptrValue($owner, $field);
         if ($stored === 0 || $this->isSerialized($stored)) {
@@ -531,8 +568,11 @@ final class PayloadRelocator
             $this->serializeAttribute(...),
         );
     }
+    /**
+     * @param \FFI\CData $zval
+     */
 
-    private function unserializeAttribute(CData $zval): void
+    private function unserializeAttribute(object $zval): void
     {
         $attr = Core::pointerAtAddress('zend_attribute *', $this->unPtr($zval->value, 'ptr'));
         $this->unStr($attr, 'name');
@@ -547,8 +587,11 @@ final class PayloadRelocator
             $this->unserializeZval($arg->value);
         }
     }
+    /**
+     * @param \FFI\CData $zval
+     */
 
-    private function serializeAttribute(CData $zval): void
+    private function serializeAttribute(object $zval): void
     {
         $address = $this->serPtr($zval->value, 'ptr');
         $attr    = Core::pointerAtAddress('zend_attribute *', $address);
@@ -565,8 +608,11 @@ final class PayloadRelocator
     }
 
     // --- types (zend_type name/list) ---------------------------------------
+    /**
+     * @param \FFI\CData $owner
+     */
 
-    private function unserializeType(CData $owner, string $field): void
+    private function unserializeType(object $owner, string $field): void
     {
         $typeMask = $owner->$field->type_mask;
         if (($typeMask & self::TYPE_LIST_BIT) !== 0) {
@@ -576,8 +622,11 @@ final class PayloadRelocator
             $this->unStr($owner->$field, 'ptr');
         }
     }
+    /**
+     * @param \FFI\CData $owner
+     */
 
-    private function serializeType(CData $owner, string $field): void
+    private function serializeType(object $owner, string $field): void
     {
         $typeMask = $owner->$field->type_mask;
         if (($typeMask & self::TYPE_LIST_BIT) !== 0) {
@@ -589,20 +638,29 @@ final class PayloadRelocator
     }
 
     // --- op_array (the executable body) ------------------------------------
+    /**
+     * @param \FFI\CData $zval
+     */
 
-    private function unserializeFunc(CData $zval): void
+    private function unserializeFunc(object $zval): void
     {
         $func = Core::pointerAtAddress('zend_function *', $this->unPtr($zval->value, 'func'));
         $this->unserializeOpArray($func->op_array);
     }
+    /**
+     * @param \FFI\CData $zval
+     */
 
-    private function serializeFunc(CData $zval): void
+    private function serializeFunc(object $zval): void
     {
         $func = Core::pointerAtAddress('zend_function *', $this->serPtr($zval->value, 'func'));
         $this->serializeOpArray($func->op_array);
     }
+    /**
+     * @param \FFI\CData $opArray
+     */
 
-    private function unserializeOpArray(CData $opArray): void
+    private function unserializeOpArray(object $opArray): void
     {
         // ZEND_MAP_PTR / run-time cache normalization is skipped (never executed here)
         if ($this->isUnserialized($this->ptrValue($opArray, 'opcodes'))) {
@@ -661,8 +719,11 @@ final class PayloadRelocator
         $this->unPtr($opArray, 'prototype');
         $this->unPtr($opArray, 'prop_info');
     }
+    /**
+     * @param \FFI\CData $opArray
+     */
 
-    private function serializeOpArray(CData $opArray): void
+    private function serializeOpArray(object $opArray): void
     {
         if ($this->isSerialized($this->ptrValue($opArray, 'opcodes'))) {
             return;
@@ -771,8 +832,9 @@ final class PayloadRelocator
 
     /**
      * @return array{int, int} [start index, end index) for the arg_info walk
+     * @param \FFI\CData $opArray
      */
-    private function argInfoBounds(CData $opArray): array
+    private function argInfoBounds(object $opArray): array
     {
         $count = (int) $opArray->num_args;
         $start = 0;
@@ -785,8 +847,11 @@ final class PayloadRelocator
 
         return [$start, $count];
     }
+    /**
+     * @param \FFI\CData $opArray
+     */
 
-    private function unserializeArgInfo(CData $opArray): void
+    private function unserializeArgInfo(object $opArray): void
     {
         if ($this->ptrValue($opArray, 'arg_info') === 0) {
             return;
@@ -802,8 +867,11 @@ final class PayloadRelocator
             $this->unserializeType($arg, 'type');
         }
     }
+    /**
+     * @param \FFI\CData $opArray
+     */
 
-    private function serializeArgInfo(CData $opArray): void
+    private function serializeArgInfo(object $opArray): void
     {
         if ($this->ptrValue($opArray, 'arg_info') === 0) {
             return;
@@ -819,8 +887,11 @@ final class PayloadRelocator
             $this->serializeType($arg, 'type');
         }
     }
+    /**
+     * @param \FFI\CData $opArray
+     */
 
-    private function unserializeVars(CData $opArray): void
+    private function unserializeVars(object $opArray): void
     {
         if ($this->ptrValue($opArray, 'vars') === 0) {
             return;
@@ -838,8 +909,11 @@ final class PayloadRelocator
             }
         }
     }
+    /**
+     * @param \FFI\CData $opArray
+     */
 
-    private function serializeVars(CData $opArray): void
+    private function serializeVars(object $opArray): void
     {
         if ($this->ptrValue($opArray, 'vars') === 0) {
             return;
@@ -861,8 +935,11 @@ final class PayloadRelocator
     }
 
     // --- classes -----------------------------------------------------------
+    /**
+     * @param \FFI\CData $zval
+     */
 
-    private function unserializeClass(CData $zval): void
+    private function unserializeClass(object $zval): void
     {
         $ce = Core::pointerAtAddress('zend_class_entry *', $this->unPtr($zval->value, 'ce'));
         $this->unStr($ce, 'name');
@@ -894,8 +971,11 @@ final class PayloadRelocator
         $this->unserializeIteratorFuncs($ce);
         // MAP_PTR / default_object_handlers / get_iterator are execution-only (skipped)
     }
+    /**
+     * @param \FFI\CData $zval
+     */
 
-    private function serializeClass(CData $zval): void
+    private function serializeClass(object $zval): void
     {
         $ce = Core::pointerAtAddress('zend_class_entry *', $this->serPtr($zval->value, 'ce'));
         $this->serStr($ce, 'name');
@@ -932,8 +1012,11 @@ final class PayloadRelocator
         '__serialize', '__unserialize', '__isset', '__unset', '__tostring',
         '__callstatic', '__debugInfo',
     ];
+    /**
+     * @param \FFI\CData $ce
+     */
 
-    private function unserializePropertyTable(CData $ce, string $field, int $count): void
+    private function unserializePropertyTable(object $ce, string $field, int $count): void
     {
         if ($this->ptrValue($ce, $field) === 0) {
             return;
@@ -944,8 +1027,11 @@ final class PayloadRelocator
             $this->unserializeZval(Core::pointerAtAddress('zval *', $address + $i * $zvalSize));
         }
     }
+    /**
+     * @param \FFI\CData $ce
+     */
 
-    private function serializePropertyTable(CData $ce, string $field, int $count): void
+    private function serializePropertyTable(object $ce, string $field, int $count): void
     {
         if ($this->ptrValue($ce, $field) === 0) {
             return;
@@ -956,8 +1042,11 @@ final class PayloadRelocator
             $this->serializeZval(Core::pointerAtAddress('zval *', $address + $i * $zvalSize));
         }
     }
+    /**
+     * @param \FFI\CData $ce
+     */
 
-    private function unserializePropInfoTable(CData $ce): void
+    private function unserializePropInfoTable(object $ce): void
     {
         if ($this->ptrValue($ce, 'properties_info_table') === 0) {
             return;
@@ -970,8 +1059,11 @@ final class PayloadRelocator
             }
         }
     }
+    /**
+     * @param \FFI\CData $ce
+     */
 
-    private function serializePropInfoTable(CData $ce): void
+    private function serializePropInfoTable(object $ce): void
     {
         if ($this->ptrValue($ce, 'properties_info_table') === 0) {
             return;
@@ -985,8 +1077,11 @@ final class PayloadRelocator
             }
         }
     }
+    /**
+     * @param \FFI\CData $ce
+     */
 
-    private function unserializeClassNames(CData $ce, string $field, int $count): void
+    private function unserializeClassNames(object $ce, string $field, int $count): void
     {
         $address  = $this->unPtr($ce, $field);
         $nameSize = Core::sizeof(Core::type('zend_class_name'));
@@ -996,8 +1091,11 @@ final class PayloadRelocator
             $this->unStr($name, 'lc_name');
         }
     }
+    /**
+     * @param \FFI\CData $ce
+     */
 
-    private function serializeClassNames(CData $ce, string $field, int $count): void
+    private function serializeClassNames(object $ce, string $field, int $count): void
     {
         $address  = $this->serPtr($ce, $field);
         $nameSize = Core::sizeof(Core::type('zend_class_name'));
@@ -1007,8 +1105,11 @@ final class PayloadRelocator
             $this->serStr($name, 'lc_name');
         }
     }
+    /**
+     * @param \FFI\CData $zval
+     */
 
-    private function unserializePropInfo(CData $zval): void
+    private function unserializePropInfo(object $zval): void
     {
         if ($this->isUnserialized($this->ptrValue($zval->value, 'ptr'))) {
             return;
@@ -1029,8 +1130,11 @@ final class PayloadRelocator
         }
         $this->unserializeType($prop, 'type');
     }
+    /**
+     * @param \FFI\CData $zval
+     */
 
-    private function serializePropInfo(CData $zval): void
+    private function serializePropInfo(object $zval): void
     {
         if ($this->isSerialized($this->ptrValue($zval->value, 'ptr'))) {
             return;
@@ -1051,8 +1155,11 @@ final class PayloadRelocator
         }
         $this->serializeType($prop, 'type');
     }
+    /**
+     * @param \FFI\CData $zval
+     */
 
-    private function unserializeClassConstant(CData $zval): void
+    private function unserializeClassConstant(object $zval): void
     {
         if ($this->isUnserialized($this->ptrValue($zval->value, 'ptr'))) {
             return;
@@ -1069,8 +1176,11 @@ final class PayloadRelocator
         $this->unserializeAttributes($constant, 'attributes');
         $this->unserializeType($constant, 'type');
     }
+    /**
+     * @param \FFI\CData $zval
+     */
 
-    private function serializeClassConstant(CData $zval): void
+    private function serializeClassConstant(object $zval): void
     {
         if ($this->isSerialized($this->ptrValue($zval->value, 'ptr'))) {
             return;
@@ -1087,8 +1197,11 @@ final class PayloadRelocator
         $this->serializeAttributes($constant, 'attributes');
         $this->serializeType($constant, 'type');
     }
+    /**
+     * @param \FFI\CData $ce
+     */
 
-    private function unserializeIteratorFuncs(CData $ce): void
+    private function unserializeIteratorFuncs(object $ce): void
     {
         if ($this->ptrValue($ce, 'iterator_funcs_ptr') !== 0) {
             throw OpCacheException::unsupportedPayload('iterator-aware class relocation');
@@ -1097,8 +1210,11 @@ final class PayloadRelocator
             throw OpCacheException::unsupportedPayload('ArrayAccess class relocation');
         }
     }
+    /**
+     * @param \FFI\CData $ce
+     */
 
-    private function serializeIteratorFuncs(CData $ce): void
+    private function serializeIteratorFuncs(object $ce): void
     {
         if ($this->ptrValue($ce, 'iterator_funcs_ptr') !== 0) {
             throw OpCacheException::unsupportedPayload('iterator-aware class relocation');
@@ -1109,8 +1225,11 @@ final class PayloadRelocator
     }
 
     // --- warnings / early bindings -----------------------------------------
+    /**
+     * @param \FFI\CData $script
+     */
 
-    private function unserializeWarnings(CData $script): void
+    private function unserializeWarnings(object $script): void
     {
         if ($this->ptrValue($script, 'warnings') === 0) {
             return;
@@ -1124,8 +1243,11 @@ final class PayloadRelocator
             $this->unStr($warning, 'message');
         }
     }
+    /**
+     * @param \FFI\CData $script
+     */
 
-    private function serializeWarnings(CData $script): void
+    private function serializeWarnings(object $script): void
     {
         if ($this->ptrValue($script, 'warnings') === 0) {
             return;
@@ -1140,8 +1262,11 @@ final class PayloadRelocator
             $this->serStr($warning, 'message');
         }
     }
+    /**
+     * @param \FFI\CData $script
+     */
 
-    private function unserializeEarlyBindings(CData $script): void
+    private function unserializeEarlyBindings(object $script): void
     {
         if ($this->ptrValue($script, 'early_bindings') === 0) {
             return;
@@ -1155,8 +1280,11 @@ final class PayloadRelocator
             $this->unStr($binding, 'lc_parent_name');
         }
     }
+    /**
+     * @param \FFI\CData $script
+     */
 
-    private function serializeEarlyBindings(CData $script): void
+    private function serializeEarlyBindings(object $script): void
     {
         if ($this->ptrValue($script, 'early_bindings') === 0) {
             return;

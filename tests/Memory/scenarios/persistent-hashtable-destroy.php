@@ -45,7 +45,7 @@ $cycle = static function (bool $sealed): void {
     if ($sealed) {
         $table->markImmutable();
 
-        $entry = ReflectionValue::newEntry(ReflectionValue::IS_ARRAY, $table->getRawValue()[0]);
+        $entry = ReflectionValue::newEntry(ReflectionValue::IS_ARRAY, \ZEngine\Type\StructArray::at($table->getRawValue()));
         $entry->getNativeValue($native);
         $entry->release();
         if (($native['key-1'] ?? null) !== 1) {

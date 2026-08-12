@@ -22,6 +22,7 @@ use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
+use ZEngine\Type\StructArray;
 
 /**
  * Class Compiler provides an access to the compiler global state (CG)
@@ -104,8 +105,11 @@ class Compiler
      * Holds an internal pointer to the compiler_globals structure
      */
     private CData $pointer;
+    /**
+     * @param \FFI\CData $pointer
+     */
 
-    public function __construct(CData $pointer)
+    public function __construct(object $pointer)
     {
         $this->pointer = $pointer;
 
@@ -236,8 +240,10 @@ class Compiler
      * Memory notes: the returned `zend_op_array*` is a raw BORROWED engine pointer (no ownership) -
      * it is only valid while the engine compiles that op_array, do not store it beyond the current
      * compilation (e.g. beyond the `zend_ast_process` callback it was observed in).
+     *
+     * @return \FFI\CData|null
      */
-    public function getActiveOpArray(): ?CData
+    public function getActiveOpArray(): ?object
     {
         $activeOpArray = $this->pointer->active_op_array;
         assert($activeOpArray === null || $activeOpArray instanceof CData);
@@ -318,7 +324,7 @@ class Compiler
         // inside and replace it with a padded copy, so the container must hold its own
         // reference - release() then drops whichever string ends up inside
         $sourceValue = new StringEntry($source);
-        $sourceEntry = ReflectionValue::newEntry(ReflectionValue::IS_STRING, $sourceValue->getRawValue()[0])
+        $sourceEntry = ReflectionValue::newEntry(ReflectionValue::IS_STRING, StructArray::at($sourceValue->getRawValue()))
             ->acquireReference();
         $rawSourceVal = $sourceEntry->getRawValue();
 

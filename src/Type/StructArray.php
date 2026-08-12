@@ -31,7 +31,7 @@ use ZEngine\Core;
  * pointer arithmetic (see AGENTS.md).
  *
  * The element type is the generic parameter T: callers parameterize the view with the
- * PHPStan object shape of the element (eg `StructArray<ZvalShape>` for a zval table) and
+ * generated struct stub of the element (eg `StructArray<\ZEngine\Generated\zval>` for a zval table) and
  * every read (`$structArray[$i]`, iteration) and `replace()` is typed as that shape, so
  * PHPStan carries the field types statically without any runtime assertion. T defaults to
  * FFI\CData when left unspecified.
@@ -50,13 +50,36 @@ use ZEngine\Core;
 final class StructArray implements ArrayAccess, Countable, IteratorAggregate
 {
     /**
-     * @param CData $baseAddress Typed pointer to the first element
-     * @param int   $count       Number of elements behind the pointer (negatives read as empty)
+     * @param CData|T $baseAddress Typed pointer to the first element; the runtime value is
+     *                             always the raw CData handle, a stub-typed pointer view is
+     *                             accepted statically (see stubs/zend-engine-structs.php)
+     * @param int     $count       Number of elements behind the pointer (negatives read as empty)
      */
     public function __construct(
-        private CData $baseAddress,
+        private object $baseAddress,
         private int $count,
     ) {}
+
+    /**
+     * Raw dereference of one element of a C array/pointer, returning the bare CData.
+     *
+     * The single-element counterpart of the instance view: for the `*ptr` / `ptr[0]`
+     * deref that used to lean on the stubs' (now removed) ArrayAccess. Like the instance
+     * offsetGet(), this is the one audited place a raw pointer is indexed - the generated
+     * struct stubs are structs, not arrays, so callers never index them directly.
+     *
+     * @param CData|object $baseAddress Pointer whose runtime value is always CData; a stub-typed
+     *                                  pointer view is accepted statically
+     *
+     * @return \FFI\CData
+     */
+    public static function at(object $baseAddress, int $index = 0): object
+    {
+        /** @var CData $element */
+        $element = $baseAddress[$index];
+
+        return $element;
+    }
 
     /**
      * @param int $offset
@@ -79,6 +102,9 @@ final class StructArray implements ArrayAccess, Countable, IteratorAggregate
             );
         }
 
+        // The single audited raw pointer-index in the framework: the base is a CData handle
+        // at runtime (the stub views used statically do not model array access, by design -
+        // they are structs, not arrays), so this one read is scoped-ignored in phpstan.dist.neon.
         /** @var T $element */
         $element = $this->baseAddress[$offset];
 
@@ -115,7 +141,7 @@ final class StructArray implements ArrayAccess, Countable, IteratorAggregate
      *
      * @return CData The previous element value, detached as an independent byte copy
      */
-    public function replace(int $position, mixed $value): CData
+    public function replace(int $position, mixed $value): object
     {
         // The slot and the incoming value are raw engine memory (T is only the static
         // element shape); the byte-level copy operates on them as plain CData

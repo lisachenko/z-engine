@@ -525,8 +525,10 @@ final class ClassDelta
 
     /**
      * Releases everything an added-method container took (rollback path only)
+     *
+     * @param \FFI\CData $container
      */
-    private static function releaseAdoptedContainer(CData $container): void
+    private static function releaseAdoptedContainer(object $container): void
     {
         $containerFunction = ReflectionFunction::fromCData(Core::cast('zend_function *', Core::addr($container)));
         $namePointer       = $containerFunction->getCommonPointer()->function_name;

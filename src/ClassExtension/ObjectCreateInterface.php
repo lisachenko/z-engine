@@ -26,5 +26,5 @@ interface ObjectCreateInterface
      *
      * @return CData Pointer to the zend_object instance
      */
-    public static function __init(CreateObjectHook $hook): CData;
+    public static function __init(CreateObjectHook $hook): object;
 }

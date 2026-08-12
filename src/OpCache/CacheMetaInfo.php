@@ -15,6 +15,7 @@ namespace ZEngine\OpCache;
 
 use FFI;
 use ZEngine\Core;
+use ZEngine\Generated\zend_file_cache_metainfo;
 
 /**
  * Immutable model of the zend_file_cache_metainfo header that opens every
@@ -58,8 +59,7 @@ final class CacheMetaInfo
         }
         $raw = Core::new('zend_file_cache_metainfo[1]');
         Core::memcpy($raw, substr($bytes, 0, self::byteSize()), self::byteSize());
-        /** @var ZendFileCacheMetaInfoShape $struct */
-        $struct = $raw[0];
+        $struct = Core::cast(zend_file_cache_metainfo::class, Core::addr($raw));
         if (FFI::string($struct->magic, strlen(self::MAGIC)) !== self::MAGIC) {
             throw OpCacheException::invalidMagic($origin);
         }
@@ -172,8 +172,7 @@ final class CacheMetaInfo
     {
         $raw = Core::new('zend_file_cache_metainfo[1]');
         FFI::memset($raw, 0, self::byteSize());
-        /** @var ZendFileCacheMetaInfoShape $struct */
-        $struct = $raw[0];
+        $struct = Core::cast(zend_file_cache_metainfo::class, Core::addr($raw));
         Core::memcpy($struct->magic, self::MAGIC, strlen(self::MAGIC));
         Core::memcpy($struct->system_id, $this->systemId->toHex(), SystemId::LENGTH);
         $struct->mem_size      = $this->memSize;
