@@ -75,12 +75,9 @@ class ReadDimensionHook extends AbstractDimensionHook
      */
     public function proceed(): mixed
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
+        $originalHandler = $this->getOriginalCallable();
 
-        // @phpstan-ignore callable.nonCallable (engine function pointers are callable CData)
-        $result = ($this->originalHandler)($this->object, $this->offset, $this->type, $this->rv);
+        $result = ($originalHandler)($this->object, $this->offset, $this->type, $this->rv);
         if ($result === null) {
             // The engine handler raised an exception and produced no value (it returns NULL then);
             // mirror the VM which treats a NULL retval as null and lets the exception propagate

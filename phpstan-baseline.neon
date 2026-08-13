@@ -181,12 +181,6 @@ parameters:
 			path: src/ClassExtension/Hook/CastObjectHook.php
 
 		-
-			message: '#^Trying to invoke FFI\\CData\|null but it''s not a callable\.$#'
-			identifier: callable.nonCallable
-			count: 1
-			path: src/ClassExtension/Hook/CastObjectHook.php
-
-		-
 			message: '#^Method ZEngine\\ClassExtension\\Hook\\CloneObjectHook\:\:handle\(\) should return FFI\\CData but returns ZEngine\\Generated\\zend_object\.$#'
 			identifier: return.type
 			count: 1
@@ -229,12 +223,6 @@ parameters:
 			path: src/ClassExtension/Hook/CompareValuesHook.php
 
 		-
-			message: '#^Trying to invoke FFI\\CData\|null but it''s not a callable\.$#'
-			identifier: callable.nonCallable
-			count: 1
-			path: src/ClassExtension/Hook/CompareValuesHook.php
-
-		-
 			message: '#^Method ZEngine\\ClassExtension\\Hook\\CreateObjectHook\:\:handle\(\) should return FFI\\CData but returns mixed\.$#'
 			identifier: return.type
 			count: 1
@@ -243,12 +231,6 @@ parameters:
 		-
 			message: '#^Property ZEngine\\ClassExtension\\Hook\\CreateObjectHook\:\:\$classType \(FFI\\CData\) does not accept mixed\.$#'
 			identifier: assign.propertyType
-			count: 1
-			path: src/ClassExtension/Hook/CreateObjectHook.php
-
-		-
-			message: '#^Trying to invoke FFI\\CData but it''s not a callable\.$#'
-			identifier: callable.nonCallable
 			count: 1
 			path: src/ClassExtension/Hook/CreateObjectHook.php
 
@@ -301,12 +283,6 @@ parameters:
 			path: src/ClassExtension/Hook/DoOperationHook.php
 
 		-
-			message: '#^Trying to invoke FFI\\CData\|null but it''s not a callable\.$#'
-			identifier: callable.nonCallable
-			count: 1
-			path: src/ClassExtension/Hook/DoOperationHook.php
-
-		-
 			message: '#^Method ZEngine\\ClassExtension\\Hook\\GetClassNameHook\:\:handle\(\) should return FFI\\CData but returns ZEngine\\Generated\\zend_string\.$#'
 			identifier: return.type
 			count: 1
@@ -345,12 +321,6 @@ parameters:
 		-
 			message: '#^Property ZEngine\\ClassExtension\\Hook\\GetPropertiesForHook\:\:\$purpose \(int\) does not accept mixed\.$#'
 			identifier: assign.propertyType
-			count: 1
-			path: src/ClassExtension/Hook/GetPropertiesForHook.php
-
-		-
-			message: '#^Trying to invoke FFI\\CData\|null but it''s not a callable\.$#'
-			identifier: callable.nonCallable
 			count: 1
 			path: src/ClassExtension/Hook/GetPropertiesForHook.php
 
@@ -403,12 +373,6 @@ parameters:
 			path: src/ClassExtension/Hook/GetPropertyPointerHook.php
 
 		-
-			message: '#^Trying to invoke FFI\\CData\|null but it''s not a callable\.$#'
-			identifier: callable.nonCallable
-			count: 1
-			path: src/ClassExtension/Hook/GetPropertyPointerHook.php
-
-		-
 			message: '#^Method ZEngine\\ClassExtension\\Hook\\HasPropertyHook\:\:handle\(\) should return int but returns mixed\.$#'
 			identifier: return.type
 			count: 1
@@ -451,12 +415,6 @@ parameters:
 			path: src/ClassExtension/Hook/HasPropertyHook.php
 
 		-
-			message: '#^Trying to invoke FFI\\CData\|null but it''s not a callable\.$#'
-			identifier: callable.nonCallable
-			count: 1
-			path: src/ClassExtension/Hook/HasPropertyHook.php
-
-		-
 			message: '#^Method ZEngine\\ClassExtension\\Hook\\InterfaceGetsImplementedHook\:\:handle\(\) should return int but returns mixed\.$#'
 			identifier: return.type
 			count: 1
@@ -477,12 +435,6 @@ parameters:
 		-
 			message: '#^Property ZEngine\\ClassExtension\\Hook\\InterfaceGetsImplementedHook\:\:\$interfaceType \(FFI\\CData\) does not accept mixed\.$#'
 			identifier: assign.propertyType
-			count: 1
-			path: src/ClassExtension/Hook/InterfaceGetsImplementedHook.php
-
-		-
-			message: '#^Trying to invoke FFI\\CData\|null but it''s not a callable\.$#'
-			identifier: callable.nonCallable
 			count: 1
 			path: src/ClassExtension/Hook/InterfaceGetsImplementedHook.php
 
@@ -547,12 +499,6 @@ parameters:
 			path: src/ClassExtension/Hook/ReadPropertyHook.php
 
 		-
-			message: '#^Trying to invoke FFI\\CData\|null but it''s not a callable\.$#'
-			identifier: callable.nonCallable
-			count: 1
-			path: src/ClassExtension/Hook/ReadPropertyHook.php
-
-		-
 			message: '#^Method ZEngine\\ClassExtension\\Hook\\UnsetPropertyHook\:\:proceed\(\) has no return type specified\.$#'
 			identifier: missingType.return
 			count: 1
@@ -579,12 +525,6 @@ parameters:
 		-
 			message: '#^Property ZEngine\\ClassExtension\\Hook\\AbstractPropertyHook\:\:\$object \(FFI\\CData\) does not accept mixed\.$#'
 			identifier: assign.propertyType
-			count: 1
-			path: src/ClassExtension/Hook/UnsetPropertyHook.php
-
-		-
-			message: '#^Trying to invoke FFI\\CData\|null but it''s not a callable\.$#'
-			identifier: callable.nonCallable
 			count: 1
 			path: src/ClassExtension/Hook/UnsetPropertyHook.php
 
@@ -639,12 +579,6 @@ parameters:
 		-
 			message: '#^Property ZEngine\\ClassExtension\\Hook\\WritePropertyHook\:\:\$value \(FFI\\CData\) does not accept mixed\.$#'
 			identifier: assign.propertyType
-			count: 1
-			path: src/ClassExtension/Hook/WritePropertyHook.php
-
-		-
-			message: '#^Trying to invoke FFI\\CData\|null but it''s not a callable\.$#'
-			identifier: callable.nonCallable
 			count: 1
 			path: src/ClassExtension/Hook/WritePropertyHook.php
 
@@ -1365,12 +1299,6 @@ parameters:
 		-
 			message: '#^Property ZEngine\\System\\Hook\\AstProcessHook\:\:\$ast \(FFI\\CData\) does not accept mixed\.$#'
 			identifier: assign.propertyType
-			count: 1
-			path: src/System/Hook/AstProcessHook.php
-
-		-
-			message: '#^Trying to invoke FFI\\CData\|null but it''s not a callable\.$#'
-			identifier: callable.nonCallable
 			count: 1
 			path: src/System/Hook/AstProcessHook.php
 

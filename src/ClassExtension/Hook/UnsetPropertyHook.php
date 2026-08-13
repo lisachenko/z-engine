@@ -39,12 +39,8 @@ class UnsetPropertyHook extends AbstractPropertyHook
      */
     public function proceed()
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
-
         // As we will play with EG(fake_scope), we won't be able to access private or protected members, need to unpack
-        $originalHandler = $this->originalHandler;
+        $originalHandler = $this->getOriginalCallable();
 
         $object    = $this->object;
         $member    = $this->member;

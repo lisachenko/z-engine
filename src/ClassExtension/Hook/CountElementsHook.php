@@ -71,12 +71,9 @@ class CountElementsHook extends AbstractHook
      */
     public function proceed(): int
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
+        $originalHandler = $this->getOriginalCallable();
 
-        // @phpstan-ignore callable.nonCallable (engine function pointers are callable CData)
-        ($this->originalHandler)($this->object, $this->count);
+        ($originalHandler)($this->object, $this->count);
 
         // @phpstan-ignore offsetAccess.nonOffsetAccessible (reading through a zend_long* CData pointer)
         $count = $this->count[0];

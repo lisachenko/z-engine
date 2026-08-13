@@ -64,12 +64,9 @@ class HasDimensionHook extends AbstractDimensionHook
      */
     public function proceed(): int
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
+        $originalHandler = $this->getOriginalCallable();
 
-        // @phpstan-ignore callable.nonCallable (engine function pointers are callable CData)
-        $result = ($this->originalHandler)($this->object, $this->offset, $this->type);
+        $result = ($originalHandler)($this->object, $this->offset, $this->type);
         assert(is_int($result));
 
         return $result;

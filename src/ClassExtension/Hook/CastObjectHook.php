@@ -147,10 +147,9 @@ class CastObjectHook extends AbstractHook
      */
     public function proceed()
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
-        $status = ($this->originalHandler)($this->object, $this->returnValue, $this->type);
+        $originalHandler = $this->getOriginalCallable();
+
+        $status = ($originalHandler)($this->object, $this->returnValue, $this->type);
         assert(is_int($status));
         $this->lastProceedStatus = $status;
 

@@ -97,10 +97,6 @@ class GetDebugInfoHook extends AbstractHook
      */
     public function proceed(): array
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
-
         $originalHandler = $this->getOriginalCallable();
 
         $object = $this->object;

@@ -61,12 +61,8 @@ class InterfaceGetsImplementedHook extends AbstractHook
      */
     public function proceed()
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
+        $originalHandler = $this->getOriginalCallable();
 
-        $result = ($this->originalHandler)($this->interfaceType, $this->classType);
-
-        return $result;
+        return ($originalHandler)($this->interfaceType, $this->classType);
     }
 }

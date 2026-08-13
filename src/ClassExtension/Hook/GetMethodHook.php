@@ -142,9 +142,6 @@ class GetMethodHook extends AbstractMethodResolutionHook
      */
     public function proceed(): ?ReflectionMethod
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
         $originalHandler = $this->getOriginalCallable();
 
         $rawFunction = ($originalHandler)($this->objectPtr, $this->methodName, $this->key);

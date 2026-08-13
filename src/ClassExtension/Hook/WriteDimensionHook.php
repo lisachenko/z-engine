@@ -62,11 +62,8 @@ class WriteDimensionHook extends AbstractDimensionHook
      */
     public function proceed(): void
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
+        $originalHandler = $this->getOriginalCallable();
 
-        // @phpstan-ignore callable.nonCallable (engine function pointers are callable CData)
-        ($this->originalHandler)($this->object, $this->offset, $this->value);
+        ($originalHandler)($this->object, $this->offset, $this->value);
     }
 }

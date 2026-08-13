@@ -111,11 +111,8 @@ class DoOperationHook extends AbstractHook
      */
     public function proceed()
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
-        $result = ($this->originalHandler)($this->opCode, $this->returnValue, $this->op1, $this->op2);
+        $originalHandler = $this->getOriginalCallable();
 
-        return $result;
+        return ($originalHandler)($this->opCode, $this->returnValue, $this->op1, $this->op2);
     }
 }

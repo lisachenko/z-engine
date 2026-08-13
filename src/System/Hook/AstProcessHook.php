@@ -55,9 +55,8 @@ class AstProcessHook extends AbstractHook
      */
     public function proceed()
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
-        ($this->originalHandler)($this->ast);
+        $originalHandler = $this->getOriginalCallable();
+
+        ($originalHandler)($this->ast);
     }
 }

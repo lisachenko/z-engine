@@ -181,9 +181,6 @@ class GetPropertiesHook extends AbstractHook
      */
     public function proceed(): array
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
         $originalHandler = $this->getOriginalCallable();
 
         $rawArray = ($originalHandler)($this->object);

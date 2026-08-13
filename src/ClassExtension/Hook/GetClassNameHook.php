@@ -75,9 +75,6 @@ class GetClassNameHook extends AbstractHook
      */
     public function proceed(): string
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
         $originalHandler = $this->getOriginalCallable();
 
         $rawName = ($originalHandler)($this->object);
