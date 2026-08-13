@@ -93,18 +93,8 @@ class LiveRange
      */
     public static function kindName(int $kind): string
     {
-        /** @var array<int, string>|null $kindNames */
-        static $kindNames = null;
-        if ($kindNames === null) {
-            $kindNames = [];
-            foreach ((new \ReflectionClass(self::class))->getConstants() as $constantName => $constantValue) {
-                if (is_int($constantValue) && $constantName !== 'KIND_MASK') {
-                    $kindNames[$constantValue] = $constantName;
-                }
-            }
-        }
-
-        return $kindNames[$kind] ?? 'UNKNOWN';
+        // KIND_MASK is the bit mask the kinds are extracted with, not a kind of its own
+        return ConstantNames::of(self::class, 'KIND_', ['KIND_MASK'])[$kind] ?? 'UNKNOWN';
     }
 
     /**

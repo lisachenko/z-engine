@@ -16,6 +16,7 @@ namespace ZEngine\System;
 use Closure;
 use ZEngine\Core;
 use ZEngine\System\Hook\OpCodeHook;
+use ZEngine\Type\ConstantNames;
 
 /**
  * Hold all internal opcode constants and provide an API to hook any existing opcode
@@ -232,28 +233,18 @@ final class OpCode
     public const INIT_PARENT_PROPERTY_HOOK_CALL = 209;
 
     /**
-     * Reversed class constants, containing names by number
-     *
-     * @var string[]
-     */
-    private static array $opCodeNames = [];
-
-    /**
      * Returns the type name of opcode
      *
      * @param int $opCode Integer value of opType
      */
     public static function name(int $opCode): string
     {
-        if (empty(self::$opCodeNames)) {
-            self::$opCodeNames = array_flip((new \ReflectionClass(self::class))->getConstants());
-        }
-
-        if (!isset(self::$opCodeNames[$opCode])) {
+        $opCodeNames = ConstantNames::of(self::class);
+        if (!isset($opCodeNames[$opCode])) {
             throw new \UnexpectedValueException('Unknown opcode ' . $opCode . '. New version of PHP?');
         }
 
-        return self::$opCodeNames[$opCode];
+        return $opCodeNames[$opCode];
     }
 
     /**

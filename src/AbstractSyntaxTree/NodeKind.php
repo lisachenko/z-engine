@@ -13,6 +13,8 @@ declare(strict_types=1);
 
 namespace ZEngine\AbstractSyntaxTree;
 
+use ZEngine\Type\ConstantNames;
+
 /**
  * Declares possible AST nodes kind
  *
@@ -149,13 +151,6 @@ class NodeKind
     public const AST_PARAM                     = 1536;
 
     /**
-     * Cache of constant names (reversed)
-     *
-     * @var string[]
-     */
-    private static array $constantNames = [];
-
-    /**
      * Checks if the given AST node kind is special
      *
      * @param int $astKind Kind of node
@@ -196,14 +191,13 @@ class NodeKind
      */
     public static function name(int $astKind): string
     {
-        if (empty(self::$constantNames)) {
-            self::$constantNames = array_flip((new \ReflectionClass(self::class))->getConstants());
-        }
-
-        if (!isset(self::$constantNames[$astKind])) {
+        // Only the public AST_* kinds are engine values: the private AST_*_SHIFT constants
+        // used to end up in the reversed map and were reported as if they were node kinds
+        $constantNames = ConstantNames::of(self::class, 'AST_');
+        if (!isset($constantNames[$astKind])) {
             throw new \UnexpectedValueException('Unknown code ' . $astKind . '. New version of PHP?');
         }
 
-        return self::$constantNames[$astKind];
+        return $constantNames[$astKind];
     }
 }

@@ -196,12 +196,7 @@ class OpLine
      */
     public static function typeName(int $opType): string
     {
-        static $opTypeNames;
-        if (!isset($opTypeNames)) {
-            $opTypeNames = array_flip((new \ReflectionClass(self::class))->getConstants());
-        }
-
-        return $opTypeNames[$opType] ?? 'UNKNOWN';
+        return ConstantNames::of(self::class, 'IS_')[$opType] ?? 'UNKNOWN';
     }
 
     /**

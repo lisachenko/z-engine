@@ -27,6 +27,7 @@ use ZEngine\Generated\zend_resource;
 use ZEngine\Generated\zend_string;
 use ZEngine\Generated\zend_value;
 use ZEngine\Generated\zval;
+use ZEngine\Type\ConstantNames;
 use ZEngine\Type\ReferenceCountedInterface;
 use ZEngine\Type\ReferenceCountedTrait;
 use ZEngine\Type\ReferenceEntry;
@@ -157,13 +158,6 @@ class ReflectionValue implements ReferenceCountedInterface
      *           (see stubs/zend-engine-structs.php)
      */
     private object $pointer;
-
-    /**
-     * Reversed class constants, containing names by number
-     *
-     * @var string[]
-     */
-    private static array $constantNames = [];
 
     /**
      * ReflectionValue constructor.
@@ -821,17 +815,15 @@ class ReflectionValue implements ReferenceCountedInterface
      */
     public static function name(int $valueCode): string
     {
-        if (empty(self::$constantNames)) {
-            self::$constantNames = array_flip((new \ReflectionClass(self::class))->getConstants());
-        }
+        $constantNames = ConstantNames::of(self::class);
 
         // We should use only low byte to get the name of constant
         $valueCode &= 0xFF;
-        if (!isset(self::$constantNames[$valueCode])) {
+        if (!isset($constantNames[$valueCode])) {
             throw new \UnexpectedValueException('Unknown code ' . $valueCode . '. New version of PHP?');
         }
 
-        return self::$constantNames[$valueCode];
+        return $constantNames[$valueCode];
     }
 
     /**
