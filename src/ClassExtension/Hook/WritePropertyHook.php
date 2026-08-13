@@ -15,6 +15,9 @@ namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zend_string;
+use ZEngine\Generated\zval;
 use ZEngine\Reflection\ReflectionValue;
 
 /**
@@ -26,8 +29,10 @@ class WritePropertyHook extends AbstractPropertyHook
 
     /**
      * Value to write
+     *
+     * @var zval Typed view of the engine handle; the runtime value is the raw FFI\CData pointer
      */
-    protected CData $value;
+    protected object $value;
 
     /**
      * typedef zval *(*zend_object_write_property_t)(zend_object *object, zend_string *member, zval *value, void **cache_slot);
@@ -37,7 +42,17 @@ class WritePropertyHook extends AbstractPropertyHook
      */
     public function handle(...$rawArguments): object
     {
-        [$this->object, $this->member, $this->value, $this->cacheSlot] = $rawArguments;
+        /**
+         * @var zend_object $object    Narrowed to the stub views at the engine callback boundary
+         * @var zend_string $member
+         * @var zval        $value
+         * @var CData|null  $cacheSlot
+         */
+        [$object, $member, $value, $cacheSlot] = $rawArguments;
+        $this->object                          = $object;
+        $this->member                          = $member;
+        $this->value                           = $value;
+        $this->cacheSlot                       = $cacheSlot;
 
         $result = ($this->userHandler)($this);
         ReflectionValue::fromValueEntry($this->value)->setNativeValue($result);

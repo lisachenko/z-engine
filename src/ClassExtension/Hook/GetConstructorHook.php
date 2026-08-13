@@ -14,6 +14,7 @@ declare(strict_types=1);
 namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
+use ZEngine\Generated\zend_object;
 use ZEngine\Reflection\ReflectionMethod;
 use ZEngine\Type\ObjectEntry;
 
@@ -33,8 +34,11 @@ class GetConstructorHook extends AbstractMethodResolutionHook
 
     /**
      * Object instance being constructed
+     *
+     * @var zend_object Typed view of the engine handle; the runtime value is the raw
+     *                  FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected CData $object;
+    protected object $object;
 
     /**
      * typedef zend_function *(*zend_object_get_constructor_t)(zend_object *object);
@@ -44,8 +48,8 @@ class GetConstructorHook extends AbstractMethodResolutionHook
      */
     public function handle(...$rawArguments): ?object
     {
-        [$object] = $rawArguments;
-        assert($object instanceof CData);
+        /** @var zend_object $object Narrowed to the stub view at the engine callback boundary */
+        [$object]     = $rawArguments;
         $this->object = $object;
 
         $result = ($this->userHandler)($this);

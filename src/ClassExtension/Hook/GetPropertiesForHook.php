@@ -16,6 +16,7 @@ namespace ZEngine\ClassExtension\Hook;
 use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Generated\zend_array;
+use ZEngine\Generated\zend_object;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\ObjectEntry;
@@ -29,8 +30,11 @@ class GetPropertiesForHook extends AbstractHook
 
     /**
      * Object instance
+     *
+     * @var zend_object Typed view of the engine handle; the runtime value is the raw
+     *                  FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected CData $object;
+    protected object $object;
 
     /**
      * Calling reason
@@ -47,7 +51,13 @@ class GetPropertiesForHook extends AbstractHook
      */
     public function handle(...$rawArguments): object
     {
-        [$this->object, $this->purpose] = $rawArguments;
+        /**
+         * @var zend_object $object Narrowed to the stub view at the engine callback boundary
+         * @var int         $purpose
+         */
+        [$object, $purpose] = $rawArguments;
+        $this->object       = $object;
+        $this->purpose      = $purpose;
 
         $result   = ($this->userHandler)($this);
         $refValue = new ReflectionValue($result);

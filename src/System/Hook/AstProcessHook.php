@@ -27,6 +27,9 @@ class AstProcessHook extends AbstractHook
 
     /**
      * Instance of top-level AST node
+     *
+     * Kept as a raw handle: the AST wrappers (NodeFactory/Node) own the zend_ast struct
+     * and still take CData, so narrowing to a stub view here would only be undone again.
      */
     protected CData $ast;
 
@@ -37,7 +40,9 @@ class AstProcessHook extends AbstractHook
      */
     public function handle(...$rawArguments): void
     {
-        [$this->ast] = $rawArguments;
+        /** @var CData $ast Narrowed at the engine callback boundary */
+        [$ast]     = $rawArguments;
+        $this->ast = $ast;
 
         ($this->userHandler)($this);
     }

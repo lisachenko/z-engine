@@ -15,6 +15,8 @@ namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zend_string;
 
 /**
  * Receiving hook for indirect property access (by reference or via $this->field++)
@@ -40,11 +42,19 @@ class GetPropertyPointerHook extends AbstractPropertyHook
      */
     public function handle(...$rawArguments): mixed
     {
-        [$this->object, $this->member, $this->type, $this->cacheSlot] = $rawArguments;
+        /**
+         * @var zend_object $object    Narrowed to the stub views at the engine callback boundary
+         * @var zend_string $member
+         * @var int         $type
+         * @var CData|null  $cacheSlot
+         */
+        [$object, $member, $type, $cacheSlot] = $rawArguments;
+        $this->object                         = $object;
+        $this->member                         = $member;
+        $this->type                           = $type;
+        $this->cacheSlot                      = $cacheSlot;
 
-        $result = ($this->userHandler)($this);
-
-        return $result;
+        return ($this->userHandler)($this);
     }
 
     /**

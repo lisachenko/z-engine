@@ -2799,7 +2799,7 @@ class ReflectionClass extends NativeReflectionClass
      *
      * This method is useful within create_object handler
      *
-     * @param CData $classType zend_class_entry type to create
+     * @param CData|zend_class_entry $classType zend_class_entry type to create
      * @param bool $persistent Whether object should be allocated persistent or not. Low-level feature!
      *
      * @return CData Instance of zend_object *

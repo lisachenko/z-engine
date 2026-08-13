@@ -13,7 +13,8 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension\Hook;
 
-use FFI\CData;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zval;
 
 /**
  * Receiving hook for object dimension check operation (isset($object[$offset])/empty($object[$offset]))
@@ -36,12 +37,15 @@ class HasDimensionHook extends AbstractDimensionHook
      */
     public function handle(...$rawArguments): int
     {
+        /**
+         * @var zend_object $object Narrowed to the stub views at the engine callback boundary
+         * @var zval|null   $offset
+         * @var int         $type
+         */
         [$object, $offset, $type] = $rawArguments;
-        assert($object instanceof CData && ($offset === null || $offset instanceof CData));
-        assert(is_int($type));
-        $this->object = $object;
-        $this->offset = $offset;
-        $this->type   = $type;
+        $this->object             = $object;
+        $this->offset             = $offset;
+        $this->type               = $type;
 
         $result = ($this->userHandler)($this);
         assert(is_int($result));

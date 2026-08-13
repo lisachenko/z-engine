@@ -13,7 +13,10 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension\Hook;
 
+use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zend_string;
 
 /**
  * Receiving hook for object field check operation
@@ -37,9 +40,20 @@ class HasPropertyHook extends AbstractPropertyHook
      */
     public function handle(...$rawArguments): int
     {
-        [$this->object, $this->member, $this->type, $this->cacheSlot] = $rawArguments;
+        /**
+         * @var zend_object $object    Narrowed to the stub views at the engine callback boundary
+         * @var zend_string $member
+         * @var int         $type
+         * @var CData|null  $cacheSlot
+         */
+        [$object, $member, $type, $cacheSlot] = $rawArguments;
+        $this->object                         = $object;
+        $this->member                         = $member;
+        $this->type                           = $type;
+        $this->cacheSlot                      = $cacheSlot;
 
         $result = ($this->userHandler)($this);
+        assert(is_int($result));
 
         return $result;
     }

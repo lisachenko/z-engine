@@ -13,7 +13,8 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension\Hook;
 
-use FFI\CData;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zval;
 use ZEngine\Reflection\ReflectionValue;
 
 /**
@@ -27,8 +28,10 @@ class WriteDimensionHook extends AbstractDimensionHook
 
     /**
      * Value to write
+     *
+     * @var zval Typed view of the engine handle; the runtime value is the raw FFI\CData pointer
      */
-    protected CData $value;
+    protected object $value;
 
     /**
      * typedef void (*zend_object_write_dimension_t)(zend_object *object, zval *offset, zval *value);
@@ -37,12 +40,15 @@ class WriteDimensionHook extends AbstractDimensionHook
      */
     public function handle(...$rawArguments): void
     {
+        /**
+         * @var zend_object $object Narrowed to the stub views at the engine callback boundary
+         * @var zval|null   $offset
+         * @var zval        $value
+         */
         [$object, $offset, $value] = $rawArguments;
-        assert($object instanceof CData && ($offset === null || $offset instanceof CData));
-        assert($value instanceof CData);
-        $this->object = $object;
-        $this->offset = $offset;
-        $this->value  = $value;
+        $this->object              = $object;
+        $this->offset              = $offset;
+        $this->value               = $value;
 
         ($this->userHandler)($this);
     }

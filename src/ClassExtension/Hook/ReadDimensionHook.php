@@ -15,6 +15,8 @@ namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zval;
 use ZEngine\Reflection\ReflectionValue;
 
 /**
@@ -31,24 +33,30 @@ class ReadDimensionHook extends AbstractDimensionHook
 
     /**
      * Internal pointer of retval (for native callback only)
+     *
+     * @var zval Engine-provided scratch slot; every VM caller supplies one
      */
-    private CData $rv;
+    private object $rv;
 
     /**
      * typedef zval *(*zend_object_read_dimension_t)(zend_object *object, zval *offset, int type, zval *rv);
      *
      * @inheritDoc
-     * @return \FFI\CData
+     * @return zval
      */
     public function handle(...$rawArguments): object
     {
+        /**
+         * @var zend_object $object Narrowed to the stub views at the engine callback boundary
+         * @var zval|null   $offset
+         * @var int         $type
+         * @var zval        $rv
+         */
         [$object, $offset, $type, $rv] = $rawArguments;
-        assert($object instanceof CData && ($offset === null || $offset instanceof CData));
-        assert(is_int($type) && $rv instanceof CData);
-        $this->object = $object;
-        $this->offset = $offset;
-        $this->type   = $type;
-        $this->rv     = $rv;
+        $this->object                  = $object;
+        $this->offset                  = $offset;
+        $this->type                    = $type;
+        $this->rv                      = $rv;
 
         $result = ($this->userHandler)($this);
 

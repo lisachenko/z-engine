@@ -13,7 +13,8 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension\Hook;
 
-use FFI\CData;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zval;
 
 /**
  * Receiving hook for object dimension unset operation (unset($object[$offset]))
@@ -29,10 +30,13 @@ class UnsetDimensionHook extends AbstractDimensionHook
      */
     public function handle(...$rawArguments): void
     {
+        /**
+         * @var zend_object $object Narrowed to the stub views at the engine callback boundary
+         * @var zval|null   $offset
+         */
         [$object, $offset] = $rawArguments;
-        assert($object instanceof CData && ($offset === null || $offset instanceof CData));
-        $this->object = $object;
-        $this->offset = $offset;
+        $this->object      = $object;
+        $this->offset      = $offset;
 
         ($this->userHandler)($this);
     }

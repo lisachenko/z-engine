@@ -15,6 +15,7 @@ namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_object;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Type\ObjectEntry;
 
@@ -27,11 +28,16 @@ class CountElementsHook extends AbstractHook
 
     /**
      * Object instance
+     *
+     * @var zend_object Typed view of the engine handle; the runtime value is the raw
+     *                  FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected CData $object;
+    protected object $object;
 
     /**
      * Holds a pointer to the zend_long count out-parameter (for native callback only)
+     *
+     * A raw `zend_long *` out-parameter: no engine struct and therefore no stub view.
      */
     protected CData $count;
 
@@ -42,10 +48,13 @@ class CountElementsHook extends AbstractHook
      */
     public function handle(...$rawArguments): int
     {
+        /**
+         * @var zend_object $object Narrowed to the stub view at the engine callback boundary
+         * @var CData       $count
+         */
         [$object, $count] = $rawArguments;
-        assert($object instanceof CData && $count instanceof CData);
-        $this->object = $object;
-        $this->count  = $count;
+        $this->object     = $object;
+        $this->count      = $count;
 
         $result = ($this->userHandler)($this);
         assert(is_int($result));

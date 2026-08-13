@@ -13,7 +13,7 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension\Hook;
 
-use FFI\CData;
+use ZEngine\Generated\zval;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
 
@@ -25,19 +25,19 @@ class CompareValuesHook extends AbstractHook
     protected const HOOK_FIELD = 'compare';
 
     /**
-     * Holds a return value
-     */
-    protected CData $returnValue;
-
-    /**
      * First operand
+     *
+     * @var zval Typed view of the engine handle; the runtime value is the raw
+     *           FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected CData $op1;
+    protected object $op1;
 
     /**
      * Second operand
+     *
+     * @var zval Typed view of the engine handle; the runtime value is the raw FFI\CData pointer
      */
-    protected CData $op2;
+    protected object $op2;
 
     /**
      * typedef int (*zend_object_compare_t)(zval *object1, zval *object2);
@@ -46,9 +46,16 @@ class CompareValuesHook extends AbstractHook
      */
     public function handle(...$rawArguments): int
     {
-        [$this->op1, $this->op2] = $rawArguments;
+        /**
+         * @var zval $op1 Narrowed to the stub views at the engine callback boundary
+         * @var zval $op2
+         */
+        [$op1, $op2] = $rawArguments;
+        $this->op1   = $op1;
+        $this->op2   = $op2;
 
         $result = ($this->userHandler)($this);
+        assert(is_int($result));
 
         return $result;
     }

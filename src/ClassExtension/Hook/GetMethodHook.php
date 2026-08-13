@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
+use ZEngine\Generated\zend_string;
+use ZEngine\Generated\zval;
 use ZEngine\Reflection\ReflectionMethod;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\ObjectEntry;
@@ -52,18 +54,25 @@ class GetMethodHook extends AbstractMethodResolutionHook
 
     /**
      * Double pointer to the object the method is resolved on (zend_object **)
+     *
+     * A double pointer: the stubs model structs, not pointer-to-pointer handles.
      */
     protected CData $objectPtr;
 
     /**
      * Method name exactly as written at the call site (zend_string *)
+     *
+     * @var zend_string Typed view of the engine handle; the runtime value is the raw
+     *                  FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected CData $methodName;
+    protected object $methodName;
 
     /**
      * Pre-lowercased name key for constant call sites (const zval *), NULL for dynamic names
+     *
+     * @var zval|null Typed view of the engine handle; the runtime value is the raw FFI\CData pointer
      */
-    protected ?CData $key = null;
+    protected ?object $key = null;
 
     /**
      * typedef zend_function *(*zend_object_get_method_t)(zend_object **object,
@@ -74,12 +83,15 @@ class GetMethodHook extends AbstractMethodResolutionHook
      */
     public function handle(...$rawArguments): ?object
     {
+        /**
+         * @var CData       $objectPtr  Narrowed to the stub views at the engine callback boundary
+         * @var zend_string $methodName
+         * @var zval|null   $key
+         */
         [$objectPtr, $methodName, $key] = $rawArguments;
-        assert($objectPtr instanceof CData && $methodName instanceof CData);
-        assert($key === null || $key instanceof CData);
-        $this->objectPtr  = $objectPtr;
-        $this->methodName = $methodName;
-        $this->key        = $key;
+        $this->objectPtr                = $objectPtr;
+        $this->methodName               = $methodName;
+        $this->key                      = $key;
 
         $result = ($this->userHandler)($this);
         if ($result === null) {

@@ -15,6 +15,9 @@ namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zend_string;
+use ZEngine\Generated\zval;
 use ZEngine\Reflection\ReflectionValue;
 
 /**
@@ -31,18 +34,32 @@ class ReadPropertyHook extends AbstractPropertyHook
 
     /**
      * Internal pointer of retval (for native callback only)
+     *
+     * @var zval Engine-provided scratch slot; every VM caller supplies one
      */
-    private ?CData $rv;
+    private object $rv;
 
     /**
      * typedef zval *(*zend_object_read_property_t)(zend_object *object, zend_string *member, int type, void **cache_slot, zval *rv);
      *
      * @inheritDoc
-     * @return \FFI\CData
+     * @return zval
      */
     public function handle(...$rawArguments): object
     {
-        [$this->object, $this->member, $this->type, $this->cacheSlot, $this->rv] = $rawArguments;
+        /**
+         * @var zend_object $object    Narrowed to the stub views at the engine callback boundary
+         * @var zend_string $member
+         * @var int         $type
+         * @var CData|null  $cacheSlot
+         * @var zval        $rv
+         */
+        [$object, $member, $type, $cacheSlot, $rv] = $rawArguments;
+        $this->object                              = $object;
+        $this->member                              = $member;
+        $this->type                                = $type;
+        $this->cacheSlot                           = $cacheSlot;
+        $this->rv                                  = $rv;
 
         $result = ($this->userHandler)($this);
 
@@ -84,6 +101,9 @@ class ReadPropertyHook extends AbstractPropertyHook
             $object->ce,
             static fn() => ($originalHandler)($object, $member, $type, $cacheSlot, $rv),
         );
+        // Engine contract: zend_std_read_property always reports a slot (&EG(uninitialized_zval)
+        // on the error paths), so there is no NULL result to guard against here
+        assert($result instanceof CData);
 
         ReflectionValue::fromValueEntry($result)->getNativeValue($phpResult);
 

@@ -13,8 +13,8 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension\Hook;
 
-use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zval;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
 
@@ -32,18 +32,25 @@ class DoOperationHook extends AbstractHook
 
     /**
      * Holds a return value
+     *
+     * @var zval Typed view of the engine handle; the runtime value is the raw
+     *           FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected CData $returnValue;
+    protected object $returnValue;
 
     /**
      * First operand
+     *
+     * @var zval Typed view of the engine handle; the runtime value is the raw FFI\CData pointer
      */
-    protected CData $op1;
+    protected object $op1;
 
     /**
      * Second operand
+     *
+     * @var zval Typed view of the engine handle; the runtime value is the raw FFI\CData pointer
      */
-    protected CData $op2;
+    protected object $op2;
 
     /**
      * typedef int (*zend_object_do_operation_t)(zend_uchar opcode, zval *result, zval *op1, zval *op2);
@@ -52,7 +59,17 @@ class DoOperationHook extends AbstractHook
      */
     public function handle(...$rawArguments): int
     {
-        [$this->opCode, $this->returnValue, $this->op1, $this->op2] = $rawArguments;
+        /**
+         * @var int  $opCode Narrowed to the stub views at the engine callback boundary
+         * @var zval $returnValue
+         * @var zval $op1
+         * @var zval $op2
+         */
+        [$opCode, $returnValue, $op1, $op2] = $rawArguments;
+        $this->opCode                       = $opCode;
+        $this->returnValue                  = $returnValue;
+        $this->op1                          = $op1;
+        $this->op2                          = $op2;
 
         $result = ($this->userHandler)($this);
         $target = ReflectionValue::fromValueEntry($this->returnValue);
