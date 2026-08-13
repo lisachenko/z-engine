@@ -7,6 +7,17 @@ on:
       - '[0-9].[0-9]'
   pull_request:
 
+# Build and test only: no job here writes to the repository or its API.
+permissions:
+  contents: read
+
+# One CI run per ref. Superseded pull-request runs are cancelled (the next push
+# re-runs everything anyway); branch runs are left alone so the history of a
+# pushed version branch keeps a complete result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # This branch targets PHP 8.4 only - engine structures are version-specific.
 env:
   PHP_MINOR: '8.4'
@@ -40,7 +51,7 @@ jobs:
         # mutates the very classes opcache would publish as immutable. The JIT is
         # off everywhere: it rewrites the executor internals z-engine hooks into
         # (AGENTS.md).
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         env:
           phpts: ${{ matrix.ts == 'zts' && 'ts' || 'nts' }}
         with:
@@ -60,7 +71,7 @@ jobs:
             || { echo "::error::Zend OPcache is not loaded - the opcache tests would silently skip"; exit 1; }
 
       - name: Install dependencies
-        uses: ramsey/composer-install@v3
+        uses: ramsey/composer-install@a8d0d959dab41457692a5e2041bd9b757a119e3f # v3.2.1
 
       - name: Run test suite
         run: composer test
@@ -107,7 +118,7 @@ jobs:
       # runner process, JIT off everywhere (see the comment there).
       - name: Set up PHP
         if: steps.artifacts.outputs.present == 'true'
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         env:
           phpts: ${{ matrix.ts == 'zts' && 'ts' || 'nts' }}
         with:
@@ -139,7 +150,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.artifacts.outputs.present == 'true'
-        uses: ramsey/composer-install@v3
+        uses: ramsey/composer-install@a8d0d959dab41457692a5e2041bd9b757a119e3f # v3.2.1
 
       - name: Run test suite
         if: steps.artifacts.outputs.present == 'true'
@@ -191,7 +202,7 @@ jobs:
       # runner process, JIT off everywhere (see the comment there).
       - name: Set up PHP
         if: steps.artifacts.outputs.present == 'true'
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         env:
           phpts: ${{ matrix.ts == 'zts' && 'ts' || 'nts' }}
         with:
@@ -227,7 +238,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.artifacts.outputs.present == 'true'
-        uses: ramsey/composer-install@v3
+        uses: ramsey/composer-install@a8d0d959dab41457692a5e2041bd9b757a119e3f # v3.2.1
 
       - name: Run test suite
         if: steps.artifacts.outputs.present == 'true'
@@ -247,13 +258,38 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: ${{ env.PHP_MINOR }}
           extensions: ffi
           ini-values: ffi.enable=1
           coverage: none
-      - uses: ramsey/composer-install@v3
+
+      # composer.lock is deliberately not committed (a library pins nothing),
+      # so the lock consistency check has to be skipped here.
+      - name: Validate composer.json
+        run: composer validate --strict --no-check-lock
+
+      - uses: ramsey/composer-install@a8d0d959dab41457692a5e2041bd9b757a119e3f # v3.2.1
+
+      # Runs after the install step: audit reads the lock file composer install
+      # just resolved (there is no committed one to audit before that).
+      - name: Audit dependencies for known advisories
+        run: composer audit
+
+      # PHPStan's result cache lives in the tmpDir configured in
+      # phpstan.dist.neon. The key carries the run sha so every run stores a
+      # fresh entry (cache entries are immutable), while restore-keys fall back
+      # to the newest cache built from the same config + dependency set.
+      - name: Cache the PHPStan result cache
+        uses: actions/cache@v4
+        with:
+          path: var/phpstan
+          key: phpstan-${{ env.PHP_MINOR }}-${{ hashFiles('phpstan.dist.neon', 'phpstan-baseline.neon', 'composer.json') }}-${{ github.sha }}
+          restore-keys: |
+            phpstan-${{ env.PHP_MINOR }}-${{ hashFiles('phpstan.dist.neon', 'phpstan-baseline.neon', 'composer.json') }}-
+            phpstan-${{ env.PHP_MINOR }}-
+
       - run: composer phpstan
 
   coding-standards:
@@ -261,12 +297,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: ${{ env.PHP_MINOR }}
           extensions: ffi
           coverage: none
-      - uses: ramsey/composer-install@v3
+      - uses: ramsey/composer-install@a8d0d959dab41457692a5e2041bd9b757a119e3f # v3.2.1
+
+      # php-cs-fixer keeps per-file hashes in .php-cs-fixer.cache (gitignored)
+      # and re-checks only what changed; it invalidates the cache itself when
+      # the tool version or the rule set changes.
+      - name: Cache the php-cs-fixer cache
+        uses: actions/cache@v4
+        with:
+          path: .php-cs-fixer.cache
+          key: php-cs-fixer-${{ env.PHP_MINOR }}-${{ hashFiles('.php-cs-fixer.dist.php', 'composer.json') }}-${{ github.sha }}
+          restore-keys: |
+            php-cs-fixer-${{ env.PHP_MINOR }}-${{ hashFiles('.php-cs-fixer.dist.php', 'composer.json') }}-
+            php-cs-fixer-${{ env.PHP_MINOR }}-
+
       - run: composer cs:check
 
   tests-internal-debug:
@@ -296,17 +345,17 @@ jobs:
       # Composer runs on a release PHP on the host; the debug container only
       # needs to run the already-installed PHPUnit (vendor/ is plain PHP).
       - name: Set up PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: ${{ env.PHP_MINOR }}
           extensions: ffi
           coverage: none
 
       - name: Install dependencies
-        uses: ramsey/composer-install@v3
+        uses: ramsey/composer-install@a8d0d959dab41457692a5e2041bd9b757a119e3f # v3.2.1
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Restore the debug image layer cache
         uses: actions/cache@v4
@@ -355,7 +404,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       # Caches the generator image's toolchain layers (apt/clang/ext-ffi); the
       # emit stage itself always re-runs - it is the step that produces the
       # artifacts being drift-checked. generate.php rotates per-target subdirs.
@@ -406,7 +455,7 @@ jobs:
 
       - name: Set up PHP
         if: steps.artifacts.outputs.present == 'true'
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         env:
           phpts: ${{ matrix.ts == 'zts' && 'ts' || 'nts' }}
         with:
@@ -459,7 +508,7 @@ jobs:
 
       - name: Set up PHP
         if: steps.artifacts.outputs.present == 'true'
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         env:
           phpts: ${{ matrix.ts == 'zts' && 'ts' || 'nts' }}
         with:
@@ -473,7 +522,7 @@ jobs:
       # environment variable this step exports.
       - name: Set up the MSVC toolchain environment
         if: steps.artifacts.outputs.present == 'true'
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
         with:
           arch: x64
 
