@@ -38,6 +38,8 @@ use ZEngine\Type\StructArray;
  */
 class ReflectionProperty extends NativeReflectionProperty
 {
+    use AccessFlagsTrait;
+
     /**
      * @var zend_property_info Typed view of the wrapped property info; the runtime value
      *                         is the raw FFI\CData handle (see stubs/zend-engine-structs.php)
@@ -243,42 +245,24 @@ class ReflectionProperty extends NativeReflectionProperty
     }
 
     /**
-     * Declares property as public
-     */
-    public function setPublic(): void
-    {
-        $this->pointer->flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->pointer->flags |= Core::ZEND_ACC_PUBLIC;
-    }
-
-    /**
-     * Declares property as protected
-     */
-    public function setProtected(): void
-    {
-        $this->pointer->flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->pointer->flags |= Core::ZEND_ACC_PROTECTED;
-    }
-
-    /**
-     * Declares property as private
-     */
-    public function setPrivate(): void
-    {
-        $this->pointer->flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->pointer->flags |= Core::ZEND_ACC_PRIVATE;
-    }
-
-    /**
      * Declares property as static/non-static
      */
     public function setStatic(bool $isStatic = true): void
     {
-        if ($isStatic) {
-            $this->pointer->flags |= Core::ZEND_ACC_STATIC;
-        } else {
-            $this->pointer->flags &= (~Core::ZEND_ACC_STATIC);
-        }
+        $this->setAccessFlag(Core::ZEND_ACC_STATIC, $isStatic);
+    }
+
+    /**
+     * A property keeps its access flags in the flags field of its zend_property_info
+     *
+     * @see AccessFlagsTrait for setPublic()/setProtected()/setPrivate()
+     */
+    protected function replaceAccessFlags(int $clearMask, int $setMask): void
+    {
+        $flags = $this->pointer->flags;
+        assert(is_int($flags));
+
+        $this->pointer->flags = ($flags & (~$clearMask)) | $setMask;
     }
 
     /**
