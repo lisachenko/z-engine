@@ -32,7 +32,7 @@ class PlateauClass
     }
 }
 
-$cycles      = 1000;
+$cycles      = 4000; // TEMP DIAGNOSTIC: scaling probe, see PR thread
 $refFunction = new ReflectionFunction('plateau_function');
 $refMethod   = new ReflectionMethod(PlateauClass::class, 'target');
 $instance    = new PlateauClass();
