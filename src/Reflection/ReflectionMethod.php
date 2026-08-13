@@ -149,7 +149,6 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
         // declaring class, and no shared engine structure is ever written.
         $boardName   = get_class(self::publicationBoard());
         $methodTable = (new ReflectionClass($boardName))->getMethodTable();
-        $boardTable  = $methodTable->getRawValue();
 
         // The temporary container is released right after the engine copied it into a bucket
         $rawFunction = Core::cast('zend_function *', $functionEntry)[0];
@@ -174,10 +173,7 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
             // Unpublish the transient entry without destroying the hook function: the table
             // destructor (zend_function_dtor) is disabled around the delete, so the bucket
             // removal releases nothing - the hook stays owned by zend_property_info.hooks
-            $previousDestructor      = $boardTable->pDestructor;
-            $boardTable->pDestructor = null;
-            $methodTable->delete($lowerName);
-            $boardTable->pDestructor = $previousDestructor;
+            $methodTable->deleteWithoutDestructor($lowerName);
         }
     }
 
