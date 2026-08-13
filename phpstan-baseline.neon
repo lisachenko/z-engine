@@ -43,12 +43,6 @@ parameters:
 			path: src/AbstractSyntaxTree/DeclarationNode.php
 
 		-
-			message: '#^Access to an undefined property ZEngine\\AbstractSyntaxTree\\NodeInterface\:\:\$node\.$#'
-			identifier: property.notFound
-			count: 1
-			path: src/AbstractSyntaxTree/ListNode.php
-
-		-
 			message: '#^Method ZEngine\\AbstractSyntaxTree\\ListNode\:\:getChildrenCount\(\) should return int but returns mixed\.$#'
 			identifier: return.type
 			count: 1
@@ -57,14 +51,8 @@ parameters:
 		-
 			message: '#^Parameter \#2 \$pointer of static method ZEngine\\Core\:\:cast\(\) expects object, mixed given\.$#'
 			identifier: argument.type
-			count: 3
+			count: 2
 			path: src/AbstractSyntaxTree/ListNode.php
-
-		-
-			message: '#^Access to an undefined property ZEngine\\AbstractSyntaxTree\\NodeInterface\:\:\$node\.$#'
-			identifier: property.notFound
-			count: 1
-			path: src/AbstractSyntaxTree/Node.php
 
 		-
 			message: '#^Method ZEngine\\AbstractSyntaxTree\\Node\:\:getAttributes\(\) should return int but returns mixed\.$#'
@@ -97,15 +85,9 @@ parameters:
 			path: src/AbstractSyntaxTree/Node.php
 
 		-
-			message: '#^Parameter \#1 \$node of static method ZEngine\\AbstractSyntaxTree\\NodeFactory\:\:fromCData\(\) expects FFI\\CData, mixed given\.$#'
-			identifier: argument.type
-			count: 3
-			path: src/AbstractSyntaxTree/Node.php
-
-		-
 			message: '#^Parameter \#2 \$pointer of static method ZEngine\\Core\:\:cast\(\) expects object, mixed given\.$#'
 			identifier: argument.type
-			count: 5
+			count: 1
 			path: src/AbstractSyntaxTree/Node.php
 
 		-
@@ -125,12 +107,6 @@ parameters:
 			identifier: argument.type
 			count: 1
 			path: src/AbstractSyntaxTree/NodeFactory.php
-
-		-
-			message: '#^Parameter \#1 \$array of function array_flip expects array\<int\|string\>, array\<string, mixed\> given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/AbstractSyntaxTree/NodeKind.php
 
 		-
 			message: '#^Constructor of class ZEngine\\AbstractSyntaxTree\\ValueNode has an unused parameter \$value\.$#'
@@ -1237,12 +1213,6 @@ parameters:
 			path: src/Reflection/ReflectionValue.php
 
 		-
-			message: '#^Parameter \#1 \$array of function array_flip expects array\<int\|string\>, array\<string, mixed\> given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Reflection/ReflectionValue.php
-
-		-
 			message: '#^Binary operation "\+" between FFI\\CData and int results in an error\.$#'
 			identifier: binaryOp.invalid
 			count: 2
@@ -1453,12 +1423,6 @@ parameters:
 			path: src/System/ObjectStore.php
 
 		-
-			message: '#^Parameter \#1 \$array of function array_flip expects array\<int\|string\>, array\<string, mixed\> given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/System/OpCode.php
-
-		-
 			message: '#^Constructor of class ZEngine\\Type\\ClosureEntry has an unused parameter \$closure\.$#'
 			identifier: constructor.unusedParameter
 			count: 1
@@ -1485,24 +1449,6 @@ parameters:
 		-
 			message: '#^Binary operation "\+" between FFI\\CData and mixed results in an error\.$#'
 			identifier: binaryOp.invalid
-			count: 1
-			path: src/Type/OpLine.php
-
-		-
-			message: '#^Cannot access offset int on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Type/OpLine.php
-
-		-
-			message: '#^Method ZEngine\\Type\\OpLine\:\:typeName\(\) should return string but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Type/OpLine.php
-
-		-
-			message: '#^Parameter \#1 \$array of function array_flip expects array\<int\|string\>, array\<string, mixed\> given\.$#'
-			identifier: argument.type
 			count: 1
 			path: src/Type/OpLine.php
 
