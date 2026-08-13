@@ -15,6 +15,8 @@ namespace ZEngine\Memory;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\HashTable;
+use ZEngine\Generated\zval;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\ObjectEntry;
@@ -344,9 +346,9 @@ final class PersistentGraphCloner
         // through an object cycle
         $this->arrayMap[$address] = $rawTable;
         $this->arrays[]           = $rawTable;
-        $this->bytes += Core::sizeof(Core::type('HashTable'));
+        $this->bytes += Core::sizeOfType(HashTable::class);
 
-        $zvalSize = Core::sizeof(Core::type('zval'));
+        $zvalSize = Core::sizeOfType(zval::class);
         $this->walkArray($sourceArray, function (int|string $key, CData $value) use ($table, $zvalSize): void {
             // Start from a byte copy of the source element, then rewrite it in place;
             // the engine copies the fixed-up bytes into its own bucket on insert

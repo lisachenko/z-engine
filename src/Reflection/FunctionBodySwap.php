@@ -150,7 +150,7 @@ final class FunctionBodySwap
 
         // Replace the whole function with the donor-backed one (the donor structure
         // itself stays untouched - it keeps sole ownership of its own fields)
-        Core::memcpy($entry, $donor, Core::sizeof(Core::type('zend_function')));
+        Core::memcpy($entry, $donor, Core::sizeOfType(zend_function::class));
 
         // Restore the entry identity: the single owned reference on the previous name
         // stays with this entry, and the scope always survives (the donor was compiled

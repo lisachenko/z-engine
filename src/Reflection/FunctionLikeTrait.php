@@ -489,7 +489,7 @@ trait FunctionLikeTrait
         $entryType = $this->isUserDefined() ? 'zend_arg_info' : 'zend_internal_arg_info';
         $entry     = Core::pointerAtAddress(
             "{$entryType} *",
-            Core::addressOf($argInfoTable) + $index * Core::sizeof(Core::type($entryType)),
+            Core::addressOf($argInfoTable) + $index * Core::sizeOfType($entryType),
         );
         $entryTypeStruct = $entry->type;
         assert($entryTypeStruct instanceof CData);

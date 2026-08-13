@@ -96,7 +96,7 @@ final class CacheMetaInfo
      */
     public static function byteSize(): int
     {
-        $size = Core::sizeof(Core::type('zend_file_cache_metainfo'));
+        $size = Core::sizeOfType(zend_file_cache_metainfo::class);
         if ($size < 1) {
             throw OpCacheException::unsupportedPayload('zend_file_cache_metainfo has no size in the loaded header');
         }
