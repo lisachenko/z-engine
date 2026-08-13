@@ -40,7 +40,7 @@ jobs:
             # excludes that group while still proving the SHM tests ran
             opcache_gate: composer test:opcache-zts
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up PHP
         # opcache must be LOADED in the parent process: every opcache-gated test
@@ -97,7 +97,7 @@ jobs:
           - { runner: macos-15-intel, arch: x64 }
         ts: [nts, zts]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The darwin artifacts can only be generated on macOS runners (see the
       # "Generate darwin headers" workflow). Until they are committed this leg
@@ -181,7 +181,7 @@ jobs:
         # Git Bash: keeps these step bodies identical to the other test jobs'.
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The windows artifacts can only be generated on Windows runners (see
       # the "Generate windows headers" workflow). Until they are committed
@@ -257,7 +257,7 @@ jobs:
     name: PHPStan (level max)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_MINOR }}
@@ -296,7 +296,7 @@ jobs:
     name: Coding standards
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_MINOR }}
@@ -340,7 +340,7 @@ jobs:
             ts_label: ZTS
             opcache_args: --group opcache --exclude-group opcache-relocator --fail-on-skipped
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Composer runs on a release PHP on the host; the debug container only
       # needs to run the already-installed PHPUnit (vendor/ is plain PHP).
@@ -402,7 +402,7 @@ jobs:
     name: Generated headers up to date
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       # Caches the generator image's toolchain layers (apt/clang/ext-ffi); the
@@ -441,7 +441,7 @@ jobs:
           - { runner: macos-15-intel, arch: x64 }
         ts: [nts, zts]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check the generated definitions are committed
         id: artifacts
@@ -494,7 +494,7 @@ jobs:
       # regeneration diff below compares content, not line endings.
       - name: Keep line endings byte-exact
         run: git config --global core.autocrlf input
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check the generated definitions are committed
         id: artifacts
