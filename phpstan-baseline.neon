@@ -1927,6 +1927,48 @@ parameters:
 			path: tests/Type/ResourceEntryTest.php
 
 		-
+			message: '#^Binary operation "\*" between mixed and 2 results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: tools/examples/worker-loop.php
+
+		-
+			message: '#^Cannot access offset ''seed'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tools/examples/worker-loop.php
+
+		-
+			message: '#^Cannot access offset 0 on ZEngine\\Generated\\HashTable\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tools/examples/worker-loop.php
+
+		-
+			message: '#^Cannot access offset 0 on ZEngine\\Generated\\zend_object\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tools/examples/worker-loop.php
+
+		-
+			message: '#^Cannot access property \$counter on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tools/examples/worker-loop.php
+
+		-
+			message: '#^Parameter \#1 \$sourceObject of static method ZEngine\\Type\\PersistentObjectFactory\:\:persistentClone\(\) expects FFI\\CData, ZEngine\\Generated\\zend_object given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tools/examples/worker-loop.php
+
+		-
+			message: '#^Parameter \#2 \$value of static method ZEngine\\Reflection\\ReflectionValue\:\:newEntry\(\) expects object, mixed given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tools/examples/worker-loop.php
+
+		-
 			message: '#^Argument of an invalid type mixed supplied for foreach, only iterables are supported\.$#'
 			identifier: foreach.nonIterable
 			count: 2

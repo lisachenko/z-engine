@@ -13,7 +13,14 @@ HEADER;
 
 $finder = PhpCsFixer\Finder::create()
     ->in([__DIR__ . '/src', __DIR__ . '/tests', __DIR__ . '/tools'])
-    ->name('*.php');
+    ->name('*.php')
+    // The root-level scripts live outside every directory above, but they are shipped
+    // code (bootstrap.php runs in every consumer process) and this config is code too
+    ->append([
+        __DIR__ . '/bootstrap.php',
+        __DIR__ . '/preload.php',
+        __FILE__,
+    ]);
 
 return (new PhpCsFixer\Config())
     ->setRiskyAllowed(true)

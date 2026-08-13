@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Z-Engine framework
  *
@@ -17,5 +18,4 @@ declare(strict_types=1);
  * explicit `Core::preload()` this file used to make is now redundant - it stays supported and
  * idempotent for scripts that already call it.
  */
-include __DIR__.'/vendor/autoload.php';
-
+include __DIR__ . '/vendor/autoload.php';

@@ -9,10 +9,16 @@ parameters:
     paths:
         - src
         - tests
+        # Executed by every consumer through composer's autoload.files, and by the
+        # opcache.preload stage respectively - analysed like any other shipped code
+        - bootstrap.php
+        - preload.php
         - tools/generator/lib
         - tools/generator/emit.php
         - tools/generator/generate.php
+        - tools/generator/symbols.php
         - tools/generator/validate.php
+        - tools/examples/worker-loop.php
         - tools/phpstan
     excludePaths:
         - tests/phpstan/specialization-class-stubs.php
