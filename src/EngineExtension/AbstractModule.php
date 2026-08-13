@@ -452,11 +452,13 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
         if ($prefixName !== false) {
             $className = $prefixName;
         }
-        // Converts camelCase to snake_case
-        $moduleName = strtolower(preg_replace_callback('/([a-z])([A-Z])/', function ($match) {
+        // Converts camelCase to snake_case; preg_replace_callback() returns null on a PCRE
+        // error (backtrack/recursion limit), in which case the class name is used unsplit
+        // instead of being handed to strtolower() as null (deprecated since PHP 8.1)
+        $snakeCased = preg_replace_callback('/([a-z])([A-Z])/', function ($match) {
             return $match[1] . '_' . $match[2];
-        }, $className));
+        }, $className);
 
-        return $moduleName;
+        return strtolower($snakeCased ?? $className);
     }
 }
