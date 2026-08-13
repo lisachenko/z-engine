@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
+use ZEngine\Generated\zend_function;
+use ZEngine\Generated\zend_internal_function;
 use ZEngine\Generated\zend_object;
 use ZEngine\Reflection\ReflectionMethod;
 use ZEngine\Type\ObjectEntry;
@@ -44,7 +46,7 @@ class GetConstructorHook extends AbstractMethodResolutionHook
      * typedef zend_function *(*zend_object_get_constructor_t)(zend_object *object);
      *
      * @inheritDoc
-     * @return \FFI\CData|null
+     * @return zend_function|zend_internal_function|null
      */
     public function handle(...$rawArguments): ?object
     {

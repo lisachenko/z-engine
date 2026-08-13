@@ -14,10 +14,11 @@ declare(strict_types=1);
 namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
-use ZEngine\Core;
+use ZEngine\Generated\zend_function;
+use ZEngine\Generated\zend_internal_function;
 use ZEngine\Hook\AbstractHook;
+use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionMethod;
-use ZEngine\Type\HashTable;
 
 /**
  * Base for hooks that resolve a method for the engine (get_method, get_constructor)
@@ -43,18 +44,22 @@ abstract class AbstractMethodResolutionHook extends AbstractHook
 
     /**
      * Raw zend_function pointer behind $proceedResult
+     *
+     * @var zend_function|zend_internal_function|null Typed view of the engine handle; the
+     *      runtime value is the raw FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected ?CData $proceedRawFunction = null;
+    protected ?object $proceedRawFunction = null;
 
     /**
      * Wraps a raw zend_function* handed back by the original handler
      *
-     * @param \FFI\CData $rawFunction
+     * @param CData|zend_function|zend_internal_function $rawFunction
      */
     final protected function wrapRawFunction(object $rawFunction): ReflectionMethod
     {
         $wrapper = ReflectionMethod::fromCData($rawFunction);
 
+        /** @var zend_function|zend_internal_function $rawFunction Narrowed to the stub views at the owning boundary */
         $this->proceedResult      = $wrapper;
         $this->proceedRawFunction = $rawFunction;
 
@@ -68,7 +73,14 @@ abstract class AbstractMethodResolutionHook extends AbstractHook
      * produced; any other reflection is resolved through the method table of its class
      * entry, which owns the returned function for the whole class lifetime.
      *
-     * @return \FFI\CData
+     * The class entry is reached through its owning reflection rather than by hand: the
+     * ReflectionClass constructor performs the engine class-table lookup (and raises the
+     * "should be in the engine" ReflectionException itself) and getMethodTable() is the
+     * accessor that owns ce->function_table. That construction is only paid on the slow
+     * path - a wrapper that came out of proceed() short-circuits above, and the VM caches
+     * the resolved function per call site for compile-time constant method names.
+     *
+     * @return zend_function|zend_internal_function
      */
     final protected function resolveRawFunction(\ReflectionMethod $method): object
     {
@@ -76,14 +88,8 @@ abstract class AbstractMethodResolutionHook extends AbstractHook
             return $this->proceedRawFunction;
         }
 
-        $className       = $method->class;
-        $classEntryValue = Core::$executor->classTable->find(strtolower($className));
-        if ($classEntryValue === null) {
-            throw new \ReflectionException("Class {$className} should be in the engine");
-        }
-        $functionTable = $classEntryValue->getRawClass()->function_table;
-        assert($functionTable instanceof CData);
-        $methodTable      = HashTable::fromCData(Core::addr($functionTable));
+        $className        = $method->class;
+        $methodTable      = (new ReflectionClass($className))->getMethodTable();
         $methodEntryValue = $methodTable->find(strtolower($method->name));
         if ($methodEntryValue === null) {
             throw new \ReflectionException("Method {$className}::{$method->name} was not found in the class");

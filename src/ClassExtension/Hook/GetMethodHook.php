@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
+use ZEngine\Generated\zend_function;
+use ZEngine\Generated\zend_internal_function;
 use ZEngine\Generated\zend_string;
 use ZEngine\Generated\zval;
 use ZEngine\Reflection\ReflectionMethod;
@@ -79,7 +81,7 @@ class GetMethodHook extends AbstractMethodResolutionHook
      *     zend_string *method, const zval *key);
      *
      * @inheritDoc
-     * @return \FFI\CData|null
+     * @return zend_function|zend_internal_function|null
      */
     public function handle(...$rawArguments): ?object
     {

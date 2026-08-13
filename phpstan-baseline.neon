@@ -151,12 +151,6 @@ parameters:
 			path: src/AbstractSyntaxTree/ValueNode.php
 
 		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\AbstractMethodResolutionHook\:\:resolveRawFunction\(\) should return FFI\\CData but returns ZEngine\\Generated\\zend_function\|ZEngine\\Generated\\zend_internal_function\.$#'
-			identifier: return.type
-			count: 1
-			path: src/ClassExtension/Hook/AbstractMethodResolutionHook.php
-
-		-
 			message: '#^Method ZEngine\\ClassExtension\\ObjectGetPropertiesForInterface\:\:__getFields\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
