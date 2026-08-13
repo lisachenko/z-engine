@@ -283,7 +283,10 @@ class ReflectionClass extends NativeReflectionClass
             if (!interface_exists($interfaceName)) {
                 throw new \ReflectionException("Interface {$interfaceName} was not found");
             }
-            $classValueEntry   = Core::$executor->classTable->find(strtolower($interfaceName));
+            $classValueEntry = Core::$executor->classTable->find(strtolower($interfaceName));
+            if ($classValueEntry === null) {
+                throw new \ReflectionException("Interface {$interfaceName} was not found in the engine");
+            }
             $interfaceClass    = $classValueEntry->getRawClass();
             $memory[$position] = $interfaceClass;
         }

@@ -111,9 +111,10 @@ class GetDebugInfoHook extends AbstractHook
         $isTemp = Core::new('int');
 
         // As we will play with EG(fake_scope), we won't be able to access private or protected members
-        $previousScope = Core::$executor->setFakeScope($scope);
-        $rawArray      = ($originalHandler)($object, Core::addr($isTemp));
-        Core::$executor->setFakeScope($previousScope);
+        $rawArray = Core::$executor->withFakeScope(
+            $scope,
+            static fn() => ($originalHandler)($object, Core::addr($isTemp)),
+        );
 
         if ($rawArray === null) {
             return [];
