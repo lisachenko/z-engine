@@ -71,7 +71,7 @@ jobs:
             || { echo "::error::Zend OPcache is not loaded - the opcache tests would silently skip"; exit 1; }
 
       - name: Install dependencies
-        uses: ramsey/composer-install@v3
+        uses: ramsey/composer-install@v4
 
       - name: Run test suite
         run: composer test
@@ -150,7 +150,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.artifacts.outputs.present == 'true'
-        uses: ramsey/composer-install@v3
+        uses: ramsey/composer-install@v4
 
       - name: Run test suite
         if: steps.artifacts.outputs.present == 'true'
@@ -238,7 +238,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.artifacts.outputs.present == 'true'
-        uses: ramsey/composer-install@v3
+        uses: ramsey/composer-install@v4
 
       - name: Run test suite
         if: steps.artifacts.outputs.present == 'true'
@@ -270,7 +270,7 @@ jobs:
       - name: Validate composer.json
         run: composer validate --strict --no-check-lock
 
-      - uses: ramsey/composer-install@v3
+      - uses: ramsey/composer-install@v4
 
       # Runs after the install step: audit reads the lock file composer install
       # just resolved (there is no committed one to audit before that).
@@ -302,7 +302,7 @@ jobs:
           php-version: ${{ env.PHP_MINOR }}
           extensions: ffi
           coverage: none
-      - uses: ramsey/composer-install@v3
+      - uses: ramsey/composer-install@v4
 
       # php-cs-fixer keeps per-file hashes in .php-cs-fixer.cache (gitignored)
       # and re-checks only what changed; it invalidates the cache itself when
@@ -352,7 +352,7 @@ jobs:
           coverage: none
 
       - name: Install dependencies
-        uses: ramsey/composer-install@v3
+        uses: ramsey/composer-install@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
