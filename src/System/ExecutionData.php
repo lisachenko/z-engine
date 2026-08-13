@@ -18,6 +18,7 @@ use ZEngine\Core;
 use ZEngine\Generated\zend_execute_data;
 use ZEngine\Generated\zval;
 use ZEngine\Reflection\FunctionLikeTrait;
+use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionFunction;
 use ZEngine\Reflection\ReflectionMethod;
 use ZEngine\Reflection\ReflectionValue;
@@ -166,25 +167,18 @@ class ExecutionData
     }
 
     /**
-     * Returns the name of the class scope the function of this frame is declared in,
-     * or null when there is none (plain function, unbound closure, main scope) or the
-     * frame carries no function entry at all
+     * Returns the class scope of the code executing in this frame as a framework
+     * wrapper, or null when there is none (plain function, unbound closure, main
+     * scope) or the frame carries no function entry at all
      *
-     * This is the cheap, allocation-light way to answer "whose code is running in this
-     * frame": unlike getFunction()/getFunctionEntry() it materializes no reflection
-     * object and performs no name lookup, which makes it usable from engine callbacks
-     * that run on every single opcode (see OpCodeHook::handle()). The scope name is
-     * exactly what debug_backtrace() reports as the frame's "class".
+     * The frame's function entry owns the scope resolution (see
+     * ReflectionFunction::getClosureScopeClass()), so no raw engine structure
+     * crosses this API boundary. The scope is exactly what debug_backtrace()
+     * reports as the frame's "class".
      */
-    public function getFunctionScopeName(): ?string
+    public function getScopeClass(): ?ReflectionClass
     {
-        /** @var CData|null $rawFunction */
-        $rawFunction = $this->pointer->func;
-        if ($rawFunction === null) {
-            return null;
-        }
-
-        return ReflectionFunction::getScopeNameOf($rawFunction);
+        return $this->getFunctionEntry()?->getClosureScopeClass();
     }
 
     /**

@@ -209,7 +209,7 @@ final class OpCodeHook implements HookInterface
      *
      * The frame that executes the opcode is the callback argument itself, so the class
      * scope that decides whether z-engine's own code is running is read straight off it
-     * (see ExecutionData::getFunctionScopeName()) - no stack walk is needed, and none is
+     * (see ExecutionData::getScopeClass()) - no stack walk is needed, and none is
      * affordable here: this runs on EVERY execution of the hooked opcode. Stacked hooks
      * pass the very same execute_data down the chain, so a delegated call resolves the
      * same executing frame as the top hook did, with no delegation frames to skip.
@@ -222,7 +222,7 @@ final class OpCodeHook implements HookInterface
         assert($state instanceof CData);
 
         $executionState = new ExecutionData($state);
-        $frameScope     = $executionState->getFunctionScopeName();
+        $frameScope     = $executionState->getScopeClass()?->getName();
         if ($frameScope !== null && str_starts_with($frameScope, self::ENGINE_SCOPE_PREFIX)) {
             // For all our internal classes just proceed with default opcode handler
 

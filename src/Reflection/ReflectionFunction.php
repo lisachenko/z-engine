@@ -153,23 +153,20 @@ class ReflectionFunction extends NativeReflectionFunction implements FunctionLik
     }
 
     /**
-     * Returns the name of the class scope a raw function entry belongs to, or null for
-     * plain functions, closures without a bound scope and main-scope pseudo entries
+     * Returns the class scope this function entry is bound to as a framework wrapper,
+     * or null for plain functions, closures without a bound scope and main-scope
+     * pseudo entries
      *
-     * This reads the entry directly instead of materializing a reflection: fromCData()
-     * initializes the native reflection state (a function-table lookup that throws for
-     * method entries), which is far too expensive for code running on every engine
-     * callback. Internal entries carry the scope in their own structure, user entries
-     * in the shared common prefix - both are served here.
-     *
-     * @param CData|zend_function|zend_internal_function $functionEntry Pointer to the structure
-     *
-     * @internal hot-path accessor for engine callbacks (see OpCodeHook::handle())
+     * Overrides the native accessor so every entry kind is served from the pointer
+     * this wrapper already owns: internal entries carry the scope in their own
+     * structure, user entries in the shared common prefix. All work around the C
+     * structure stays isolated here - callers receive the ReflectionClass wrapper,
+     * never a raw scope pointer.
      */
-    public static function getScopeNameOf(object $functionEntry): ?string
+    public function getClosureScopeClass(): ?ReflectionClass
     {
         /** @var zend_function|zend_internal_function $entry Narrowed to the stub views at the owning boundary */
-        $entry = $functionEntry;
+        $entry = $this->pointer;
         if ($entry->type === Core::ZEND_INTERNAL_FUNCTION) {
             /** @var zend_internal_function $internalEntry */
             $internalEntry = $entry;
@@ -182,12 +179,8 @@ class ReflectionFunction extends NativeReflectionFunction implements FunctionLik
         if ($scope === null) {
             return null;
         }
-        $scopeName = $scope->name;
-        if ($scopeName === null) {
-            return null;
-        }
 
-        return StringEntry::fromCData($scopeName)->getStringValue();
+        return ReflectionClass::fromCData($scope);
     }
 
     /**
