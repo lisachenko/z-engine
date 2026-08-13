@@ -1555,6 +1555,36 @@ parameters:
 			path: tests/Memory/scenarios/property-read-hook.php
 
 		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Reflection\\\\ReflectionClass'' and ZEngine\\Reflection\\ReflectionClass will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Reflection/ReflectionClassConstantTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with 123 and 123 will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 3
+			path: tests/Reflection/ReflectionClassConstantTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with ''child\-const'' and ''child\-const'' will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Reflection/ReflectionClassParentTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with ''parent\-const'' and ''parent\-const'' will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 2
+			path: tests/Reflection/ReflectionClassParentTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with array\{parentProperty\: 130, childProperty\: 21\} and array\{parentProperty\: int, childProperty\: int, parentProperty\: int, ''\000ZEngine\\Stub\\TestParentClass\000parentSecret''\: string\} will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 1
+			path: tests/Reflection/ReflectionClassParentTest.php
+
+		-
 			message: '#^Access to an undefined property ZEngine\\Stub\\TestClass\:\:\$unknown\.$#'
 			identifier: property.notFound
 			count: 1
@@ -1647,12 +1677,6 @@ parameters:
 		-
 			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertFalse\(\) with true will always evaluate to false\.$#'
 			identifier: method.impossibleType
-			count: 1
-			path: tests/Reflection/ReflectionClassTest.php
-
-		-
-			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsObject\(\) with object will always evaluate to true\.$#'
-			identifier: method.alreadyNarrowedType
 			count: 1
 			path: tests/Reflection/ReflectionClassTest.php
 
@@ -1771,6 +1795,72 @@ parameters:
 			path: tests/Reflection/ReflectionClassTest.php
 
 		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Stub\\\\DebuggableCloneable'' and ZEngine\\Stub\\DebuggableCloneable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Stub\\\\TestClass'' and ZEngine\\Stub\\TestClass will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 3
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Stub\\\\TestClass'' and ZEngine\\Stub\\TestClass@anonymous/tests/Reflection/ReflectionClassTest\.php\:140 will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Stub\\\\TestInterface'' and ZEngine\\Stub\\TestClass will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Stub\\\\TestInterface'' and ZEngine\\Stub\\TestInterface will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Stub\\\\TestInterface'' and ZEngine\\Stub\\TestInterface@anonymous/tests/Reflection/ReflectionClassTest\.php\:282 will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with ''unknown'' and ''property'' will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with \*NEVER\* and ZEngine\\Stub\\TestInterface will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with arguments 1, 1 and ''Uninstalled handler…'' will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with array\{a\: 1, b\: true, c\: 42\.0\} and array\{property\: int, ''\000ZEngine\\Stub\\TestClass\000secret''\: int\} will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with array\{a\: 1, b\: true, c\: 42\.0\} and array\{property\: int\|null, absent\: int\|null\} will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
 			message: '#^Anonymous function never returns null so it can be removed from the return type\.$#'
 			identifier: return.unusedType
 			count: 1
@@ -1797,6 +1887,12 @@ parameters:
 		-
 			message: '#^Call to method ZEngine\\Stub\\TestClass@anonymous/tests/Reflection/ReflectionMethodTest\.php\:90\:\:reflectedMethod\(\) on a separate line has no effect\.$#'
 			identifier: method.resultUnused
+			count: 1
+			path: tests/Reflection/ReflectionMethodTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Reflection\\\\ReflectionClass'' and ZEngine\\Reflection\\ReflectionClass will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
 			count: 1
 			path: tests/Reflection/ReflectionMethodTest.php
 
@@ -1873,6 +1969,48 @@ parameters:
 			path: tests/Stub/TestTrait.php
 
 		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Reflection\\\\ReflectionValue'' and ZEngine\\Reflection\\ReflectionValue will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/System/ExecutionDataTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\System\\\\ExecutionData'' and ZEngine\\System\\ExecutionData will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/System/ExecutionDataTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Type\\\\OpLine'' and ZEngine\\Type\\OpLine will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/System/ExecutionDataTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''stdClass'' and \$this\(ZEngine\\System\\ExecutionDataTest\) will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 1
+			path: tests/System/ExecutionDataTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Type\\\\HashTable'' and ZEngine\\Type\\HashTable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/System/ExecutorTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotEmpty\(\) with non\-empty\-list\<int\|string\> will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/System/ExecutorTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\System\\\\Hook\\\\OpCodeHook'' and ZEngine\\System\\Hook\\OpCodeHook will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/System/Hook/OpCodeHookTest.php
+
+		-
 			message: '#^Cannot call method getNativeValue\(\) on ZEngine\\Type\\ObjectEntry\|null\.$#'
 			identifier: method.nonObject
 			count: 1
@@ -1909,10 +2047,22 @@ parameters:
 			path: tests/Type/PersistentHashTableTest.php
 
 		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with arguments 2, 2 and ''Both the mutable…'' will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Type/PersistentHashTableTest.php
+
+		-
 			message: '#^Parameter \#1 \$sourceObject of static method ZEngine\\Type\\PersistentObjectFactory\:\:persistentClone\(\) expects FFI\\CData, ZEngine\\Generated\\zend_object given\.$#'
 			identifier: argument.type
 			count: 3
 			path: tests/Type/PersistentObjectFactoryTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Reflection\\\\ReflectionValue'' and ZEngine\\Reflection\\ReflectionValue will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Type/ReferenceEntryTest.php
 
 		-
 			message: '#^Offset 1 might not exist on array\{\}\|array\{non\-falsy\-string, non\-empty\-string\}\.$#'

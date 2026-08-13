@@ -1,5 +1,11 @@
 includes:
     - phpstan-baseline.neon
+    # PHPUnit awareness: assertion methods narrow types (so the analyser stops treating a
+    # passing assertion as an unchecked value) and the rule set catches the assertion smells
+    # the suite can hide - listed explicitly rather than through phpstan/extension-installer,
+    # matching how every other service in this config is declared
+    - vendor/phpstan/phpstan-phpunit/extension.neon
+    - vendor/phpstan/phpstan-phpunit/rules.neon
 
 parameters:
     level: max
@@ -89,6 +95,13 @@ parameters:
         -
             identifier: argument.type
             path: src/OpCache/ReflectionOpcacheFile.php
+        # The dimension tests exist to prove that a plain `count($object)` reaches the engine's
+        # count_elements handler on a class that never declared the count itself. Rewriting them
+        # as assertCount() would measure PHPUnit's Count constraint instead of the language
+        # construct under test, so phpstan-phpunit's suggestion is declined for this file only.
+        -
+            identifier: phpunit.assertCount
+            path: tests/Reflection/ReflectionClassDimensionTest.php
     reportUnmatchedIgnoredErrors: false
     treatPhpDocTypesAsCertain: false
 

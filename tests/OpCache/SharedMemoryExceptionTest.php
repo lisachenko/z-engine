@@ -21,7 +21,10 @@ final class SharedMemoryExceptionTest extends TestCase
 {
     public function testExceptionLivesInTheOpCacheNamespaceAndStaysCatchable(): void
     {
-        // Existing catch (\ReflectionException) blocks keep working after the move
+        // Existing catch (\ReflectionException) blocks keep working after the move.
+        // Statically always true is exactly the guarantee being pinned: the test exists so a
+        // future reparenting of the exception fails here instead of in a consumer catch block
+        // @phpstan-ignore staticMethod.alreadyNarrowedType (pins the inheritance the API promises)
         self::assertInstanceOf(
             \ReflectionException::class,
             SharedMemoryException::methodMissingAfterCopyOut('Some\Shared', 'method'),
