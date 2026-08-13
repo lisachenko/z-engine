@@ -24,7 +24,7 @@ use ZEngine\Type\ObjectEntry;
 /**
  * Receiving hook for casting to array, debugging, etc
  */
-class GetPropertiesForHook extends AbstractHook
+final class GetPropertiesForHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'get_properties_for';
 

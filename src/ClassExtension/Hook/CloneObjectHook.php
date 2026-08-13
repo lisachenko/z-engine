@@ -35,7 +35,7 @@ use ZEngine\Type\ObjectEntry;
  *  - The user handler must not let exceptions escape: handle() is entered by the engine
  *    through an FFI trampoline with no PHP frame around it to catch them (see issue #50).
  */
-class CloneObjectHook extends AbstractHook
+final class CloneObjectHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'clone_obj';
 

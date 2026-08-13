@@ -21,7 +21,7 @@ use ZEngine\Generated\zend_string;
 /**
  * Receiving hook for object field unset operation
  */
-class UnsetPropertyHook extends AbstractPropertyHook
+final class UnsetPropertyHook extends AbstractPropertyHook
 {
     protected const HOOK_FIELD = 'unset_property';
 

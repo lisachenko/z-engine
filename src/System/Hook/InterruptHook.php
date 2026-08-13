@@ -37,7 +37,7 @@ use ZEngine\System\ExecutionData;
  * reflection cannot resolve by name (closures) - prefer getFunctionEntry() or
  * wrap frame inspection in try/catch inside the handler.
  */
-class InterruptHook extends AbstractHook
+final class InterruptHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'zend_interrupt_function';
 

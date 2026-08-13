@@ -19,7 +19,7 @@ use ZEngine\Generated\zval;
 /**
  * Receiving hook for object dimension check operation (isset($object[$offset])/empty($object[$offset]))
  */
-class HasDimensionHook extends AbstractDimensionHook
+final class HasDimensionHook extends AbstractDimensionHook
 {
     protected const HOOK_FIELD = 'has_dimension';
 

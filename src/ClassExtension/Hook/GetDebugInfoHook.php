@@ -41,7 +41,7 @@ use ZEngine\Type\ObjectEntry;
  *  - The user handler must not let exceptions escape: handle() is entered by the engine
  *    through an FFI trampoline with no PHP frame around it to catch them (see issue #50).
  */
-class GetDebugInfoHook extends AbstractHook
+final class GetDebugInfoHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'get_debug_info';
 

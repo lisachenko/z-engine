@@ -21,7 +21,7 @@ use ZEngine\Generated\zend_string;
 /**
  * Receiving hook for indirect property access (by reference or via $this->field++)
  */
-class GetPropertyPointerHook extends AbstractPropertyHook
+final class GetPropertyPointerHook extends AbstractPropertyHook
 {
     protected const HOOK_FIELD = 'get_property_ptr_ptr';
 

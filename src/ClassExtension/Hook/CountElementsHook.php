@@ -22,7 +22,7 @@ use ZEngine\Type\ObjectEntry;
 /**
  * Receiving hook for object count operation (count($object))
  */
-class CountElementsHook extends AbstractHook
+final class CountElementsHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'count_elements';
 

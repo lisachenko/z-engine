@@ -21,7 +21,7 @@ use ZEngine\Generated\zend_string;
 /**
  * Receiving hook for object field check operation
  */
-class HasPropertyHook extends AbstractPropertyHook
+final class HasPropertyHook extends AbstractPropertyHook
 {
     protected const HOOK_FIELD = 'has_property';
 

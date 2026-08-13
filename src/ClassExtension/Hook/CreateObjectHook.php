@@ -21,7 +21,7 @@ use ZEngine\Reflection\ReflectionClass;
 /**
  * Receiving hook for performing operation on object
  */
-class CreateObjectHook extends AbstractHook
+final class CreateObjectHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'create_object';
 

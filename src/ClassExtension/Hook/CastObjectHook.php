@@ -23,7 +23,7 @@ use ZEngine\Type\ObjectEntry;
 /**
  * Receiving hook for casting object to another type
  */
-class CastObjectHook extends AbstractHook
+final class CastObjectHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'cast_object';
 

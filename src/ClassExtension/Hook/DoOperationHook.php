@@ -21,7 +21,7 @@ use ZEngine\Reflection\ReflectionValue;
 /**
  * Receiving hook for performing operation on object
  */
-class DoOperationHook extends AbstractHook
+final class DoOperationHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'do_operation';
 

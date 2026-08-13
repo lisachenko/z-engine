@@ -23,7 +23,7 @@ use ZEngine\Reflection\ReflectionValue;
 /**
  * Receiving hook for object field write operation
  */
-class WritePropertyHook extends AbstractPropertyHook
+final class WritePropertyHook extends AbstractPropertyHook
 {
     protected const HOOK_FIELD = 'write_property';
 

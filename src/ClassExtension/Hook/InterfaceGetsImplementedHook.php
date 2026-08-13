@@ -20,7 +20,7 @@ use ZEngine\Reflection\ReflectionClass;
 /**
  * Receiving hook for interface implementation
  */
-class InterfaceGetsImplementedHook extends AbstractHook
+final class InterfaceGetsImplementedHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'interface_gets_implemented';
 

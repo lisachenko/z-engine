@@ -22,7 +22,7 @@ use ZEngine\Reflection\ReflectionValue;
 /**
  * Receiving hook for object dimension read operation ($value = $object[$offset])
  */
-class ReadDimensionHook extends AbstractDimensionHook
+final class ReadDimensionHook extends AbstractDimensionHook
 {
     protected const HOOK_FIELD = 'read_dimension';
 

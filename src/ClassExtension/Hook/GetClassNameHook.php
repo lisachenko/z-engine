@@ -34,7 +34,7 @@ use ZEngine\Type\StringEntry;
  *  - The user handler must not let exceptions escape: handle() is entered by the engine
  *    through an FFI trampoline with no PHP frame around it to catch them (see issue #50).
  */
-class GetClassNameHook extends AbstractHook
+final class GetClassNameHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'get_class_name';
 

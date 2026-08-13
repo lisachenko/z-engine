@@ -44,7 +44,7 @@ use ZEngine\Type\StringEntry;
  *  - The user handler must not let exceptions escape (see issue #50), and must stay
  *    side-effect-free when isCheckOnly() reports a pure callability probe.
  */
-class GetClosureHook extends AbstractHook
+final class GetClosureHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'get_closure';
 

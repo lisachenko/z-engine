@@ -19,7 +19,7 @@ use ZEngine\Generated\zval;
 /**
  * Receiving hook for object dimension unset operation (unset($object[$offset]))
  */
-class UnsetDimensionHook extends AbstractDimensionHook
+final class UnsetDimensionHook extends AbstractDimensionHook
 {
     protected const HOOK_FIELD = 'unset_dimension';
 

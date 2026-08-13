@@ -32,7 +32,7 @@ use ZEngine\Type\StringEntry;
  * default callback to bail out and never return - swallowing a fatal error
  * resumes execution in a state the engine considers unreachable.
  */
-class ErrorCallbackHook extends AbstractHook
+final class ErrorCallbackHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'zend_error_cb';
 

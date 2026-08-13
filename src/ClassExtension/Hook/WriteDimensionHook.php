@@ -22,7 +22,7 @@ use ZEngine\Reflection\ReflectionValue;
  *
  * The offset is null for append operations ($object[] = $value)
  */
-class WriteDimensionHook extends AbstractDimensionHook
+final class WriteDimensionHook extends AbstractDimensionHook
 {
     protected const HOOK_FIELD = 'write_dimension';
 

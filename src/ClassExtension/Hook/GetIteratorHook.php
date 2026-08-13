@@ -49,7 +49,7 @@ use ZEngine\Type\ObjectEntry;
  *    foreach falls back to default property iteration; iterations already in flight keep
  *    their bridged iterator until their loop ends.
  */
-class GetIteratorHook extends AbstractHook
+final class GetIteratorHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'get_iterator';
 

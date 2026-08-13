@@ -20,7 +20,7 @@ use ZEngine\Reflection\ReflectionValue;
 /**
  * Receiving hook for performing operation on object
  */
-class CompareValuesHook extends AbstractHook
+final class CompareValuesHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'compare';
 

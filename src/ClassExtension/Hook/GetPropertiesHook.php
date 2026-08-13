@@ -65,7 +65,7 @@ use ZEngine\Type\ObjectEntry;
  *    cycles running through them are reclaimed only at request shutdown by the object
  *    store - delayed collection, never corruption.
  */
-class GetPropertiesHook extends AbstractHook
+final class GetPropertiesHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'get_properties';
 

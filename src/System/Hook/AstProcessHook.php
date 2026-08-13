@@ -21,7 +21,7 @@ use ZEngine\Hook\AbstractHook;
 /**
  * Receiving hook for processing an AST
  */
-class AstProcessHook extends AbstractHook
+final class AstProcessHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'zend_ast_process';
 

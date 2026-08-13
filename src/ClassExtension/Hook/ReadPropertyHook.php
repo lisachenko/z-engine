@@ -23,7 +23,7 @@ use ZEngine\Reflection\ReflectionValue;
 /**
  * Receiving hook for object field read operation
  */
-class ReadPropertyHook extends AbstractPropertyHook
+final class ReadPropertyHook extends AbstractPropertyHook
 {
     protected const HOOK_FIELD = 'read_property';
 

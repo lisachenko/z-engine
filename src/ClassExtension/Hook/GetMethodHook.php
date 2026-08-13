@@ -50,7 +50,7 @@ use ZEngine\Type\StringEntry;
  *    its method-name reference.
  *  - The user handler must not let exceptions escape (see issue #50).
  */
-class GetMethodHook extends AbstractMethodResolutionHook
+final class GetMethodHook extends AbstractMethodResolutionHook
 {
     protected const HOOK_FIELD = 'get_method';
 
