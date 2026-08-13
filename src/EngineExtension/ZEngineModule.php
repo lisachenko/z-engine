@@ -15,6 +15,7 @@ namespace ZEngine\EngineExtension;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Memory\HeapAnchorMissingException;
 use ZEngine\Memory\PersistentHeap;
 use ZEngine\Memory\PersistentHeapException;
 use ZEngine\Reflection\ReflectionValue;
@@ -168,7 +169,7 @@ final class ZEngineModule extends AbstractModule implements ModuleLifecycleInter
     {
         $anchor = $this->getGlobals();
         if ($anchor === null) {
-            throw new PersistentHeapException('The zengine module has no globals block');
+            throw HeapAnchorMissingException::create();
         }
         $anchorTyped = $anchor->u1;
         assert($anchorTyped instanceof CData);
@@ -185,7 +186,7 @@ final class ZEngineModule extends AbstractModule implements ModuleLifecycleInter
     {
         $anchor = $this->getGlobals();
         if ($anchor === null) {
-            throw new PersistentHeapException('The zengine module has no globals block');
+            throw HeapAnchorMissingException::create();
         }
         $anchorTyped = $anchor->u1;
         assert($anchorTyped instanceof CData);

@@ -15,6 +15,17 @@ namespace ZEngine\Reflection;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_arg_info;
+use ZEngine\Generated\zend_class_constant;
+use ZEngine\Generated\zend_class_entry;
+use ZEngine\Generated\zend_class_name;
+use ZEngine\Generated\zend_op;
+use ZEngine\Generated\zend_op_array;
+use ZEngine\Generated\zend_property_info;
+use ZEngine\Generated\zend_trait_alias;
+use ZEngine\Generated\zend_trait_precedence;
+use ZEngine\Generated\zend_type;
+use ZEngine\Generated\zval;
 use ZEngine\System\OpCode;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\OpLine;
@@ -686,7 +697,7 @@ class ClassSpecializer
         // request allocator reclaims the block at request end
         $entryStruct = Core::new('zend_class_entry', false);
         $newEntry    = Core::cast('zend_class_entry *', Core::addr($entryStruct));
-        Core::memcpy($newEntry, $sourceEntry, Core::sizeof(Core::type('zend_class_entry')));
+        Core::memcpy($newEntry, $sourceEntry, Core::sizeOfType(zend_class_entry::class));
 
         // Identity: fresh refcount, owned name, no shared-memory storage flags
         $newEntry->refcount = 1;
@@ -794,7 +805,7 @@ class ClassSpecializer
      */
     private function copyZvalTable(object $sourceTable, int $totalSlots): object
     {
-        $zvalSize = Core::sizeof(Core::type('zval'));
+        $zvalSize = Core::sizeOfType(zval::class);
         $memory   = Core::new("zval[{$totalSlots}]", false);
         Core::memcpy($memory, $sourceTable, $zvalSize * $totalSlots);
         for ($slot = 0; $slot < $totalSlots; $slot++) {
@@ -819,7 +830,7 @@ class ClassSpecializer
         if ($totalInterfaces === 0) {
             return;
         }
-        $itemSize = Core::sizeof(Core::type('zend_class_entry *'));
+        $itemSize = Core::sizeOfType('zend_class_entry *');
         $memory   = Core::new("zend_class_entry *[{$totalInterfaces}]", false);
         Core::memcpy($memory, $sourceEntry->interfaces, $itemSize * $totalInterfaces);
         $newEntry->interfaces = Core::cast('zend_class_entry **', Core::addr($memory));
@@ -838,7 +849,7 @@ class ClassSpecializer
         $totalTraits = $sourceEntry->num_traits;
         assert(is_int($totalTraits));
         if ($totalTraits > 0) {
-            $itemSize = Core::sizeof(Core::type('zend_class_name'));
+            $itemSize = Core::sizeOfType(zend_class_name::class);
             $memory   = Core::new("zend_class_name[{$totalTraits}]", false);
             Core::memcpy($memory, $sourceEntry->trait_names, $itemSize * $totalTraits);
             for ($index = 0; $index < $totalTraits; $index++) {
@@ -856,12 +867,13 @@ class ClassSpecializer
         $aliasList = $sourceEntry->trait_aliases;
         if ($aliasList !== null) {
             assert($aliasList instanceof CData);
-            $aliases = [];
+            $aliasSize = Core::sizeOfType(zend_trait_alias::class);
+            $aliases   = [];
             for ($index = 0; $aliasList[$index] !== null; $index++) {
                 $sourceAlias = $aliasList[$index];
                 assert($sourceAlias instanceof CData);
                 $aliasCopy = Core::new('zend_trait_alias', false);
-                Core::memcpy($aliasCopy, $sourceAlias, Core::sizeof(Core::type('zend_trait_alias')));
+                Core::memcpy($aliasCopy, $sourceAlias, $aliasSize);
                 $aliasMethodRef = $aliasCopy->trait_method;
                 assert($aliasMethodRef instanceof CData);
                 $this->addTraitMethodReferenceNames($aliasMethodRef);
@@ -878,16 +890,16 @@ class ClassSpecializer
         $precedenceList = $sourceEntry->trait_precedences;
         if ($precedenceList !== null) {
             assert($precedenceList instanceof CData);
-            $pointerSize = Core::sizeof(Core::type('zend_string *'));
-            $precedences = [];
+            $pointerSize    = Core::sizeOfType('zend_string *');
+            $precedenceSize = Core::sizeOfType(zend_trait_precedence::class);
+            $precedences    = [];
             for ($index = 0; $precedenceList[$index] !== null; $index++) {
                 $sourcePrecedence = $precedenceList[$index];
                 assert($sourcePrecedence instanceof CData);
                 $totalExcludes = $sourcePrecedence->num_excludes;
                 assert(is_int($totalExcludes));
-                $structSize = Core::sizeof(Core::type('zend_trait_precedence'))
-                    + max(0, $totalExcludes - 1) * $pointerSize;
-                $memory = Core::new("char[{$structSize}]", false);
+                $structSize = $precedenceSize + max(0, $totalExcludes - 1) * $pointerSize;
+                $memory     = Core::new("char[{$structSize}]", false);
                 Core::memcpy($memory, $sourcePrecedence, $structSize);
                 $precedenceCopy      = Core::cast('zend_trait_precedence *', $memory);
                 $precedenceMethodRef = $precedenceCopy->trait_method;
@@ -1077,7 +1089,7 @@ class ClassSpecializer
         string $methodName,
     ): object {
         $opArrayCopy = Core::new('zend_op_array', false);
-        Core::memcpy($opArrayCopy, $sourceOpArray, Core::sizeof(Core::type('zend_op_array')));
+        Core::memcpy($opArrayCopy, $sourceOpArray, Core::sizeOfType(zend_op_array::class));
 
         // Share the compiled body through the op_array refcount; each holder owns one
         // reference on the display name (destroy_op_array releases it per holder)
@@ -1178,7 +1190,7 @@ class ClassSpecializer
             return;
         }
 
-        $entrySize  = Core::sizeof(Core::type('zend_arg_info'));
+        $entrySize  = Core::sizeOfType(zend_arg_info::class);
         $sourceArgs = $sourceOpArray->arg_info;
         assert($sourceArgs instanceof CData);
         // The allocation starts one entry before arg_info when a return entry exists
@@ -1324,7 +1336,7 @@ class ClassSpecializer
     {
         $sourceOpcodes = $sourceOpArray->opcodes;
         assert($sourceOpcodes instanceof CData);
-        $opcodeSize = Core::sizeof(Core::type('zend_op'));
+        $opcodeSize = Core::sizeOfType(zend_op::class);
         $memory     = Core::new("zend_op[{$total}]", false);
         Core::memcpy($memory, $sourceOpcodes, $total * $opcodeSize);
 
@@ -1463,6 +1475,7 @@ class ClassSpecializer
         $newPropertiesTable = $newEntry->properties_info;
         assert($newPropertiesTable instanceof CData);
         $newTable    = HashTable::fromCData(Core::addr($newPropertiesTable));
+        $infoSize    = Core::sizeOfType(zend_property_info::class);
         $propertyMap = [];
         $ownCopies   = [];
 
@@ -1474,7 +1487,7 @@ class ClassSpecializer
 
             if (Core::addressOf($declaringClass) === $sourceAddress) {
                 $infoCopy = Core::new('zend_property_info', false);
-                Core::memcpy($infoCopy, $sourceInfo, Core::sizeof(Core::type('zend_property_info')));
+                Core::memcpy($infoCopy, $sourceInfo, $infoSize);
                 $infoCopy->ce      = $newEntry;
                 $propertyNameValue = $infoCopy->name;
                 assert($propertyNameValue instanceof CData);
@@ -1570,7 +1583,8 @@ class ClassSpecializer
         $sourceAddress     = Core::addressOf($sourceEntry);
         $newConstantsTable = $newEntry->constants_table;
         assert($newConstantsTable instanceof CData);
-        $newTable = HashTable::fromCData(Core::addr($newConstantsTable));
+        $newTable     = HashTable::fromCData(Core::addr($newConstantsTable));
+        $constantSize = Core::sizeOfType(zend_class_constant::class);
 
         foreach ($this->constantsTable($sourceEntry) as $constantName => $constantValue) {
             assert(is_string($constantName));
@@ -1587,7 +1601,7 @@ class ClassSpecializer
 
             if ($isOwnDeclaration || $isOwnedValue) {
                 $constantCopy = Core::new('zend_class_constant', false);
-                Core::memcpy($constantCopy, $sourceConstant, Core::sizeof(Core::type('zend_class_constant')));
+                Core::memcpy($constantCopy, $sourceConstant, $constantSize);
                 if ($isOwnDeclaration) {
                     $constantCopy->ce = $newEntry;
                 }
@@ -1794,7 +1808,7 @@ class ClassSpecializer
         $totalTypes = $sourceList->num_types;
         assert(is_int($totalTypes));
 
-        $typeSize   = Core::sizeof(Core::type('zend_type'));
+        $typeSize   = Core::sizeOfType(zend_type::class);
         $baseOffset = Core::type('zend_type_list')->getStructFieldOffset('types');
         $blockSize  = $baseOffset + $totalTypes * $typeSize;
         $memory     = Core::new("char[{$blockSize}]", false);
@@ -1933,7 +1947,7 @@ class ClassSpecializer
         assert(is_int($functionFlags) && is_int($numberOfArgs));
         $firstIndex = ($functionFlags & Core::ZEND_ACC_HAS_RETURN_TYPE) !== 0 ? -1 : 0;
         $lastIndex  = $numberOfArgs - 1 + (($functionFlags & Core::ZEND_ACC_VARIADIC) !== 0 ? 1 : 0);
-        $entrySize  = Core::sizeof(Core::type('zend_arg_info'));
+        $entrySize  = Core::sizeOfType(zend_arg_info::class);
         for ($index = $firstIndex; $index <= $lastIndex; $index++) {
             $entry = Core::pointerAtAddress(
                 'zend_arg_info *',

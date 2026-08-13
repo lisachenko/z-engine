@@ -438,8 +438,8 @@ class ExecutionData
     {
         static $slotSize;
         if ($slotSize === null) {
-            $alignedSizeOfExecuteData = Core::getAlignedSize(Core::sizeof(Core::type('zend_execute_data')));
-            $alignedSizeOfZval        = Core::getAlignedSize(Core::sizeof(Core::type('zval')));
+            $alignedSizeOfExecuteData = Core::getAlignedSize(Core::sizeOfType(zend_execute_data::class));
+            $alignedSizeOfZval        = Core::getAlignedSize(Core::sizeOfType(zval::class));
 
             $slotSize = intdiv(($alignedSizeOfExecuteData + $alignedSizeOfZval) - 1, $alignedSizeOfZval);
         }

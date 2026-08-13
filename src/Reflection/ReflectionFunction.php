@@ -15,6 +15,7 @@ namespace ZEngine\Reflection;
 
 use Closure;
 use FFI\CData;
+use ReflectionClass as NativeReflectionClass;
 use ReflectionFunction as NativeReflectionFunction;
 use ZEngine\Core;
 use ZEngine\Generated\zend_function;
@@ -48,7 +49,7 @@ class ReflectionFunction extends NativeReflectionFunction implements FunctionLik
     public static function fromCData(object $functionEntry): ReflectionFunction
     {
         /** @var ReflectionFunction $reflectionFunction */
-        $reflectionFunction = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionFunction = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
         /** @var zend_function|zend_internal_function $entry Narrowed to the stub views at the owning boundary */
         $entry = $functionEntry;
         if ($entry->type === Core::ZEND_INTERNAL_FUNCTION) {
@@ -140,7 +141,7 @@ class ReflectionFunction extends NativeReflectionFunction implements FunctionLik
     public static function fromClosureEntry(ClosureEntry $closureEntry, string $functionName): ReflectionFunction
     {
         /** @var ReflectionFunction $reflectionFunction */
-        $reflectionFunction          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionFunction          = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
         $reflectionFunction->pointer = Core::cast(zend_function::class, Core::addr($closureEntry->getRawFunction()));
 
         $reflectionFunction->setFunctionName($functionName);
