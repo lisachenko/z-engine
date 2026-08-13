@@ -129,7 +129,7 @@ class CastObjectHook extends AbstractHook
      * Combined with handle() this makes the naive fall-through — `$hook->proceed(); return
      * $hook->getResult();` — behave exactly like an uninstalled handler for every cast type.
      */
-    public function getResult()
+    public function getResult(): mixed
     {
         if ($this->lastProceedStatus !== Core::SUCCESS) {
             return null;
@@ -145,7 +145,7 @@ class CastObjectHook extends AbstractHook
      * @return int Core::SUCCESS when the original handler produced a value in the retval slot,
      *             Core::FAILURE when it could not (numeric casts on plain objects, for example)
      */
-    public function proceed()
+    public function proceed(): int
     {
         $originalHandler = $this->getOriginalCallable();
 

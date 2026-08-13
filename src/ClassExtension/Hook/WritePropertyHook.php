@@ -48,7 +48,7 @@ class WritePropertyHook extends AbstractPropertyHook
     /**
      * Returns value to write
      */
-    public function getValue()
+    public function getValue(): mixed
     {
         ReflectionValue::fromValueEntry($this->value)->getNativeValue($value);
 
@@ -60,15 +60,20 @@ class WritePropertyHook extends AbstractPropertyHook
      *
      * @param mixed $newValue Value to set
      */
-    public function setValue($newValue)
+    public function setValue($newValue): void
     {
         ReflectionValue::fromValueEntry($this->value)->setNativeValue($newValue);
     }
 
     /**
      * Proceeds with default handler
+     *
+     * The engine write_property contract guarantees a non-NULL zval*: the standard handler
+     * reports either the written property slot or &EG(error_zval).
+     *
+     * @return \FFI\CData The value slot the engine handler wrote into
      */
-    protected function proceed()
+    protected function proceed(): object
     {
         // As we will play with EG(fake_scope), we won't be able to access private or protected members, need to unpack
         $originalHandler = $this->getOriginalCallable();
@@ -78,9 +83,12 @@ class WritePropertyHook extends AbstractPropertyHook
         $value     = $this->value;
         $cacheSlot = $this->cacheSlot;
 
-        return Core::$executor->withFakeScope(
+        $writtenSlot = Core::$executor->withFakeScope(
             $object->ce,
             static fn() => ($originalHandler)($object, $member, $value, $cacheSlot),
         );
+        assert($writtenSlot instanceof CData);
+
+        return $writtenSlot;
     }
 }

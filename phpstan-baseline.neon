@@ -157,12 +157,6 @@ parameters:
 			path: src/ClassExtension/Hook/AbstractMethodResolutionHook.php
 
 		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\CastObjectHook\:\:getResult\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: src/ClassExtension/Hook/CastObjectHook.php
-
-		-
 			message: '#^Property ZEngine\\ClassExtension\\Hook\\CastObjectHook\:\:\$object \(FFI\\CData\) does not accept mixed\.$#'
 			identifier: assign.propertyType
 			count: 1
@@ -187,26 +181,8 @@ parameters:
 			path: src/ClassExtension/Hook/CloneObjectHook.php
 
 		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\CompareValuesHook\:\:getFirst\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: src/ClassExtension/Hook/CompareValuesHook.php
-
-		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\CompareValuesHook\:\:getSecond\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: src/ClassExtension/Hook/CompareValuesHook.php
-
-		-
 			message: '#^Method ZEngine\\ClassExtension\\Hook\\CompareValuesHook\:\:handle\(\) should return int but returns mixed\.$#'
 			identifier: return.type
-			count: 1
-			path: src/ClassExtension/Hook/CompareValuesHook.php
-
-		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\CompareValuesHook\:\:proceed\(\) has no return type specified\.$#'
-			identifier: missingType.return
 			count: 1
 			path: src/ClassExtension/Hook/CompareValuesHook.php
 
@@ -233,30 +209,6 @@ parameters:
 			identifier: assign.propertyType
 			count: 1
 			path: src/ClassExtension/Hook/CreateObjectHook.php
-
-		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\DoOperationHook\:\:getFirst\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: src/ClassExtension/Hook/DoOperationHook.php
-
-		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\DoOperationHook\:\:getResult\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: src/ClassExtension/Hook/DoOperationHook.php
-
-		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\DoOperationHook\:\:getSecond\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: src/ClassExtension/Hook/DoOperationHook.php
-
-		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\DoOperationHook\:\:proceed\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: src/ClassExtension/Hook/DoOperationHook.php
 
 		-
 			message: '#^Property ZEngine\\ClassExtension\\Hook\\DoOperationHook\:\:\$op1 \(FFI\\CData\) does not accept mixed\.$#'
@@ -295,18 +247,6 @@ parameters:
 			path: src/ClassExtension/Hook/GetDebugInfoHook.php
 
 		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\GetPropertiesForHook\:\:handle\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: src/ClassExtension/Hook/GetPropertiesForHook.php
-
-		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\GetPropertiesForHook\:\:proceed\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: src/ClassExtension/Hook/GetPropertiesForHook.php
-
-		-
 			message: '#^Parameter \#1 \$scope of method ZEngine\\System\\Executor\:\:withFakeScope\(\) expects FFI\\CData\|null, mixed given\.$#'
 			identifier: argument.type
 			count: 1
@@ -329,18 +269,6 @@ parameters:
 			identifier: return.type
 			count: 1
 			path: src/ClassExtension/Hook/GetPropertiesHook.php
-
-		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\GetPropertyPointerHook\:\:handle\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: src/ClassExtension/Hook/GetPropertyPointerHook.php
-
-		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\GetPropertyPointerHook\:\:proceed\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: src/ClassExtension/Hook/GetPropertyPointerHook.php
 
 		-
 			message: '#^Parameter \#1 \$scope of method ZEngine\\System\\Executor\:\:withFakeScope\(\) expects FFI\\CData\|null, mixed given\.$#'
@@ -374,12 +302,6 @@ parameters:
 
 		-
 			message: '#^Method ZEngine\\ClassExtension\\Hook\\HasPropertyHook\:\:handle\(\) should return int but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/ClassExtension/Hook/HasPropertyHook.php
-
-		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\HasPropertyHook\:\:proceed\(\) should return int but returns mixed\.$#'
 			identifier: return.type
 			count: 1
 			path: src/ClassExtension/Hook/HasPropertyHook.php
@@ -421,12 +343,6 @@ parameters:
 			path: src/ClassExtension/Hook/InterfaceGetsImplementedHook.php
 
 		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\InterfaceGetsImplementedHook\:\:proceed\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: src/ClassExtension/Hook/InterfaceGetsImplementedHook.php
-
-		-
 			message: '#^Property ZEngine\\ClassExtension\\Hook\\InterfaceGetsImplementedHook\:\:\$classType \(FFI\\CData\) does not accept mixed\.$#'
 			identifier: assign.propertyType
 			count: 1
@@ -441,12 +357,6 @@ parameters:
 		-
 			message: '#^Method ZEngine\\ClassExtension\\Hook\\ReadPropertyHook\:\:handle\(\) should return FFI\\CData but returns FFI\\CData\|null\.$#'
 			identifier: return.type
-			count: 1
-			path: src/ClassExtension/Hook/ReadPropertyHook.php
-
-		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\ReadPropertyHook\:\:proceed\(\) has no return type specified\.$#'
-			identifier: missingType.return
 			count: 1
 			path: src/ClassExtension/Hook/ReadPropertyHook.php
 
@@ -499,12 +409,6 @@ parameters:
 			path: src/ClassExtension/Hook/ReadPropertyHook.php
 
 		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\UnsetPropertyHook\:\:proceed\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: src/ClassExtension/Hook/UnsetPropertyHook.php
-
-		-
 			message: '#^Parameter \#1 \$scope of method ZEngine\\System\\Executor\:\:withFakeScope\(\) expects FFI\\CData\|null, ZEngine\\Generated\\zend_class_entry\|null given\.$#'
 			identifier: argument.type
 			count: 1
@@ -527,30 +431,6 @@ parameters:
 			identifier: assign.propertyType
 			count: 1
 			path: src/ClassExtension/Hook/UnsetPropertyHook.php
-
-		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\WritePropertyHook\:\:getValue\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: src/ClassExtension/Hook/WritePropertyHook.php
-
-		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\WritePropertyHook\:\:handle\(\) should return FFI\\CData but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/ClassExtension/Hook/WritePropertyHook.php
-
-		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\WritePropertyHook\:\:proceed\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: src/ClassExtension/Hook/WritePropertyHook.php
-
-		-
-			message: '#^Method ZEngine\\ClassExtension\\Hook\\WritePropertyHook\:\:setValue\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: src/ClassExtension/Hook/WritePropertyHook.php
 
 		-
 			message: '#^Parameter \#1 \$scope of method ZEngine\\System\\Executor\:\:withFakeScope\(\) expects FFI\\CData\|null, mixed given\.$#'
@@ -1289,12 +1169,6 @@ parameters:
 			identifier: argument.type
 			count: 1
 			path: src/System/Executor.php
-
-		-
-			message: '#^Method ZEngine\\System\\Hook\\AstProcessHook\:\:proceed\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: src/System/Hook/AstProcessHook.php
 
 		-
 			message: '#^Property ZEngine\\System\\Hook\\AstProcessHook\:\:\$ast \(FFI\\CData\) does not accept mixed\.$#'

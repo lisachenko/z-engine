@@ -79,7 +79,7 @@ class DoOperationHook extends AbstractHook
     /**
      * Returns first operand
      */
-    public function getFirst()
+    public function getFirst(): mixed
     {
         ReflectionValue::fromValueEntry($this->op1)->getNativeValue($value);
 
@@ -89,7 +89,7 @@ class DoOperationHook extends AbstractHook
     /**
      * Returns second operand
      */
-    public function getSecond()
+    public function getSecond(): mixed
     {
         ReflectionValue::fromValueEntry($this->op2)->getNativeValue($value);
 
@@ -99,7 +99,7 @@ class DoOperationHook extends AbstractHook
     /**
      * Returns result of casting (eg from call to proceed)
      */
-    public function getResult()
+    public function getResult(): mixed
     {
         ReflectionValue::fromValueEntry($this->returnValue)->getNativeValue($result);
 
@@ -108,11 +108,17 @@ class DoOperationHook extends AbstractHook
 
     /**
      * Proceeds with object custom operation
+     *
+     * @return int Core::SUCCESS when the original handler produced a value in the result slot,
+     *             Core::FAILURE when the operation is not supported for these operands
      */
-    public function proceed()
+    public function proceed(): int
     {
         $originalHandler = $this->getOriginalCallable();
 
-        return ($originalHandler)($this->opCode, $this->returnValue, $this->op1, $this->op2);
+        $result = ($originalHandler)($this->opCode, $this->returnValue, $this->op1, $this->op2);
+        assert(is_int($result));
+
+        return $result;
     }
 }

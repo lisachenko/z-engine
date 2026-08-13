@@ -37,7 +37,7 @@ class UnsetPropertyHook extends AbstractPropertyHook
     /**
      * Proceeds with default handler
      */
-    public function proceed()
+    public function proceed(): void
     {
         // As we will play with EG(fake_scope), we won't be able to access private or protected members, need to unpack
         $originalHandler = $this->getOriginalCallable();

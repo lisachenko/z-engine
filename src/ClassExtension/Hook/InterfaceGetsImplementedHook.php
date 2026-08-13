@@ -58,11 +58,17 @@ class InterfaceGetsImplementedHook extends AbstractHook
 
     /**
      * Proceeds with default handler
+     *
+     * @return int Core::SUCCESS when the original handler accepted the implementation,
+     *             Core::FAILURE when it rejected it
      */
-    public function proceed()
+    public function proceed(): int
     {
         $originalHandler = $this->getOriginalCallable();
 
-        return ($originalHandler)($this->interfaceType, $this->classType);
+        $result = ($originalHandler)($this->interfaceType, $this->classType);
+        assert(is_int($result));
+
+        return $result;
     }
 }

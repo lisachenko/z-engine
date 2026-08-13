@@ -56,7 +56,7 @@ class CompareValuesHook extends AbstractHook
     /**
      * Returns first operand
      */
-    public function getFirst()
+    public function getFirst(): mixed
     {
         ReflectionValue::fromValueEntry($this->op1)->getNativeValue($value);
 
@@ -66,7 +66,7 @@ class CompareValuesHook extends AbstractHook
     /**
      * Returns second operand
      */
-    public function getSecond()
+    public function getSecond(): mixed
     {
         ReflectionValue::fromValueEntry($this->op2)->getNativeValue($value);
 
@@ -75,11 +75,16 @@ class CompareValuesHook extends AbstractHook
 
     /**
      * Proceeds with object comparison
+     *
+     * @return int The engine ordering verdict (-1, 0, 1) or Core::FAILURE for uncomparable values
      */
-    public function proceed()
+    public function proceed(): int
     {
         $originalHandler = $this->getOriginalCallable();
 
-        return ($originalHandler)($this->op1, $this->op2);
+        $result = ($originalHandler)($this->op1, $this->op2);
+        assert(is_int($result));
+
+        return $result;
     }
 }

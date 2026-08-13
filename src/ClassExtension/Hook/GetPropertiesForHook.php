@@ -15,6 +15,7 @@ namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_array;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\ObjectEntry;
@@ -42,8 +43,9 @@ class GetPropertiesForHook extends AbstractHook
      * zend_array *(*zend_object_get_properties_for_t)(zend_object *object, zend_prop_purpose purpose);
      *
      * @inheritDoc
+     * @return zend_array
      */
-    public function handle(...$rawArguments)
+    public function handle(...$rawArguments): object
     {
         [$this->object, $this->purpose] = $rawArguments;
 
@@ -87,8 +89,11 @@ class GetPropertiesForHook extends AbstractHook
 
     /**
      * Proceeds with default handler
+     *
+     * @return \FFI\CData|null zend_array* produced by the original handler, NULL when it
+     *                         reported no dedicated table for this purpose
      */
-    public function proceed()
+    public function proceed(): ?object
     {
         // As we will play with EG(fake_scope), we won't be able to access private or protected members, need to unpack
         $originalHandler = $this->getOriginalCallable();
@@ -96,9 +101,12 @@ class GetPropertiesForHook extends AbstractHook
         $object  = $this->object;
         $purpose = $this->purpose;
 
-        return Core::$executor->withFakeScope(
+        $rawArray = Core::$executor->withFakeScope(
             $object->ce,
             static fn() => ($originalHandler)($object, $purpose),
         );
+        assert($rawArray === null || $rawArray instanceof CData);
+
+        return $rawArray;
     }
 }

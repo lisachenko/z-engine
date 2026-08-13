@@ -53,7 +53,7 @@ class AstProcessHook extends AbstractHook
     /**
      * Proceeds with default callback
      */
-    public function proceed()
+    public function proceed(): void
     {
         $originalHandler = $this->getOriginalCallable();
 

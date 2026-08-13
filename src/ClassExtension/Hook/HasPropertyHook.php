@@ -68,9 +68,12 @@ class HasPropertyHook extends AbstractPropertyHook
         $type      = $this->type;
         $cacheSlot = $this->cacheSlot;
 
-        return Core::$executor->withFakeScope(
+        $result = Core::$executor->withFakeScope(
             $object->ce,
             static fn() => ($originalHandler)($object, $member, $type, $cacheSlot),
         );
+        assert(is_int($result));
+
+        return $result;
     }
 }
