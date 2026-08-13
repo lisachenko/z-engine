@@ -803,8 +803,7 @@ class Core
 
     /**
      * Checks if the given pointer refers to a block allocated by z-engine via trackedNew()
-     */
-    /**
+     *
      * @param CData|object $pointer Runtime value is always CData; statically stub-typed views are accepted
      */
     public static function isTrackedBlock(object $pointer): bool
@@ -817,8 +816,7 @@ class Core
      *
      * Engine-original buffers are deliberately left alone: freeing memory that z-engine did
      * not allocate is exactly the wrong-allocator corruption this registry exists to prevent.
-     */
-    /**
+     *
      * @param CData|object $pointer Runtime value is always CData; statically stub-typed views are accepted
      */
     public static function untrackAndFree(object $pointer): void
@@ -834,8 +832,7 @@ class Core
 
     /**
      * Removes a block from the registry without freeing it (ownership handed to the engine)
-     */
-    /**
+     *
      * @param CData|object $pointer Runtime value is always CData; statically stub-typed views are accepted
      */
     public static function untrack(object $pointer): void

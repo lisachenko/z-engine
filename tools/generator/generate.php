@@ -9,6 +9,7 @@
  * with this source code in the file LICENSE.
  *
  */
+declare(strict_types=1);
 
 /**
  * Host-side generator driver: builds the generator docker image for every
@@ -33,8 +34,6 @@
  * caches in the temp directory. --php-dev=DIR (or Z_ENGINE_PHP_DEVPACK) points
  * at an already extracted one instead.
  */
-
-declare(strict_types=1);
 
 error_reporting(E_ALL);
 

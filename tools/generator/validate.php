@@ -9,6 +9,7 @@
  * with this source code in the file LICENSE.
  *
  */
+declare(strict_types=1);
 
 /**
  * Validation stage: loads the freshly generated engine.h with PHP FFI and
@@ -26,8 +27,6 @@
  * or a botched calling convention therefore fails generation right here rather
  * than at the user's first Core::init().
  */
-
-declare(strict_types=1);
 
 $buildDir = $argv[1] ?? '';
 $library  = $argv[2] ?? null;

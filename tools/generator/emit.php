@@ -9,6 +9,7 @@
  * with this source code in the file LICENSE.
  *
  */
+declare(strict_types=1);
 
 /**
  * In-image generator entry point: produces engine.h, constants.php and
@@ -36,8 +37,6 @@
  * --only=header runs only header emission + FFI validation (clang + ext-ffi
  *               required); expects layouts.json already present in --out.
  */
-
-declare(strict_types=1);
 
 namespace ZEngine\Generator;
 
