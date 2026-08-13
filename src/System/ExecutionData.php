@@ -18,6 +18,7 @@ use ZEngine\Core;
 use ZEngine\Generated\zend_execute_data;
 use ZEngine\Generated\zval;
 use ZEngine\Reflection\FunctionLikeTrait;
+use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionFunction;
 use ZEngine\Reflection\ReflectionMethod;
 use ZEngine\Reflection\ReflectionValue;
@@ -163,6 +164,21 @@ class ExecutionData
         }
 
         return ReflectionFunction::fromCData($rawFunction);
+    }
+
+    /**
+     * Returns the class scope of the code executing in this frame as a framework
+     * wrapper, or null when there is none (plain function, unbound closure, main
+     * scope) or the frame carries no function entry at all
+     *
+     * The frame's function entry owns the scope resolution (see
+     * ReflectionFunction::getClosureScopeClass()), so no raw engine structure
+     * crosses this API boundary. The scope is exactly what debug_backtrace()
+     * reports as the frame's "class".
+     */
+    public function getScopeClass(): ?ReflectionClass
+    {
+        return $this->getFunctionEntry()?->getClosureScopeClass();
     }
 
     /**
@@ -416,8 +432,8 @@ class ExecutionData
     {
         static $slotSize;
         if ($slotSize === null) {
-            $alignedSizeOfExecuteData = Core::getAlignedSize(Core::sizeof(Core::type('zend_execute_data')));
-            $alignedSizeOfZval        = Core::getAlignedSize(Core::sizeof(Core::type('zval')));
+            $alignedSizeOfExecuteData = Core::getAlignedSize(Core::sizeOfType(zend_execute_data::class));
+            $alignedSizeOfZval        = Core::getAlignedSize(Core::sizeOfType(zval::class));
 
             $slotSize = intdiv(($alignedSizeOfExecuteData + $alignedSizeOfZval) - 1, $alignedSizeOfZval);
         }

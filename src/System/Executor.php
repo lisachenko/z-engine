@@ -103,6 +103,32 @@ class Executor
     }
 
     /**
+     * Runs the given callback under a temporary fake scope, restoring the previous one afterwards
+     *
+     * EG(fake_scope) drives the visibility checks of the engine's default object handlers, so it
+     * is request-global state that must be handed back no matter how the callback leaves: a
+     * throwing __get(), a typed-property error or an uninitialized readonly access would
+     * otherwise leave the whole rest of the request running under a foreign scope. Restoration
+     * therefore happens in a finally block, and this helper is the only supported way to install
+     * a temporary scope - never pair setFakeScope() calls by hand.
+     *
+     * @param \FFI\CData|null $scope   Class entry to impersonate, or null to drop the fake scope
+     * @param \Closure        $body    Callback to invoke while the fake scope is installed
+     *
+     * @return mixed Whatever the callback returned
+     */
+    public function withFakeScope(?object $scope, \Closure $body): mixed
+    {
+        $previousScope = $this->setFakeScope($scope);
+
+        try {
+            return $body();
+        } finally {
+            $this->setFakeScope($previousScope);
+        }
+    }
+
+    /**
      * Checks if the engine carries an exception in flight (EG(exception) != NULL)
      *
      * Memory contract: pure pointer comparison, no refcount changes.

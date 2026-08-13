@@ -15,6 +15,7 @@ namespace ZEngine\Reflection;
 
 use Closure;
 use FFI\CData;
+use ReflectionClass as NativeReflectionClass;
 use ReflectionFunction as NativeReflectionFunction;
 use ZEngine\Core;
 use ZEngine\Generated\zend_function;
@@ -48,7 +49,7 @@ class ReflectionFunction extends NativeReflectionFunction implements FunctionLik
     public static function fromCData(object $functionEntry): ReflectionFunction
     {
         /** @var ReflectionFunction $reflectionFunction */
-        $reflectionFunction = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionFunction = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
         /** @var zend_function|zend_internal_function $entry Narrowed to the stub views at the owning boundary */
         $entry = $functionEntry;
         if ($entry->type === Core::ZEND_INTERNAL_FUNCTION) {
@@ -140,7 +141,7 @@ class ReflectionFunction extends NativeReflectionFunction implements FunctionLik
     public static function fromClosureEntry(ClosureEntry $closureEntry, string $functionName): ReflectionFunction
     {
         /** @var ReflectionFunction $reflectionFunction */
-        $reflectionFunction          = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionFunction          = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
         $reflectionFunction->pointer = Core::cast(zend_function::class, Core::addr($closureEntry->getRawFunction()));
 
         $reflectionFunction->setFunctionName($functionName);
@@ -149,6 +150,37 @@ class ReflectionFunction extends NativeReflectionFunction implements FunctionLik
         $reflectionFunction->setClosureFlag(false);
 
         return $reflectionFunction;
+    }
+
+    /**
+     * Returns the class scope this function entry is bound to as a framework wrapper,
+     * or null for plain functions, closures without a bound scope and main-scope
+     * pseudo entries
+     *
+     * Overrides the native accessor so every entry kind is served from the pointer
+     * this wrapper already owns: internal entries carry the scope in their own
+     * structure, user entries in the shared common prefix. All work around the C
+     * structure stays isolated here - callers receive the ReflectionClass wrapper,
+     * never a raw scope pointer.
+     */
+    public function getClosureScopeClass(): ?ReflectionClass
+    {
+        /** @var zend_function|zend_internal_function $entry Narrowed to the stub views at the owning boundary */
+        $entry = $this->pointer;
+        if ($entry->type === Core::ZEND_INTERNAL_FUNCTION) {
+            /** @var zend_internal_function $internalEntry */
+            $internalEntry = $entry;
+            $scope         = $internalEntry->scope;
+        } else {
+            /** @var zend_function $userEntry */
+            $userEntry = $entry;
+            $scope     = $userEntry->common->scope;
+        }
+        if ($scope === null) {
+            return null;
+        }
+
+        return ReflectionClass::fromCData($scope);
     }
 
     /**

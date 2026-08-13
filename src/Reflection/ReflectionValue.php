@@ -667,7 +667,7 @@ class ReflectionValue implements ReferenceCountedInterface
     public function replaceWith(ReflectionValue $donor): ReflectionValue
     {
         $this->assertNotReleased();
-        $zvalSize = Core::sizeof(Core::type('zval'));
+        $zvalSize = Core::sizeOfType(zval::class);
         $snapshot = Core::new('zval');
         Core::memcpy($snapshot, $this->pointer, $zvalSize);
         Core::memcpy($this->pointer, $donor->getRawValue(), $zvalSize);
@@ -685,7 +685,7 @@ class ReflectionValue implements ReferenceCountedInterface
     {
         $this->assertNotReleased();
         Core::call('zval_ptr_dtor', $this->zvalPointer());
-        Core::memcpy($this->pointer, $snapshot->getRawValue(), Core::sizeof(Core::type('zval')));
+        Core::memcpy($this->pointer, $snapshot->getRawValue(), Core::sizeOfType(zval::class));
     }
 
     /**

@@ -124,7 +124,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
     final public function register(): void
     {
         if ($this->isModuleRegistered()) {
-            throw new \RuntimeException('Module ' . $this->moduleName . ' was already registered.');
+            throw ModuleRegistrationException::alreadyRegistered($this->moduleName);
         }
 
         // Since PHP 8.4 zend_register_module_ex stores THIS pointer directly in the
@@ -145,7 +145,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
 
         $globalType = static::globalType();
         if ($globalType !== null) {
-            $module->globals_size = Core::sizeof(Core::type($globalType));
+            $module->globals_size = Core::sizeOfType($globalType);
             if (\ZEND_THREAD_SAFE) {
                 // On ZTS the entry carries a pointer to a ts_rsrc_id slot instead of the
                 // globals block: zend_startup_module_ex() passes it to ts_allocate_id(),
@@ -167,7 +167,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
             // The engine refused the entry (conflicting dependency or duplicate name) and
             // reported an E_CORE_WARNING; the persistent buffers above are bounded, error-path
             // allocations that stay in the tracked-block registry
-            throw new \RuntimeException('Can not register module ' . $moduleName . ' in the engine');
+            throw ModuleRegistrationException::registrationRefused($moduleName);
         }
         \assert($realModulePointer instanceof CData);
 
@@ -205,7 +205,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
 
         $result = Core::call('zend_startup_module_ex', $this->moduleEntry);
         if ($result !== Core::SUCCESS) {
-            throw new \RuntimeException('Can not startup module ' . $this->moduleName);
+            throw ModuleRegistrationException::startupFailed($this->moduleName);
         }
 
         // dl() parity: a module started in the middle of a request receives the current
@@ -452,11 +452,13 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
         if ($prefixName !== false) {
             $className = $prefixName;
         }
-        // Converts camelCase to snake_case
-        $moduleName = strtolower(preg_replace_callback('/([a-z])([A-Z])/', function ($match) {
+        // Converts camelCase to snake_case; preg_replace_callback() returns null on a PCRE
+        // error (backtrack/recursion limit), in which case the class name is used unsplit
+        // instead of being handed to strtolower() as null (deprecated since PHP 8.1)
+        $snakeCased = preg_replace_callback('/([a-z])([A-Z])/', function ($match) {
             return $match[1] . '_' . $match[2];
-        }, $className));
+        }, $className);
 
-        return $moduleName;
+        return strtolower($snakeCased ?? $className);
     }
 }

@@ -74,7 +74,7 @@ trait ReferenceCountedTrait
             );
         }
         if ($this->getGC()->refcount <= 0) {
-            throw new \RuntimeException('Reference counter underflow: the value has already been released');
+            throw TypeOperationException::referenceCountUnderflow();
         }
 
         return --$this->getGC()->refcount;

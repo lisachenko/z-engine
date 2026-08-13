@@ -100,7 +100,7 @@ final class PersistentHashTable extends HashTable
             self::HASH_UPDATE,
         );
         if ($result === null) {
-            throw new \RuntimeException('Can not store an item with key ' . $key->getStringValue());
+            throw TypeOperationException::cannotStoreKey($key->getStringValue());
         }
     }
 
@@ -117,7 +117,7 @@ final class PersistentHashTable extends HashTable
             self::HASH_UPDATE,
         );
         if ($result === null) {
-            throw new \RuntimeException("Can not store an item with index {$key}");
+            throw TypeOperationException::cannotStoreIndex($key);
         }
     }
 
