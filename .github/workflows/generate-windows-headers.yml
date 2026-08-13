@@ -25,6 +25,14 @@ on:
 permissions:
   contents: write
 
+# This workflow commits and pushes to the target branch, so two runs against
+# the same branch must never overlap (they would race on the push and rebase).
+# Queue them instead of cancelling: a cancelled run can leave the artifacts
+# half-refreshed, and the commit job is the only thing that publishes them.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref }}
+  cancel-in-progress: false
+
 # This branch targets PHP 8.4 only - engine structures are version-specific.
 env:
   PHP_MINOR: '8.4'

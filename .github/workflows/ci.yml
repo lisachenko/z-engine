@@ -7,6 +7,17 @@ on:
       - '[0-9].[0-9]'
   pull_request:
 
+# Build and test only: no job here writes to the repository or its API.
+permissions:
+  contents: read
+
+# One CI run per ref. Superseded pull-request runs are cancelled (the next push
+# re-runs everything anyway); branch runs are left alone so the history of a
+# pushed version branch keeps a complete result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # This branch targets PHP 8.4 only - engine structures are version-specific.
 env:
   PHP_MINOR: '8.4'
@@ -253,7 +264,32 @@ jobs:
           extensions: ffi
           ini-values: ffi.enable=1
           coverage: none
+
+      # composer.lock is deliberately not committed (a library pins nothing),
+      # so the lock consistency check has to be skipped here.
+      - name: Validate composer.json
+        run: composer validate --strict --no-check-lock
+
       - uses: ramsey/composer-install@v3
+
+      # Runs after the install step: audit reads the lock file composer install
+      # just resolved (there is no committed one to audit before that).
+      - name: Audit dependencies for known advisories
+        run: composer audit
+
+      # PHPStan's result cache lives in the tmpDir configured in
+      # phpstan.dist.neon. The key carries the run sha so every run stores a
+      # fresh entry (cache entries are immutable), while restore-keys fall back
+      # to the newest cache built from the same config + dependency set.
+      - name: Cache the PHPStan result cache
+        uses: actions/cache@v4
+        with:
+          path: var/phpstan
+          key: phpstan-${{ env.PHP_MINOR }}-${{ hashFiles('phpstan.dist.neon', 'phpstan-baseline.neon', 'composer.json') }}-${{ github.sha }}
+          restore-keys: |
+            phpstan-${{ env.PHP_MINOR }}-${{ hashFiles('phpstan.dist.neon', 'phpstan-baseline.neon', 'composer.json') }}-
+            phpstan-${{ env.PHP_MINOR }}-
+
       - run: composer phpstan
 
   coding-standards:
@@ -267,6 +303,19 @@ jobs:
           extensions: ffi
           coverage: none
       - uses: ramsey/composer-install@v3
+
+      # php-cs-fixer keeps per-file hashes in .php-cs-fixer.cache (gitignored)
+      # and re-checks only what changed; it invalidates the cache itself when
+      # the tool version or the rule set changes.
+      - name: Cache the php-cs-fixer cache
+        uses: actions/cache@v4
+        with:
+          path: .php-cs-fixer.cache
+          key: php-cs-fixer-${{ env.PHP_MINOR }}-${{ hashFiles('.php-cs-fixer.dist.php', 'composer.json') }}-${{ github.sha }}
+          restore-keys: |
+            php-cs-fixer-${{ env.PHP_MINOR }}-${{ hashFiles('.php-cs-fixer.dist.php', 'composer.json') }}-
+            php-cs-fixer-${{ env.PHP_MINOR }}-
+
       - run: composer cs:check
 
   tests-internal-debug:
