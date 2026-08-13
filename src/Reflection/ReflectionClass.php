@@ -497,24 +497,6 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
-     * Tells whether the given raw class entry describes a user-defined (compiled) class
-     *
-     * Entry-level counterpart of isUserDefined() for the machinery that walks the whole
-     * engine class table and only needs this one answer: constructing a full reflection
-     * per class entry would pay a native parent constructor plus the low-level table
-     * wrappers for a single byte read.
-     *
-     * @param CData|zend_class_entry $classEntry Pointer to the structure
-     *
-     * @internal shared with the body-swap machinery (FunctionBodySwap)
-     */
-    public static function entryIsUserDefined(object $classEntry): bool
-    {
-        /** @var zend_class_entry $classEntry Narrowed to the stub view at the owning boundary */
-        return ord($classEntry->type) === Core::ZEND_USER_CLASS;
-    }
-
-    /**
      * Checks if this class entry lives in opcache shared memory (ZEND_ACC_IMMUTABLE)
      *
      * Opcache marks every class it publishes from its shared memory as immutable:
@@ -636,25 +618,6 @@ class ReflectionClass extends NativeReflectionClass
     public function getMethodTable(): HashTable
     {
         return $this->methodTable;
-    }
-
-    /**
-     * Returns the borrowed method-table view of the given raw class entry
-     *
-     * Entry-level counterpart of getMethodTable(): the table lives inside the class
-     * entry, so a lookup does not need the rest of the reflection state (see
-     * entryIsUserDefined() for why the class-table walks avoid building one).
-     *
-     * @param CData|zend_class_entry $classEntry Pointer to the structure
-     *
-     * @return HashTable|ReflectionValue[]
-     *
-     * @internal shared with the body-swap machinery (FunctionBodySwap)
-     */
-    public static function entryMethodTable(object $classEntry): HashTable
-    {
-        /** @var zend_class_entry $classEntry Narrowed to the stub view at the owning boundary */
-        return HashTable::fromCData(Core::addr($classEntry->function_table));
     }
 
     /**

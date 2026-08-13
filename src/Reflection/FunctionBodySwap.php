@@ -222,13 +222,11 @@ final class FunctionBodySwap
             }
             $seenClasses[$classAddress] = true;
 
-            // Both answers come straight off the entry through the owning class: a full
-            // reflection per engine class would pay a native parent constructor and the
-            // low-level table wrappers just to serve one flag read and one table lookup
-            if (!ReflectionClass::entryIsUserDefined($rawClass)) {
+            $reflectionClass = ReflectionClass::fromCData($rawClass);
+            if (!$reflectionClass->isUserDefined()) {
                 continue;
             }
-            $bucketValue = ReflectionClass::entryMethodTable($rawClass)->find($lowerName);
+            $bucketValue = $reflectionClass->getMethodTable()->find($lowerName);
             if ($bucketValue !== null && Core::addressOf($bucketValue->getRawFunction()) === $entryAddress) {
                 $shares++;
             }
