@@ -96,11 +96,7 @@ final class StructArray implements ArrayAccess, Countable, IteratorAggregate
      */
     public function offsetGet(mixed $offset): mixed
     {
-        if ($offset < 0 || $offset >= $this->count) {
-            throw new \OutOfBoundsException(
-                "Struct array index {$offset} is out of bounds, valid range is 0..{$this->count}",
-            );
-        }
+        $this->assertInBounds($offset);
 
         // The single audited raw pointer-index in the framework: the base is a CData handle
         // at runtime (the stub views used statically do not model array access, by design -
@@ -157,6 +153,27 @@ final class StructArray implements ArrayAccess, Countable, IteratorAggregate
         return $previousCopy;
     }
 
+    /**
+     * Stores one element pointer (or null for an empty slot) at the given position
+     *
+     * The pointer counterpart of replace(): replace() byte-copies a value INTO the struct a
+     * slot holds, this overwrites the pointer the slot itself carries - the shape every
+     * engine pointer block is built with (NULL-terminated trait adaptation lists, the
+     * slot-indexed properties_info_table, packed `T *[N]` blocks). The write mutates
+     * engine-visible memory behind the FFI pointer, which static analysis cannot see -
+     * hence the explicit impurity marker.
+     *
+     * @phpstan-impure
+     *
+     * @param CData|T|null $pointer Element pointer to store, or null to clear the slot
+     */
+    public function storePointer(int $position, ?object $pointer): void
+    {
+        $this->assertInBounds($position);
+
+        $this->baseAddress[$position] = $pointer;
+    }
+
     public function count(): int
     {
         return max($this->count, 0);
@@ -169,6 +186,18 @@ final class StructArray implements ArrayAccess, Countable, IteratorAggregate
     {
         for ($index = 0; $index < $this->count; $index++) {
             yield $index => $this[$index];
+        }
+    }
+
+    /**
+     * Refuses any index outside the declared element range, on both ends
+     */
+    private function assertInBounds(int $offset): void
+    {
+        if ($offset < 0 || $offset >= $this->count) {
+            throw new \OutOfBoundsException(
+                "Struct array index {$offset} is out of bounds, valid range is 0..{$this->count}",
+            );
         }
     }
 }

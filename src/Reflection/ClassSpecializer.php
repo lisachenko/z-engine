@@ -893,10 +893,8 @@ class ClassSpecializer
                 $precedenceMethodRef = $precedenceCopy->trait_method;
                 assert($precedenceMethodRef instanceof CData);
                 $this->addTraitMethodReferenceNames($precedenceMethodRef);
-                $excludeNames = self::precedenceExcludeNames($precedenceCopy);
-                for ($excludeIndex = 0; $excludeIndex < $totalExcludes; $excludeIndex++) {
-                    $excludeName = $excludeNames[$excludeIndex];
-                    assert($excludeName instanceof CData);
+                $excludeNames = ReflectionClass::precedenceExcludeNames($precedenceCopy, $totalExcludes);
+                foreach ($excludeNames as $excludeName) {
                     self::addStringReference($excludeName);
                 }
                 $precedences[] = $precedenceCopy;
@@ -934,26 +932,12 @@ class ClassSpecializer
     {
         $totalItems = count($items);
         $memory     = Core::new("{$itemType} *[" . ($totalItems + 1) . ']', false);
+        $slots      = new StructArray($memory, $totalItems + 1);
         foreach ($items as $position => $item) {
-            self::storePointerSlot($memory, $position, $item);
+            $slots->storePointer($position, $item);
         }
 
         return Core::cast("{$itemType} **", Core::addr($memory));
-    }
-
-    /**
-     * Stores one pointer (or null) into the given slot of a pointer-array block
-     *
-     * The write mutates engine-visible memory behind the FFI pointer, which static
-     * analysis cannot see - hence the explicit impurity marker.
-     *
-     * @phpstan-impure
-     * @param \FFI\CData $arrayMemory
-     * @param \FFI\CData|null $pointer
-     */
-    private static function storePointerSlot(object $arrayMemory, int $slot, ?object $pointer): void
-    {
-        $arrayMemory[$slot] = $pointer;
     }
 
     /**
@@ -1545,13 +1529,16 @@ class ClassSpecializer
             return;
         }
         $memory = Core::new("zend_property_info *[{$totalSlots}]", false);
+        $slots  = new StructArray($memory, $totalSlots);
         for ($slot = 0; $slot < $totalSlots; $slot++) {
+            // Empty slots are read raw: the table is a nullable pointer array, a shape the
+            // element-typed StructArray view deliberately does not model
             $sourceInfo = $sourceTable[$slot];
             if ($sourceInfo === null) {
                 continue;
             }
             assert($sourceInfo instanceof CData);
-            self::storePointerSlot($memory, $slot, $propertyMap[Core::addressOf($sourceInfo)] ?? $sourceInfo);
+            $slots->storePointer($slot, $propertyMap[Core::addressOf($sourceInfo)] ?? $sourceInfo);
         }
         $newEntry->properties_info_table = Core::cast('zend_property_info **', Core::addr($memory));
     }
@@ -1964,19 +1951,5 @@ class ClassSpecializer
             assert($entry instanceof CData);
             yield $entry;
         }
-    }
-
-    /**
-     * Returns a freely indexable pointer to the flexible exclude_class_names array of a
-     * zend_trait_precedence (the declared 1-element FFI view is bounds-checked)
-     *
-     * @param \FFI\CData $precedenceEntry
-     * @return \FFI\CData
-     */
-    private static function precedenceExcludeNames(object $precedenceEntry): object
-    {
-        $excludeOffset = Core::type('zend_trait_precedence')->getStructFieldOffset('exclude_class_names');
-
-        return Core::pointerAtAddress('zend_string **', Core::addressOf($precedenceEntry) + $excludeOffset);
     }
 }
