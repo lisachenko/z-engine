@@ -611,7 +611,7 @@ final class PersistentHeap
     private function assertOperational(): void
     {
         if ($this->destroyed) {
-            throw new PersistentHeapException('This persistent heap has been destroyed');
+            throw PersistentHeapException::heapDestroyed();
         }
         if ($this->inert || Core::isShutdown()) {
             throw HeapInertException::create();
@@ -661,7 +661,7 @@ final class PersistentHeap
     private function requireEntry(PersistentHashTable $table, int $index): ReflectionValue
     {
         return $table->findIndex($index)
-            ?? throw new PersistentHeapException("Corrupt heap metadata: missing entry #{$index}");
+            ?? throw PersistentHeapException::corruptMetadata($index);
     }
 
     /**
