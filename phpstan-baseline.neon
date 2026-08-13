@@ -1033,12 +1033,6 @@ parameters:
 			path: src/Reflection/ReflectionClass.php
 
 		-
-			message: '#^Cannot call method getRawClass\(\) on ZEngine\\Reflection\\ReflectionValue\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: src/Reflection/ReflectionClass.php
-
-		-
 			message: '#^Cannot call method isSubclassOf\(\) on ZEngine\\Reflection\\ReflectionClass\|null\.$#'
 			identifier: method.nonObject
 			count: 1
