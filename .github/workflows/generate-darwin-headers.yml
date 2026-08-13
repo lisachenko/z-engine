@@ -25,6 +25,14 @@ on:
 permissions:
   contents: write
 
+# This workflow commits and pushes to the target branch, so two runs against
+# the same branch must never overlap (they would race on the push and rebase).
+# Queue them instead of cancelling: a cancelled run can leave the artifacts
+# half-refreshed, and the commit job is the only thing that publishes them.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref }}
+  cancel-in-progress: false
+
 # This branch targets PHP 8.5 only - engine structures are version-specific.
 env:
   PHP_MINOR: '8.5'
@@ -41,7 +49,7 @@ jobs:
         ts: [nts, zts]
     runs-on: ${{ matrix.runner-arch.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref }}
 
@@ -99,7 +107,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/gen-debug"
           cp -R "${TMPDIR:-/tmp}/"z-engine-generator-* "$RUNNER_TEMP/gen-debug/" 2>/dev/null || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: gen-debug-darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }}
@@ -116,7 +124,7 @@ jobs:
           grep -q 'FFI_SCOPE "ZEngine"' "${dir}/engine.h" \
             || { echo "::error::${dir}/engine.h has no FFI_SCOPE declaration"; exit 1; }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: steps.build.outputs.available == 'true'
         with:
           name: darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }}
@@ -132,11 +140,11 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref }}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: darwin-*
           path: include/${{ env.PHP_MINOR }}/

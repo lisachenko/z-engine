@@ -4,6 +4,8 @@ includes:
 parameters:
     level: max
     phpVersion: 80500
+    # Deterministic result-cache location (gitignored, /var/) so CI can cache it
+    tmpDir: var/phpstan
     paths:
         - src
         - tests

@@ -82,9 +82,10 @@ class ReadPropertyHook extends AbstractPropertyHook
         $cacheSlot = $this->cacheSlot;
         $rv        = $this->rv;
 
-        $previousScope = Core::$executor->setFakeScope($object->ce);
-        $result        = ($originalHandler)($object, $member, $type, $cacheSlot, $rv);
-        Core::$executor->setFakeScope($previousScope);
+        $result = Core::$executor->withFakeScope(
+            $object->ce,
+            static fn() => ($originalHandler)($object, $member, $type, $cacheSlot, $rv),
+        );
 
         ReflectionValue::fromValueEntry($result)->getNativeValue($phpResult);
 

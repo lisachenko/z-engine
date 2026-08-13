@@ -100,10 +100,9 @@ class GetPropertiesForHook extends AbstractHook
         $object  = $this->object;
         $purpose = $this->purpose;
 
-        $previousScope = Core::$executor->setFakeScope($object->ce);
-        $result        = ($originalHandler)($object, $purpose);
-        Core::$executor->setFakeScope($previousScope);
-
-        return $result;
+        return Core::$executor->withFakeScope(
+            $object->ce,
+            static fn() => ($originalHandler)($object, $purpose),
+        );
     }
 }
