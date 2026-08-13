@@ -145,7 +145,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
 
         $globalType = static::globalType();
         if ($globalType !== null) {
-            $module->globals_size = Core::sizeof(Core::type($globalType));
+            $module->globals_size = Core::sizeOfType($globalType);
             if (\ZEND_THREAD_SAFE) {
                 // On ZTS the entry carries a pointer to a ts_rsrc_id slot instead of the
                 // globals block: zend_startup_module_ex() passes it to ts_allocate_id(),

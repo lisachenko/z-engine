@@ -16,6 +16,16 @@ namespace ZEngine\OpCache;
 use FFI;
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\Bucket;
+use ZEngine\Generated\zend_arg_info;
+use ZEngine\Generated\zend_ast;
+use ZEngine\Generated\zend_ast_list;
+use ZEngine\Generated\zend_ast_ref;
+use ZEngine\Generated\zend_attribute_arg;
+use ZEngine\Generated\zend_class_name;
+use ZEngine\Generated\zend_early_binding;
+use ZEngine\Generated\zend_string;
+use ZEngine\Generated\zval;
 
 /**
  * Turns the position-independent file-cache payload into a live in-memory
@@ -108,7 +118,7 @@ final class PayloadRelocator
         $this->size           = $metaInfo->memSize();
         $this->strSectionBase = $this->base + $this->size;
         // _ZSTR_HEADER_SIZE = sizeof(zend_string) - sizeof(char) (the flexible val[1] member)
-        $this->zendStringHeaderSize = Core::sizeof(Core::type('zend_string')) - 1;
+        $this->zendStringHeaderSize = Core::sizeOfType(zend_string::class) - 1;
     }
 
     /**
@@ -317,7 +327,7 @@ final class PayloadRelocator
         $used        = $ht->nNumUsed;
         if (($ht->u->flags & self::HASH_FLAG_PACKED) !== 0) {
             for ($i = 0; $i < $used; $i++) {
-                $zval = Core::pointerAtAddress('zval *', $dataAddress + $i * Core::sizeof(Core::type('zval')));
+                $zval = Core::pointerAtAddress('zval *', $dataAddress + $i * Core::sizeOfType(zval::class));
                 if ($zval->u1->v->type !== 0) {
                     $each($zval);
                 }
@@ -325,7 +335,7 @@ final class PayloadRelocator
 
             return;
         }
-        $bucketSize = Core::sizeof(Core::type('Bucket'));
+        $bucketSize = Core::sizeOfType(Bucket::class);
         for ($i = 0; $i < $used; $i++) {
             $bucket = Core::pointerAtAddress('Bucket *', $dataAddress + $i * $bucketSize);
             if ($bucket->val->u1->v->type !== 0) {
@@ -352,7 +362,7 @@ final class PayloadRelocator
         $used        = $ht->nNumUsed;
         if (($ht->u->flags & self::HASH_FLAG_PACKED) !== 0) {
             for ($i = 0; $i < $used; $i++) {
-                $zval = Core::pointerAtAddress('zval *', $dataAddress + $i * Core::sizeof(Core::type('zval')));
+                $zval = Core::pointerAtAddress('zval *', $dataAddress + $i * Core::sizeOfType(zval::class));
                 if ($zval->u1->v->type !== 0) {
                     $each($zval);
                 }
@@ -360,7 +370,7 @@ final class PayloadRelocator
 
             return;
         }
-        $bucketSize = Core::sizeof(Core::type('Bucket'));
+        $bucketSize = Core::sizeOfType(Bucket::class);
         for ($i = 0; $i < $used; $i++) {
             $bucket = Core::pointerAtAddress('Bucket *', $dataAddress + $i * $bucketSize);
             if ($bucket->val->u1->v->type !== 0) {
@@ -396,7 +406,7 @@ final class PayloadRelocator
             case self::IS_CONSTANT_AST:
                 if (!$this->isUnserialized($this->ptrValue($zval->value, 'ast'))) {
                     $astRef = $this->unPtr($zval->value, 'ast');
-                    $this->unserializeAst($astRef + Core::sizeof(Core::type('zend_ast_ref')));
+                    $this->unserializeAst($astRef + Core::sizeOfType(zend_ast_ref::class));
                 }
                 break;
             case self::IS_INDIRECT:
@@ -428,7 +438,7 @@ final class PayloadRelocator
             case self::IS_CONSTANT_AST:
                 if (!$this->isSerialized($this->ptrValue($zval->value, 'ast'))) {
                     $astRef = $this->serPtr($zval->value, 'ast');
-                    $this->serializeAst($astRef + Core::sizeof(Core::type('zend_ast_ref')));
+                    $this->serializeAst($astRef + Core::sizeOfType(zend_ast_ref::class));
                 }
                 break;
             case self::IS_INDIRECT:
@@ -451,10 +461,10 @@ final class PayloadRelocator
         }
         if (($kind >> self::ZEND_AST_IS_LIST_SHIFT & 1) !== 0) {
             $list      = Core::pointerAtAddress('zend_ast_list *', $astAddress);
-            $childBase = $astAddress + Core::sizeof(Core::type('zend_ast_list')) - PHP_INT_SIZE;
+            $childBase = $astAddress + Core::sizeOfType(zend_ast_list::class) - PHP_INT_SIZE;
             $count     = $list->children;
         } else {
-            $childBase = $astAddress + Core::sizeof(Core::type('zend_ast')) - PHP_INT_SIZE;
+            $childBase = $astAddress + Core::sizeOfType(zend_ast::class) - PHP_INT_SIZE;
             $count     = $kind >> self::ZEND_AST_CHILDREN_SHIFT;
         }
         for ($i = 0; $i < $count; $i++) {
@@ -478,10 +488,10 @@ final class PayloadRelocator
         }
         if (($kind >> self::ZEND_AST_IS_LIST_SHIFT & 1) !== 0) {
             $list      = Core::pointerAtAddress('zend_ast_list *', $astAddress);
-            $childBase = $astAddress + Core::sizeof(Core::type('zend_ast_list')) - PHP_INT_SIZE;
+            $childBase = $astAddress + Core::sizeOfType(zend_ast_list::class) - PHP_INT_SIZE;
             $count     = $list->children;
         } else {
-            $childBase = $astAddress + Core::sizeof(Core::type('zend_ast')) - PHP_INT_SIZE;
+            $childBase = $astAddress + Core::sizeOfType(zend_ast::class) - PHP_INT_SIZE;
             $count     = $kind >> self::ZEND_AST_CHILDREN_SHIFT;
         }
         for ($i = 0; $i < $count; $i++) {
@@ -536,7 +546,7 @@ final class PayloadRelocator
         $attr = Core::pointerAtAddress('zend_attribute *', $this->unPtr($zval->value, 'ptr'));
         $this->unStr($attr, 'name');
         $this->unStr($attr, 'lcname');
-        $argSize = Core::sizeof(Core::type('zend_attribute_arg'));
+        $argSize = Core::sizeOfType(zend_attribute_arg::class);
         $argBase = Core::addressOf($attr->args);
         for ($i = 0; $i < $attr->argc; $i++) {
             $arg = Core::pointerAtAddress('zend_attribute_arg *', $argBase + $i * $argSize);
@@ -554,7 +564,7 @@ final class PayloadRelocator
         $attr    = Core::pointerAtAddress('zend_attribute *', $address);
         $this->serStr($attr, 'name');
         $this->serStr($attr, 'lcname');
-        $argSize = Core::sizeof(Core::type('zend_attribute_arg'));
+        $argSize = Core::sizeOfType(zend_attribute_arg::class);
         $argBase = Core::addressOf($attr->args);
         for ($i = 0; $i < $attr->argc; $i++) {
             $arg = Core::pointerAtAddress('zend_attribute_arg *', $argBase + $i * $argSize);
@@ -648,7 +658,7 @@ final class PayloadRelocator
         }
         if ($this->ptrValue($opArray, 'literals') !== 0) {
             $address  = $this->unPtr($opArray, 'literals');
-            $zvalSize = Core::sizeof(Core::type('zval'));
+            $zvalSize = Core::sizeOfType(zval::class);
             for ($i = 0; $i < $opArray->last_literal; $i++) {
                 $this->unserializeZval(Core::pointerAtAddress('zval *', $address + $i * $zvalSize));
             }
@@ -711,7 +721,7 @@ final class PayloadRelocator
         }
         if ($this->ptrValue($opArray, 'literals') !== 0) {
             $address  = $this->serPtr($opArray, 'literals');
-            $zvalSize = Core::sizeof(Core::type('zval'));
+            $zvalSize = Core::sizeOfType(zval::class);
             for ($i = 0; $i < $opArray->last_literal; $i++) {
                 $this->serializeZval(Core::pointerAtAddress('zval *', $address + $i * $zvalSize));
             }
@@ -760,7 +770,7 @@ final class PayloadRelocator
             return;
         }
         $address       = $this->unPtr($opArray, 'arg_info');
-        $argInfoSize   = Core::sizeof(Core::type('zend_arg_info'));
+        $argInfoSize   = Core::sizeOfType(zend_arg_info::class);
         [$start, $end] = $this->argInfoBounds($opArray);
         for ($i = $start; $i < $end; $i++) {
             $arg = Core::pointerAtAddress('zend_arg_info *', $address + $i * $argInfoSize);
@@ -780,7 +790,7 @@ final class PayloadRelocator
             return;
         }
         $address       = $this->serPtr($opArray, 'arg_info');
-        $argInfoSize   = Core::sizeof(Core::type('zend_arg_info'));
+        $argInfoSize   = Core::sizeOfType(zend_arg_info::class);
         [$start, $end] = $this->argInfoBounds($opArray);
         for ($i = $start; $i < $end; $i++) {
             $arg = Core::pointerAtAddress('zend_arg_info *', $address + $i * $argInfoSize);
@@ -925,7 +935,7 @@ final class PayloadRelocator
             return;
         }
         $address  = $this->unPtr($ce, $field);
-        $zvalSize = Core::sizeof(Core::type('zval'));
+        $zvalSize = Core::sizeOfType(zval::class);
         for ($i = 0; $i < $count; $i++) {
             $this->unserializeZval(Core::pointerAtAddress('zval *', $address + $i * $zvalSize));
         }
@@ -940,7 +950,7 @@ final class PayloadRelocator
             return;
         }
         $address  = $this->serPtr($ce, $field);
-        $zvalSize = Core::sizeof(Core::type('zval'));
+        $zvalSize = Core::sizeOfType(zval::class);
         for ($i = 0; $i < $count; $i++) {
             $this->serializeZval(Core::pointerAtAddress('zval *', $address + $i * $zvalSize));
         }
@@ -987,7 +997,7 @@ final class PayloadRelocator
     private function unserializeClassNames(object $ce, string $field, int $count): void
     {
         $address  = $this->unPtr($ce, $field);
-        $nameSize = Core::sizeof(Core::type('zend_class_name'));
+        $nameSize = Core::sizeOfType(zend_class_name::class);
         for ($i = 0; $i < $count; $i++) {
             $name = Core::pointerAtAddress('zend_class_name *', $address + $i * $nameSize);
             $this->unStr($name, 'name');
@@ -1001,7 +1011,7 @@ final class PayloadRelocator
     private function serializeClassNames(object $ce, string $field, int $count): void
     {
         $address  = $this->serPtr($ce, $field);
-        $nameSize = Core::sizeof(Core::type('zend_class_name'));
+        $nameSize = Core::sizeOfType(zend_class_name::class);
         for ($i = 0; $i < $count; $i++) {
             $name = Core::pointerAtAddress('zend_class_name *', $address + $i * $nameSize);
             $this->serStr($name, 'name');
@@ -1175,7 +1185,7 @@ final class PayloadRelocator
             return;
         }
         $address     = $this->unPtr($script, 'early_bindings');
-        $bindingSize = Core::sizeof(Core::type('zend_early_binding'));
+        $bindingSize = Core::sizeOfType(zend_early_binding::class);
         for ($i = 0; $i < $script->num_early_bindings; $i++) {
             $binding = Core::pointerAtAddress('zend_early_binding *', $address + $i * $bindingSize);
             $this->unStr($binding, 'lcname');
@@ -1193,7 +1203,7 @@ final class PayloadRelocator
             return;
         }
         $address     = $this->serPtr($script, 'early_bindings');
-        $bindingSize = Core::sizeof(Core::type('zend_early_binding'));
+        $bindingSize = Core::sizeOfType(zend_early_binding::class);
         for ($i = 0; $i < $script->num_early_bindings; $i++) {
             $binding = Core::pointerAtAddress('zend_early_binding *', $address + $i * $bindingSize);
             $this->serStr($binding, 'lcname');
