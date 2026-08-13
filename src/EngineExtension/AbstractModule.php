@@ -24,7 +24,6 @@ use ZEngine\EngineExtension\Hook\RequestShutdownHook;
 use ZEngine\EngineExtension\Hook\RequestStartupHook;
 use ZEngine\Reflection\ReflectionExtension;
 use ZEngine\Type\StringEntry;
-use ZEngine\Type\StructArray;
 
 /**
  * Base class for userland PHP extensions (engine modules)
@@ -415,30 +414,15 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
      */
     private function makeRegistryKeyPersistent(): void
     {
-        $registryTable = Core::$modules->getRawValue();
-        $lowerName     = strtolower($this->moduleName);
-
-        $numUsed = $registryTable->nNumUsed;
-        $arData  = $registryTable->arData;
-        assert($arData !== null || $numUsed === 0);
-        $buckets = $arData !== null ? new StructArray($arData, $numUsed) : null;
-        for ($index = 0; $index < $numUsed; $index++) {
-            assert($buckets !== null);
-            $bucket = Core::addr($buckets[$index]);
-            if ($bucket->key === null) {
-                continue;
-            }
-            $key = StringEntry::fromCData($bucket->key);
-            if ($key->getStringValue() !== $lowerName) {
-                continue;
-            }
-            // A permanent interned key (registered during engine startup) is already safe
-            if (!$key->isPermanent()) {
-                $bucket->key = StringEntry::persistentInterned($lowerName)->getRawValue();
-            }
-
+        $lowerName   = strtolower($this->moduleName);
+        $registryKey = Core::$modules->findKeyEntry($lowerName);
+        // A permanent interned key (registered during engine startup) is already safe, and
+        // so is a module that is not in the registry at all
+        if ($registryKey === null || $registryKey->isPermanent()) {
             return;
         }
+
+        Core::$modules->replaceKey($lowerName, StringEntry::persistentInterned($lowerName));
     }
 
     /**

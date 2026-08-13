@@ -859,12 +859,6 @@ parameters:
 			path: src/EngineExtension/AbstractModule.php
 
 		-
-			message: '#^Parameter \#1 \$stringPointer of static method ZEngine\\Type\\StringEntry\:\:fromCData\(\) expects FFI\\CData\|ZEngine\\Generated\\zend_string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/EngineExtension/AbstractModule.php
-
-		-
 			message: '#^Property ZEngine\\EngineExtension\\Hook\\ExtensionConstructorHook\:\:\$globalMemoryPointer \(FFI\\CData\) does not accept mixed\.$#'
 			identifier: assign.propertyType
 			count: 1
