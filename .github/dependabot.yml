@@ -6,3 +6,40 @@ updates:
     interval: daily
     time: "04:00"
   open-pull-requests-limit: 10
+
+# Keeps the workflow actions current - including the SHA pins of the
+# third-party ones, whose trailing "# vX.Y.Z" comment dependabot rewrites
+# together with the SHA.
+- package-ecosystem: github-actions
+  directory: "/"
+  schedule:
+    interval: weekly
+    day: monday
+    time: "04:00"
+  open-pull-requests-limit: 10
+  commit-message:
+    prefix: ci
+
+# The two images CI builds inline (no registry): the header generator and the
+# debug PHP build. Both live outside the repository root, so each needs its own
+# entry - dependabot scans the given directory for files whose name contains
+# "dockerfile", which covers tools/docker/php-debug.Dockerfile.
+- package-ecosystem: docker
+  directory: "/tools/generator"
+  schedule:
+    interval: weekly
+    day: monday
+    time: "04:00"
+  open-pull-requests-limit: 5
+  commit-message:
+    prefix: ci
+
+- package-ecosystem: docker
+  directory: "/tools/docker"
+  schedule:
+    interval: weekly
+    day: monday
+    time: "04:00"
+  open-pull-requests-limit: 5
+  commit-message:
+    prefix: ci
