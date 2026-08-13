@@ -22,6 +22,7 @@ use function strpos;
 
 use ZEngine\Core;
 use ZEngine\Reflection\ReflectionMethod;
+use ZEngine\Type\StructArray;
 
 /**
  * General node class that can contain several children nodes
@@ -151,14 +152,10 @@ class Node implements NodeInterface
             return [];
         }
 
-        $children     = [];
-        $castChildren = Core::cast('zend_ast **', $this->node->child);
+        $children = [];
         for ($index = 0; $index < $totalChildren; $index++) {
-            if ($castChildren[$index] !== null) {
-                $children[$index] = NodeFactory::fromCData($castChildren[$index], $this->owner);
-            } else {
-                $children[$index] = null;
-            }
+            $child            = $this->childAt($index);
+            $children[$index] = $child !== null ? NodeFactory::fromCData($child, $this->owner) : null;
         }
 
         return $children;
@@ -171,16 +168,12 @@ class Node implements NodeInterface
      */
     final public function getChild(int $index): ?NodeInterface
     {
-        $totalChildren = $this->getChildrenCount();
-        if ($index >= $totalChildren) {
-            throw new \OutOfBoundsException('Child index is out of range, there are ' . $totalChildren . ' children.');
-        }
-        $castChildren = Core::cast('zend_ast **', $this->node->child);
-        if ($castChildren[$index] === null) {
+        $child = $this->childAt($index);
+        if ($child === null) {
             return null;
         }
 
-        return NodeFactory::fromCData($castChildren[$index], $this->owner);
+        return NodeFactory::fromCData($child, $this->owner);
     }
 
     /**
@@ -191,12 +184,8 @@ class Node implements NodeInterface
      */
     public function replaceChild(int $index, NodeInterface $node): void
     {
-        $totalChildren = $this->getChildrenCount();
-        if ($index >= $totalChildren) {
-            throw new \OutOfBoundsException('Child index is out of range, there are ' . $totalChildren . ' children.');
-        }
-        $castChildren         = Core::cast('zend_ast **', $this->node->child);
-        $castChildren[$index] = Core::cast('zend_ast *', $node->node);
+        $rawNode = self::rawNodeOf($node, __FUNCTION__);
+        $this->childSlotsFor($index)->storePointer($index, Core::cast('zend_ast *', $rawNode));
     }
 
     /**
@@ -206,16 +195,75 @@ class Node implements NodeInterface
      */
     public function removeChild(int $index): NodeInterface
     {
-        $totalChildren = $this->getChildrenCount();
-        if ($index >= $totalChildren) {
-            throw new \OutOfBoundsException('Child index is out of range, there are ' . $totalChildren . ' children.');
-        }
-        $castChildren = Core::cast('zend_ast **', $this->node->child);
-        $child        = NodeFactory::fromCData($castChildren[$index], $this->owner);
-
-        $castChildren[$index] = null;
+        $childSlots = $this->childSlotsFor($index);
+        $child      = NodeFactory::fromCData($childSlots[$index], $this->owner);
+        $childSlots->storePointer($index, null);
 
         return $child;
+    }
+
+    /**
+     * Returns the raw zend_ast pointer of a node handed in through the NodeInterface API
+     *
+     * The child pointers this class stores are engine zend_ast structures, which only the
+     * Node hierarchy owns; the public methods keep the wider NodeInterface parameter type
+     * (narrowing it would be a BC break) and this guard turns what used to be a fatal
+     * "access to protected property" on a foreign implementation into a normal exception.
+     *
+     * @return CData zend_ast (or zend_ast_list) pointer of the given node
+     */
+    protected static function rawNodeOf(NodeInterface $node, string $operation): CData
+    {
+        if (!$node instanceof self) {
+            throw new \InvalidArgumentException(sprintf(
+                '%s() accepts only nodes backed by an engine zend_ast (a %s instance), %s given.',
+                $operation,
+                self::class,
+                get_class($node),
+            ));
+        }
+
+        return $node->node;
+    }
+
+    /**
+     * Reads one child pointer of this node, or null when that slot is empty
+     *
+     * The engine stores an absent child as a NULL pointer, a shape the element-typed
+     * struct-array view does not model, so the read is narrowed once here.
+     *
+     * @return CData|null zend_ast pointer of the child
+     */
+    private function childAt(int $index): ?CData
+    {
+        /** @var CData|null $child The engine leaves optional children NULL */
+        $child = $this->childSlotsFor($index)[$index];
+
+        return $child;
+    }
+
+    /**
+     * Returns the child-pointer view of this node after refusing an unusable index
+     *
+     * zend_ast declares its children as the flexible `zend_ast *child[1]` array, so the real
+     * bound is the node's runtime child count (ListNode overrides it with the list counter).
+     * Routing every accessor through Type\StructArray checks BOTH ends of that range: a
+     * NEGATIVE index used to pass the `$index >= $totalChildren` guards untouched and made
+     * the three writers read and overwrite engine memory in front of the node itself.
+     *
+     * @return StructArray<CData>
+     */
+    private function childSlotsFor(int $index): StructArray
+    {
+        $totalChildren = $this->getChildrenCount();
+        $childSlots    = new StructArray(Core::cast('zend_ast **', $this->node->child), $totalChildren);
+        if (!isset($childSlots[$index])) {
+            throw new \OutOfBoundsException(
+                'Child index ' . $index . ' is out of range, there are ' . $totalChildren . ' children.',
+            );
+        }
+
+        return $childSlots;
     }
 
     /**
