@@ -664,7 +664,10 @@ class Core
         // call), which made every buffer cast a slow leak in long-running processes.
         try {
             // Only C arrays are countable; pointers and structs throw FFI\Exception,
-            // scalar CData (eg uintptr_t) throws TypeError - both mean "not an array"
+            // scalar CData (eg uintptr_t) throws TypeError - both mean "not an array".
+            // The count itself is deliberately discarded: this call is a probe whose
+            // answer is the thrown exception (or its absence), not the returned number
+            // @phpstan-ignore function.resultUnused (array-decay probe, the throw is the result)
             \count($pointer);
             $pointer = FFI::addr($pointer[0]);
         } catch (FFI\Exception | \TypeError) {
@@ -1179,8 +1182,11 @@ class Core
     {
         $dir = new RecursiveDirectoryIterator(__DIR__, RecursiveDirectoryIterator::KEY_AS_PATHNAME);
 
-        /** @var \SplFileInfo[] $iterator */
         $iterator = new RecursiveIteratorIterator($dir, RecursiveIteratorIterator::SELF_FIRST);
+
+        // The tag belongs on the yielded value: without CURRENT_AS_* flags the directory
+        // iterator hands out SplFileInfo instances, while the iterator itself is not an array
+        /** @var \SplFileInfo $fileInfo */
         foreach ($iterator as $fileInfo) {
             if (!$fileInfo->isFile()) {
                 continue;

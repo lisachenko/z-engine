@@ -172,6 +172,13 @@ class ReflectionValue implements ReferenceCountedInterface
      * payload (when the payload is refcounted); both are dropped by release()/__destruct.
      *
      * @param mixed $value Any value to be reflected
+     *
+     * The value is deliberately never named in the body: it is read back out of the
+     * engine frame this very constructor runs in (argument slot 0), which is the only way
+     * to reach the caller's own zval instead of a copy. Removing the parameter would
+     * remove the zval the constructor is built to capture.
+     *
+     * @phpstan-ignore constructor.unusedParameter (captured from the frame's argument slot 0)
      */
     public function __construct(mixed $value)
     {

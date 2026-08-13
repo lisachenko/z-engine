@@ -380,7 +380,6 @@ class ExecutionData
      *
      * <span style="color:red; font-weight: bold">Only for the Z-Engine library</span>
      *
-     * @param CData $call zend_execute_data
      * @param int $variableNum Variable number
      *
      * @return CData zval* pointer

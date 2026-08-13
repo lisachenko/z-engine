@@ -180,11 +180,28 @@ class Compiler
      */
     public function getAST(): NodeInterface
     {
-        if ($this->pointer->ast === null) {
+        $ast = $this->getRawAST();
+        if ($ast === null) {
             throw new \LogicException('Not in compilation process');
         }
 
-        return NodeFactory::fromCData($this->pointer->ast);
+        return NodeFactory::fromCData($ast);
+    }
+
+    /**
+     * Returns the raw CG(ast) pointer, or null when no tree is attached to the compiler
+     *
+     * The field is only populated while a compilation (or a parseString() run) is in
+     * progress; the engine clears it again when the lexical state is restored.
+     *
+     * @return \FFI\CData|null zend_ast* pointer
+     */
+    private function getRawAST(): ?object
+    {
+        $ast = $this->pointer->ast;
+        assert($ast === null || $ast instanceof CData);
+
+        return $ast;
     }
 
     /**
@@ -357,15 +374,17 @@ class Compiler
         $ast = null;
         try {
             $result = Core::call('zendparse');
-            // restore_lexical_state changes CG(ast) and CG(ast_arena), grab the tree before it
-            $ast = $this->pointer->ast;
+            // restore_lexical_state changes CG(ast) and CG(ast_arena), grab the tree before it.
+            // zendparse() is what fills CG(ast) back in after it was cleared above, so the field
+            // is either the freshly parsed tree or still null when the parser produced nothing
+            $ast = $this->getRawAST();
             if ($result !== Core::SUCCESS) {
                 (new AstOwnership($ast, $arenaBuffer))->release();
                 $ast = null;
             }
         } catch (\Throwable $error) {
             // A ParseError raised by the engine mid-parse: destroy the partial tree and rethrow
-            (new AstOwnership($this->pointer->ast, $arenaBuffer))->release();
+            (new AstOwnership($this->getRawAST(), $arenaBuffer))->release();
             throw $error;
         } finally {
             if ($ast === null) {

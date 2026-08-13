@@ -1,0 +1,90 @@
+parameters:
+    level: max
+    phpVersion: 80400
+    paths:
+        - src
+        - tests
+        - tools/generator/lib
+        - tools/generator/emit.php
+        - tools/generator/generate.php
+        - tools/generator/validate.php
+        - tools/phpstan
+    excludePaths:
+        - tests/phpstan/specialization-class-stubs.php
+        # Compiled into the opcache file cache by child processes; the static
+        # counter and attribute usage are fixture payload, not library code
+        - tests/OpCache/fixtures/answer.php
+        # Child driver invoked in a subprocess; calls a dynamic global/method
+        # target passed on argv, which is not statically typeable
+        - tests/OpCache/scripts/run-cached.php
+        # Sacrificial child pinning the ext-ffi abort on zend_throw_exception_hook:
+        # pokes the raw engine symbol through an ad-hoc FFI::cdef on purpose
+        - tests/System/Hook/scenarios/throw-hook-ffi-abort.php
+    # Analysis-only declarations of the runtime-generated specialized classes and the
+    # deliberately-undefined placeholder type (see the file header for the rationale),
+    # plus the generated engine struct stubs (ZEngine\Generated\*, emitted by
+    # tools/generator into stubs/ - never autoloadable, visible to analysis only)
+    scanFiles:
+        - tests/phpstan/specialization-class-stubs.php
+        - stubs/zend-engine-structs.php
+    # FFI\CData is dynamically typed - the engine structs it wraps are only
+    # known at runtime from the loaded header, so field/method access on CData
+    # cannot be statically resolved. Scope the unavoidable ignores tightly to
+    # CData/FFI so all non-FFI code is still held to level max.
+    ignoreErrors:
+        # Direct field reads off a raw CData handle: the generated struct stubs
+        # (stubs/zend-engine-structs.php) type every field the wrappers touch, but the
+        # low-level pointer-surgery zones below still read undeclared fields directly.
+        -
+            identifier: property.notFound
+            message: '#Access to an undefined property FFI\\CData::#'
+        # Raw CData buffers (locally-allocated `T[N]` arrays used with memcpy/addr and
+        # indexed in place) are genuine C arrays; the generated struct stubs deliberately do
+        # NOT implement ArrayAccess (they are structs, not arrays - typed contiguous arrays
+        # go through Type\StructArray instead).
+        -
+            identifier: offsetAccess.nonOffsetAccessible
+            message: '#Cannot access offset .+ on FFI\\CData#'
+        # Type\StructArray is the single audited pointer-index primitive: its base is a raw
+        # CData handle at runtime (typed `object` so a stub pointer view is accepted), so the
+        # two in-class base indexes (offsetGet + the static at() deref) are scoped-ignored here.
+        -
+            identifier: offsetAccess.nonOffsetAccessible
+            path: src/Type/StructArray.php
+        # PayloadRelocator is the file-cache pointer-surgery machinery: it walks
+        # engine structs field by field through FFI\CData, so a chained access
+        # (`$zval->u1->v->type`) resolves to `mixed` after the first hop and the
+        # arithmetic/casts on those reads cannot be statically typed. The FFI
+        # blast radius is confined to this one audited file (AGENTS.md); every
+        # path is covered by the byte-identity and execute-from-cache tests.
+        -
+            identifier: property.nonObject
+            path: src/OpCache/PayloadRelocator.php
+        -
+            identifier: binaryOp.invalid
+            path: src/OpCache/PayloadRelocator.php
+        -
+            identifier: cast.int
+            path: src/OpCache/PayloadRelocator.php
+        -
+            identifier: argument.type
+            path: src/OpCache/PayloadRelocator.php
+        # ReflectionOpcacheFile is the CData facade over the relocated script:
+        # it reads embedded engine structs (script.filename, function/class
+        # tables) that resolve to `mixed` after the first CData hop.
+        -
+            identifier: property.nonObject
+            path: src/OpCache/ReflectionOpcacheFile.php
+        -
+            identifier: argument.type
+            path: src/OpCache/ReflectionOpcacheFile.php
+    reportUnmatchedIgnoredErrors: false
+    treatPhpDocTypesAsCertain: false
+
+# Resolves the typed Core entry points (new/trackedNew/cast/pointerAtAddress) by their
+# literal $type argument: stub class-strings type the handle as the generated stub
+# class, C type name strings stay FFI\CData (see the extension's class docblock)
+services:
+    -
+        class: ZEngine\PHPStan\TypedEntryPointReturnExtension
+        tags: [phpstan.broker.dynamicStaticMethodReturnTypeExtension]

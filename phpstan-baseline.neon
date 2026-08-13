@@ -133,12 +133,6 @@ parameters:
 			path: src/AbstractSyntaxTree/NodeKind.php
 
 		-
-			message: '#^Constructor of class ZEngine\\AbstractSyntaxTree\\ValueNode has an unused parameter \$value\.$#'
-			identifier: constructor.unusedParameter
-			count: 1
-			path: src/AbstractSyntaxTree/ValueNode.php
-
-		-
 			message: '#^Parameter \#1 \$valueEntry of static method ZEngine\\Reflection\\ReflectionValue\:\:fromValueEntry\(\) expects FFI\\CData\|ZEngine\\Generated\\zval, mixed given\.$#'
 			identifier: argument.type
 			count: 1
@@ -703,12 +697,6 @@ parameters:
 			path: src/Core.php
 
 		-
-			message: '#^Call to function count\(\) on a separate line has no effect\.$#'
-			identifier: function.resultUnused
-			count: 1
-			path: src/Core.php
-
-		-
 			message: '#^Cannot access offset ''fields'' on mixed\.$#'
 			identifier: offsetAccess.nonOffsetAccessible
 			count: 1
@@ -753,12 +741,6 @@ parameters:
 		-
 			message: '#^Method ZEngine\\Core\:\:sizeof\(\) has parameter \$cType with no type specified\.$#'
 			identifier: missingType.parameter
-			count: 1
-			path: src/Core.php
-
-		-
-			message: '#^PHPDoc tag @var with type array\<SplFileInfo\> is not subtype of native type RecursiveIteratorIterator\<RecursiveDirectoryIterator\>\.$#'
-			identifier: varTag.nativeType
 			count: 1
 			path: src/Core.php
 
@@ -1219,12 +1201,6 @@ parameters:
 			path: src/Reflection/ReflectionValue.php
 
 		-
-			message: '#^Constructor of class ZEngine\\Reflection\\ReflectionValue has an unused parameter \$value\.$#'
-			identifier: constructor.unusedParameter
-			count: 1
-			path: src/Reflection/ReflectionValue.php
-
-		-
 			message: '#^Parameter \#1 \$array of function array_flip expects array\<int\|string\>, array\<string, mixed\> given\.$#'
 			identifier: argument.type
 			count: 1
@@ -1243,26 +1219,8 @@ parameters:
 			path: src/System/Compiler.php
 
 		-
-			message: '#^Parameter \#1 \$node of static method ZEngine\\AbstractSyntaxTree\\NodeFactory\:\:fromCData\(\) expects FFI\\CData, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/System/Compiler.php
-
-		-
 			message: '#^Parameter \#1 \$stringPointer of static method ZEngine\\Type\\StringEntry\:\:fromCData\(\) expects FFI\\CData\|ZEngine\\Generated\\zend_string, mixed given\.$#'
 			identifier: argument.type
-			count: 1
-			path: src/System/Compiler.php
-
-		-
-			message: '#^Strict comparison using \=\=\= between null and null will always evaluate to true\.$#'
-			identifier: identical.alwaysTrue
-			count: 2
-			path: src/System/Compiler.php
-
-		-
-			message: '#^Unreachable statement \- code above always terminates\.$#'
-			identifier: deadCode.unreachable
 			count: 1
 			path: src/System/Compiler.php
 
@@ -1299,12 +1257,6 @@ parameters:
 		-
 			message: '#^Method ZEngine\\System\\ExecutionData\:\:getFunction\(\) has invalid return type ZEngine\\Reflection\\FunctionLikeTrait\.$#'
 			identifier: return.trait
-			count: 1
-			path: src/System/ExecutionData.php
-
-		-
-			message: '#^PHPDoc tag @param references unknown parameter\: \$call$#'
-			identifier: parameter.notFound
 			count: 1
 			path: src/System/ExecutionData.php
 
@@ -1447,12 +1399,6 @@ parameters:
 			path: src/System/OpCode.php
 
 		-
-			message: '#^Constructor of class ZEngine\\Type\\ClosureEntry has an unused parameter \$closure\.$#'
-			identifier: constructor.unusedParameter
-			count: 1
-			path: src/Type/ClosureEntry.php
-
-		-
 			message: '#^Method ZEngine\\Type\\ObjectEntry\:\:getNativeValue\(\) should return object but returns mixed\.$#'
 			identifier: return.type
 			count: 1
@@ -1507,12 +1453,6 @@ parameters:
 			path: src/Type/OpLine.php
 
 		-
-			message: '#^Constructor of class ZEngine\\Type\\ReferenceEntry has an unused parameter \$reference\.$#'
-			identifier: constructor.unusedParameter
-			count: 1
-			path: src/Type/ReferenceEntry.php
-
-		-
 			message: '#^Method ZEngine\\Type\\ReferenceEntry\:\:__construct\(\) has parameter \$reference with no type specified\.$#'
 			identifier: missingType.parameter
 			count: 1
@@ -1527,12 +1467,6 @@ parameters:
 		-
 			message: '#^Binary operation "\+" between FFI\\CData and int\<0, max\> results in an error\.$#'
 			identifier: binaryOp.invalid
-			count: 1
-			path: src/Type/StringEntry.php
-
-		-
-			message: '#^Constructor of class ZEngine\\Type\\StringEntry has an unused parameter \$value\.$#'
-			identifier: constructor.unusedParameter
 			count: 1
 			path: src/Type/StringEntry.php
 
