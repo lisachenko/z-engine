@@ -19,11 +19,14 @@ use PHPUnit\Framework\TestCase;
 
 class ResourceEntryTest extends TestCase
 {
+    /** @var resource */
     private $file;
 
     protected function setUp(): void
     {
-        $this->file = fopen(__FILE__, 'r');
+        $file = fopen(__FILE__, 'r');
+        self::assertNotFalse($file, 'Unable to open the test file for reading');
+        $this->file = $file;
     }
 
     protected function tearDown(): void
@@ -55,14 +58,14 @@ class ResourceEntryTest extends TestCase
         }
     }
 
-    public function testGetRawData()
+    public function testGetRawData(): void
     {
         $refResource = new ResourceEntry($this->file);
         $rawData     = $refResource->getRawData();
         $this->assertInstanceOf(CData::class, $rawData);
     }
 
-    public function testGetType()
+    public function testGetType(): void
     {
         $refResource = new ResourceEntry($this->file);
 
@@ -71,7 +74,7 @@ class ResourceEntryTest extends TestCase
     }
 
     #[Group('internal')]
-    public function testSetType()
+    public function testSetType(): void
     {
         $refResource = new ResourceEntry($this->file);
 
