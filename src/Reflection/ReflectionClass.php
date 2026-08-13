@@ -2192,19 +2192,10 @@ class ReflectionClass extends NativeReflectionClass
     #[\ReturnTypeWillChange]
     public function getDefaultProperties(): iterable
     {
-        $iterator = function () {
-            $propertyIndex = 0;
-            $count         = $this->pointer->default_properties_count;
-            $rawTable      = $this->pointer->default_properties_table;
-            $table         = $rawTable !== null ? new StructArray($rawTable, $count) : null;
-            while ($propertyIndex < $count) {
-                assert($table !== null);
-                yield $propertyIndex => ReflectionValue::fromValueEntry($table[$propertyIndex]);
-                $propertyIndex++;
-            }
-        };
-
-        return iterator_to_array($iterator());
+        return $this->readZvalTable(
+            $this->pointer->default_properties_table,
+            $this->pointer->default_properties_count,
+        );
     }
 
     /**
@@ -2214,19 +2205,36 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function getDefaultStaticMembers(): iterable
     {
-        $iterator = function () {
-            $propertyIndex = 0;
-            $count         = $this->pointer->default_static_members_count;
-            $rawTable      = $this->pointer->default_static_members_table;
-            $table         = $rawTable !== null ? new StructArray($rawTable, $count) : null;
-            while ($propertyIndex < $count) {
-                assert($table !== null);
-                yield $propertyIndex => ReflectionValue::fromValueEntry($table[$propertyIndex]);
-                $propertyIndex++;
-            }
-        };
+        return $this->readZvalTable(
+            $this->pointer->default_static_members_table,
+            $this->pointer->default_static_members_count,
+        );
+    }
 
-        return iterator_to_array($iterator());
+    /**
+     * Wraps every entry of a contiguous class-level zval table into a ReflectionValue
+     *
+     * Both default tables of zend_class_entry (properties and static members) are plain
+     * zval arrays sized by their own counter field, so one bounds-checked read serves both.
+     *
+     * @param mixed $rawTable zval * of the first entry (CData or null for an empty table)
+     * @param mixed $count    Number of entries behind the pointer
+     *
+     * @return array<int, ReflectionValue>
+     */
+    private function readZvalTable(mixed $rawTable, mixed $count): array
+    {
+        assert(is_int($count));
+        if ($rawTable === null || $count <= 0) {
+            return [];
+        }
+        assert($rawTable instanceof CData);
+        $entries = [];
+        foreach (new StructArray($rawTable, $count) as $index => $valueEntry) {
+            $entries[$index] = ReflectionValue::fromValueEntry($valueEntry);
+        }
+
+        return $entries;
     }
 
     /**
