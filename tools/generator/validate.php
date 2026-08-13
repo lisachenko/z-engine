@@ -1,6 +1,16 @@
 <?php
 
 /**
+ * Z-Engine framework
+ *
+ * @copyright Copyright 2026, Lisachenko Alexander <lisachenko.it@gmail.com>
+ *
+ * This source file is subject to the license that is bundled
+ * with this source code in the file LICENSE.
+ *
+ */
+
+/**
  * Validation stage: loads the freshly generated engine.h with PHP FFI and
  * asserts that FFI's idea of every struct layout matches the C compiler's
  * ground truth from layouts.json. Run as a subprocess by emit.php so that a

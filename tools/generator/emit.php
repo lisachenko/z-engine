@@ -1,6 +1,16 @@
 <?php
 
 /**
+ * Z-Engine framework
+ *
+ * @copyright Copyright 2026, Lisachenko Alexander <lisachenko.it@gmail.com>
+ *
+ * This source file is subject to the license that is bundled
+ * with this source code in the file LICENSE.
+ *
+ */
+
+/**
  * In-image generator entry point: produces engine.h, constants.php and
  * layouts.json for the PHP build that runs this script.
  *
