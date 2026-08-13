@@ -131,6 +131,43 @@ class ReflectionClass extends NativeReflectionClass
     ];
 
     /**
+     * Class-extension hook registry: interface => [magic method that implements it, installer]
+     *
+     * The map is the single source of truth for installExtensionHandlers(): registration
+     * happens in insertion order, and ObjectCreateInterface comes first because the
+     * create_object handler is the mandatory prerequisite of every other one. Supporting a
+     * new hook interface is one line here, nothing else.
+     *
+     * @var array<class-string, array{string, string}>
+     */
+    private const EXTENSION_HANDLERS = [
+        ObjectCreateInterface::class             => ['__init', 'setCreateObjectHandler'],
+        ObjectCastInterface::class               => ['__cast', 'setCastObjectHandler'],
+        ObjectDoOperationInterface::class        => ['__doOperation', 'setDoOperationHandler'],
+        ObjectCompareValuesInterface::class      => ['__compare', 'setCompareValuesHandler'],
+        ObjectReadPropertyInterface::class       => ['__fieldRead', 'setReadPropertyHandler'],
+        ObjectWritePropertyInterface::class      => ['__fieldWrite', 'setWritePropertyHandler'],
+        ObjectGetPropertyPointerInterface::class => ['__fieldPointer', 'setGetPropertyPointerHandler'],
+        ObjectHasPropertyInterface::class        => ['__fieldIsset', 'setHasPropertyHandler'],
+        ObjectUnsetPropertyInterface::class      => ['__fieldUnset', 'setUnsetPropertyHandler'],
+        ObjectGetPropertiesForInterface::class   => ['__getFields', 'setGetPropertiesForHandler'],
+        ObjectGetDebugInfoInterface::class       => ['__getDebugInfo', 'setGetDebugInfoHandler'],
+        ObjectCloneInterface::class              => ['__cloneObject', 'setCloneObjectHandler'],
+        ObjectReadDimensionInterface::class      => ['__dimensionRead', 'setReadDimensionHandler'],
+        ObjectWriteDimensionInterface::class     => ['__dimensionWrite', 'setWriteDimensionHandler'],
+        ObjectHasDimensionInterface::class       => ['__dimensionHas', 'setHasDimensionHandler'],
+        ObjectUnsetDimensionInterface::class     => ['__dimensionUnset', 'setUnsetDimensionHandler'],
+        ObjectCountElementsInterface::class      => ['__count', 'setCountElementsHandler'],
+        ObjectGetClassNameInterface::class       => ['__getClassName', 'setGetClassNameHandler'],
+        ObjectGetConstructorInterface::class     => ['__getConstructor', 'setGetConstructorHandler'],
+        ObjectGetPropertiesInterface::class      => ['__getProperties', 'setGetPropertiesHandler'],
+        ObjectGetClosureInterface::class         => ['__getClosure', 'setGetClosureHandler'],
+        ObjectGetMethodInterface::class          => ['__getMethod', 'setGetMethodHandler'],
+        ObjectGetIteratorInterface::class        => ['__getIterator', 'setGetIteratorHandler'],
+    ];
+
+
+    /**
      * Remembers the slot capacity of the engine-allocated properties_info_table per class
      *
      * The table is arena-allocated by the engine during linking, so it can only be compacted
@@ -2239,42 +2276,6 @@ class ReflectionClass extends NativeReflectionClass
 
         return ReflectionClassConstant::fromCData($constantPtr, $name);
     }
-
-    /**
-     * Class-extension hook registry: interface => [magic method that implements it, installer]
-     *
-     * The map is the single source of truth for installExtensionHandlers(): registration
-     * happens in insertion order, and ObjectCreateInterface comes first because the
-     * create_object handler is the mandatory prerequisite of every other one. Supporting a
-     * new hook interface is one line here, nothing else.
-     *
-     * @var array<class-string, array{string, string}>
-     */
-    private const EXTENSION_HANDLERS = [
-        ObjectCreateInterface::class             => ['__init', 'setCreateObjectHandler'],
-        ObjectCastInterface::class               => ['__cast', 'setCastObjectHandler'],
-        ObjectDoOperationInterface::class        => ['__doOperation', 'setDoOperationHandler'],
-        ObjectCompareValuesInterface::class      => ['__compare', 'setCompareValuesHandler'],
-        ObjectReadPropertyInterface::class       => ['__fieldRead', 'setReadPropertyHandler'],
-        ObjectWritePropertyInterface::class      => ['__fieldWrite', 'setWritePropertyHandler'],
-        ObjectGetPropertyPointerInterface::class => ['__fieldPointer', 'setGetPropertyPointerHandler'],
-        ObjectHasPropertyInterface::class        => ['__fieldIsset', 'setHasPropertyHandler'],
-        ObjectUnsetPropertyInterface::class      => ['__fieldUnset', 'setUnsetPropertyHandler'],
-        ObjectGetPropertiesForInterface::class   => ['__getFields', 'setGetPropertiesForHandler'],
-        ObjectGetDebugInfoInterface::class       => ['__getDebugInfo', 'setGetDebugInfoHandler'],
-        ObjectCloneInterface::class              => ['__cloneObject', 'setCloneObjectHandler'],
-        ObjectReadDimensionInterface::class      => ['__dimensionRead', 'setReadDimensionHandler'],
-        ObjectWriteDimensionInterface::class     => ['__dimensionWrite', 'setWriteDimensionHandler'],
-        ObjectHasDimensionInterface::class       => ['__dimensionHas', 'setHasDimensionHandler'],
-        ObjectUnsetDimensionInterface::class     => ['__dimensionUnset', 'setUnsetDimensionHandler'],
-        ObjectCountElementsInterface::class      => ['__count', 'setCountElementsHandler'],
-        ObjectGetClassNameInterface::class       => ['__getClassName', 'setGetClassNameHandler'],
-        ObjectGetConstructorInterface::class     => ['__getConstructor', 'setGetConstructorHandler'],
-        ObjectGetPropertiesInterface::class      => ['__getProperties', 'setGetPropertiesHandler'],
-        ObjectGetClosureInterface::class         => ['__getClosure', 'setGetClosureHandler'],
-        ObjectGetMethodInterface::class          => ['__getMethod', 'setGetMethodHandler'],
-        ObjectGetIteratorInterface::class        => ['__getIterator', 'setGetIteratorHandler'],
-    ];
 
     /**
      * Installs user-defined object handlers for given class to control extra-features of this class
