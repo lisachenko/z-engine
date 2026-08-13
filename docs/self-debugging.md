@@ -85,12 +85,13 @@ Three properties of user opcode handlers shape the whole design
    ([docs/opcache-binary.md](opcache-binary.md)).
 2. **Cost.** Every intercepted opcode crosses a libffi trampoline
    ([docs/memory-model.md](memory-model.md), Path A) and `OpCodeHook::handle()`
-   additionally runs a `debug_backtrace(…, 10)` filter per hit. With
-   `COMPILE_EXTENDED_STMT` on, that tax applies to *every statement of every
-   instrumented file*. Mitigations, in leverage order: gate instrumentation per file
-   (toggle the compiler option from a `zend_ast_process` hook based on
-   `Compiler::getFileName()`), memoize an include/exclude decision per op_array
-   address instead of the backtrace filter, and strip `EXT_STMT` oplines back to
+   additionally resolves the executing frame's class scope per hit — a couple of struct
+   reads off the `execute_data` the callback already receives (it used to be a
+   `debug_backtrace(…, 10)` filter). With `COMPILE_EXTENDED_STMT` on, that tax applies
+   to *every statement of every instrumented file*. Mitigations, in leverage order: gate
+   instrumentation per file (toggle the compiler option from a `zend_ast_process` hook
+   based on `Compiler::getFileName()`), memoize an include/exclude decision per op_array
+   address instead of the per-hit scope filter, and strip `EXT_STMT` oplines back to
    `NOP` while no breakpoint targets their file. ZDebug ships the middle one (its
    `OpArrayGate` decides each op_array once, keyed by entry address); the compiler-option
    gating and the `NOP` strip-back remain design sketches.

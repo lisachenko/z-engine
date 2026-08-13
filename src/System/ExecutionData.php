@@ -166,6 +166,28 @@ class ExecutionData
     }
 
     /**
+     * Returns the name of the class scope the function of this frame is declared in,
+     * or null when there is none (plain function, unbound closure, main scope) or the
+     * frame carries no function entry at all
+     *
+     * This is the cheap, allocation-light way to answer "whose code is running in this
+     * frame": unlike getFunction()/getFunctionEntry() it materializes no reflection
+     * object and performs no name lookup, which makes it usable from engine callbacks
+     * that run on every single opcode (see OpCodeHook::handle()). The scope name is
+     * exactly what debug_backtrace() reports as the frame's "class".
+     */
+    public function getFunctionScopeName(): ?string
+    {
+        /** @var CData|null $rawFunction */
+        $rawFunction = $this->pointer->func;
+        if ($rawFunction === null) {
+            return null;
+        }
+
+        return ReflectionFunction::getScopeNameOf($rawFunction);
+    }
+
+    /**
      * Returns the bound $this object of this frame, or null when the frame has none
      * (plain function, static call, main scope)
      *

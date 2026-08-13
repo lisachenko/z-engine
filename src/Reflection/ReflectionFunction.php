@@ -152,6 +152,44 @@ class ReflectionFunction extends NativeReflectionFunction implements FunctionLik
     }
 
     /**
+     * Returns the name of the class scope a raw function entry belongs to, or null for
+     * plain functions, closures without a bound scope and main-scope pseudo entries
+     *
+     * This reads the entry directly instead of materializing a reflection: fromCData()
+     * initializes the native reflection state (a function-table lookup that throws for
+     * method entries), which is far too expensive for code running on every engine
+     * callback. Internal entries carry the scope in their own structure, user entries
+     * in the shared common prefix - both are served here.
+     *
+     * @param CData|zend_function|zend_internal_function $functionEntry Pointer to the structure
+     *
+     * @internal hot-path accessor for engine callbacks (see OpCodeHook::handle())
+     */
+    public static function getScopeNameOf(object $functionEntry): ?string
+    {
+        /** @var zend_function|zend_internal_function $entry Narrowed to the stub views at the owning boundary */
+        $entry = $functionEntry;
+        if ($entry->type === Core::ZEND_INTERNAL_FUNCTION) {
+            /** @var zend_internal_function $internalEntry */
+            $internalEntry = $entry;
+            $scope         = $internalEntry->scope;
+        } else {
+            /** @var zend_function $userEntry */
+            $userEntry = $entry;
+            $scope     = $userEntry->common->scope;
+        }
+        if ($scope === null) {
+            return null;
+        }
+        $scopeName = $scope->name;
+        if ($scopeName === null) {
+            return null;
+        }
+
+        return StringEntry::fromCData($scopeName)->getStringValue();
+    }
+
+    /**
      * Returns a user-friendly representation of internal structure to prevent segfault
      */
     public function __debugInfo(): array
