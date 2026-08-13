@@ -355,7 +355,7 @@ jobs:
         uses: ramsey/composer-install@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Restore the debug image layer cache
         uses: actions/cache@v4
@@ -404,7 +404,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       # Caches the generator image's toolchain layers (apt/clang/ext-ffi); the
       # emit stage itself always re-runs - it is the step that produces the
       # artifacts being drift-checked. generate.php rotates per-target subdirs.
