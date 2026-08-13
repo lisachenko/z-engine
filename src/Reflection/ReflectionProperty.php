@@ -14,6 +14,7 @@ declare(strict_types=1);
 namespace ZEngine\Reflection;
 
 use FFI\CData;
+use ReflectionClass as NativeReflectionClass;
 use ReflectionProperty as NativeReflectionProperty;
 use ZEngine\Core;
 use ZEngine\Generated\zend_property_info;
@@ -71,7 +72,7 @@ class ReflectionProperty extends NativeReflectionProperty
     public static function fromCData(object $propertyEntry): ReflectionProperty
     {
         /** @var ReflectionProperty $reflectionProperty */
-        $reflectionProperty = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionProperty = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
         /** @var zend_property_info $propertyEntry Narrowed to the stub view at the owning boundary */
         $propertyNamePointer = $propertyEntry->name;
         assert($propertyNamePointer !== null);
@@ -101,7 +102,7 @@ class ReflectionProperty extends NativeReflectionProperty
     public static function fromRawEntry(object $propertyInfo): ReflectionProperty
     {
         /** @var ReflectionProperty $reflectionProperty */
-        $reflectionProperty = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionProperty = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
         /** @var zend_property_info $propertyInfo Narrowed at the boundary (may be a struct or a pointer view) */
         $reflectionProperty->pointer = $propertyInfo;
 

@@ -281,7 +281,7 @@ trait FunctionLikeTrait
      */
     private function copyMethodOutOfSharedMemory(object $entryScope): object
     {
-        $declaringClass = ReflectionClass::fromCData(Core::cast('zend_class_entry *', $entryScope));
+        $declaringClass = ReflectionClass::fromCData($entryScope);
         $declaringClass->copyOutOfSharedMemory();
 
         $methodName  = $this->getName();

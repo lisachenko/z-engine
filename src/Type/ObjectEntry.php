@@ -128,7 +128,7 @@ class ObjectEntry implements ReferenceCountedInterface
         // Engine invariant: every live object carries its class entry
         assert($classEntry !== null);
 
-        return ReflectionClass::fromCData(Core::cast('zend_class_entry *', $classEntry));
+        return ReflectionClass::fromCData($classEntry);
     }
 
     /**

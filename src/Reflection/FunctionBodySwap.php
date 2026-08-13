@@ -401,8 +401,7 @@ final class FunctionBodySwap
             // must set the flag or its materialized table leaks at request end
             $entryScope = $entryFunction->getCommonPointer()->scope;
             if ($entryScope !== null) {
-                ReflectionClass::fromCData(Core::cast('zend_class_entry *', $entryScope))
-                    ->markHasStaticInMethods();
+                ReflectionClass::fromCData($entryScope)->markHasStaticInMethods();
             }
         }
         if ($defaultsTable === null || !$duplicateStatics) {
