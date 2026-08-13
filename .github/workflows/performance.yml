@@ -1,0 +1,79 @@
+name: Performance
+
+on:
+  push:
+    branches:
+      - master
+      - '[0-9].[0-9]'
+  pull_request:
+
+# Runs the benchmark only: nothing here writes to the repository or its API.
+permissions:
+  contents: read
+
+# One performance run per ref. Superseded pull-request runs are cancelled (the
+# next push re-runs it anyway); branch runs are left alone so a pushed version
+# branch keeps a complete result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# This branch targets PHP 8.4 only - engine structures are version-specific.
+env:
+  PHP_MINOR: '8.4'
+
+jobs:
+  benchmark:
+    name: Performance group (informational)
+    runs-on: ubuntu-latest
+    # INFORMATIONAL, not a merge gate. The only test in the `performance` group
+    # (tests/Performance/GeneratedFunctionBenchmarkTest.php) asserts a wall-clock
+    # RATIO between a generated function and a hand-declared one. That verdict is
+    # sound on a quiet machine but noisy on a shared GitHub runner, so a red run
+    # here means "look at the numbers", not "this pull request is broken". The
+    # summary step below surfaces the outcome without blocking the merge.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same engine-facing ini as the CI tests job: FFI on, assertions on and the
+      # JIT off everywhere - the JIT rewrites the executor internals z-engine
+      # hooks into, and it would also invalidate the comparison this benchmark
+      # makes (AGENTS.md). Opcache is not needed here, so it is not loaded.
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_MINOR }}
+          extensions: ffi
+          ini-values: ffi.enable=1, zend.assertions=1, opcache.jit=off, opcache.jit_buffer_size=0
+          coverage: none
+
+      - name: Install dependencies
+        uses: ramsey/composer-install@v3
+
+      # The group is excluded from every other suite, so this is the only place
+      # the "zero FFI at call time" claim in the README is actually exercised.
+      # --fail-on-skipped (in the composer script) keeps a future self-skip from
+      # reading as a pass.
+      - name: Run the performance group
+        id: benchmark
+        run: composer test:performance
+
+      - name: Summarize the outcome
+        if: always()
+        run: |
+          {
+            echo "## Performance group"
+            echo
+            if [ "${{ steps.benchmark.outcome }}" = "success" ]; then
+              echo "The generated-function benchmark stayed within its ratio budget."
+            else
+              echo "The generated-function benchmark did **not** pass (outcome: \`${{ steps.benchmark.outcome }}\`)."
+              echo
+              echo "This job is informational and never blocks a merge: the assertion is a"
+              echo "wall-clock ratio and shared runners are noisy. Open the job log, read the"
+              echo "\`[generated-function]\` line, and only treat it as a regression if the ratio"
+              echo "is reproducibly high - that would mean generated functions grew a per-call"
+              echo "FFI trampoline (Path A instead of Path B in docs/memory-model.md)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
