@@ -222,11 +222,13 @@ final class FunctionBodySwap
             }
             $seenClasses[$classAddress] = true;
 
-            $reflectionClass = ReflectionClass::fromCData($rawClass);
-            if (!$reflectionClass->isUserDefined()) {
+            // Both answers come straight off the entry through the owning class: a full
+            // reflection per engine class would pay a native parent constructor and the
+            // low-level table wrappers just to serve one flag read and one table lookup
+            if (!ReflectionClass::entryIsUserDefined($rawClass)) {
                 continue;
             }
-            $bucketValue = $reflectionClass->getMethodTable()->find($lowerName);
+            $bucketValue = ReflectionClass::entryMethodTable($rawClass)->find($lowerName);
             if ($bucketValue !== null && Core::addressOf($bucketValue->getRawFunction()) === $entryAddress) {
                 $shares++;
             }
@@ -401,8 +403,7 @@ final class FunctionBodySwap
             // must set the flag or its materialized table leaks at request end
             $entryScope = $entryFunction->getCommonPointer()->scope;
             if ($entryScope !== null) {
-                ReflectionClass::fromCData(Core::cast('zend_class_entry *', $entryScope))
-                    ->markHasStaticInMethods();
+                ReflectionClass::fromCData($entryScope)->markHasStaticInMethods();
             }
         }
         if ($defaultsTable === null || !$duplicateStatics) {
