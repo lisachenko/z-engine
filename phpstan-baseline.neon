@@ -901,12 +901,6 @@ parameters:
 			path: src/Memory/PersistentGraphCloner.php
 
 		-
-			message: '#^Parameter \#1 \$sourceObject of method ZEngine\\Memory\\PersistentGraphCloner\:\:cloneObject\(\) expects FFI\\CData, ZEngine\\Generated\\zend_object given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Memory/PersistentGraphCloner.php
-
-		-
 			message: '#^Property ZEngine\\Memory\\PersistentGraphCloner\:\:\$arrayMap \(array\<int, FFI\\CData\>\) does not accept array\<int, FFI\\CData\|ZEngine\\Generated\\HashTable\>\.$#'
 			identifier: assign.propertyType
 			count: 1
@@ -935,24 +929,6 @@ parameters:
 			identifier: assign.propertyType
 			count: 1
 			path: src/Memory/PersistentGraphCloner.php
-
-		-
-			message: '#^Parameter \#3 \$pointer of method ZEngine\\Memory\\PersistentHeap\:\:addPointerEntry\(\) expects FFI\\CData, FFI\\CData\|ZEngine\\Generated\\zend_string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Memory/PersistentHeap.php
-
-		-
-			message: '#^Parameter \#3 \$pointer of method ZEngine\\Memory\\PersistentHeap\:\:addPointerEntry\(\) expects FFI\\CData, ZEngine\\Generated\\HashTable given\.$#'
-			identifier: argument.type
-			count: 5
-			path: src/Memory/PersistentHeap.php
-
-		-
-			message: '#^Parameter \#3 \$pointer of method ZEngine\\Memory\\PersistentHeap\:\:addPointerEntry\(\) expects FFI\\CData, ZEngine\\Generated\\zend_string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Memory/PersistentHeap.php
 
 		-
 			message: '#^Method ZEngine\\Reflection\\ClassSpecializer\:\:copyFunctionTable\(\) should return array\<int, FFI\\CData\> but returns array\<int, FFI\\CData\|ZEngine\\Generated\\zend_function\|ZEngine\\Generated\\zend_internal_function\>\.$#'

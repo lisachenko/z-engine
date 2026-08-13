@@ -15,8 +15,11 @@ namespace ZEngine\Memory;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_array;
+use ZEngine\Generated\zend_object;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionValue;
+use ZEngine\Type\HashTable;
 use ZEngine\Type\ObjectEntry;
 use ZEngine\Type\PersistentHashTable;
 use ZEngine\Type\PersistentObjectFactory;
@@ -169,16 +172,16 @@ final class PersistentGraphCloner
             throw UnsupportedGraphElementException::internalClass($className, $path);
         }
 
-        $entry     = ObjectEntry::weakFor($source);
-        $rawObject = $entry->getRawValue();
+        $entry = ObjectEntry::weakFor($source);
         if ($entry->isLazy()) {
             throw UnsupportedGraphElementException::lazyObject($className, $path);
         }
-        if (!PersistentObjectFactory::usesStandardHandlers($rawObject)) {
+        // The handler-block check is pointer identity against std_object_handlers, the one
+        // fact about the object no typed accessor can express
+        if (!PersistentObjectFactory::usesStandardHandlers($entry->getRawValue())) {
             throw UnsupportedGraphElementException::customHandlers($className, $path);
         }
-        $classEntry = self::asCData($rawObject->ce);
-        if ((self::asInt($classEntry->ce_flags) & Core::ZEND_ACC_USE_GUARDS) !== 0) {
+        if (($entry->getClass()->getFlags() & Core::ZEND_ACC_USE_GUARDS) !== 0) {
             throw UnsupportedGraphElementException::propertyGuards($className, $path);
         }
         foreach ($native->getProperties() as $property) {
@@ -187,21 +190,18 @@ final class PersistentGraphCloner
             }
         }
 
-        $slotCount = self::asInt($classEntry->default_properties_count);
-        $tableBase = Core::cast('zval *', Core::addr(self::asCData(self::asCData($rawObject->properties_table)[0])));
+        $slotCount = $entry->getPropertySlotCount();
         for ($index = 0; $index < $slotCount; $index++) {
-            $this->validateValue(Core::addr(self::asCData($tableBase[$index])), "{$path}({$className})->slot#{$index}");
+            $this->validateValue($entry->getPropertySlot($index), "{$path}({$className})->slot#{$index}");
         }
     }
 
     /**
-     * Validates one source zval (given as zval*) against the supported-type matrix
-     *
-     * @param \FFI\CData $zval
+     * Validates one source value against the supported-type matrix
      */
-    private function validateValue(object $zval, string $path): void
+    private function validateValue(ReflectionValue $value, string $path): void
     {
-        $type = self::zvalType($zval);
+        $type = $value->getBaseType();
         switch ($type) {
             case ReflectionValue::IS_UNDEF:
             case ReflectionValue::IS_NULL:
@@ -213,14 +213,14 @@ final class PersistentGraphCloner
                 return;
 
             case ReflectionValue::IS_ARRAY:
-                $this->validateArray(self::asCData(self::asCData($zval->value)->arr), $path);
+                $this->validateArray($value->getRawArray(), $path);
 
                 return;
 
             case ReflectionValue::IS_OBJECT:
                 // Materialize the child as a live PHP object to reuse reflection checks;
                 // the temporary reference is dropped when $child leaves this scope
-                ReflectionValue::fromValueEntry($zval)->getNativeValue($child);
+                $value->getNativeValue($child);
                 assert(is_object($child));
                 $this->validateObject($child, $path);
 
@@ -240,7 +240,7 @@ final class PersistentGraphCloner
     /**
      * Validates every element of a source array (shared arrays are walked once)
      *
-     * @param \FFI\CData $sourceArray
+     * @param CData|zend_array $sourceArray The engine value the source zval points at
      */
     private function validateArray(object $sourceArray, string $path): void
     {
@@ -250,9 +250,9 @@ final class PersistentGraphCloner
         }
         $this->seenSourceArrays[$address] = true;
 
-        $this->walkArray($sourceArray, function (int|string $key, CData $value) use ($path): void {
-            $this->validateValue($value, "{$path}[{$key}]");
-        });
+        foreach (HashTable::fromCData($sourceArray) as $key => $element) {
+            $this->validateValue($element, "{$path}[{$key}]");
+        }
     }
 
     /**
@@ -261,7 +261,7 @@ final class PersistentGraphCloner
      * The identity map entry is recorded BEFORE the slots are rewritten, so a back-edge
      * (cycle) or a shared DAG node resolves to the same clone instead of recursing.
      *
-     * @param \FFI\CData $sourceObject
+     * @param CData|zend_object $sourceObject The engine value the source zval points at
      * @return \FFI\CData
      */
     private function cloneObject(object $sourceObject): object
@@ -271,63 +271,65 @@ final class PersistentGraphCloner
             return $this->objectMap[$address];
         }
 
-        $clone = PersistentObjectFactory::persistentClone($sourceObject);
+        $clone      = PersistentObjectFactory::persistentClone($sourceObject);
+        $cloneEntry = ObjectEntry::fromCData($clone);
         // The byte-copied handle belongs to the source in the CURRENT request; the clone
         // receives a fresh handle at every re-attachment (ObjectStore::put)
-        $clone->handle = 0;
+        $cloneEntry->setHandle(0);
 
         $this->objectMap[$address] = $clone;
 
-        $classEntry = self::asCData($sourceObject->ce);
-        $objectSize = ReflectionClass::getObjectSize($classEntry);
+        $sourceClass = ObjectEntry::fromCData($sourceObject)->getClass();
+        $objectSize  = ReflectionClass::getObjectSize($sourceClass->getRawValue());
 
         $this->objects[]    = $clone;
-        $this->classNames[] = strtolower(StringEntry::fromCData(self::asCData($classEntry->name))->getStringValue());
+        $this->classNames[] = strtolower($sourceClass->getName());
         $this->classSizes[] = $objectSize;
         $this->bytes += $objectSize;
 
-        $slotCount = self::asInt($classEntry->default_properties_count);
-        $tableBase = Core::cast('zval *', Core::addr(self::asCData(self::asCData($clone->properties_table)[0])));
+        // The clone is a byte copy, so it still carries the source class entry: its slot
+        // count is the live one for the whole cloning pass
+        $slotCount = $cloneEntry->getPropertySlotCount();
         for ($index = 0; $index < $slotCount; $index++) {
-            $this->rewriteValue(Core::addr(self::asCData($tableBase[$index])));
+            $this->rewriteValue($cloneEntry->getPropertySlot($index));
         }
 
         return $clone;
     }
 
     /**
-     * Rewrites one clone-owned zval in place: request-lifetime payload pointers are
+     * Rewrites one clone-owned value in place: request-lifetime payload pointers are
      * replaced by persistent ones, scalar byte copies are left untouched
      *
-     * @param \FFI\CData $zval
+     * Every replacement is written NON-REFCOUNTED (setUncountedPayload): the persistent
+     * blocks minted here are interned strings, sealed arrays and refcount-pinned objects,
+     * which the engine copies by pointer and never releases.
      */
-    private function rewriteValue(object $zval): void
+    private function rewriteValue(ReflectionValue $value): void
     {
-        $type      = self::zvalType($zval);
-        $zvalValue = self::asCData($zval->value);
-        $zvalTyped = self::asCData($zval->u1);
+        $type = $value->getBaseType();
         if ($type === ReflectionValue::IS_STRING) {
-            $content = StringEntry::fromCData(self::asCData($zvalValue->str))->getStringValue();
+            $content = StringEntry::fromCData($value->getRawString())->getStringValue();
 
-            $zvalValue->str = $this->persistString($content)->getRawValue();
             // Interned-style payload: consumers copy the pointer without refcounting
-            $zvalTyped->type_info = ReflectionValue::IS_STRING;
+            $value->setUncountedPayload(ReflectionValue::IS_STRING, $this->persistString($content)->getRawValue());
         } elseif ($type === ReflectionValue::IS_ARRAY) {
-            $zvalValue->arr = $this->cloneArray(self::asCData($zvalValue->arr));
             // Immutable payload: copy-on-write into request memory on mutation
-            $zvalTyped->type_info = ReflectionValue::IS_ARRAY;
+            $value->setUncountedPayload(ReflectionValue::IS_ARRAY, $this->cloneArray($value->getRawArray()));
         } elseif ($type === ReflectionValue::IS_OBJECT) {
-            $zvalValue->obj = $this->cloneObject(self::asCData($zvalValue->obj));
             // Standard refcounted object shape: alias churn lands on the pinned counter,
             // and GC_NOT_COLLECTABLE in the clone header keeps the collector away
-            $zvalTyped->type_info = ReflectionValue::IS_OBJECT | $this->objectTypeFlags;
+            $value->setUncountedPayload(
+                ReflectionValue::IS_OBJECT | $this->objectTypeFlags,
+                $this->cloneObject($value->getRawObject()),
+            );
         }
     }
 
     /**
      * Mints (or returns the already minted) sealed persistent copy of one source array
      *
-     * @param \FFI\CData $sourceArray
+     * @param CData|zend_array $sourceArray The engine value the source zval points at
      * @return \FFI\CData
      */
     private function cloneArray(object $sourceArray): object
@@ -347,22 +349,21 @@ final class PersistentGraphCloner
         $this->bytes += Core::sizeof(Core::type('HashTable'));
 
         $zvalSize = Core::sizeof(Core::type('zval'));
-        $this->walkArray($sourceArray, function (int|string $key, CData $value) use ($table, $zvalSize): void {
+        foreach (HashTable::fromCData($sourceArray) as $key => $sourceElement) {
             // Start from a byte copy of the source element, then rewrite it in place;
             // the engine copies the fixed-up bytes into its own bucket on insert
             $element = Core::new('zval');
-            Core::memcpy($element, $value[0], $zvalSize);
-            $elementPointer = Core::addr($element);
+            Core::memcpy($element, $sourceElement->getRawValue(), $zvalSize);
 
-            $this->rewriteValue($elementPointer);
+            $borrowed = ReflectionValue::fromValueEntry(Core::addr($element));
+            $this->rewriteValue($borrowed);
 
-            $borrowed = ReflectionValue::fromValueEntry($elementPointer);
             if (is_int($key)) {
                 $table->addIndex($key, $borrowed);
             } else {
                 $table->addInterned($this->persistString($key), $borrowed);
             }
-        });
+        }
 
         // Interned-style sealing: non-refcounted in zvals, copy-on-write on userland writes
         $table->markImmutable();
@@ -388,73 +389,4 @@ final class PersistentGraphCloner
         return $entry;
     }
 
-    /**
-     * Iterates the live elements of a source zend_array, preserving string AND integer
-     * keys (unlike HashTable::getIterator, which drops integer keys of hashed tables)
-     *
-     * @param \Closure(int|string, CData): void $visitor Receives the key and a zval* view
-     * @param \FFI\CData $sourceArray
-     */
-    private function walkArray(object $sourceArray, \Closure $visitor): void
-    {
-        $isPacked = (self::asInt(self::asCData($sourceArray->u)->flags) & Core::engineConstant('HASH_FLAG_PACKED')) !== 0;
-        $numUsed  = self::asInt($sourceArray->nNumUsed);
-
-        for ($index = 0; $index < $numUsed; $index++) {
-            if ($isPacked) {
-                $value = Core::addr(self::asCData(self::asCData($sourceArray->arPacked)[$index]));
-                if (self::zvalType($value) === ReflectionValue::IS_UNDEF) {
-                    continue;
-                }
-                $visitor($index, $value);
-            } else {
-                $bucket = Core::addr(self::asCData(self::asCData($sourceArray->arData)[$index]));
-                $value  = Core::addr(self::asCData($bucket->val));
-                if (self::zvalType($value) === ReflectionValue::IS_UNDEF) {
-                    continue;
-                }
-                $rawKey = $bucket->key;
-                $key    = $rawKey !== null
-                    ? StringEntry::fromCData(self::asCData($rawKey))->getStringValue()
-                    : self::asInt($bucket->h);
-                $visitor($key, $value);
-            }
-        }
-    }
-
-    /**
-     * Reads the base type byte of a zval (given as zval*)
-     *
-     * @param \FFI\CData $zval
-     */
-    private static function zvalType(object $zval): int
-    {
-        return self::asInt(self::asCData(self::asCData($zval->u1)->v)->type);
-    }
-
-    /**
-     * Narrows a dynamically typed FFI read to CData
-     *
-     * Engine struct members read through ext/ffi carry no static type information; the
-     * generated header is the runtime ground truth, so the narrowing can never fail on
-     * a verified layout (ZENGINE_STRICT_LAYOUT_CHECK).
-     *
-     * @return \FFI\CData
-     */
-    private static function asCData(mixed $value): object
-    {
-        assert($value instanceof CData);
-
-        return $value;
-    }
-
-    /**
-     * Narrows a dynamically typed FFI read to int (see asCData)
-     */
-    private static function asInt(mixed $value): int
-    {
-        assert(is_int($value));
-
-        return $value;
-    }
 }
