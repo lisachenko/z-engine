@@ -1615,12 +1615,6 @@ parameters:
 			path: tests/Memory/scenarios/persistent-object-put-detach.php
 
 		-
-			message: '#^Parameter \#1 \$sourceObject of static method ZEngine\\Type\\PersistentObjectFactory\:\:persistentClone\(\) expects FFI\\CData, ZEngine\\Generated\\zend_object given\.$#'
-			identifier: argument.type
-			count: 1
-			path: tests/Memory/scenarios/persistent-object-put-detach.php
-
-		-
 			message: '#^Binary operation "\*" between mixed and 2 results in an error\.$#'
 			identifier: binaryOp.invalid
 			count: 1
@@ -2285,12 +2279,6 @@ parameters:
 			identifier: method.nonObject
 			count: 6
 			path: tests/Type/PersistentHashTableTest.php
-
-		-
-			message: '#^Parameter \#1 \$sourceObject of static method ZEngine\\Type\\PersistentObjectFactory\:\:persistentClone\(\) expects FFI\\CData, ZEngine\\Generated\\zend_object given\.$#'
-			identifier: argument.type
-			count: 3
-			path: tests/Type/PersistentObjectFactoryTest.php
 
 		-
 			message: '#^Cannot cast mixed to string\.$#'

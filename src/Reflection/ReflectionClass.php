@@ -2830,6 +2830,25 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
+     * Returns the number of inline property slots a class entry declares for its instances
+     *
+     * Companion of getObjectSize() for low-level machinery that holds a resolved
+     * zend_class_entry instead of a live object: the number of zval slots the engine
+     * reserves in every instance (properties_table), the property-guard slot included when
+     * the class uses guards. An object whose class entry is known to be current reads the
+     * same number through ObjectEntry::getPropertySlotCount().
+     *
+     * @param CData|zend_class_entry $classType zend_class_entry to read the slot count of
+     */
+    public static function getDefaultPropertiesCount(object $classType): int
+    {
+        /** @var zend_class_entry $classEntry Narrowed to the stub view at the owning boundary */
+        $classEntry = $classType;
+
+        return $classEntry->default_properties_count;
+    }
+
+    /**
      * Checks if the current class has a parent
      */
     private function hasParentClass(): bool

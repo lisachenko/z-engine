@@ -239,6 +239,25 @@ class ObjectEntry implements ReferenceCountedInterface
     }
 
     /**
+     * Returns the number of inline property slots (properties_table) of this object
+     *
+     * The count is a property of the object's CURRENT class entry, so it is only
+     * meaningful while that entry is the live one: machinery that works on an object
+     * whose ce is known to be stale (persistent graphs re-attached in a later request)
+     * must take the count from the class entry it resolved itself, through
+     * ReflectionClass::getDefaultPropertiesCount().
+     */
+    public function getPropertySlotCount(): int
+    {
+        $this->assertObjectAlive();
+        $classEntry = $this->pointer->ce;
+        // Engine invariant: every live object carries its class entry
+        assert($classEntry !== null);
+
+        return $classEntry->default_properties_count;
+    }
+
+    /**
      * Returns a borrowed view of one inline property slot (properties_table[$index])
      *
      * The returned value owns neither the zval container nor a payload reference; it is
@@ -246,10 +265,7 @@ class ObjectEntry implements ReferenceCountedInterface
      */
     public function getPropertySlot(int $index): ReflectionValue
     {
-        $this->assertObjectAlive();
-        $classEntry = $this->pointer->ce;
-        assert($classEntry !== null);
-        $propertiesCount = $classEntry->default_properties_count;
+        $propertiesCount = $this->getPropertySlotCount();
         if ($index < 0 || $index >= $propertiesCount) {
             throw new \OutOfBoundsException("Property slot {$index} is out of bounds 0.." . ($propertiesCount - 1));
         }

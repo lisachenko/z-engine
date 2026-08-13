@@ -62,14 +62,17 @@ final class PersistentObjectFactory
     /**
      * Creates a persistent byte-clone of a live zend_object
      *
-     * @param CData $sourceObject zend_object* to clone (must use std_object_handlers)
+     * @param CData|zend_object $sourceObject zend_object* to clone (must use std_object_handlers)
      *
      * @return zend_object zend_object* in persistent memory, not yet registered in the store
      */
     public static function persistentClone(object $sourceObject): object
     {
-        $sourceClass = $sourceObject->ce;
-        assert($sourceClass instanceof CData);
+        /** @var zend_object $source Narrowed to the stub view at the owning boundary */
+        $source      = $sourceObject;
+        $sourceClass = $source->ce;
+        // Engine invariant: every live object carries its class entry
+        assert($sourceClass !== null);
         $totalSize = ReflectionClass::getObjectSize($sourceClass);
         $memory    = Core::trackedNew("char[{$totalSize}]", true);
         $object    = Core::cast(zend_object::class, $memory);

@@ -594,6 +594,35 @@ class ReflectionValue implements ReferenceCountedInterface
     }
 
     /**
+     * Writes a payload pointer together with its complete type_info word, WITHOUT any
+     * refcounting on either the previous or the new content
+     *
+     * The primitive behind the engine's non-refcounted value shapes: interned strings,
+     * immutable (sealed) arrays and refcount-pinned persistent objects are copied around
+     * by pointer and are never addref'd or released. Consumers derive that from the type
+     * flags, which is why the whole u1.type_info word is written here instead of just the
+     * base type - the caller decides what the slot looks like to the engine.
+     *
+     * This is NOT an assignment: the previous content is overwritten in place, so the slot
+     * must either be uninitialized or hold a payload nobody has to release (a byte copy of
+     * another slot, a freshly minted persistent clone).
+     *
+     * <span style="color:red; font-weight:bold">Danger!</span> Low-level API, can bring a segmentation fault
+     * @internal used by the persistent graph cloner
+     *
+     * @param int          $typeInfo Full type_info word: base type | (type flags << Z_TYPE_FLAGS_SHIFT)
+     * @param CData|object $pointer  Payload block; the runtime value is always CData
+     */
+    public function setUncountedPayload(int $typeInfo, object $pointer): void
+    {
+        $this->assertNotReleased();
+        // Every zend_value member is pointer-sized, so the void* member writes the payload
+        // bytes for whichever shape the type_info word declares
+        $this->valueUnion()->ptr      = Core::cast('void *', $pointer);
+        $this->pointer->u1->type_info = $typeInfo;
+    }
+
+    /**
      * Structurally compares this zval with another one for the hot-swap delta
      *
      * This is a CONSERVATIVE scalar comparison: two values are equal only when they
