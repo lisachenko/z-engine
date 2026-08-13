@@ -867,12 +867,13 @@ class ClassSpecializer
         $aliasList = $sourceEntry->trait_aliases;
         if ($aliasList !== null) {
             assert($aliasList instanceof CData);
-            $aliases = [];
+            $aliasSize = Core::sizeOfType(zend_trait_alias::class);
+            $aliases   = [];
             for ($index = 0; $aliasList[$index] !== null; $index++) {
                 $sourceAlias = $aliasList[$index];
                 assert($sourceAlias instanceof CData);
                 $aliasCopy = Core::new('zend_trait_alias', false);
-                Core::memcpy($aliasCopy, $sourceAlias, Core::sizeOfType(zend_trait_alias::class));
+                Core::memcpy($aliasCopy, $sourceAlias, $aliasSize);
                 $aliasMethodRef = $aliasCopy->trait_method;
                 assert($aliasMethodRef instanceof CData);
                 $this->addTraitMethodReferenceNames($aliasMethodRef);
@@ -889,16 +890,16 @@ class ClassSpecializer
         $precedenceList = $sourceEntry->trait_precedences;
         if ($precedenceList !== null) {
             assert($precedenceList instanceof CData);
-            $pointerSize = Core::sizeOfType('zend_string *');
-            $precedences = [];
+            $pointerSize    = Core::sizeOfType('zend_string *');
+            $precedenceSize = Core::sizeOfType(zend_trait_precedence::class);
+            $precedences    = [];
             for ($index = 0; $precedenceList[$index] !== null; $index++) {
                 $sourcePrecedence = $precedenceList[$index];
                 assert($sourcePrecedence instanceof CData);
                 $totalExcludes = $sourcePrecedence->num_excludes;
                 assert(is_int($totalExcludes));
-                $structSize = Core::sizeOfType(zend_trait_precedence::class)
-                    + max(0, $totalExcludes - 1) * $pointerSize;
-                $memory = Core::new("char[{$structSize}]", false);
+                $structSize = $precedenceSize + max(0, $totalExcludes - 1) * $pointerSize;
+                $memory     = Core::new("char[{$structSize}]", false);
                 Core::memcpy($memory, $sourcePrecedence, $structSize);
                 $precedenceCopy      = Core::cast('zend_trait_precedence *', $memory);
                 $precedenceMethodRef = $precedenceCopy->trait_method;
@@ -1474,6 +1475,7 @@ class ClassSpecializer
         $newPropertiesTable = $newEntry->properties_info;
         assert($newPropertiesTable instanceof CData);
         $newTable    = HashTable::fromCData(Core::addr($newPropertiesTable));
+        $infoSize    = Core::sizeOfType(zend_property_info::class);
         $propertyMap = [];
         $ownCopies   = [];
 
@@ -1485,7 +1487,7 @@ class ClassSpecializer
 
             if (Core::addressOf($declaringClass) === $sourceAddress) {
                 $infoCopy = Core::new('zend_property_info', false);
-                Core::memcpy($infoCopy, $sourceInfo, Core::sizeOfType(zend_property_info::class));
+                Core::memcpy($infoCopy, $sourceInfo, $infoSize);
                 $infoCopy->ce      = $newEntry;
                 $propertyNameValue = $infoCopy->name;
                 assert($propertyNameValue instanceof CData);
@@ -1581,7 +1583,8 @@ class ClassSpecializer
         $sourceAddress     = Core::addressOf($sourceEntry);
         $newConstantsTable = $newEntry->constants_table;
         assert($newConstantsTable instanceof CData);
-        $newTable = HashTable::fromCData(Core::addr($newConstantsTable));
+        $newTable     = HashTable::fromCData(Core::addr($newConstantsTable));
+        $constantSize = Core::sizeOfType(zend_class_constant::class);
 
         foreach ($this->constantsTable($sourceEntry) as $constantName => $constantValue) {
             assert(is_string($constantName));
@@ -1598,7 +1601,7 @@ class ClassSpecializer
 
             if ($isOwnDeclaration || $isOwnedValue) {
                 $constantCopy = Core::new('zend_class_constant', false);
-                Core::memcpy($constantCopy, $sourceConstant, Core::sizeOfType(zend_class_constant::class));
+                Core::memcpy($constantCopy, $sourceConstant, $constantSize);
                 if ($isOwnDeclaration) {
                     $constantCopy->ce = $newEntry;
                 }

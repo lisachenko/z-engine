@@ -326,8 +326,9 @@ final class PayloadRelocator
         $dataAddress = $this->unPtr($ht, 'arData');
         $used        = $ht->nNumUsed;
         if (($ht->u->flags & self::HASH_FLAG_PACKED) !== 0) {
+            $zvalSize = Core::sizeOfType(zval::class);
             for ($i = 0; $i < $used; $i++) {
-                $zval = Core::pointerAtAddress('zval *', $dataAddress + $i * Core::sizeOfType(zval::class));
+                $zval = Core::pointerAtAddress('zval *', $dataAddress + $i * $zvalSize);
                 if ($zval->u1->v->type !== 0) {
                     $each($zval);
                 }
@@ -361,8 +362,9 @@ final class PayloadRelocator
         $dataAddress = $this->serPtr($ht, 'arData');
         $used        = $ht->nNumUsed;
         if (($ht->u->flags & self::HASH_FLAG_PACKED) !== 0) {
+            $zvalSize = Core::sizeOfType(zval::class);
             for ($i = 0; $i < $used; $i++) {
-                $zval = Core::pointerAtAddress('zval *', $dataAddress + $i * Core::sizeOfType(zval::class));
+                $zval = Core::pointerAtAddress('zval *', $dataAddress + $i * $zvalSize);
                 if ($zval->u1->v->type !== 0) {
                     $each($zval);
                 }
