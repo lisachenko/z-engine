@@ -127,7 +127,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/gen-debug"
           cp -R "$(cygpath -u "${TEMP:-$RUNNER_TEMP}")/"z-engine-generator-* "$RUNNER_TEMP/gen-debug/" 2>/dev/null || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: gen-debug-windows-x64-${{ matrix.ts }}
@@ -146,7 +146,7 @@ jobs:
           grep -q 'FFI_LIB "${{ matrix.dll }}"' "${dir}/engine.h" \
             || { echo "::error::${dir}/engine.h does not name ${{ matrix.dll }} as FFI_LIB - symbols would not resolve on Windows"; exit 1; }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: steps.build.outputs.available == 'true'
         with:
           name: windows-x64-${{ matrix.ts }}

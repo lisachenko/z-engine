@@ -91,7 +91,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/gen-debug"
           cp -R "${TMPDIR:-/tmp}/"z-engine-generator-* "$RUNNER_TEMP/gen-debug/" 2>/dev/null || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: gen-debug-darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }}
@@ -107,7 +107,7 @@ jobs:
           grep -q 'FFI_SCOPE "ZEngine"' "${dir}/engine.h" \
             || { echo "::error::${dir}/engine.h has no FFI_SCOPE declaration"; exit 1; }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }}
           path: include/${{ env.PHP_MINOR }}/darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }}
