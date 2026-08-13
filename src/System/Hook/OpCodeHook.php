@@ -43,10 +43,11 @@ final class OpCodeHook implements HookInterface
     private const FIELD_KEY_PREFIX = 'user-opcode';
 
     /**
-     * How deep to look for the frame that executed the hooked opcode: frame 0 is this
-     * handler, then possibly a few delegation frames of stacked OpCodeHook instances
+     * Class-name prefix of z-engine's own code: opcodes executed by a frame whose scope
+     * starts with it never reach a user handler, which keeps the framework from calling
+     * back into itself (see docs/self-debugging.md)
      */
-    private const BACKTRACE_LIMIT = 10;
+    private const ENGINE_SCOPE_PREFIX = 'ZEngine';
 
     /**
      * Custom user handler with signature function($scope): int
@@ -97,9 +98,9 @@ final class OpCodeHook implements HookInterface
         assert($previousHandler === null || $previousHandler instanceof CData);
         $this->originalHandler = $previousHandler;
 
-        $result = Core::call('zend_set_user_opcode_handler', $this->opCode, Closure::fromCallable([$this, 'handle']));
+        $result = Core::call('zend_set_user_opcode_handler', $this->opCode, $this->handle(...));
         if ($result === Core::FAILURE) {
-            throw new \RuntimeException('Can not install user opcode handler');
+            throw OpCodeHookException::handlerInstallFailed();
         }
         $this->installed = true;
         Core::registerHook($this);
@@ -130,7 +131,7 @@ final class OpCodeHook implements HookInterface
 
         $result = Core::call('zend_set_user_opcode_handler', $this->opCode, $this->originalHandler);
         if ($result === Core::FAILURE) {
-            throw new \RuntimeException('Can not restore original opcode handler');
+            throw OpCodeHookException::handlerRestoreFailed();
         }
         $this->installed = false;
         Core::unregisterHook($this);
@@ -198,13 +199,20 @@ final class OpCodeHook implements HookInterface
         if (!$this->installed) {
             return;
         }
-        Core::call('zend_set_user_opcode_handler', $this->opCode, Closure::fromCallable([$this, 'handle']));
+        Core::call('zend_set_user_opcode_handler', $this->opCode, $this->handle(...));
     }
 
     /**
      * Handles the hooked opcode and returns one of ZEND_USER_OPCODE_* codes
      *
      * typedef int (*user_opcode_handler_t)(zend_execute_data *execute_data);
+     *
+     * The frame that executes the opcode is the callback argument itself, so the class
+     * scope that decides whether z-engine's own code is running is read straight off it
+     * (see ExecutionData::getScopeClass()) - no stack walk is needed, and none is
+     * affordable here: this runs on EVERY execution of the hooked opcode. Stacked hooks
+     * pass the very same execute_data down the chain, so a delegated call resolves the
+     * same executing frame as the top hook did, with no delegation frames to skip.
      *
      * @param mixed ...$rawArguments Raw C arguments of this callback (zend_execute_data*)
      */
@@ -213,26 +221,15 @@ final class OpCodeHook implements HookInterface
         [$state] = $rawArguments;
         assert($state instanceof CData);
 
-        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, self::BACKTRACE_LIMIT);
-        $class = '';
-        $total = count($trace);
-        for ($index = 1; $index < $total; $index++) {
-            $frameClass = $trace[$index]['class'] ?? '';
-            if ($frameClass === self::class) {
-                // Delegation frame of a stacked OpCodeHook: the executing frame is deeper
-                continue;
-            }
-            $class = $frameClass;
-            break;
-        }
-        if (strpos($class, 'ZEngine') === 0) {
+        $executionState = new ExecutionData($state);
+        $frameScope     = $executionState->getScopeClass()?->getName();
+        if ($frameScope !== null && str_starts_with($frameScope, self::ENGINE_SCOPE_PREFIX)) {
             // For all our internal classes just proceed with default opcode handler
 
             return Core::ZEND_USER_OPCODE_DISPATCH;
         }
 
-        $executionState = new ExecutionData($state);
-        $handleResult   = ($this->userHandler)($executionState);
+        $handleResult = ($this->userHandler)($executionState);
         assert(is_int($handleResult));
 
         if ($handleResult === Core::ZEND_USER_OPCODE_DISPATCH && $this->originalHandler !== null) {

@@ -225,16 +225,9 @@ final class HotSwap
      */
     private static function unpublishClassEntry(string $lowerName): void
     {
-        $classTable = Core::$executor->classTable;
-        $rawTable   = $classTable->getRawValue();
-
-        $previousDestructor    = $rawTable->pDestructor;
-        $rawTable->pDestructor = null;
-        try {
-            $classTable->delete($lowerName);
-        } finally {
-            $rawTable->pDestructor = $previousDestructor;
-        }
+        // The table destructor is disabled around the delete so the bucket removal
+        // releases nothing - the class entry survives and is republished afterwards
+        Core::$executor->classTable->deleteWithoutDestructor($lowerName);
     }
 
     /**

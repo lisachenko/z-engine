@@ -14,6 +14,7 @@ declare(strict_types=1);
 namespace ZEngine\Reflection;
 
 use FFI\CData;
+use ReflectionClass as NativeReflectionClass;
 use ReflectionClassConstant as NativeReflectionClassConstant;
 use ZEngine\Core;
 use ZEngine\Generated\zend_class_constant;
@@ -70,7 +71,7 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
     public static function fromCData(object $constantEntry, string $constantName): ReflectionClassConstant
     {
         /** @var ReflectionClassConstant $reflectionConstant */
-        $reflectionConstant = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionConstant = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
         /** @var zend_class_constant $constantEntry Narrowed to the stub view at the owning boundary */
         $classEntry = $constantEntry->ce;
         assert($classEntry !== null);
@@ -103,7 +104,7 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
     public static function fromRawEntry(object $constantEntry): ReflectionClassConstant
     {
         /** @var ReflectionClassConstant $reflectionConstant */
-        $reflectionConstant = (new ReflectionClass(static::class))->newInstanceWithoutConstructor();
+        $reflectionConstant = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
         /** @var zend_class_constant $constantEntry Narrowed at the boundary (may be a struct or a pointer view) */
         $reflectionConstant->pointer = $constantEntry;
 

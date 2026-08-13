@@ -66,6 +66,8 @@ use ZEngine\ClassExtension\ObjectWritePropertyInterface;
 use ZEngine\Core;
 use ZEngine\Generated\zend_class_entry;
 use ZEngine\Generated\zend_class_name;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zend_trait_precedence;
 use ZEngine\Generated\zval;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\OpCache\SharedMemoryException;
@@ -312,7 +314,7 @@ class ReflectionClass extends NativeReflectionClass
         $isPersistent = $this->isPersistentAllocation();
         $memory       = Core::trackedNew("zend_class_entry *[$numResultInterfaces]", $isPersistent);
 
-        $itemsSize = Core::sizeof(Core::type('zend_class_entry *'));
+        $itemsSize = Core::sizeOfType('zend_class_entry *');
         if ($totalInterfaces > 0) {
             Core::memcpy($memory, $this->pointer->interfaces, $itemsSize * $totalInterfaces);
         }
@@ -321,7 +323,10 @@ class ReflectionClass extends NativeReflectionClass
             if (!interface_exists($interfaceName)) {
                 throw new \ReflectionException("Interface {$interfaceName} was not found");
             }
-            $classValueEntry   = Core::$executor->classTable->find(strtolower($interfaceName));
+            $classValueEntry = Core::$executor->classTable->find(strtolower($interfaceName));
+            if ($classValueEntry === null) {
+                throw new \ReflectionException("Interface {$interfaceName} was not found in the engine");
+            }
             $interfaceClass    = $classValueEntry->getRawClass();
             $memory[$position] = $interfaceClass;
         }
@@ -783,7 +788,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function getDefaultPropertyValueOf(ReflectionProperty $property): ReflectionValue
     {
-        $zvalSize = Core::sizeof(Core::type('zval'));
+        $zvalSize = Core::sizeOfType(zval::class);
         $slotBase = Core::type('zend_object')->getStructFieldOffset('properties_table');
         $slot     = intdiv($property->getOffset() - $slotBase, $zvalSize);
         $table    = $this->pointer->default_properties_table;
@@ -961,7 +966,7 @@ class ReflectionClass extends NativeReflectionClass
         $isPersistent = $this->isPersistentAllocation();
         $memory       = Core::trackedNew("zend_class_name [$numResultTraits]", $isPersistent);
 
-        $itemsSize = Core::sizeof(Core::type('zend_class_name'));
+        $itemsSize = Core::sizeOfType(zend_class_name::class);
         if ($totalTraits > 0) {
             Core::memcpy($memory, $this->pointer->trait_names, $itemsSize * $totalTraits);
         }
@@ -1267,8 +1272,8 @@ class ReflectionClass extends NativeReflectionClass
         // zend_trait_precedence embeds a flexible array of excluded names, so the block is
         // sized manually like the compiler does (one zend_string* slot is already part of
         // the structure itself)
-        $pointerSize = Core::sizeof(Core::type('zend_string *'));
-        $structSize  = Core::sizeof(Core::type('zend_trait_precedence')) + ($totalExcludes - 1) * $pointerSize;
+        $pointerSize = Core::sizeOfType('zend_string *');
+        $structSize  = Core::sizeOfType(zend_trait_precedence::class) + ($totalExcludes - 1) * $pointerSize;
         $memory      = Core::trackedNew("char[{$structSize}]", $isPersistent);
 
         $precedenceEntry = Core::cast('zend_trait_precedence *', $memory);
@@ -1727,7 +1732,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     private function detachParentProperties(int $selfAddress): void
     {
-        $zvalSize = Core::sizeof(Core::type('zval'));
+        $zvalSize = Core::sizeOfType(zval::class);
         $slotBase = Core::type('zend_object')->getStructFieldOffset('properties_table');
 
         // Partition properties_info into inherited entries and own instance/static definitions
@@ -2044,7 +2049,7 @@ class ReflectionClass extends NativeReflectionClass
         }
         $materialized = $this->getMaterializedStaticMembersTable();
         if ($materialized !== null) {
-            $zvalSize     = Core::sizeof(Core::type('zval'));
+            $zvalSize     = Core::sizeOfType(zval::class);
             $defaultTable = $this->pointer->default_static_members_table;
             $totalSlots   = $this->pointer->default_static_members_count;
             assert($defaultTable instanceof CData && is_int($totalSlots));
@@ -2102,7 +2107,7 @@ class ReflectionClass extends NativeReflectionClass
         }
         assert($infoTable instanceof CData);
         $selfAddress = Core::addressOf($this->pointer);
-        $zvalSize    = Core::sizeof(Core::type('zval'));
+        $zvalSize    = Core::sizeOfType(zval::class);
         $slotBase    = Core::type('zend_object')->getStructFieldOffset('properties_table');
         $totalSlots  = $this->pointer->default_properties_count;
         assert(is_int($totalSlots));
@@ -2650,7 +2655,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public static function newInstanceRaw(object $classType, bool $persistent = false): object
     {
-        $objectSize = Core::sizeof(Core::type('zend_object'));
+        $objectSize = Core::sizeOfType(zend_object::class);
         $totalSize  = $objectSize + self::getObjectPropertiesSize($classType);
         $memory     = Core::new("char[{$totalSize}]", false, $persistent);
         $object     = Core::cast('zend_object *', $memory);
@@ -2672,7 +2677,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public static function getObjectSize(object $classType): int
     {
-        return Core::sizeof(Core::type('zend_object')) + self::getObjectPropertiesSize($classType);
+        return Core::sizeOfType(zend_object::class) + self::getObjectPropertiesSize($classType);
     }
 
     /**
