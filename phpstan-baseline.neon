@@ -853,12 +853,6 @@ parameters:
 			path: src/Core.php
 
 		-
-			message: '#^Parameter \#1 \$string of function strtolower expects string, string\|null given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/EngineExtension/AbstractModule.php
-
-		-
 			message: '#^Parameter \#1 \$stringPointer of static method ZEngine\\Type\\StringEntry\:\:fromCData\(\) expects FFI\\CData\|ZEngine\\Generated\\zend_string, mixed given\.$#'
 			identifier: argument.type
 			count: 1

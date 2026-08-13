@@ -401,7 +401,7 @@ class ObjectEntry implements ReferenceCountedInterface
     private function assertObjectAlive(): void
     {
         if ($this->weakSource !== null && $this->weakSource->get() === null) {
-            throw new \RuntimeException('The underlying object has been destroyed, this entry is dangling');
+            throw TypeOperationException::danglingObjectEntry();
         }
     }
 }

@@ -99,7 +99,7 @@ final class OpCodeHook implements HookInterface
 
         $result = Core::call('zend_set_user_opcode_handler', $this->opCode, Closure::fromCallable([$this, 'handle']));
         if ($result === Core::FAILURE) {
-            throw new \RuntimeException('Can not install user opcode handler');
+            throw OpCodeHookException::handlerInstallFailed();
         }
         $this->installed = true;
         Core::registerHook($this);
@@ -130,7 +130,7 @@ final class OpCodeHook implements HookInterface
 
         $result = Core::call('zend_set_user_opcode_handler', $this->opCode, $this->originalHandler);
         if ($result === Core::FAILURE) {
-            throw new \RuntimeException('Can not restore original opcode handler');
+            throw OpCodeHookException::handlerRestoreFailed();
         }
         $this->installed = false;
         Core::unregisterHook($this);
