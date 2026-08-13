@@ -532,12 +532,13 @@ class ClassSpecializer
         $total = $opArray->last;
         assert(is_int($total));
 
-        $opcodes = $opArray->opcodes;
-        assert($opcodes instanceof CData);
+        $rawOpcodes = $opArray->opcodes;
+        assert($rawOpcodes instanceof CData);
+        // The op_array carries its own opcode count, so the walk goes through the
+        // bounds-checked view instead of indexing the raw pointer (see AGENTS.md)
+        $opcodes = new StructArray($rawOpcodes, $total);
 
-        for ($index = 0; $index < $total; $index++) {
-            $opline = $opcodes[$index];
-            assert($opline instanceof CData);
+        foreach ($opcodes as $index => $opline) {
             if (!in_array($opline->opcode, [OpCode::RETURN, OpCode::RETURN_BY_REF, OpCode::GENERATOR_RETURN], true)) {
                 continue;
             }
@@ -545,7 +546,6 @@ class ClassSpecializer
                 return false;
             }
             $previous = $opcodes[$index - 1];
-            assert($previous instanceof CData);
             if ($previous->opcode !== OpCode::VERIFY_RETURN_TYPE) {
                 return false;
             }
