@@ -282,7 +282,7 @@ jobs:
       # fresh entry (cache entries are immutable), while restore-keys fall back
       # to the newest cache built from the same config + dependency set.
       - name: Cache the PHPStan result cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: var/phpstan
           key: phpstan-${{ env.PHP_MINOR }}-${{ hashFiles('phpstan.dist.neon', 'phpstan-baseline.neon', 'composer.json') }}-${{ github.sha }}
@@ -308,7 +308,7 @@ jobs:
       # and re-checks only what changed; it invalidates the cache itself when
       # the tool version or the rule set changes.
       - name: Cache the php-cs-fixer cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .php-cs-fixer.cache
           key: php-cs-fixer-${{ env.PHP_MINOR }}-${{ hashFiles('.php-cs-fixer.dist.php', 'composer.json') }}-${{ github.sha }}
@@ -358,7 +358,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Restore the debug image layer cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /tmp/.buildx-cache
           key: docker-debug-${{ matrix.ts }}-${{ env.PHP_MINOR }}-${{ hashFiles('tools/docker/php-debug.Dockerfile') }}
@@ -409,7 +409,7 @@ jobs:
       # emit stage itself always re-runs - it is the step that produces the
       # artifacts being drift-checked. generate.php rotates per-target subdirs.
       - name: Restore the generator image layer cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /tmp/.buildx-gen-cache
           key: docker-gen-${{ env.PHP_MINOR }}-${{ hashFiles('tools/generator/Dockerfile') }}
