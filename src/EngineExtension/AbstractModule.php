@@ -124,7 +124,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
     final public function register(): void
     {
         if ($this->isModuleRegistered()) {
-            throw new \RuntimeException('Module ' . $this->moduleName . ' was already registered.');
+            throw ModuleRegistrationException::alreadyRegistered($this->moduleName);
         }
 
         // Since PHP 8.4 zend_register_module_ex stores THIS pointer directly in the
@@ -167,7 +167,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
             // The engine refused the entry (conflicting dependency or duplicate name) and
             // reported an E_CORE_WARNING; the persistent buffers above are bounded, error-path
             // allocations that stay in the tracked-block registry
-            throw new \RuntimeException('Can not register module ' . $moduleName . ' in the engine');
+            throw ModuleRegistrationException::registrationRefused($moduleName);
         }
         \assert($realModulePointer instanceof CData);
 
@@ -205,7 +205,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
 
         $result = Core::call('zend_startup_module_ex', $this->moduleEntry);
         if ($result !== Core::SUCCESS) {
-            throw new \RuntimeException('Can not startup module ' . $this->moduleName);
+            throw ModuleRegistrationException::startupFailed($this->moduleName);
         }
 
         // dl() parity: a module started in the middle of a request receives the current
