@@ -60,7 +60,7 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref }}
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
+        uses: shivammathur/setup-php@v2
         env:
           phpts: ${{ matrix.ts == 'zts' && 'ts' || 'nts' }}
         with:
@@ -98,7 +98,7 @@ jobs:
       # environment variable, which this step exports for the whole job.
       - name: Set up the MSVC toolchain environment
         if: steps.build.outputs.available == 'true'
-        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+        uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
 

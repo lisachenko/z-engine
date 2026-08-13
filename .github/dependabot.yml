@@ -7,9 +7,7 @@ updates:
     time: "04:00"
   open-pull-requests-limit: 10
 
-# Keeps the workflow actions current - including the SHA pins of the
-# third-party ones, whose trailing "# vX.Y.Z" comment dependabot rewrites
-# together with the SHA.
+# Keeps the workflow actions' version tags current.
 - package-ecosystem: github-actions
   directory: "/"
   schedule:
