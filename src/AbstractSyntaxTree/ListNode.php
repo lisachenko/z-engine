@@ -67,7 +67,7 @@ class ListNode extends Node
         // This variable can be redeclared (if list will grow during node addition)
         $selfNode = Core::cast('zend_ast *', $this->node);
         foreach ($nodes as $node) {
-            $astNode  = Core::cast('zend_ast *', self::rawNodeOf($node, __FUNCTION__));
+            $astNode  = Core::cast('zend_ast *', $node->node);
             $selfNode = Core::call('zend_ast_list_add', $selfNode, $astNode);
         }
 
