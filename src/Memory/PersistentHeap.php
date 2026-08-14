@@ -420,7 +420,7 @@ final class PersistentHeap
             // A stored object still carries the class entry of the request that minted the
             // clone (pass 3 rewrites it), so the slot count MUST come from the entry resolved
             // above - dereferencing the stale one here would read freed memory
-            $slotCount = ReflectionClass::getDefaultPropertiesCount($resolved[$index]);
+            $slotCount = ReflectionClass::fromCData($resolved[$index])->getDefaultPropertiesCount();
             $slots     = new StructArray(ObjectEntry::fromCData($objectPointer)->getPropertyTablePointer(), $slotCount);
             for ($slot = 0; $slot < $slotCount; $slot++) {
                 $value  = ReflectionValue::fromValueEntry(Core::addr($slots[$slot]));
