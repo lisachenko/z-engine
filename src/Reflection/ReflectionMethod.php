@@ -149,7 +149,7 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
         // board instead: the native constructor resolves the function through the board
         // but adopts the hook's own scope, so the reflection still reports the real
         // declaring class, and no shared engine structure is ever written.
-        $boardName   = get_class(self::publicationBoard());
+        $boardName   = self::publicationBoard()::class;
         $methodTable = (new ReflectionClass($boardName))->getMethodTable();
 
         // The temporary container is released right after the engine copied it into a bucket

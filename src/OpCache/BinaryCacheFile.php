@@ -101,7 +101,7 @@ final class BinaryCacheFile
         if ($realPath === false) {
             throw OpCacheException::scriptNotFound($scriptPath);
         }
-        $systemId = $systemId ?? SystemId::current();
+        $systemId ??= SystemId::current();
 
         return rtrim($fileCacheDir, '/') . '/' . $systemId->toHex() . $realPath . '.bin';
     }

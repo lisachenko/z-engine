@@ -384,9 +384,9 @@ final class IteratorBridge implements HookInterface
     {
         $state->broken = true;
 
-        $iteratorClass = get_class($state->iterator);
+        $iteratorClass = $state->iterator::class;
         trigger_error(
-            "Engine iteration terminated: {$iteratorClass}::{$method}() threw " . get_class($error)
+            "Engine iteration terminated: {$iteratorClass}::{$method}() threw " . $error::class
             . ": {$error->getMessage()} (exceptions cannot cross the FFI boundary, see issue #50)",
             E_USER_WARNING,
         );

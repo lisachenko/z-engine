@@ -101,7 +101,7 @@ final class GetIteratorHook extends AbstractHook
             $userIterator = ($this->userHandler)($this);
         } catch (Throwable $error) {
             trigger_error(
-                'Engine get_iterator handler threw ' . get_class($error) . ": {$error->getMessage()}"
+                'Engine get_iterator handler threw ' . $error::class . ": {$error->getMessage()}"
                 . ' (exceptions cannot cross the FFI boundary, see issue #50)',
                 E_USER_WARNING,
             );
