@@ -20,7 +20,6 @@ use ZEngine\Core;
 use ZEngine\Generated\zend_property_info;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\StringEntry;
-use ZEngine\Type\StructArray;
 
 /**
  * Class ReflectionProperty
@@ -214,10 +213,7 @@ class ReflectionProperty extends NativeReflectionProperty
             return null;
         }
         assert($hooks instanceof CData);
-        // The hooks block is a fixed-size zend_function * array indexed by hook kind, so it
-        // is read through the bounds-checked view rather than by raw pointer index
-        $hookTable    = new StructArray($hooks, Core::ZEND_PROPERTY_HOOK_COUNT);
-        $hookFunction = $hookTable[$kind];
+        $hookFunction = $hooks[$kind];
         if ($hookFunction === null) {
             return null;
         }
