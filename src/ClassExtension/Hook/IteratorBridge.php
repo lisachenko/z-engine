@@ -131,6 +131,7 @@ final class IteratorBridge implements HookInterface
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): never
     {
         throw new \LogicException('IteratorBridge callbacks are dispatched through the funcs vtable');
@@ -139,6 +140,7 @@ final class IteratorBridge implements HookInterface
     /**
      * Mints the persistent vtable and registers the bridge in the Core hook registry (idempotent)
      */
+    #[\Override]
     public function install(): void
     {
         if ($this->installed) {
@@ -164,6 +166,7 @@ final class IteratorBridge implements HookInterface
      * shutdown never calls into the (by then freed) trampolines. The persistent vtable
      * block itself stays allocated - it is immortal by design.
      */
+    #[\Override]
     public function uninstall(): void
     {
         if (!$this->installed) {
@@ -183,16 +186,19 @@ final class IteratorBridge implements HookInterface
         Core::unregisterHook($this);
     }
 
+    #[\Override]
     public function isInstalled(): bool
     {
         return $this->installed;
     }
 
+    #[\Override]
     public function hasOriginalHandler(): bool
     {
         return false;
     }
 
+    #[\Override]
     public function getHookFieldKey(): string
     {
         return 'iterator-bridge::zend_object_iterator_funcs';
@@ -204,6 +210,7 @@ final class IteratorBridge implements HookInterface
      * Used at install time and by Core::reinstallHooks() for SAPIs that cycle ext/ffi
      * callback state between handled requests.
      */
+    #[\Override]
     public function refreshTrampoline(): void
     {
         if (self::$vtable === null) {
@@ -377,9 +384,9 @@ final class IteratorBridge implements HookInterface
     {
         $state->broken = true;
 
-        $iteratorClass = get_class($state->iterator);
+        $iteratorClass = $state->iterator::class;
         trigger_error(
-            "Engine iteration terminated: {$iteratorClass}::{$method}() threw " . get_class($error)
+            "Engine iteration terminated: {$iteratorClass}::{$method}() threw " . $error::class
             . ": {$error->getMessage()} (exceptions cannot cross the FFI boundary, see issue #50)",
             E_USER_WARNING,
         );

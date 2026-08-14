@@ -35,9 +35,9 @@ final class ModuleDependency
      * @deprecated Use the DependencyType enum (DependencyType::Required/Conflicts/Optional) instead;
      *             these int aliases are kept for consumers that pass or compare raw MODULE_DEP_* values
      */
-    public const MODULE_REQUIRED  = 1;
-    public const MODULE_CONFLICTS = 2;
-    public const MODULE_OPTIONAL  = 3;
+    public const int MODULE_REQUIRED  = 1;
+    public const int MODULE_CONFLICTS = 2;
+    public const int MODULE_OPTIONAL  = 3;
 
     /**
      * Dependency type as the engine stores it in zend_module_dep.type

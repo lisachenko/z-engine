@@ -57,7 +57,7 @@ final class PersistentObjectFactory
      * Refcount baseline for persistent objects: high enough that request-time release
      * churn can never reach zero, low enough to stay far from the uint32 range
      */
-    public const PIN_BASELINE = 1 << 29;
+    public const int PIN_BASELINE = 1 << 29;
 
     /**
      * Creates a persistent byte-clone of a live zend_object

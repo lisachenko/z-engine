@@ -25,7 +25,7 @@ use ZEngine\Reflection\ReflectionValue;
  */
 final class ReadPropertyHook extends AbstractPropertyHook
 {
-    protected const HOOK_FIELD = 'read_property';
+    protected const string HOOK_FIELD = 'read_property';
 
     /**
      * Hook access type
@@ -45,6 +45,7 @@ final class ReadPropertyHook extends AbstractPropertyHook
      * @inheritDoc
      * @return zval
      */
+    #[\Override]
     public function handle(...$rawArguments): object
     {
         /**

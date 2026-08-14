@@ -24,7 +24,7 @@ use ZEngine\Type\ObjectEntry;
  */
 final class CountElementsHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'count_elements';
+    protected const string HOOK_FIELD = 'count_elements';
 
     /**
      * Object instance
@@ -46,6 +46,7 @@ final class CountElementsHook extends AbstractHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): int
     {
         /**

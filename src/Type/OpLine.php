@@ -41,14 +41,14 @@ class OpLine
     /**
      * Unused operand
      */
-    public const IS_UNUSED = 0;
+    public const int IS_UNUSED = 0;
 
     /**
      * This opcode node type is used for literal values in PHP code.
      *
      * For example, the integer literal 1 or string literal 'Hello, World!' will both be of this type.
      */
-    public const IS_CONST = (1 << 0);
+    public const int IS_CONST = (1 << 0);
 
     /**
      * This opcode node type is used for temporary variables.
@@ -59,7 +59,7 @@ class OpLine
      *
      * For example, the return value of $a++ will be of this type.
      */
-    public const IS_TMP_VAR = (1 << 1);
+    public const int IS_TMP_VAR = (1 << 1);
 
     /**
      * This opcode node type is used for complex variables in PHP code.
@@ -67,7 +67,7 @@ class OpLine
      * For example, the variable $obj->a is considered to be a complex variable, however the variable $a is not
      * (it is instead an IS_CV type).
      */
-    public const IS_VAR = (1 << 2);
+    public const int IS_VAR = (1 << 2);
 
     /**
      * This opcode node type is used for simple variables in PHP code.
@@ -75,7 +75,7 @@ class OpLine
      * For example, the variable $a is considered to be a simple variable,
      * however the variable $obj->a is not (it is instead an IS_VAR type).
      */
-    public const IS_CV = (1 << 3);
+    public const int IS_CV = (1 << 3);
 
     /**
      * Execution context (if present).
@@ -231,24 +231,16 @@ class OpLine
      */
     private function getValuePointer(object $node, int $opType): ?ReflectionValue
     {
-        $pointer = null;
+        // IS_UNUSED is still used by some opcodes, in most cases it points to an IS_UNDEF value
+        $pointer = match ($opType) {
+            self::IS_CONST => self::getRuntimeConstant(Core::cast('zend_op *', $this->opline), $node),
+            // All these types requires context to be present, otherwise we can't resolve such nodes
+            self::IS_TMP_VAR, self::IS_VAR, self::IS_CV, self::IS_UNUSED => isset($this->context)
+                ? $this->context->getCallVariable(Core::cast('znode_op *', $node)->var)
+                : null,
+            default => throw new \InvalidArgumentException('Received invalid opcode type: ' . $opType),
+        };
 
-        switch ($opType) {
-            case self::IS_CONST:
-                $pointer = self::getRuntimeConstant(Core::cast('zend_op *', $this->opline), $node);
-                break;
-            case self::IS_TMP_VAR:
-            case self::IS_VAR:
-            case self::IS_CV:
-            case self::IS_UNUSED: // For some opcodes IS_UNUSED still used, in most cases it points to an IS_UNDEF value
-                // All these types requires context to be present, otherwise we can't resolve such nodes
-                if (isset($this->context)) {
-                    $pointer = $this->context->getCallVariable(Core::cast('znode_op *', $node)->var);
-                }
-                break;
-            default:
-                throw new \InvalidArgumentException('Received invalid opcode type: ' . $opType);
-        }
         $value = isset($pointer) ? ReflectionValue::fromValueEntry($pointer) : null;
 
         return $value;

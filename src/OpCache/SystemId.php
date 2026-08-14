@@ -22,7 +22,7 @@ use ZEngine\Core;
  */
 final class SystemId
 {
-    public const LENGTH = 32;
+    public const int LENGTH = 32;
 
     private function __construct(private readonly string $hex) {}
 

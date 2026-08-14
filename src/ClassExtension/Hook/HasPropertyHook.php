@@ -23,7 +23,7 @@ use ZEngine\Generated\zend_string;
  */
 final class HasPropertyHook extends AbstractPropertyHook
 {
-    protected const HOOK_FIELD = 'has_property';
+    protected const string HOOK_FIELD = 'has_property';
 
     /**
      * Check type:
@@ -38,6 +38,7 @@ final class HasPropertyHook extends AbstractPropertyHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): int
     {
         /**

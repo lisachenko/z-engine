@@ -51,7 +51,7 @@ use ZEngine\Type\ObjectEntry;
  */
 final class GetIteratorHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'get_iterator';
+    protected const string HOOK_FIELD = 'get_iterator';
 
     /**
      * Class entry of the object being iterated
@@ -79,6 +79,7 @@ final class GetIteratorHook extends AbstractHook
      * @inheritDoc
      * @return \FFI\CData|null
      */
+    #[\Override]
     public function handle(...$rawArguments): ?object
     {
         /**
@@ -100,7 +101,7 @@ final class GetIteratorHook extends AbstractHook
             $userIterator = ($this->userHandler)($this);
         } catch (Throwable $error) {
             trigger_error(
-                'Engine get_iterator handler threw ' . get_class($error) . ": {$error->getMessage()}"
+                'Engine get_iterator handler threw ' . $error::class . ": {$error->getMessage()}"
                 . ' (exceptions cannot cross the FFI boundary, see issue #50)',
                 E_USER_WARNING,
             );

@@ -25,7 +25,7 @@ use ZEngine\Reflection\ReflectionValue;
  */
 final class WritePropertyHook extends AbstractPropertyHook
 {
-    protected const HOOK_FIELD = 'write_property';
+    protected const string HOOK_FIELD = 'write_property';
 
     /**
      * Value to write
@@ -40,6 +40,7 @@ final class WritePropertyHook extends AbstractPropertyHook
      * @inheritDoc
      * @return \FFI\CData
      */
+    #[\Override]
     public function handle(...$rawArguments): object
     {
         /**

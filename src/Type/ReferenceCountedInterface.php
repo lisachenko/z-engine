@@ -22,11 +22,11 @@ namespace ZEngine\Type;
  */
 interface ReferenceCountedInterface
 {
-    public const GC_COLLECTABLE      = (1 << 4);
-    public const GC_PROTECTED        = (1 << 5); // used for recursion detection
-    public const GC_IMMUTABLE        = (1 << 6); // can't be canged in place
-    public const GC_PERSISTENT       = (1 << 7); // allocated using malloc
-    public const GC_PERSISTENT_LOCAL = (1 << 8); // persistent, but thread-local
+    public const int GC_COLLECTABLE      = (1 << 4);
+    public const int GC_PROTECTED        = (1 << 5); // used for recursion detection
+    public const int GC_IMMUTABLE        = (1 << 6); // can't be canged in place
+    public const int GC_PERSISTENT       = (1 << 7); // allocated using malloc
+    public const int GC_PERSISTENT_LOCAL = (1 << 8); // persistent, but thread-local
 
     /**
      * Returns an internal reference counter value

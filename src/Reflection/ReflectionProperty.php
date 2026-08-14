@@ -149,6 +149,7 @@ class ReflectionProperty extends NativeReflectionProperty
     /**
      * Checks if this property is declared static
      */
+    #[\Override]
     public function isStatic(): bool
     {
         return ($this->getFlags() & Core::ZEND_ACC_STATIC) !== 0;
@@ -157,6 +158,7 @@ class ReflectionProperty extends NativeReflectionProperty
     /**
      * Checks if this property is virtual (hooked, no backing storage slot)
      */
+    #[\Override]
     public function isVirtual(): bool
     {
         return ($this->getFlags() & Core::ZEND_ACC_VIRTUAL) !== 0;
@@ -178,6 +180,7 @@ class ReflectionProperty extends NativeReflectionProperty
     /**
      * Checks if this property declares at least one property hook (PHP 8.4+)
      */
+    #[\Override]
     public function hasHooks(): bool
     {
         return $this->pointer->hooks !== null;
@@ -196,6 +199,7 @@ class ReflectionProperty extends NativeReflectionProperty
      *
      * @param \PropertyHookType|int $kind Hook kind
      */
+    #[\Override]
     public function getHook(\PropertyHookType|int $kind): ?ReflectionMethod
     {
         if ($kind instanceof \PropertyHookType) {
@@ -265,6 +269,7 @@ class ReflectionProperty extends NativeReflectionProperty
     /**
      * Gets the declaring class
      */
+    #[\Override]
     public function getDeclaringClass(): ReflectionClass
     {
         $classEntry = $this->pointer->ce;

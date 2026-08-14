@@ -41,53 +41,53 @@ class Compiler
      */
 
     /* generate extended debug information */
-    public const COMPILE_EXTENDED_STMT  = (1 << 0);
-    public const COMPILE_EXTENDED_FCALL = (1 << 1);
-    public const COMPILE_EXTENDED_INFO  = (self::COMPILE_EXTENDED_STMT | self::COMPILE_EXTENDED_FCALL);
+    public const int COMPILE_EXTENDED_STMT  = (1 << 0);
+    public const int COMPILE_EXTENDED_FCALL = (1 << 1);
+    public const int COMPILE_EXTENDED_INFO  = (self::COMPILE_EXTENDED_STMT | self::COMPILE_EXTENDED_FCALL);
 
     /* call op_array handler of extendions */
-    public const COMPILE_HANDLE_OP_ARRAY = (1 << 2);
+    public const int COMPILE_HANDLE_OP_ARRAY = (1 << 2);
 
     /* generate INIT_FCALL_BY_NAME for internal functions instead of INIT_FCALL */
-    public const COMPILE_IGNORE_INTERNAL_FUNCTIONS = (1 << 3);
+    public const int COMPILE_IGNORE_INTERNAL_FUNCTIONS = (1 << 3);
 
     /* don't perform early binding for classes inherited form internal ones;
      * in namespaces assume that internal class that doesn't exist at compile-time
      * may apper in run-time */
-    public const COMPILE_IGNORE_INTERNAL_CLASSES = (1 << 4);
+    public const int COMPILE_IGNORE_INTERNAL_CLASSES = (1 << 4);
 
     /* generate DECLARE_CLASS_DELAYED opcode to delay early binding */
-    public const COMPILE_DELAYED_BINDING = (1 << 5);
+    public const int COMPILE_DELAYED_BINDING = (1 << 5);
 
     /* disable constant substitution at compile-time */
-    public const COMPILE_NO_CONSTANT_SUBSTITUTION = (1 << 6);
+    public const int COMPILE_NO_CONSTANT_SUBSTITUTION = (1 << 6);
 
     /* generate INIT_FCALL_BY_NAME for userland functions instead of INIT_FCALL */
-    public const COMPILE_IGNORE_USER_FUNCTIONS = (1 << 9);
+    public const int COMPILE_IGNORE_USER_FUNCTIONS = (1 << 9);
 
     /* force ACC_USE_GUARDS for all classes */
-    public const COMPILE_GUARDS = (1 << 10);
+    public const int COMPILE_GUARDS = (1 << 10);
 
     /* disable builtin special case function calls */
-    public const COMPILE_NO_BUILTINS = (1 << 11);
+    public const int COMPILE_NO_BUILTINS = (1 << 11);
 
     /* this flag is set when compiler invoked by opcache_compile_file() */
-    public const COMPILE_WITHOUT_EXECUTION = (1 << 14);
+    public const int COMPILE_WITHOUT_EXECUTION = (1 << 14);
 
     /* this flag is set when compiler invoked during preloading */
-    public const COMPILE_PRELOAD = (1 << 15);
+    public const int COMPILE_PRELOAD = (1 << 15);
 
     /* disable jumptable optimization for switch statements */
-    public const COMPILE_NO_JUMPTABLES = (1 << 16);
+    public const int COMPILE_NO_JUMPTABLES = (1 << 16);
 
     /* this flag is set when compiler invoked during preloading in separate process */
-    public const COMPILE_PRELOAD_IN_CHILD = (1 << 17);
+    public const int COMPILE_PRELOAD_IN_CHILD = (1 << 17);
 
     /* The default value for CG(compiler_options) */
-    public const COMPILE_DEFAULT = self::COMPILE_HANDLE_OP_ARRAY;
+    public const int COMPILE_DEFAULT = self::COMPILE_HANDLE_OP_ARRAY;
 
     /* The default value for CG(compiler_options) during eval() */
-    public const COMPILE_DEFAULT_FOR_EVAL = 0;
+    public const int COMPILE_DEFAULT_FOR_EVAL = 0;
 
     /**
      * The engine views below are bound to their compiler-globals table once, in the constructor,

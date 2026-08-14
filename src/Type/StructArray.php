@@ -84,6 +84,7 @@ final class StructArray implements ArrayAccess, Countable, IteratorAggregate
     /**
      * @param int $offset
      */
+    #[\Override]
     public function offsetExists(mixed $offset): bool
     {
         return $offset >= 0 && $offset < $this->count;
@@ -94,6 +95,7 @@ final class StructArray implements ArrayAccess, Countable, IteratorAggregate
      *
      * @return T
      */
+    #[\Override]
     public function offsetGet(mixed $offset): mixed
     {
         if ($offset < 0 || $offset >= $this->count) {
@@ -117,6 +119,7 @@ final class StructArray implements ArrayAccess, Countable, IteratorAggregate
      * @param int $offset
      * @param T   $value
      */
+    #[\Override]
     public function offsetSet(mixed $offset, mixed $value): void
     {
         $this->replace($offset, $value);
@@ -125,6 +128,7 @@ final class StructArray implements ArrayAccess, Countable, IteratorAggregate
     /**
      * @param int $offset
      */
+    #[\Override]
     public function offsetUnset(mixed $offset): never
     {
         throw new \LogicException('Struct-array elements live in engine memory and cannot be unset');
@@ -157,6 +161,7 @@ final class StructArray implements ArrayAccess, Countable, IteratorAggregate
         return $previousCopy;
     }
 
+    #[\Override]
     public function count(): int
     {
         return max($this->count, 0);
@@ -165,6 +170,7 @@ final class StructArray implements ArrayAccess, Countable, IteratorAggregate
     /**
      * @return Traversable<int, T>
      */
+    #[\Override]
     public function getIterator(): Traversable
     {
         for ($index = 0; $index < $this->count; $index++) {

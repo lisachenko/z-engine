@@ -195,11 +195,11 @@ class ReflectionExtension extends NativeReflectionExtension
         foreach ($methods as $method) {
             $methodName  = $method->getName();
             $hasZeroArgs = $method->getNumberOfRequiredParameters() === 0;
-            if ((strpos($methodName, 'get') === 0) && $hasZeroArgs) {
+            if (str_starts_with($methodName, 'get') && $hasZeroArgs) {
                 $friendlyName          = lcfirst(substr($methodName, 3));
                 $result[$friendlyName] = $this->$methodName();
             }
-            if ((strpos($methodName, 'is') === 0) && $hasZeroArgs) {
+            if (str_starts_with($methodName, 'is') && $hasZeroArgs) {
                 $friendlyName          = lcfirst(substr($methodName, 2));
                 $result[$friendlyName] = $this->$methodName();
             }

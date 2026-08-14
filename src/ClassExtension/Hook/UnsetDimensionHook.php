@@ -21,13 +21,14 @@ use ZEngine\Generated\zval;
  */
 final class UnsetDimensionHook extends AbstractDimensionHook
 {
-    protected const HOOK_FIELD = 'unset_dimension';
+    protected const string HOOK_FIELD = 'unset_dimension';
 
     /**
      * typedef void (*zend_object_unset_dimension_t)(zend_object *object, zval *offset);
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): void
     {
         /**

@@ -23,7 +23,7 @@ use ZEngine\Reflection\ReflectionClass;
  */
 final class CreateObjectHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'create_object';
+    protected const string HOOK_FIELD = 'create_object';
 
     /**
      * Class entry the object is created for
@@ -60,6 +60,7 @@ final class CreateObjectHook extends AbstractHook
      * @inheritDoc
      * @return \FFI\CData
      */
+    #[\Override]
     public function handle(...$rawArguments): object
     {
         /** @var zend_class_entry $classType Narrowed to the stub view at the engine callback boundary */

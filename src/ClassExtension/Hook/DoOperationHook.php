@@ -23,7 +23,7 @@ use ZEngine\Reflection\ReflectionValue;
  */
 final class DoOperationHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'do_operation';
+    protected const string HOOK_FIELD = 'do_operation';
 
     /**
      * Operation opcode
@@ -57,6 +57,7 @@ final class DoOperationHook extends AbstractHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): int
     {
         /**

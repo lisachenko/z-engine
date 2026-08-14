@@ -37,7 +37,7 @@ use ZEngine\Type\ObjectEntry;
  */
 final class CloneObjectHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'clone_obj';
+    protected const string HOOK_FIELD = 'clone_obj';
 
     /**
      * Object instance being cloned
@@ -53,6 +53,7 @@ final class CloneObjectHook extends AbstractHook
      * @inheritDoc
      * @return zend_object
      */
+    #[\Override]
     public function handle(...$rawArguments): object
     {
         /** @var zend_object $object Narrowed to the stub view at the engine callback boundary */

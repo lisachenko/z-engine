@@ -149,7 +149,7 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
         // board instead: the native constructor resolves the function through the board
         // but adopts the hook's own scope, so the reflection still reports the real
         // declaring class, and no shared engine structure is ever written.
-        $boardName   = get_class(self::publicationBoard());
+        $boardName   = self::publicationBoard()::class;
         $methodTable = (new ReflectionClass($boardName))->getMethodTable();
 
         // The temporary container is released right after the engine copied it into a bucket
@@ -290,6 +290,7 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      *
      * @throws \InvalidArgumentException If scope is not available
      */
+    #[\Override]
     public function getDeclaringClass(): ReflectionClass
     {
         $scope = $this->getCommonPointer()->scope;
@@ -321,6 +322,7 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      * Returns the method prototype or null if no prototype for this method
      */
     #[\ReturnTypeWillChange]
+    #[\Override]
     public function getPrototype(): ?ReflectionMethod
     {
         $prototype = $this->getCommonPointer()->prototype;
@@ -349,10 +351,13 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
         $thisOpArray  = $this->getOpArrayPointer();
         $otherOpArray = $other->getOpArrayPointer();
 
-        foreach (['last', 'last_var', 'last_literal', 'T', 'num_args', 'required_num_args', 'fn_flags'] as $field) {
-            if ($thisOpArray->{$field} !== $otherOpArray->{$field}) {
-                return false;
-            }
+        $bodyMetrics  = ['last', 'last_var', 'last_literal', 'T', 'num_args', 'required_num_args', 'fn_flags'];
+        $metricsAgree = array_all(
+            $bodyMetrics,
+            static fn(string $field): bool => $thisOpArray->{$field} === $otherOpArray->{$field},
+        );
+        if (!$metricsAgree) {
+            return false;
         }
         $opcodesSize = $thisOpArray->last * Core::sizeOfType(zend_op::class);
         if ($opcodesSize > 0) {

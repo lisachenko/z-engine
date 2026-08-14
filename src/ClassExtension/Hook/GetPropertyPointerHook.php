@@ -23,7 +23,7 @@ use ZEngine\Generated\zend_string;
  */
 final class GetPropertyPointerHook extends AbstractPropertyHook
 {
-    protected const HOOK_FIELD = 'get_property_ptr_ptr';
+    protected const string HOOK_FIELD = 'get_property_ptr_ptr';
 
     /**
      * Hook access type
@@ -40,6 +40,7 @@ final class GetPropertyPointerHook extends AbstractPropertyHook
      * would turn a userland contract violation into a TypeError raised inside an FFI
      * trampoline, where it cannot be caught (see issue #50).
      */
+    #[\Override]
     public function handle(...$rawArguments): mixed
     {
         /**

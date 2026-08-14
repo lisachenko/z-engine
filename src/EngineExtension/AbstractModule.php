@@ -45,12 +45,12 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
     /**
      * @see zend_modules.h:MODULE_PERSISTENT
      */
-    private const MODULE_PERSISTENT = 1;
+    private const int MODULE_PERSISTENT = 1;
 
     /**
      * @see zend_modules.h:MODULE_TEMPORARY
      */
-    private const MODULE_TEMPORARY = 2;
+    private const int MODULE_TEMPORARY = 2;
 
     /**
      * Unique name of this module
@@ -80,6 +80,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
     /**
      * Returns the unique name of this module
      */
+    #[\Override]
     final public function getName(): string
     {
         return $this->moduleName;
@@ -93,6 +94,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
      * versions supported by their z-engine release. Override only when a module
      * intentionally pins a specific engine API.
      */
+    #[\Override]
     public static function targetApiVersion(): int
     {
         return Core::engineConstant('ZEND_MODULE_API_NO');
@@ -104,6 +106,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
      * @inheritDoc
      * @return list<ModuleDependency>
      */
+    #[\Override]
     public function getModuleDependencies(): array
     {
         return [];
@@ -112,6 +115,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
     /**
      * Checks if this module loaded or not
      */
+    #[\Override]
     final public function isModuleRegistered(): bool
     {
         return extension_loaded($this->moduleName);
@@ -120,6 +124,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
     /**
      * Performs registration of this module in the engine
      */
+    #[\Override]
     final public function register(): void
     {
         if ($this->isModuleRegistered()) {
@@ -194,6 +199,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
      *
      * Startup includes calling callbacks for global memory allocation, checking deps, etc
      */
+    #[\Override]
     final public function startup(): void
     {
         if ($this instanceof ControlModuleGlobalsInterface) {
@@ -229,6 +235,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
      * @inheritDoc
      * @return \FFI\CData|null
      */
+    #[\Override]
     final public function getGlobals(): ?object
     {
         $rawPointer = parent::getGlobals();

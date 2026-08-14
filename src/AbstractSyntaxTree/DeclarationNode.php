@@ -80,6 +80,7 @@ class DeclarationNode extends Node
     /**
      * As declaration node spans several lines, just return start line instead
      */
+    #[\Override]
     public function getLine(): int
     {
         return $this->node->start_lineno;
@@ -88,6 +89,7 @@ class DeclarationNode extends Node
     /**
      * Changes the node line (actually, it's a start line)
      */
+    #[\Override]
     public function setLine(int $newLine): void
     {
         $this->node->start_lineno = $newLine;
@@ -190,6 +192,7 @@ class DeclarationNode extends Node
     /**
      * @inheritDoc
      */
+    #[\Override]
     public function getChildrenCount(): int
     {
         // Declaration node always contain 4 children nodes.
@@ -199,6 +202,7 @@ class DeclarationNode extends Node
     /**
      * @inheritDoc
      */
+    #[\Override]
     protected function dumpThis(int $indent = 0): string
     {
         $line = parent::dumpThis($indent);

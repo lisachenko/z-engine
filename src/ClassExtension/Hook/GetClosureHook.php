@@ -46,7 +46,7 @@ use ZEngine\Type\StringEntry;
  */
 final class GetClosureHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'get_closure';
+    protected const string HOOK_FIELD = 'get_closure';
 
     /**
      * Object instance being resolved to a closure
@@ -94,6 +94,7 @@ final class GetClosureHook extends AbstractHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): int
     {
         /**

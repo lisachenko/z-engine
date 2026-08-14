@@ -239,6 +239,7 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
     /**
      * Gets the declaring class
      */
+    #[\Override]
     public function getDeclaringClass(): ReflectionClass
     {
         $classEntry = $this->pointer->ce;

@@ -67,7 +67,7 @@ use ZEngine\Type\ObjectEntry;
  */
 final class GetPropertiesHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'get_properties';
+    protected const string HOOK_FIELD = 'get_properties';
 
     /**
      * Object instance
@@ -109,6 +109,7 @@ final class GetPropertiesHook extends AbstractHook
      * @inheritDoc
      * @return HashTableStruct
      */
+    #[\Override]
     public function handle(...$rawArguments): object
     {
         /** @var zend_object $object Narrowed to the stub view at the engine callback boundary */

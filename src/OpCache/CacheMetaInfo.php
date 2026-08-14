@@ -35,7 +35,7 @@ final class CacheMetaInfo
     /**
      * The magic is "OPCACHE" plus a terminating NUL (char magic[8] in C)
      */
-    public const MAGIC = "OPCACHE\0";
+    public const string MAGIC = "OPCACHE\0";
 
     /**
      * The fields are published as public readonly and every reconstruction below passes them by

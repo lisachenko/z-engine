@@ -39,7 +39,7 @@ use ZEngine\System\ExecutionData;
  */
 final class InterruptHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'zend_interrupt_function';
+    protected const string HOOK_FIELD = 'zend_interrupt_function';
 
     /**
      * Raw zend_execute_data pointer of the interrupted frame
@@ -54,6 +54,7 @@ final class InterruptHook extends AbstractHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): void
     {
         /** @var zend_execute_data $executeData Narrowed to the stub view at the engine callback boundary */

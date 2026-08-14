@@ -54,26 +54,26 @@ use ZEngine\Generated\zval;
  */
 final class PayloadRelocator
 {
-    private const IS_STRING       = 6;
-    private const IS_ARRAY        = 7;
-    private const IS_INDIRECT     = 12;
-    private const IS_CONSTANT_AST = 11;
+    private const int IS_STRING       = 6;
+    private const int IS_ARRAY        = 7;
+    private const int IS_INDIRECT     = 12;
+    private const int IS_CONSTANT_AST = 11;
 
-    private const HASH_FLAG_UNINITIALIZED = 8;
-    private const HASH_FLAG_PACKED        = 4;
+    private const int HASH_FLAG_UNINITIALIZED = 8;
+    private const int HASH_FLAG_PACKED        = 4;
 
-    private const ZEND_ACC_LINKED          = 0x8;
-    private const ZEND_ACC_HAS_RETURN_TYPE = 0x2000;
-    private const ZEND_ACC_VARIADIC        = 0x4000;
+    private const int ZEND_ACC_LINKED          = 0x8;
+    private const int ZEND_ACC_HAS_RETURN_TYPE = 0x2000;
+    private const int ZEND_ACC_VARIADIC        = 0x4000;
 
-    private const ZEND_AST_ZVAL           = 64;
-    private const ZEND_AST_CONSTANT       = 65;
-    private const ZEND_AST_IS_LIST_SHIFT  = 7;
-    private const ZEND_AST_CHILDREN_SHIFT = 8;
+    private const int ZEND_AST_ZVAL           = 64;
+    private const int ZEND_AST_CONSTANT       = 65;
+    private const int ZEND_AST_IS_LIST_SHIFT  = 7;
+    private const int ZEND_AST_CHILDREN_SHIFT = 8;
 
     /** zend_type bit layout (zend_types.h) - list/name discriminators */
-    private const TYPE_LIST_BIT = 4194304;  // _ZEND_TYPE_LIST_BIT
-    private const TYPE_NAME_BIT = 16777216; // _ZEND_TYPE_NAME_BIT
+    private const int TYPE_LIST_BIT = 4194304;  // _ZEND_TYPE_LIST_BIT
+    private const int TYPE_NAME_BIT = 16777216; // _ZEND_TYPE_NAME_BIT
 
     private readonly int $base;
     private readonly int $size;

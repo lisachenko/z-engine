@@ -69,103 +69,103 @@ class Core
      */
 
     /* Visibility flags (methods, properties, constants) */
-    public const ZEND_ACC_PUBLIC    = 0x1;
-    public const ZEND_ACC_PROTECTED = 0x2;
-    public const ZEND_ACC_PRIVATE   = 0x4;
+    public const int ZEND_ACC_PUBLIC    = 0x1;
+    public const int ZEND_ACC_PROTECTED = 0x2;
+    public const int ZEND_ACC_PRIVATE   = 0x4;
 
     /* Common flags */
-    public const ZEND_ACC_CHANGED        = 0x8;
-    public const ZEND_ACC_STATIC         = 0x10;
-    public const ZEND_ACC_FINAL          = 0x20;
-    public const ZEND_ACC_ABSTRACT       = 0x40;
-    public const ZEND_ACC_IMMUTABLE      = 0x80;
-    public const ZEND_ACC_HAS_TYPE_HINTS = 0x100;
-    public const ZEND_ACC_TOP_LEVEL      = 0x200;
-    public const ZEND_ACC_PRELOADED      = 0x400;
+    public const int ZEND_ACC_CHANGED        = 0x8;
+    public const int ZEND_ACC_STATIC         = 0x10;
+    public const int ZEND_ACC_FINAL          = 0x20;
+    public const int ZEND_ACC_ABSTRACT       = 0x40;
+    public const int ZEND_ACC_IMMUTABLE      = 0x80;
+    public const int ZEND_ACC_HAS_TYPE_HINTS = 0x100;
+    public const int ZEND_ACC_TOP_LEVEL      = 0x200;
+    public const int ZEND_ACC_PRELOADED      = 0x400;
 
     /* Class flags */
-    public const ZEND_ACC_INTERFACE                = 0x1;
-    public const ZEND_ACC_TRAIT                    = 0x2;
-    public const ZEND_ACC_ANON_CLASS               = 0x4;
-    public const ZEND_ACC_LINKED                   = 0x8;
-    public const ZEND_ACC_IMPLICIT_ABSTRACT_CLASS  = 0x10;
-    public const ZEND_ACC_EXPLICIT_ABSTRACT_CLASS  = 0x40;
-    public const ZEND_ACC_USE_GUARDS               = 0x800;
-    public const ZEND_ACC_CONSTANTS_UPDATED        = 0x1000;
-    public const ZEND_ACC_NO_DYNAMIC_PROPERTIES    = 0x2000;
-    public const ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES = 0x8000;
-    public const ZEND_ACC_READONLY_CLASS           = 0x10000;
-    public const ZEND_ACC_RESOLVED_PARENT          = 0x20000;
-    public const ZEND_ACC_RESOLVED_INTERFACES      = 0x40000;
-    public const ZEND_ACC_UNRESOLVED_VARIANCE      = 0x80000;
-    public const ZEND_ACC_NEARLY_LINKED            = 0x100000;
-    public const ZEND_ACC_ENUM                     = 0x10000000;
-    public const ZEND_ACC_NOT_SERIALIZABLE         = 0x20000000;
-    public const ZEND_ACC_UNINSTANTIABLE           = 0x10000053;
+    public const int ZEND_ACC_INTERFACE                = 0x1;
+    public const int ZEND_ACC_TRAIT                    = 0x2;
+    public const int ZEND_ACC_ANON_CLASS               = 0x4;
+    public const int ZEND_ACC_LINKED                   = 0x8;
+    public const int ZEND_ACC_IMPLICIT_ABSTRACT_CLASS  = 0x10;
+    public const int ZEND_ACC_EXPLICIT_ABSTRACT_CLASS  = 0x40;
+    public const int ZEND_ACC_USE_GUARDS               = 0x800;
+    public const int ZEND_ACC_CONSTANTS_UPDATED        = 0x1000;
+    public const int ZEND_ACC_NO_DYNAMIC_PROPERTIES    = 0x2000;
+    public const int ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES = 0x8000;
+    public const int ZEND_ACC_READONLY_CLASS           = 0x10000;
+    public const int ZEND_ACC_RESOLVED_PARENT          = 0x20000;
+    public const int ZEND_ACC_RESOLVED_INTERFACES      = 0x40000;
+    public const int ZEND_ACC_UNRESOLVED_VARIANCE      = 0x80000;
+    public const int ZEND_ACC_NEARLY_LINKED            = 0x100000;
+    public const int ZEND_ACC_ENUM                     = 0x10000000;
+    public const int ZEND_ACC_NOT_SERIALIZABLE         = 0x20000000;
+    public const int ZEND_ACC_UNINSTANTIABLE           = 0x10000053;
 
     /* Property flags */
-    public const ZEND_ACC_READONLY = 0x80;
-    public const ZEND_ACC_VIRTUAL  = 0x200;
+    public const int ZEND_ACC_READONLY = 0x80;
+    public const int ZEND_ACC_VIRTUAL  = 0x200;
 
     /**
      * Property hook kinds (zend_property_hook_kind), used to index zend_property_info.hooks
      */
-    public const ZEND_PROPERTY_HOOK_GET = 0;
-    public const ZEND_PROPERTY_HOOK_SET = 1;
+    public const int ZEND_PROPERTY_HOOK_GET = 0;
+    public const int ZEND_PROPERTY_HOOK_SET = 1;
 
     /**
      * Number of entries in a zend_property_info.hooks array (one per hook kind)
      */
-    public const ZEND_PROPERTY_HOOK_COUNT = 2;
+    public const int ZEND_PROPERTY_HOOK_COUNT = 2;
 
     /* Function flags */
-    public const ZEND_ACC_DEPRECATED          = 0x800;
-    public const ZEND_ACC_RETURN_REFERENCE    = 0x1000;
-    public const ZEND_ACC_HAS_RETURN_TYPE     = 0x2000;
-    public const ZEND_ACC_VARIADIC            = 0x4000;
-    public const ZEND_ACC_HAS_FINALLY_BLOCK   = 0x8000;
-    public const ZEND_ACC_EARLY_BINDING       = 0x10000;
-    public const ZEND_ACC_USES_THIS           = 0x20000;
-    public const ZEND_ACC_CALL_VIA_TRAMPOLINE = 0x40000;
-    public const ZEND_ACC_NEVER_CACHE         = 0x80000;
-    public const ZEND_ACC_TRAIT_CLONE         = 0x100000;
-    public const ZEND_ACC_CTOR                = 0x200000;
-    public const ZEND_ACC_CLOSURE             = 0x400000;
-    public const ZEND_ACC_FAKE_CLOSURE        = 0x800000;
-    public const ZEND_ACC_GENERATOR           = 0x1000000;
-    public const ZEND_ACC_DONE_PASS_TWO       = 0x2000000;
-    public const ZEND_ACC_HEAP_RT_CACHE       = 0x4000000;
-    public const ZEND_ACC_STRICT_TYPES        = 0x80000000;
+    public const int ZEND_ACC_DEPRECATED          = 0x800;
+    public const int ZEND_ACC_RETURN_REFERENCE    = 0x1000;
+    public const int ZEND_ACC_HAS_RETURN_TYPE     = 0x2000;
+    public const int ZEND_ACC_VARIADIC            = 0x4000;
+    public const int ZEND_ACC_HAS_FINALLY_BLOCK   = 0x8000;
+    public const int ZEND_ACC_EARLY_BINDING       = 0x10000;
+    public const int ZEND_ACC_USES_THIS           = 0x20000;
+    public const int ZEND_ACC_CALL_VIA_TRAMPOLINE = 0x40000;
+    public const int ZEND_ACC_NEVER_CACHE         = 0x80000;
+    public const int ZEND_ACC_TRAIT_CLONE         = 0x100000;
+    public const int ZEND_ACC_CTOR                = 0x200000;
+    public const int ZEND_ACC_CLOSURE             = 0x400000;
+    public const int ZEND_ACC_FAKE_CLOSURE        = 0x800000;
+    public const int ZEND_ACC_GENERATOR           = 0x1000000;
+    public const int ZEND_ACC_DONE_PASS_TWO       = 0x2000000;
+    public const int ZEND_ACC_HEAP_RT_CACHE       = 0x4000000;
+    public const int ZEND_ACC_STRICT_TYPES        = 0x80000000;
 
-    public const ZEND_ACC_PPP_MASK = self::ZEND_ACC_PUBLIC | self::ZEND_ACC_PROTECTED | self::ZEND_ACC_PRIVATE;
+    public const int ZEND_ACC_PPP_MASK = self::ZEND_ACC_PUBLIC | self::ZEND_ACC_PROTECTED | self::ZEND_ACC_PRIVATE;
 
     /**
      * Type of zend_function.type
      */
-    public const ZEND_INTERNAL_FUNCTION = 1;
-    public const ZEND_USER_FUNCTION     = 2;
-    public const ZEND_EVAL_CODE         = 4;
+    public const int ZEND_INTERNAL_FUNCTION = 1;
+    public const int ZEND_USER_FUNCTION     = 2;
+    public const int ZEND_EVAL_CODE         = 4;
 
-    public const ZEND_INTERNAL_CLASS = 1;
-    public const ZEND_USER_CLASS     = 2;
+    public const int ZEND_INTERNAL_CLASS = 1;
+    public const int ZEND_USER_CLASS     = 2;
 
     /**
      * User opcode handler return values
      */
-    public const ZEND_USER_OPCODE_CONTINUE    = 0; /* execute next opcode */
-    public const ZEND_USER_OPCODE_RETURN      = 1; /* exit from executor (return from function) */
-    public const ZEND_USER_OPCODE_DISPATCH    = 2; /* call original opcode handler */
-    public const ZEND_USER_OPCODE_ENTER       = 3; /* enter into new op_array without recursion */
-    public const ZEND_USER_OPCODE_LEAVE       = 4; /* return to calling op_array within the same executor */
-    public const ZEND_USER_OPCODE_DISPATCH_TO = 0x100; /* call original handler of returned opcode */
+    public const int ZEND_USER_OPCODE_CONTINUE    = 0; /* execute next opcode */
+    public const int ZEND_USER_OPCODE_RETURN      = 1; /* exit from executor (return from function) */
+    public const int ZEND_USER_OPCODE_DISPATCH    = 2; /* call original opcode handler */
+    public const int ZEND_USER_OPCODE_ENTER       = 3; /* enter into new op_array without recursion */
+    public const int ZEND_USER_OPCODE_LEAVE       = 4; /* return to calling op_array within the same executor */
+    public const int ZEND_USER_OPCODE_DISPATCH_TO = 0x100; /* call original handler of returned opcode */
 
-    public const SUCCESS = 0;
-    public const FAILURE = -1;
+    public const int SUCCESS = 0;
+    public const int FAILURE = -1;
 
     /**
      * This should be equal to ZEND_MM_ALIGNMENT
      */
-    public const MM_ALIGNMENT = 8;
+    public const int MM_ALIGNMENT = 8;
 
     /**
      * Provides an access to the executor global state
@@ -599,7 +599,7 @@ class Core
      * the typed entry points (new(zval::class), cast(zend_string::class, ...)) resolvable
      * without the stub classes ever being loaded.
      */
-    private const STRUCT_STUB_NAMESPACE = 'ZEngine\\Generated\\';
+    private const string STRUCT_STUB_NAMESPACE = 'ZEngine\\Generated\\';
 
     /**
      * Maps a generated struct stub class-string to the C type name it stands for; plain C

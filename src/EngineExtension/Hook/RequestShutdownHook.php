@@ -23,5 +23,5 @@ namespace ZEngine\EngineExtension\Hook;
  */
 class RequestShutdownHook extends AbstractModuleLifecycleHook
 {
-    protected const HOOK_FIELD = 'request_shutdown_func';
+    protected const string HOOK_FIELD = 'request_shutdown_func';
 }

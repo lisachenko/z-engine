@@ -22,7 +22,7 @@ use ZEngine\Reflection\ReflectionValue;
  */
 final class CompareValuesHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'compare';
+    protected const string HOOK_FIELD = 'compare';
 
     /**
      * First operand
@@ -44,6 +44,7 @@ final class CompareValuesHook extends AbstractHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): int
     {
         /**

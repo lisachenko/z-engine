@@ -239,6 +239,7 @@ class ReflectionClass extends NativeReflectionClass
      * @inheritDoc
      */
     #[\ReturnTypeWillChange]
+    #[\Override]
     public function getName()
     {
         $className = $this->pointer->name;
@@ -251,6 +252,7 @@ class ReflectionClass extends NativeReflectionClass
     /**
      * @inheritDoc
      */
+    #[\Override]
     public function getInterfaceNames(): array
     {
         $interfaceNames  = [];
@@ -282,6 +284,7 @@ class ReflectionClass extends NativeReflectionClass
      * @return ReflectionClass[] An associative array of interfaces, with keys as interface
      * names and the array values as <b>ReflectionClass</b> objects.
      */
+    #[\Override]
     public function getInterfaces(): array
     {
         $interfaces = [];
@@ -405,6 +408,7 @@ class ReflectionClass extends NativeReflectionClass
      * @return ReflectionMethod
      */
     #[\ReturnTypeWillChange]
+    #[\Override]
     public function getMethod($name)
     {
         $functionEntry = $this->methodTable->find(strtolower($name));
@@ -422,6 +426,7 @@ class ReflectionClass extends NativeReflectionClass
      * structures in memory (dynamic/hot-swap entries not registered natively).
      */
     #[\ReturnTypeWillChange]
+    #[\Override]
     public function hasMethod($name)
     {
         return $this->methodTable->find(strtolower($name)) !== null;
@@ -432,6 +437,7 @@ class ReflectionClass extends NativeReflectionClass
      * @return ReflectionMethod[]
      */
     #[\ReturnTypeWillChange]
+    #[\Override]
     public function getMethods($filter = null)
     {
         $methods = [];
@@ -487,6 +493,7 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     #[\ReturnTypeWillChange]
+    #[\Override]
     public function isInternal()
     {
         return ord($this->pointer->type) === Core::ZEND_INTERNAL_CLASS;
@@ -534,6 +541,7 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     #[\ReturnTypeWillChange]
+    #[\Override]
     public function isUserDefined()
     {
         return ord($this->pointer->type) === Core::ZEND_USER_CLASS;
@@ -864,18 +872,19 @@ class ReflectionClass extends NativeReflectionClass
     public function getMagicSlotFor(ReflectionMethod $method): ?string
     {
         $methodAddress = $method->getAddress();
-        foreach (self::INHERITED_FUNCTION_POINTERS as $fieldName) {
-            $fieldFunction = $this->pointer->{$fieldName};
-            if ($fieldFunction === null) {
-                continue;
-            }
-            assert($fieldFunction instanceof CData);
-            if (Core::addressOf($fieldFunction) === $methodAddress) {
-                return $fieldName;
-            }
-        }
 
-        return null;
+        return array_find(
+            self::INHERITED_FUNCTION_POINTERS,
+            function (string $fieldName) use ($methodAddress): bool {
+                $fieldFunction = $this->pointer->{$fieldName};
+                if ($fieldFunction === null) {
+                    return false;
+                }
+                assert($fieldFunction instanceof CData);
+
+                return Core::addressOf($fieldFunction) === $methodAddress;
+            },
+        );
     }
 
     /**
@@ -936,6 +945,7 @@ class ReflectionClass extends NativeReflectionClass
      * @return ReflectionClass[] An associative array of traits, with keys as trait
      * names and the array values as <b>ReflectionClass</b> objects.
      */
+    #[\Override]
     public function getTraits(): array
     {
         $traits = [];
@@ -1070,7 +1080,8 @@ class ReflectionClass extends NativeReflectionClass
      *
      * @return array<string, array{trait: ?string, method: string, flags: int}>
      */
-    public function getTraitAliases(): array // @phpstan-ignore method.childReturnType (the engine-level view is deliberately richer than the native alias-name map)
+    #[\Override] // @phpstan-ignore method.childReturnType (the engine-level view is deliberately richer than the native alias-name map)
+    public function getTraitAliases(): array
     {
         $traitAliases = [];
         $aliasList    = $this->pointer->trait_aliases;
@@ -1558,6 +1569,7 @@ class ReflectionClass extends NativeReflectionClass
      * @inheritDoc
      */
     #[\ReturnTypeWillChange]
+    #[\Override]
     public function getParentClass(): ?ReflectionClass
     {
         if (!$this->hasParentClass()) {
@@ -2233,6 +2245,7 @@ class ReflectionClass extends NativeReflectionClass
      * @return iterable|ReflectionValue[]
      */
     #[\ReturnTypeWillChange]
+    #[\Override]
     public function getDefaultProperties(): iterable
     {
         return $this->readZvalTable(
@@ -2285,6 +2298,7 @@ class ReflectionClass extends NativeReflectionClass
      * @return ReflectionClassConstant
      */
     #[\ReturnTypeWillChange]
+    #[\Override]
     public function getReflectionConstant($name)
     {
         $constantEntry = $this->constantsTable->find($name);

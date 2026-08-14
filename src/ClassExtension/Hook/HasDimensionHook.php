@@ -21,7 +21,7 @@ use ZEngine\Generated\zval;
  */
 final class HasDimensionHook extends AbstractDimensionHook
 {
-    protected const HOOK_FIELD = 'has_dimension';
+    protected const string HOOK_FIELD = 'has_dimension';
 
     /**
      * Check type:
@@ -35,6 +35,7 @@ final class HasDimensionHook extends AbstractDimensionHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): int
     {
         /**

@@ -52,7 +52,7 @@ use ZEngine\Type\StringEntry;
  */
 final class GetMethodHook extends AbstractMethodResolutionHook
 {
-    protected const HOOK_FIELD = 'get_method';
+    protected const string HOOK_FIELD = 'get_method';
 
     /**
      * Double pointer to the object the method is resolved on (zend_object **)
@@ -83,6 +83,7 @@ final class GetMethodHook extends AbstractMethodResolutionHook
      * @inheritDoc
      * @return zend_function|zend_internal_function|null
      */
+    #[\Override]
     public function handle(...$rawArguments): ?object
     {
         /**
