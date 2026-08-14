@@ -355,12 +355,6 @@ parameters:
 			path: src/Core.php
 
 		-
-			message: '#^Parameter \#1 \$stringPointer of static method ZEngine\\Type\\StringEntry\:\:fromCData\(\) expects FFI\\CData\|ZEngine\\Generated\\zend_string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/EngineExtension/AbstractModule.php
-
-		-
 			message: '#^Property ZEngine\\EngineExtension\\Hook\\ExtensionConstructorHook\:\:\$globalMemoryPointer \(FFI\\CData\) does not accept mixed\.$#'
 			identifier: assign.propertyType
 			count: 1
@@ -403,12 +397,6 @@ parameters:
 			path: src/Memory/PersistentGraphCloner.php
 
 		-
-			message: '#^Parameter \#1 \$sourceObject of method ZEngine\\Memory\\PersistentGraphCloner\:\:cloneObject\(\) expects FFI\\CData, ZEngine\\Generated\\zend_object given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Memory/PersistentGraphCloner.php
-
-		-
 			message: '#^Property ZEngine\\Memory\\PersistentGraphCloner\:\:\$arrayMap \(array\<int, FFI\\CData\>\) does not accept array\<int, FFI\\CData\|ZEngine\\Generated\\HashTable\>\.$#'
 			identifier: assign.propertyType
 			count: 1
@@ -437,24 +425,6 @@ parameters:
 			identifier: assign.propertyType
 			count: 1
 			path: src/Memory/PersistentGraphCloner.php
-
-		-
-			message: '#^Parameter \#3 \$pointer of method ZEngine\\Memory\\PersistentHeap\:\:addPointerEntry\(\) expects FFI\\CData, FFI\\CData\|ZEngine\\Generated\\zend_string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Memory/PersistentHeap.php
-
-		-
-			message: '#^Parameter \#3 \$pointer of method ZEngine\\Memory\\PersistentHeap\:\:addPointerEntry\(\) expects FFI\\CData, ZEngine\\Generated\\HashTable given\.$#'
-			identifier: argument.type
-			count: 5
-			path: src/Memory/PersistentHeap.php
-
-		-
-			message: '#^Parameter \#3 \$pointer of method ZEngine\\Memory\\PersistentHeap\:\:addPointerEntry\(\) expects FFI\\CData, ZEngine\\Generated\\zend_string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Memory/PersistentHeap.php
 
 		-
 			message: '#^Method ZEngine\\Reflection\\ClassSpecializer\:\:copyFunctionTable\(\) should return array\<int, FFI\\CData\> but returns array\<int, FFI\\CData\|ZEngine\\Generated\\zend_function\|ZEngine\\Generated\\zend_internal_function\>\.$#'
@@ -1088,12 +1058,6 @@ parameters:
 
 		-
 			message: '#^Parameter \#1 \$object of function spl_object_id expects object, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: tests/Memory/scenarios/persistent-object-put-detach.php
-
-		-
-			message: '#^Parameter \#1 \$sourceObject of static method ZEngine\\Type\\PersistentObjectFactory\:\:persistentClone\(\) expects FFI\\CData, ZEngine\\Generated\\zend_object given\.$#'
 			identifier: argument.type
 			count: 1
 			path: tests/Memory/scenarios/persistent-object-put-detach.php
@@ -1763,12 +1727,6 @@ parameters:
 			identifier: method.nonObject
 			count: 6
 			path: tests/Type/PersistentHashTableTest.php
-
-		-
-			message: '#^Parameter \#1 \$sourceObject of static method ZEngine\\Type\\PersistentObjectFactory\:\:persistentClone\(\) expects FFI\\CData, ZEngine\\Generated\\zend_object given\.$#'
-			identifier: argument.type
-			count: 3
-			path: tests/Type/PersistentObjectFactoryTest.php
 
 		-
 			message: '#^Cannot cast mixed to string\.$#'

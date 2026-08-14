@@ -2835,6 +2835,20 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
+     * Returns the number of inline property slots this class declares for its instances
+     *
+     * The number of zval slots the engine reserves in every instance (properties_table),
+     * the property-guard slot included when the class uses guards. Machinery that works
+     * on an object whose class entry may be stale (persistent graphs re-attached in a
+     * later request) resolves the entry itself and reads the count through
+     * ReflectionClass::fromCData($entry)->getDefaultPropertiesCount().
+     */
+    public function getDefaultPropertiesCount(): int
+    {
+        return $this->pointer->default_properties_count;
+    }
+
+    /**
      * Checks if the current class has a parent
      */
     private function hasParentClass(): bool
