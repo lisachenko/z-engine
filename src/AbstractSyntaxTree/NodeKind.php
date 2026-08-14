@@ -152,13 +152,6 @@ class NodeKind
     public const int AST_PARAM                     = 1536;
 
     /**
-     * Cache of constant names (reversed)
-     *
-     * @var string[]
-     */
-    private static array $constantNames = [];
-
-    /**
      * Checks if the given AST node kind is special
      *
      * @param int $astKind Kind of node

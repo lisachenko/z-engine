@@ -214,7 +214,10 @@ class ExecutionDataTest extends TestCase
         // Just for fun: we can do crazy things like changing $this in current stack frame
         $self = $this; // Save current $this to call method on it later
         $thisValue->setNativeValue(new \stdClass());
-        $self->assertInstanceOf(\stdClass::class, $this);
+        // Assert through a copy: the engine swapped the frame's This slot underneath
+        // the analyser, and narrowing $this itself would fold it to never
+        $swappedThis = $this;
+        $self->assertInstanceOf(\stdClass::class, $swappedThis);
 
         // Restore the original $this before the frame unwinds: leaving a foreign object
         // in the running frame's This slot desyncs the object the engine releases at

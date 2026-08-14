@@ -234,13 +234,6 @@ final class OpCode
     public const int DECLARE_ATTRIBUTED_CONST       = 210; // PHP 8.5: DECLARE_CONST with attributes
 
     /**
-     * Reversed class constants, containing names by number
-     *
-     * @var string[]
-     */
-    private static array $opCodeNames = [];
-
-    /**
      * Returns the type name of opcode
      *
      * @param int $opCode Integer value of opType
