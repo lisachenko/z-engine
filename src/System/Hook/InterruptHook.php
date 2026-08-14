@@ -13,7 +13,7 @@ declare(strict_types=1);
 
 namespace ZEngine\System\Hook;
 
-use FFI\CData;
+use ZEngine\Generated\zend_execute_data;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\System\ExecutionData;
 
@@ -37,24 +37,28 @@ use ZEngine\System\ExecutionData;
  * reflection cannot resolve by name (closures) - prefer getFunctionEntry() or
  * wrap frame inspection in try/catch inside the handler.
  */
-class InterruptHook extends AbstractHook
+final class InterruptHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'zend_interrupt_function';
+    protected const string HOOK_FIELD = 'zend_interrupt_function';
 
     /**
      * Raw zend_execute_data pointer of the interrupted frame
+     *
+     * @var zend_execute_data Typed view of the engine handle; the runtime value is the raw
+     *                        FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected CData $executeData;
+    protected object $executeData;
 
     /**
      * typedef void (*zend_interrupt_function)(zend_execute_data *execute_data);
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): void
     {
-        [$executeData] = $rawArguments;
-        assert($executeData instanceof CData);
+        /** @var zend_execute_data $executeData Narrowed to the stub view at the engine callback boundary */
+        [$executeData]     = $rawArguments;
         $this->executeData = $executeData;
 
         ($this->userHandler)($this);

@@ -13,14 +13,17 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension\Hook;
 
+use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zend_string;
 
 /**
  * Receiving hook for object field check operation
  */
-class HasPropertyHook extends AbstractPropertyHook
+final class HasPropertyHook extends AbstractPropertyHook
 {
-    protected const HOOK_FIELD = 'has_property';
+    protected const string HOOK_FIELD = 'has_property';
 
     /**
      * Check type:
@@ -35,11 +38,23 @@ class HasPropertyHook extends AbstractPropertyHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): int
     {
-        [$this->object, $this->member, $this->type, $this->cacheSlot] = $rawArguments;
+        /**
+         * @var zend_object $object    Narrowed to the stub views at the engine callback boundary
+         * @var zend_string $member
+         * @var int         $type
+         * @var CData|null  $cacheSlot
+         */
+        [$object, $member, $type, $cacheSlot] = $rawArguments;
+        $this->object                         = $object;
+        $this->member                         = $member;
+        $this->type                           = $type;
+        $this->cacheSlot                      = $cacheSlot;
 
         $result = ($this->userHandler)($this);
+        assert(is_int($result));
 
         return $result;
     }
@@ -60,21 +75,20 @@ class HasPropertyHook extends AbstractPropertyHook
      */
     public function proceed(): int
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
-
         // As we will play with EG(fake_scope), we won't be able to access private or protected members, need to unpack
-        $originalHandler = $this->originalHandler;
+        $originalHandler = $this->getOriginalCallable();
 
         $object    = $this->object;
         $member    = $this->member;
         $type      = $this->type;
         $cacheSlot = $this->cacheSlot;
 
-        return Core::$executor->withFakeScope(
+        $result = Core::$executor->withFakeScope(
             $object->ce,
             static fn() => ($originalHandler)($object, $member, $type, $cacheSlot),
         );
+        assert(is_int($result));
+
+        return $result;
     }
 }

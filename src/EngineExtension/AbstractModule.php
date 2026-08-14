@@ -24,7 +24,6 @@ use ZEngine\EngineExtension\Hook\RequestShutdownHook;
 use ZEngine\EngineExtension\Hook\RequestStartupHook;
 use ZEngine\Reflection\ReflectionExtension;
 use ZEngine\Type\StringEntry;
-use ZEngine\Type\StructArray;
 
 /**
  * Base class for userland PHP extensions (engine modules)
@@ -46,12 +45,12 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
     /**
      * @see zend_modules.h:MODULE_PERSISTENT
      */
-    private const MODULE_PERSISTENT = 1;
+    private const int MODULE_PERSISTENT = 1;
 
     /**
      * @see zend_modules.h:MODULE_TEMPORARY
      */
-    private const MODULE_TEMPORARY = 2;
+    private const int MODULE_TEMPORARY = 2;
 
     /**
      * Unique name of this module
@@ -81,6 +80,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
     /**
      * Returns the unique name of this module
      */
+    #[\Override]
     final public function getName(): string
     {
         return $this->moduleName;
@@ -94,6 +94,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
      * versions supported by their z-engine release. Override only when a module
      * intentionally pins a specific engine API.
      */
+    #[\Override]
     public static function targetApiVersion(): int
     {
         return Core::engineConstant('ZEND_MODULE_API_NO');
@@ -105,6 +106,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
      * @inheritDoc
      * @return list<ModuleDependency>
      */
+    #[\Override]
     public function getModuleDependencies(): array
     {
         return [];
@@ -113,6 +115,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
     /**
      * Checks if this module loaded or not
      */
+    #[\Override]
     final public function isModuleRegistered(): bool
     {
         return extension_loaded($this->moduleName);
@@ -121,6 +124,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
     /**
      * Performs registration of this module in the engine
      */
+    #[\Override]
     final public function register(): void
     {
         if ($this->isModuleRegistered()) {
@@ -195,6 +199,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
      *
      * Startup includes calling callbacks for global memory allocation, checking deps, etc
      */
+    #[\Override]
     final public function startup(): void
     {
         if ($this instanceof ControlModuleGlobalsInterface) {
@@ -230,6 +235,7 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
      * @inheritDoc
      * @return \FFI\CData|null
      */
+    #[\Override]
     final public function getGlobals(): ?object
     {
         $rawPointer = parent::getGlobals();
@@ -372,15 +378,15 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
             $rawDependency = $rawDependencies[$index];
             \assert($rawDependency instanceof CData);
             $rawDependency->name = self::newPersistentString($dependency->getName());
-            $relation            = $dependency->getRelation();
+            $relation            = $dependency->versionRelation();
             if ($relation !== null) {
-                $rawDependency->rel = self::newPersistentString($relation);
+                $rawDependency->rel = self::newPersistentString($relation->value);
             }
             $version = $dependency->getVersion();
             if ($version !== null) {
                 $rawDependency->version = self::newPersistentString($version);
             }
-            $rawDependency->type = $dependency->getDependencyType();
+            $rawDependency->type = $dependency->dependencyType()->value;
             $index++;
         }
         // The trailing element stays zero-initialized: the NULL terminator the engine
@@ -415,30 +421,15 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
      */
     private function makeRegistryKeyPersistent(): void
     {
-        $registryTable = Core::$modules->getRawValue();
-        $lowerName     = strtolower($this->moduleName);
-
-        $numUsed = $registryTable->nNumUsed;
-        $arData  = $registryTable->arData;
-        assert($arData !== null || $numUsed === 0);
-        $buckets = $arData !== null ? new StructArray($arData, $numUsed) : null;
-        for ($index = 0; $index < $numUsed; $index++) {
-            assert($buckets !== null);
-            $bucket = Core::addr($buckets[$index]);
-            if ($bucket->key === null) {
-                continue;
-            }
-            $key = StringEntry::fromCData($bucket->key);
-            if ($key->getStringValue() !== $lowerName) {
-                continue;
-            }
-            // A permanent interned key (registered during engine startup) is already safe
-            if (!$key->isPermanent()) {
-                $bucket->key = StringEntry::persistentInterned($lowerName)->getRawValue();
-            }
-
+        $lowerName   = strtolower($this->moduleName);
+        $registryKey = Core::$modules->findKeyEntry($lowerName);
+        // A permanent interned key (registered during engine startup) is already safe, and
+        // so is a module that is not in the registry at all
+        if ($registryKey === null || $registryKey->isPermanent()) {
             return;
         }
+
+        Core::$modules->replaceKey($lowerName, StringEntry::persistentInterned($lowerName));
     }
 
     /**

@@ -34,44 +34,47 @@ class ArgumentEntry
     /**
      * Index of the pseudo-entry that holds the return-type information
      */
-    public const RETURN_ENTRY_INDEX = -1;
+    public const int RETURN_ENTRY_INDEX = -1;
 
     /**
      * Mask of the pure MAY_BE_* type bits, where MAY_BE_<TYPE> is (1 << IS_<TYPE>)
      *
      * @see zend_types.h:_ZEND_TYPE_MAY_BE_MASK
      */
-    public const TYPE_MAY_BE_MASK = (1 << 18) - 1;
+    public const int TYPE_MAY_BE_MASK = (1 << 18) - 1;
 
     /**
      * Nullability bit inside the pure type mask (same value as MAY_BE_NULL)
      *
      * @see zend_types.h:_ZEND_TYPE_NULLABLE_BIT
      */
-    public const TYPE_NULLABLE_BIT = 0x2;
+    public const int TYPE_NULLABLE_BIT = 0x2;
 
     /**
      * Shift of the two-bit argument send mode inside the type mask
      *
      * @see zend_compile.h:_ZEND_SEND_MODE_SHIFT (== _ZEND_TYPE_EXTRA_FLAGS_SHIFT)
      */
-    public const SEND_MODE_SHIFT = 25;
+    public const int SEND_MODE_SHIFT = 25;
 
     /**
      * Argument send modes as returned by getSendMode()
      *
      * @see zend_compile.h:ZEND_SEND_BY_VAL/ZEND_SEND_BY_REF/ZEND_SEND_PREFER_REF
+     *
+     * @deprecated Use the SendMode enum (SendMode::ByValue/ByReference/PreferReference) instead;
+     *             these int aliases are kept for consumers that compare getSendMode() by value
      */
-    public const SEND_BY_VAL     = 0;
-    public const SEND_BY_REF     = 1;
-    public const SEND_PREFER_REF = 2;
+    public const int SEND_BY_VAL     = 0;
+    public const int SEND_BY_REF     = 1;
+    public const int SEND_PREFER_REF = 2;
 
     /**
      * Variadic-argument bit inside the type mask
      *
      * @see zend_compile.h:_ZEND_IS_VARIADIC_BIT
      */
-    public const IS_VARIADIC_BIT = 1 << 27;
+    public const int IS_VARIADIC_BIT = 1 << 27;
 
     public function __construct(
         private readonly int $index,
@@ -139,11 +142,25 @@ class ArgumentEntry
     }
 
     /**
+     * Returns the argument send mode decoded from the type mask
+     *
+     * The engine only ever encodes three of the four bit patterns the two-bit field can hold, so
+     * the strict from() doubles as an invariant guard: a fourth pattern means the entry was read
+     * at a wrong offset and a ValueError is far better than a plausible-looking wrong answer.
+     */
+    public function sendMode(): SendMode
+    {
+        return SendMode::from(($this->typeMask >> self::SEND_MODE_SHIFT) & 3);
+    }
+
+    /**
      * Returns the argument send mode (one of the SEND_* constants)
+     *
+     * @deprecated Use sendMode() instead, which returns the SendMode enum
      */
     public function getSendMode(): int
     {
-        return ($this->typeMask >> self::SEND_MODE_SHIFT) & 3;
+        return $this->sendMode()->value;
     }
 
     /**
@@ -151,7 +168,7 @@ class ArgumentEntry
      */
     public function isByReference(): bool
     {
-        return $this->getSendMode() !== self::SEND_BY_VAL;
+        return $this->sendMode()->isByReference();
     }
 
     /**

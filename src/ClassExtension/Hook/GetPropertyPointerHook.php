@@ -13,14 +13,17 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension\Hook;
 
+use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zend_string;
 
 /**
  * Receiving hook for indirect property access (by reference or via $this->field++)
  */
-class GetPropertyPointerHook extends AbstractPropertyHook
+final class GetPropertyPointerHook extends AbstractPropertyHook
 {
-    protected const HOOK_FIELD = 'get_property_ptr_ptr';
+    protected const string HOOK_FIELD = 'get_property_ptr_ptr';
 
     /**
      * Hook access type
@@ -31,14 +34,28 @@ class GetPropertyPointerHook extends AbstractPropertyHook
      * typedef zval *(*zend_object_get_property_ptr_ptr_t)(zend_object *object, zend_string *member, int type, void **cache_slot)
      *
      * @inheritDoc
+     *
+     * Declared `mixed` on purpose: the value is whatever the user handler produced (a zval*
+     * or NULL to make the engine fall back to read_property), and a stricter declaration
+     * would turn a userland contract violation into a TypeError raised inside an FFI
+     * trampoline, where it cannot be caught (see issue #50).
      */
-    public function handle(...$rawArguments)
+    #[\Override]
+    public function handle(...$rawArguments): mixed
     {
-        [$this->object, $this->member, $this->type, $this->cacheSlot] = $rawArguments;
+        /**
+         * @var zend_object $object    Narrowed to the stub views at the engine callback boundary
+         * @var zend_string $member
+         * @var int         $type
+         * @var CData|null  $cacheSlot
+         */
+        [$object, $member, $type, $cacheSlot] = $rawArguments;
+        $this->object                         = $object;
+        $this->member                         = $member;
+        $this->type                           = $type;
+        $this->cacheSlot                      = $cacheSlot;
 
-        $result = ($this->userHandler)($this);
-
-        return $result;
+        return ($this->userHandler)($this);
     }
 
     /**
@@ -51,24 +68,26 @@ class GetPropertyPointerHook extends AbstractPropertyHook
 
     /**
      * Proceeds with default handler
+     *
+     * @return \FFI\CData|null zval* of the property slot, NULL when the engine handler
+     *                         declined to hand one out (the VM then uses read_property)
      */
-    public function proceed()
+    public function proceed(): ?object
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
-
         // As we will play with EG(fake_scope), we won't be able to access private or protected members, need to unpack
-        $originalHandler = $this->originalHandler;
+        $originalHandler = $this->getOriginalCallable();
 
         $object    = $this->object;
         $member    = $this->member;
         $type      = $this->type;
         $cacheSlot = $this->cacheSlot;
 
-        return Core::$executor->withFakeScope(
+        $propertySlot = Core::$executor->withFakeScope(
             $object->ce,
             static fn() => ($originalHandler)($object, $member, $type, $cacheSlot),
         );
+        assert($propertySlot === null || $propertySlot instanceof CData);
+
+        return $propertySlot;
     }
 }

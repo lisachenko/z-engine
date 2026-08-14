@@ -15,14 +15,16 @@ namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zval;
 use ZEngine\Reflection\ReflectionValue;
 
 /**
  * Receiving hook for object dimension read operation ($value = $object[$offset])
  */
-class ReadDimensionHook extends AbstractDimensionHook
+final class ReadDimensionHook extends AbstractDimensionHook
 {
-    protected const HOOK_FIELD = 'read_dimension';
+    protected const string HOOK_FIELD = 'read_dimension';
 
     /**
      * Hook access type (BP_VAR_R, BP_VAR_IS, ...)
@@ -31,24 +33,31 @@ class ReadDimensionHook extends AbstractDimensionHook
 
     /**
      * Internal pointer of retval (for native callback only)
+     *
+     * @var zval Engine-provided scratch slot; every VM caller supplies one
      */
-    private CData $rv;
+    private object $rv;
 
     /**
      * typedef zval *(*zend_object_read_dimension_t)(zend_object *object, zval *offset, int type, zval *rv);
      *
      * @inheritDoc
-     * @return \FFI\CData
+     * @return zval
      */
+    #[\Override]
     public function handle(...$rawArguments): object
     {
+        /**
+         * @var zend_object $object Narrowed to the stub views at the engine callback boundary
+         * @var zval|null   $offset
+         * @var int         $type
+         * @var zval        $rv
+         */
         [$object, $offset, $type, $rv] = $rawArguments;
-        assert($object instanceof CData && ($offset === null || $offset instanceof CData));
-        assert(is_int($type) && $rv instanceof CData);
-        $this->object = $object;
-        $this->offset = $offset;
-        $this->type   = $type;
-        $this->rv     = $rv;
+        $this->object                  = $object;
+        $this->offset                  = $offset;
+        $this->type                    = $type;
+        $this->rv                      = $rv;
 
         $result = ($this->userHandler)($this);
 
@@ -75,12 +84,9 @@ class ReadDimensionHook extends AbstractDimensionHook
      */
     public function proceed(): mixed
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
+        $originalHandler = $this->getOriginalCallable();
 
-        // @phpstan-ignore callable.nonCallable (engine function pointers are callable CData)
-        $result = ($this->originalHandler)($this->object, $this->offset, $this->type, $this->rv);
+        $result = ($originalHandler)($this->object, $this->offset, $this->type, $this->rv);
         if ($result === null) {
             // The engine handler raised an exception and produced no value (it returns NULL then);
             // mirror the VM which treats a NULL retval as null and lets the exception propagate

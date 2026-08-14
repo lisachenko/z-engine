@@ -14,6 +14,9 @@ declare(strict_types=1);
 namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
+use ZEngine\Generated\zend_function;
+use ZEngine\Generated\zend_internal_function;
+use ZEngine\Generated\zend_object;
 use ZEngine\Reflection\ReflectionMethod;
 use ZEngine\Type\ObjectEntry;
 
@@ -27,25 +30,29 @@ use ZEngine\Type\ObjectEntry;
  * The user handler must not let exceptions escape: handle() is entered by the engine
  * through an FFI trampoline with no PHP frame around it to catch them (see issue #50).
  */
-class GetConstructorHook extends AbstractMethodResolutionHook
+final class GetConstructorHook extends AbstractMethodResolutionHook
 {
-    protected const HOOK_FIELD = 'get_constructor';
+    protected const string HOOK_FIELD = 'get_constructor';
 
     /**
      * Object instance being constructed
+     *
+     * @var zend_object Typed view of the engine handle; the runtime value is the raw
+     *                  FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected CData $object;
+    protected object $object;
 
     /**
      * typedef zend_function *(*zend_object_get_constructor_t)(zend_object *object);
      *
      * @inheritDoc
-     * @return \FFI\CData|null
+     * @return zend_function|zend_internal_function|null
      */
+    #[\Override]
     public function handle(...$rawArguments): ?object
     {
-        [$object] = $rawArguments;
-        assert($object instanceof CData);
+        /** @var zend_object $object Narrowed to the stub view at the engine callback boundary */
+        [$object]     = $rawArguments;
         $this->object = $object;
 
         $result = ($this->userHandler)($this);
@@ -75,9 +82,6 @@ class GetConstructorHook extends AbstractMethodResolutionHook
      */
     public function proceed(): ?ReflectionMethod
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
         $originalHandler = $this->getOriginalCallable();
 
         $rawFunction = ($originalHandler)($this->object);

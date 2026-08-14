@@ -32,9 +32,10 @@ class NativeNumber implements
 {
     use ObjectCreateTrait;
 
+    /** @var int|float|numeric-string */
     private $value;
 
-    public function __construct($value)
+    public function __construct(mixed $value)
     {
         if (!is_numeric($value)) {
             throw new \InvalidArgumentException('Only numeric values are allowed');
@@ -43,7 +44,6 @@ class NativeNumber implements
     }
 
     /**
-     * @param NativeNumber $instance
      * @inheritDoc
      */
     public static function __cast(CastObjectHook $hook)
@@ -104,11 +104,9 @@ class NativeNumber implements
     }
 
     /**
-     * @param $one
-     *
-     * @return int|string
+     * @return int|float|numeric-string
      */
-    private static function getNumericValue($one)
+    private static function getNumericValue(mixed $one)
     {
         if ($one instanceof NativeNumber) {
             $left = $one->value;

@@ -22,14 +22,14 @@ use ZEngine\Type\OpLine;
 
 class ExecutionDataTest extends TestCase
 {
-    public function testHasPrevious()
+    public function testHasPrevious(): void
     {
         $hasPrevious = Core::$executor->getExecutionState()->hasPrevious();
         // This method is definitely called from PHPUnit, so it MUST contain previous entries
         $this->assertTrue($hasPrevious, 'This method is called from PHPUnit, it MUST contain previous entries');
     }
 
-    public function testGetPrevious()
+    public function testGetPrevious(): void
     {
         $executionData = Core::$executor->getExecutionState()->getPrevious();
         $this->assertInstanceOf(ExecutionData::class, $executionData);
@@ -67,7 +67,7 @@ class ExecutionDataTest extends TestCase
      * This test is tricky one to understand: PHP engine allocates a stack frame, where each variable is stored in
      * the stack frame. Thus, $a variable will be stored in first slot in the stack frame and we can access it to check
      */
-    public function testGetCallVariableByNumber()
+    public function testGetCallVariableByNumber(): void
     {
         // Do not use constants here to prevent opcode optimization and inlining
         $expected = microtime(true);
@@ -152,7 +152,7 @@ class ExecutionDataTest extends TestCase
     }
 
     #[DataProvider('argumentProvider')]
-    public function testGetArguments($arg1 = null, $arg2 = null, $arg3 = null)
+    public function testGetArguments(mixed $arg1 = null, mixed $arg2 = null, mixed $arg3 = null): void
     {
         $engineArguments   = Core::$executor->getExecutionState()->getArguments();
         $receivedArguments = [];
@@ -166,7 +166,7 @@ class ExecutionDataTest extends TestCase
     }
 
     #[DataProvider('argumentProvider')]
-    public function testGetNumberOfArguments(...$args)
+    public function testGetNumberOfArguments(mixed ...$args): void
     {
         $engineArguments = Core::$executor->getExecutionState()->getNumberOfArguments();
         $expectedNumber  = func_num_args();
@@ -174,7 +174,7 @@ class ExecutionDataTest extends TestCase
     }
 
     #[DataProvider('argumentProvider')]
-    public function testGetArgument($firstPhpArgument, ...$rest)
+    public function testGetArgument(mixed $firstPhpArgument, mixed ...$rest): void
     {
         // Be aware, that getArgument() can return only declared arguments, not extra one!
         $firstArgument = Core::$executor->getExecutionState()->getArgument(0);
@@ -184,6 +184,9 @@ class ExecutionDataTest extends TestCase
         $this->assertSame($firstPhpArgument, $firstEngineValue);
     }
 
+    /**
+     * @return list<list<mixed>>
+     */
     public static function argumentProvider(): array
     {
         return [
@@ -193,7 +196,7 @@ class ExecutionDataTest extends TestCase
         ];
     }
 
-    public function testGetOpline()
+    public function testGetOpline(): void
     {
         $opline = Core::$executor->getExecutionState()->getOpline();
         $this->assertSame(__LINE__ - 1, $opline->getLine());
@@ -201,7 +204,7 @@ class ExecutionDataTest extends TestCase
         $this->assertInstanceOf(OpLine::class, $opline);
     }
 
-    public function testGetThis()
+    public function testGetThis(): void
     {
         $thisValue = Core::$executor->getExecutionState()->getThis();
         $this->assertNotNull($thisValue);
@@ -267,18 +270,18 @@ class ExecutionDataTest extends TestCase
         return [$state->hasThis(), $state->getThis()];
     }
 
-    public function testGetFunction()
+    public function testGetFunction(): void
     {
         $reflectionFunction = Core::$executor->getExecutionState()->getFunction();
         $this->assertSame(__FUNCTION__, $reflectionFunction->getName());
     }
 
-    public function testGetCallVariable()
+    public function testGetCallVariable(): void
     {
         $this->markTestSkipped('Very engine-specific method');
     }
 
-    public function testGetReturnValue()
+    public function testGetReturnValue(): void
     {
         $this->markTestSkipped('It is impossible to check this method, because return value will be overridden by PHP');
     }

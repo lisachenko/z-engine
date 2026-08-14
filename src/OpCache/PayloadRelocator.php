@@ -54,17 +54,17 @@ use ZEngine\Generated\zval;
  */
 final class PayloadRelocator
 {
-    private const IS_STRING       = 6;
-    private const IS_ARRAY        = 7;
-    private const IS_INDIRECT     = 12;
-    private const IS_CONSTANT_AST = 11;
+    private const int IS_STRING       = 6;
+    private const int IS_ARRAY        = 7;
+    private const int IS_INDIRECT     = 12;
+    private const int IS_CONSTANT_AST = 11;
 
-    private const HASH_FLAG_UNINITIALIZED = 8;
-    private const HASH_FLAG_PACKED        = 4;
+    private const int HASH_FLAG_UNINITIALIZED = 8;
+    private const int HASH_FLAG_PACKED        = 4;
 
-    private const ZEND_ACC_LINKED          = 0x8;
-    private const ZEND_ACC_HAS_RETURN_TYPE = 0x2000;
-    private const ZEND_ACC_VARIADIC        = 0x4000;
+    private const int ZEND_ACC_LINKED          = 0x8;
+    private const int ZEND_ACC_HAS_RETURN_TYPE = 0x2000;
+    private const int ZEND_ACC_VARIADIC        = 0x4000;
 
     /**
      * AST node kinds the walk special-cases. PHP 8.5 added two node shapes that can
@@ -72,21 +72,21 @@ final class PayloadRelocator
      * into the expression, carrying a zend_op_array pointer) and ZEND_AST_CALLABLE_CONVERT
      * (first-class callable syntax, whose zend_ast_fcc holds only a ZEND_MAP_PTR slot).
      */
-    private const ZEND_AST_ZVAL             = 64;
-    private const ZEND_AST_CONSTANT         = 65;
-    private const ZEND_AST_OP_ARRAY         = 66;
-    private const ZEND_AST_CALLABLE_CONVERT = 3;
-    private const ZEND_AST_IS_LIST_SHIFT    = 7;
-    private const ZEND_AST_CHILDREN_SHIFT   = 8;
+    private const int ZEND_AST_ZVAL             = 64;
+    private const int ZEND_AST_CONSTANT         = 65;
+    private const int ZEND_AST_OP_ARRAY         = 66;
+    private const int ZEND_AST_CALLABLE_CONVERT = 3;
+    private const int ZEND_AST_IS_LIST_SHIFT    = 7;
+    private const int ZEND_AST_CHILDREN_SHIFT   = 8;
 
     /** Opcodes whose operands carry file-cache state the opline walk must convert (PHP 8.5) */
-    private const ZEND_DECLARE_ATTRIBUTED_CONST = 210;
-    private const ZEND_OP_DATA                  = 137;
-    private const IS_CONST                      = 1;
+    private const int ZEND_DECLARE_ATTRIBUTED_CONST = 210;
+    private const int ZEND_OP_DATA                  = 137;
+    private const int IS_CONST                      = 1;
 
     /** zend_type bit layout (zend_types.h) - list/name discriminators */
-    private const TYPE_LIST_BIT = 4194304;  // _ZEND_TYPE_LIST_BIT
-    private const TYPE_NAME_BIT = 16777216; // _ZEND_TYPE_NAME_BIT
+    private const int TYPE_LIST_BIT = 4194304;  // _ZEND_TYPE_LIST_BIT
+    private const int TYPE_NAME_BIT = 16777216; // _ZEND_TYPE_NAME_BIT
 
     private readonly int $base;
     private readonly int $size;

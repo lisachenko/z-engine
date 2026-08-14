@@ -27,6 +27,7 @@ use ZEngine\Generated\zend_resource;
 use ZEngine\Generated\zend_string;
 use ZEngine\Generated\zend_value;
 use ZEngine\Generated\zval;
+use ZEngine\Type\ConstantNames;
 use ZEngine\Type\ReferenceCountedInterface;
 use ZEngine\Type\ReferenceCountedTrait;
 use ZEngine\Type\ReferenceEntry;
@@ -114,41 +115,41 @@ class ReflectionValue implements ReferenceCountedInterface
     use ReleasableTrait;
 
     /* regular data types */
-    public const IS_UNDEF        = 0;
-    public const IS_NULL         = 1;
-    public const IS_FALSE        = 2;
-    public const IS_TRUE         = 3;
-    public const IS_LONG         = 4;
-    public const IS_DOUBLE       = 5;
-    public const IS_STRING       = 6;
-    public const IS_ARRAY        = 7;
-    public const IS_OBJECT       = 8;
-    public const IS_RESOURCE     = 9;
-    public const IS_REFERENCE    = 10;
-    public const IS_CONSTANT_AST = 11; /* constant expressions */
+    public const int IS_UNDEF        = 0;
+    public const int IS_NULL         = 1;
+    public const int IS_FALSE        = 2;
+    public const int IS_TRUE         = 3;
+    public const int IS_LONG         = 4;
+    public const int IS_DOUBLE       = 5;
+    public const int IS_STRING       = 6;
+    public const int IS_ARRAY        = 7;
+    public const int IS_OBJECT       = 8;
+    public const int IS_RESOURCE     = 9;
+    public const int IS_REFERENCE    = 10;
+    public const int IS_CONSTANT_AST = 11; /* constant expressions */
 
     /**
      * Fake types used only for type hinting.
      * These are allowed to overlap with the types below.
      */
-    public const IS_CALLABLE = 12;
-    public const IS_ITERABLE = 13;
-    public const IS_VOID     = 14;
-    public const IS_STATIC   = 15;
-    public const IS_MIXED    = 16;
-    public const IS_NEVER    = 17;
+    public const int IS_CALLABLE = 12;
+    public const int IS_ITERABLE = 13;
+    public const int IS_VOID     = 14;
+    public const int IS_STATIC   = 15;
+    public const int IS_MIXED    = 16;
+    public const int IS_NEVER    = 17;
 
     /* internal types */
-    public const IS_INDIRECT  = 12;
-    public const IS_PTR       = 13;
-    public const IS_ALIAS_PTR = 14;
-    public const _IS_ERROR    = 15;
+    public const int IS_INDIRECT  = 12;
+    public const int IS_PTR       = 13;
+    public const int IS_ALIAS_PTR = 14;
+    public const int _IS_ERROR    = 15;
 
     /* used for casts */
-    public const _IS_BOOL   = 18;
-    public const _IS_NUMBER = 19;
+    public const int _IS_BOOL   = 18;
+    public const int _IS_NUMBER = 19;
 
-    private const Z_TYPE_FLAGS_MASK = 0xFF00;
+    private const int Z_TYPE_FLAGS_MASK = 0xFF00;
 
     /**
      * Stores the pointer to the zval structure associated with this variable
@@ -159,19 +160,19 @@ class ReflectionValue implements ReferenceCountedInterface
     private object $pointer;
 
     /**
-     * Reversed class constants, containing names by number
-     *
-     * @var string[]
-     */
-    private static array $constantNames = [];
-
-    /**
      * ReflectionValue constructor.
      *
      * The constructed instance owns its zval container and exactly one reference on the
      * payload (when the payload is refcounted); both are dropped by release()/__destruct.
      *
      * @param mixed $value Any value to be reflected
+     *
+     * The value is deliberately never named in the body: it is read back out of the
+     * engine frame this very constructor runs in (argument slot 0), which is the only way
+     * to reach the caller's own zval instead of a copy. Removing the parameter would
+     * remove the zval the constructor is built to capture.
+     *
+     * @phpstan-ignore constructor.unusedParameter (captured from the frame's argument slot 0)
      */
     public function __construct(mixed $value)
     {
@@ -236,8 +237,7 @@ class ReflectionValue implements ReferenceCountedInterface
      * The flags are derived from the payload's GC header, exactly like the engine's IS_*_EX macros do.
      *
      * @see zend_types.h:IS_STRING_EX/IS_ARRAY_EX/IS_OBJECT_EX macro family
-     */
-    /**
+     *
      * @param CData|zval $zvalEntry
      */
     private static function buildTypeInfo(int $type, object $zvalEntry): int
@@ -329,8 +329,7 @@ class ReflectionValue implements ReferenceCountedInterface
      *
      * The previous content is saved aside and released only after the copy took its own
      * reference, so a self-assignment of a refcount-1 payload cannot use freed memory.
-     */
-    /**
+     *
      * @param CData|zval $dstZval
      */
     private static function copyAndReleasePrevious(ReflectionValue $source, object $dstZval): void
@@ -386,8 +385,7 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * Type-friendly getter to return zend_class_entry directly
-     */
-    /**
+     *
      * @return zend_class_entry
      */
     public function getRawClass(): object
@@ -403,8 +401,7 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * Type-friendly getter to return zend_function/zend_internal_function directly
-     */
-    /**
+     *
      * @return zend_function|zend_internal_function
      */
     public function getRawFunction(): object
@@ -425,8 +422,7 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * Type-friendly getter to return zend_string directly
-     */
-    /**
+     *
      * @return zend_string
      */
     public function getRawString(): object
@@ -442,8 +438,7 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * Type-friendly getter to return zend_array directly
-     */
-    /**
+     *
      * @return zend_array
      */
     public function getRawArray(): object
@@ -459,8 +454,7 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * Type-friendly getter to return zend_object directly
-     */
-    /**
+     *
      * @return zend_object
      */
     public function getRawObject(): object
@@ -476,8 +470,7 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * Type-friendly getter to return zend_resource directly
-     */
-    /**
+     *
      * @return zend_resource
      */
     public function getRawResource(): object
@@ -493,8 +486,7 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * Type-friendly getter to return zend_resource directly
-     */
-    /**
+     *
      * @return zend_reference
      */
     public function getRawReference(): object
@@ -555,8 +547,7 @@ class ReflectionValue implements ReferenceCountedInterface
      * The pointer is a live view into engine memory: reads reflect the current zval
      * state and writes go straight to the engine. Prefer the typed accessors
      * (getType(), getNativeValue(), equals()) over poking fields on the result.
-     */
-    /**
+     *
      * @return zval
      */
     public function getRawValue(): object
@@ -583,8 +574,7 @@ class ReflectionValue implements ReferenceCountedInterface
      * the bucket destructor - the previous pointer is simply overwritten.
      *
      * @internal used by the copy-out-of-SHM path
-     */
-    /**
+     *
      * @param CData|object $pointer Runtime value is always CData; statically stub-typed views are accepted
      */
     public function setPointer(object $pointer): void
@@ -612,27 +602,31 @@ class ReflectionValue implements ReferenceCountedInterface
         }
         $thisValue  = $this->valueUnion();
         $otherValue = $other->valueUnion();
-        switch ($type) {
-            case self::IS_UNDEF:
-            case self::IS_NULL:
-            case self::IS_FALSE:
-            case self::IS_TRUE:
-                return true;
-            case self::IS_LONG:
-                return $thisValue->lval === $otherValue->lval;
-            case self::IS_DOUBLE:
-                return $thisValue->dval === $otherValue->dval;
-            case self::IS_STRING:
-                $thisString  = $thisValue->str;
-                $otherString = $otherValue->str;
-                assert($thisString !== null && $otherString !== null);
 
-                return StringEntry::fromCData($thisString)->getStringValue()
-                    === StringEntry::fromCData($otherString)->getStringValue();
-            default:
-                // Arrays, objects and constant expressions: conservatively different
-                return false;
-        }
+        return match ($type) {
+            self::IS_LONG   => $thisValue->lval === $otherValue->lval,
+            self::IS_DOUBLE => $thisValue->dval === $otherValue->dval,
+            self::IS_STRING => self::stringSlotsEqual($thisValue->str, $otherValue->str),
+            // Payload-less types: the base-type check above already decided them
+            self::IS_UNDEF, self::IS_NULL, self::IS_FALSE, self::IS_TRUE => true,
+            // Arrays, objects and constant expressions: conservatively different
+            default => false,
+        };
+    }
+
+    /**
+     * Compares the zend_string slots of two IS_STRING zvals by their PHP string value
+     *
+     * @param zend_string|null $thisString
+     * @param zend_string|null $otherString
+     */
+    private static function stringSlotsEqual(?object $thisString, ?object $otherString): bool
+    {
+        // Engine invariant: an IS_STRING zval always carries its zend_string
+        assert($thisString !== null && $otherString !== null);
+
+        return StringEntry::fromCData($thisString)->getStringValue()
+            === StringEntry::fromCData($otherString)->getStringValue();
     }
 
     /**
@@ -715,8 +709,7 @@ class ReflectionValue implements ReferenceCountedInterface
     /**
      * Returns a zval POINTER for engine calls, whether this wrapper holds an embedded
      * zval struct (a table slot / constant value) or a zval pointer (a container)
-     */
-    /**
+     *
      * @return CData|zval
      */
     private function zvalPointer(): object
@@ -821,17 +814,15 @@ class ReflectionValue implements ReferenceCountedInterface
      */
     public static function name(int $valueCode): string
     {
-        if (empty(self::$constantNames)) {
-            self::$constantNames = array_flip((new \ReflectionClass(self::class))->getConstants());
-        }
+        $constantNames = ConstantNames::of(self::class);
 
         // We should use only low byte to get the name of constant
         $valueCode &= 0xFF;
-        if (!isset(self::$constantNames[$valueCode])) {
+        if (!isset($constantNames[$valueCode])) {
             throw new \UnexpectedValueException('Unknown code ' . $valueCode . '. New version of PHP?');
         }
 
-        return self::$constantNames[$valueCode];
+        return $constantNames[$valueCode];
     }
 
     /**
@@ -876,6 +867,6 @@ class ReflectionValue implements ReferenceCountedInterface
      */
     private function isTypeInfoRefCounted(int $typeInfo): bool
     {
-        return ($typeInfo & self::Z_TYPE_FLAGS_MASK) != 0;
+        return ($typeInfo & self::Z_TYPE_FLAGS_MASK) !== 0;
     }
 }

@@ -51,7 +51,7 @@ class ReflectionClassTest extends TestCase
     }
 
     #[Group('internal')]
-    public function testRemoveMethods()
+    public function testRemoveMethods(): void
     {
         $this->refClass->removeMethods('methodToRemove');
         $isMethodExists = method_exists(TestClass::class, 'methodToRemove');
@@ -59,7 +59,7 @@ class ReflectionClassTest extends TestCase
     }
 
     #[Group('internal')]
-    public function testAddMethod()
+    public function testAddMethod(): void
     {
         // Immortal-by-design: addMethod() keeps the closure body alive until the class
         // entry is destroyed at the very end of the request (see docs/long-running.md),
@@ -94,7 +94,7 @@ class ReflectionClassTest extends TestCase
         $this->assertSame('tseT', $instance->$dynamicName('Test'));
     }
 
-    public function testSetAbstract()
+    public function testSetAbstract(): void
     {
         $this->refClass->setAbstract(true);
         $this->assertTrue($this->refClass->isAbstract());
@@ -110,7 +110,7 @@ class ReflectionClassTest extends TestCase
 
      */
     #[Depends('testSetAbstract')]
-    public function testSetNonAbstract()
+    public function testSetNonAbstract(): void
     {
         $this->refClass->setAbstract(false);
         $this->assertFalse($this->refClass->isAbstract());
@@ -118,7 +118,7 @@ class ReflectionClassTest extends TestCase
         $this->assertInstanceOf(TestClass::class, $instance);
     }
 
-    public function testSetFinal()
+    public function testSetFinal(): void
     {
         $this->refClass->setFinal(true);
         $this->assertTrue($this->refClass->isFinal());
@@ -132,7 +132,7 @@ class ReflectionClassTest extends TestCase
 
      */
     #[Depends('testSetFinal')]
-    public function testSetNonFinal()
+    public function testSetNonFinal(): void
     {
         $this->refClass->setFinal(false);
         $this->assertFalse($this->refClass->isFinal());
@@ -141,14 +141,14 @@ class ReflectionClassTest extends TestCase
         $this->assertInstanceOf(TestClass::class, $instance);
     }
 
-    public function testGetClassConstantsReturnsExtendedClass()
+    public function testGetClassConstantsReturnsExtendedClass(): void
     {
         $refConstant = $this->refClass->getReflectionConstant('SOME_CONST');
         $this->assertInstanceOf(ReflectionClassConstant::class, $refConstant);
     }
 
     #[Group('internal')]
-    public function testAddTraits()
+    public function testAddTraits(): void
     {
         $this->refClass->addTraits(TestTrait::class);
 
@@ -159,7 +159,7 @@ class ReflectionClassTest extends TestCase
 
     #[Group('internal')]
     #[Depends('testAddTraits')]
-    public function testRemoveTraits()
+    public function testRemoveTraits(): void
     {
         $this->markTestSkipped('Sometimes it segfaults, skip it right now');
         $this->refClass->removeTraits(TestTrait::class);
@@ -234,7 +234,7 @@ class ReflectionClassTest extends TestCase
         $this->assertSame(1, $this->refClass->getEndLine(), 'End line number should be changed');
     }
 
-    public function testSetFileName()
+    public function testSetFileName(): void
     {
         // Take the file name to restore later
         $originalFileName = $this->refClass->getFileName();

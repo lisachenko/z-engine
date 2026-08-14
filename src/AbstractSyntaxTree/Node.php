@@ -17,10 +17,8 @@ use function count;
 
 use FFI\CData;
 use ReflectionClass;
-
-use function strpos;
-
 use ZEngine\Core;
+use ZEngine\Generated\zend_ast;
 use ZEngine\Reflection\ReflectionMethod;
 
 /**
@@ -76,7 +74,7 @@ class Node implements NodeInterface
      * Node static constructor.
      *
      * @param AstOwnership|null $owner Ownership handle that must stay alive while this node is used
-     * @param \FFI\CData $node
+     * @param CData|zend_ast $node Pointer to the structure
      */
     public static function fromCData(object $node, ?AstOwnership $owner = null): Node
     {
@@ -94,6 +92,7 @@ class Node implements NodeInterface
      *
      * @see NodeKind class constants
      */
+    #[\Override]
     final public function getKind(): int
     {
         return $this->node->kind;
@@ -102,6 +101,7 @@ class Node implements NodeInterface
     /**
      * Returns node's kind-specific flags
      */
+    #[\Override]
     final public function getAttributes(): int
     {
         return $this->node->attr;
@@ -110,6 +110,7 @@ class Node implements NodeInterface
     /**
      * Changes node attributes
      */
+    #[\Override]
     final public function setAttributes(int $newAttributes): int
     {
         return $this->node->attr = $newAttributes;
@@ -118,6 +119,7 @@ class Node implements NodeInterface
     /**
      * Returns the start line number of the node
      */
+    #[\Override]
     public function getLine(): int
     {
         return $this->node->lineno;
@@ -126,6 +128,7 @@ class Node implements NodeInterface
     /**
      * Changes the node line
      */
+    #[\Override]
     public function setLine(int $newLine): void
     {
         $this->node->lineno = $newLine;
@@ -134,6 +137,7 @@ class Node implements NodeInterface
     /**
      * Returns the number of children for this node
      */
+    #[\Override]
     public function getChildrenCount(): int
     {
         return NodeKind::childrenCount($this->node->kind);
@@ -144,6 +148,7 @@ class Node implements NodeInterface
      *
      * @return NodeInterface[]
      */
+    #[\Override]
     final public function getChildren(): array
     {
         $totalChildren = $this->getChildrenCount();
@@ -169,10 +174,11 @@ class Node implements NodeInterface
      *
      * @param int $index Index of child node
      */
+    #[\Override]
     final public function getChild(int $index): ?NodeInterface
     {
         $totalChildren = $this->getChildrenCount();
-        if ($index >= $totalChildren) {
+        if ($index < 0 || $index >= $totalChildren) {
             throw new \OutOfBoundsException('Child index is out of range, there are ' . $totalChildren . ' children.');
         }
         $castChildren = Core::cast('zend_ast **', $this->node->child);
@@ -189,10 +195,11 @@ class Node implements NodeInterface
      * @param int           $index Child node index
      * @param NodeInterface $node  New node to use
      */
+    #[\Override]
     public function replaceChild(int $index, NodeInterface $node): void
     {
         $totalChildren = $this->getChildrenCount();
-        if ($index >= $totalChildren) {
+        if ($index < 0 || $index >= $totalChildren) {
             throw new \OutOfBoundsException('Child index is out of range, there are ' . $totalChildren . ' children.');
         }
         $castChildren         = Core::cast('zend_ast **', $this->node->child);
@@ -204,10 +211,11 @@ class Node implements NodeInterface
      *
      * @param int $index Index of the node to remove
      */
+    #[\Override]
     public function removeChild(int $index): NodeInterface
     {
         $totalChildren = $this->getChildrenCount();
-        if ($index >= $totalChildren) {
+        if ($index < 0 || $index >= $totalChildren) {
             throw new \OutOfBoundsException('Child index is out of range, there are ' . $totalChildren . ' children.');
         }
         $castChildren = Core::cast('zend_ast **', $this->node->child);
@@ -227,7 +235,7 @@ class Node implements NodeInterface
         $methods = (new ReflectionClass(static::class))->getMethods(ReflectionMethod::IS_PUBLIC);
         foreach ($methods as $method) {
             $methodName = $method->getName();
-            if ((strpos($methodName, 'get') === 0) && $method->getNumberOfRequiredParameters() === 0) {
+            if (str_starts_with($methodName, 'get') && $method->getNumberOfRequiredParameters() === 0) {
                 $name          = lcfirst(substr($methodName, 3));
                 $result[$name] = $this->$methodName();
             }
@@ -241,6 +249,7 @@ class Node implements NodeInterface
      *
      * @param int $indent Level of indentation
      */
+    #[\Override]
     final public function dump(int $indent = 0): string
     {
         $content = sprintf('%4d', $this->getLine()) . ': ';

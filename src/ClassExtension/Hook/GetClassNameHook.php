@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zend_string;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Type\ObjectEntry;
 use ZEngine\Type\StringEntry;
@@ -32,25 +34,29 @@ use ZEngine\Type\StringEntry;
  *  - The user handler must not let exceptions escape: handle() is entered by the engine
  *    through an FFI trampoline with no PHP frame around it to catch them (see issue #50).
  */
-class GetClassNameHook extends AbstractHook
+final class GetClassNameHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'get_class_name';
+    protected const string HOOK_FIELD = 'get_class_name';
 
     /**
      * Object instance to report the class name for (const zend_object *)
+     *
+     * @var zend_object Typed view of the engine handle; the runtime value is the raw
+     *                  FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected CData $object;
+    protected object $object;
 
     /**
      * typedef zend_string *(*zend_object_get_class_name_t)(const zend_object *object);
      *
      * @inheritDoc
-     * @return \FFI\CData
+     * @return zend_string
      */
+    #[\Override]
     public function handle(...$rawArguments): object
     {
-        [$object] = $rawArguments;
-        assert($object instanceof CData);
+        /** @var zend_object $object Narrowed to the stub view at the engine callback boundary */
+        [$object]     = $rawArguments;
         $this->object = $object;
 
         $result = ($this->userHandler)($this);
@@ -75,9 +81,6 @@ class GetClassNameHook extends AbstractHook
      */
     public function proceed(): string
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
         $originalHandler = $this->getOriginalCallable();
 
         $rawName = ($originalHandler)($this->object);

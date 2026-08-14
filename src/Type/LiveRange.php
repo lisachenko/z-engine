@@ -29,18 +29,18 @@ namespace ZEngine\Type;
  */
 class LiveRange
 {
-    public const KIND_TMPVAR  = 0;
-    public const KIND_LOOP    = 1;
-    public const KIND_SILENCE = 2;
-    public const KIND_ROPE    = 3;
-    public const KIND_NEW     = 4;
+    public const int KIND_TMPVAR  = 0;
+    public const int KIND_LOOP    = 1;
+    public const int KIND_SILENCE = 2;
+    public const int KIND_ROPE    = 3;
+    public const int KIND_NEW     = 4;
 
     /**
      * Mask of the kind bits inside the var field
      *
      * @see zend_compile.h:ZEND_LIVE_MASK
      */
-    public const KIND_MASK = 7;
+    public const int KIND_MASK = 7;
 
     public function __construct(
         private readonly int $var,
@@ -93,18 +93,8 @@ class LiveRange
      */
     public static function kindName(int $kind): string
     {
-        /** @var array<int, string>|null $kindNames */
-        static $kindNames = null;
-        if ($kindNames === null) {
-            $kindNames = [];
-            foreach ((new \ReflectionClass(self::class))->getConstants() as $constantName => $constantValue) {
-                if (is_int($constantValue) && $constantName !== 'KIND_MASK') {
-                    $kindNames[$constantValue] = $constantName;
-                }
-            }
-        }
-
-        return $kindNames[$kind] ?? 'UNKNOWN';
+        // KIND_MASK is the bit mask the kinds are extracted with, not a kind of its own
+        return ConstantNames::of(self::class, 'KIND_', ['KIND_MASK'])[$kind] ?? 'UNKNOWN';
     }
 
     /**

@@ -13,8 +13,9 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension\Hook;
 
-use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zval;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\ObjectEntry;
@@ -22,19 +23,24 @@ use ZEngine\Type\ObjectEntry;
 /**
  * Receiving hook for casting object to another type
  */
-class CastObjectHook extends AbstractHook
+final class CastObjectHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'cast_object';
+    protected const string HOOK_FIELD = 'cast_object';
 
     /**
      * Object instance to perform casting
+     *
+     * @var zend_object Typed view of the engine handle; the runtime value is the raw
+     *                  FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected CData $object;
+    protected object $object;
 
     /**
      * Holds a return value
+     *
+     * @var zval Typed view of the engine handle; the runtime value is the raw FFI\CData pointer
      */
-    protected CData $returnValue;
+    protected object $returnValue;
 
     /**
      * Cast type
@@ -55,10 +61,19 @@ class CastObjectHook extends AbstractHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): int
     {
-        [$this->object, $this->returnValue, $this->type] = $rawArguments;
-        $this->lastProceedStatus                         = null;
+        /**
+         * @var zend_object $object Narrowed to the stub views at the engine callback boundary
+         * @var zval        $returnValue
+         * @var int         $type
+         */
+        [$object, $returnValue, $type] = $rawArguments;
+        $this->object                  = $object;
+        $this->returnValue             = $returnValue;
+        $this->type                    = $type;
+        $this->lastProceedStatus       = null;
 
         $result = ($this->userHandler)($this);
         if ($result === null && $this->lastProceedFailed()) {
@@ -129,7 +144,7 @@ class CastObjectHook extends AbstractHook
      * Combined with handle() this makes the naive fall-through — `$hook->proceed(); return
      * $hook->getResult();` — behave exactly like an uninstalled handler for every cast type.
      */
-    public function getResult()
+    public function getResult(): mixed
     {
         if ($this->lastProceedStatus !== Core::SUCCESS) {
             return null;
@@ -145,12 +160,11 @@ class CastObjectHook extends AbstractHook
      * @return int Core::SUCCESS when the original handler produced a value in the retval slot,
      *             Core::FAILURE when it could not (numeric casts on plain objects, for example)
      */
-    public function proceed()
+    public function proceed(): int
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
-        $status = ($this->originalHandler)($this->object, $this->returnValue, $this->type);
+        $originalHandler = $this->getOriginalCallable();
+
+        $status = ($originalHandler)($this->object, $this->returnValue, $this->type);
         assert(is_int($status));
         $this->lastProceedStatus = $status;
 

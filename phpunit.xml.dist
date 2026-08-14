@@ -13,9 +13,21 @@
          colors="true"
          bootstrap="./tests/bootstrap.php"
          failOnWarning="true"
+         failOnDeprecation="true"
+         failOnNotice="true"
+         failOnRisky="true"
+         beStrictAboutOutputDuringTests="true"
          displayDetailsOnTestsThatTriggerWarnings="true"
          displayDetailsOnTestsThatTriggerNotices="true"
          displayDetailsOnTestsThatTriggerDeprecations="true">
+    <!--
+      Strictness: deprecations, notices, risky tests and stray output are hard
+      failures, not lines scrolling past in the CI log. This library writes into
+      engine memory, so a deprecation from the engine or a test that produces
+      unexpected output is a signal about the runtime, not noise. If a leg turns
+      red on one of these, the failing signal gets fixed or explicitly
+      documented - the flag does not get removed.
+    -->
     <testsuites>
         <testsuite name="Z-Engine Test Suite">
             <directory>./tests/</directory>

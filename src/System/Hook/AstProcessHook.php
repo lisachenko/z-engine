@@ -21,12 +21,15 @@ use ZEngine\Hook\AbstractHook;
 /**
  * Receiving hook for processing an AST
  */
-class AstProcessHook extends AbstractHook
+final class AstProcessHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'zend_ast_process';
+    protected const string HOOK_FIELD = 'zend_ast_process';
 
     /**
      * Instance of top-level AST node
+     *
+     * Kept as a raw handle: the AST wrappers (NodeFactory/Node) own the zend_ast struct
+     * and still take CData, so narrowing to a stub view here would only be undone again.
      */
     protected CData $ast;
 
@@ -35,9 +38,12 @@ class AstProcessHook extends AbstractHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): void
     {
-        [$this->ast] = $rawArguments;
+        /** @var CData $ast Narrowed at the engine callback boundary */
+        [$ast]     = $rawArguments;
+        $this->ast = $ast;
 
         ($this->userHandler)($this);
     }
@@ -53,11 +59,10 @@ class AstProcessHook extends AbstractHook
     /**
      * Proceeds with default callback
      */
-    public function proceed()
+    public function proceed(): void
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
-        ($this->originalHandler)($this->ast);
+        $originalHandler = $this->getOriginalCallable();
+
+        ($originalHandler)($this->ast);
     }
 }

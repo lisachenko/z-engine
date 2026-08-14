@@ -24,13 +24,14 @@ use ZEngine\Hook\AbstractHook;
  */
 class ModuleInfoHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'info_func';
+    protected const string HOOK_FIELD = 'info_func';
 
     /**
      * void (*info_func)(zend_module_entry *zend_module);
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): void
     {
         if (Core::isShutdown()) {

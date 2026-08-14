@@ -22,5 +22,5 @@ namespace ZEngine\EngineExtension\Hook;
  */
 class RequestStartupHook extends AbstractModuleLifecycleHook
 {
-    protected const HOOK_FIELD = 'request_startup_func';
+    protected const string HOOK_FIELD = 'request_startup_func';
 }

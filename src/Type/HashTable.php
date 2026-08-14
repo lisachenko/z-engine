@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace ZEngine\Type;
 
+use Countable;
 use FFI\CData;
 use IteratorAggregate;
 use ReflectionClass as NativeReflectionClass;
@@ -20,6 +21,7 @@ use Traversable;
 use ZEngine\Core;
 use ZEngine\Generated\Bucket;
 use ZEngine\Generated\HashTable as HashTableStruct;
+use ZEngine\Generated\zend_array;
 use ZEngine\Generated\zend_function;
 use ZEngine\Generated\zend_internal_function;
 use ZEngine\Generated\zend_refcounted_h;
@@ -63,25 +65,25 @@ use ZEngine\Reflection\ReflectionValue;
  *
  * @implements IteratorAggregate<int|string, ReflectionValue>
  */
-class HashTable implements IteratorAggregate, ReferenceCountedInterface
+class HashTable implements IteratorAggregate, Countable, ReferenceCountedInterface
 {
     use ReferenceCountedTrait;
 
-    protected const HASH_UPDATE          = (1 << 0);
-    protected const HASH_ADD             = (1 << 1);
-    protected const HASH_UPDATE_INDIRECT = (1 << 2);
-    protected const HASH_ADD_NEW         = (1 << 3);
-    protected const HASH_ADD_NEXT        = (1 << 4);
+    protected const int HASH_UPDATE          = (1 << 0);
+    protected const int HASH_ADD             = (1 << 1);
+    protected const int HASH_UPDATE_INDIRECT = (1 << 2);
+    protected const int HASH_ADD_NEW         = (1 << 3);
+    protected const int HASH_ADD_NEXT        = (1 << 4);
 
     /**
      * Corresponds to the HASH_FLAG_PACKED flag in zend_types.h
      */
-    protected const HASH_FLAG_PACKED = (1 << 2);
+    protected const int HASH_FLAG_PACKED = (1 << 2);
 
     /**
      * @see zend_hash.c:uninitialized_bucket - two uint32_t slots holding HT_INVALID_IDX
      */
-    private const HT_INVALID_IDX = 0xFFFFFFFF;
+    private const int HT_INVALID_IDX = 0xFFFFFFFF;
 
     /**
      * Process-lifetime stand-in for the engine's static uninitialized_bucket
@@ -137,7 +139,10 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
      * The caller guarantees the pointed table stays alive for the wrapper lifetime -
      * the standard borrowed construction of the framework (docs/long-running.md).
      *
-     * @param CData|HashTableStruct $hashInstance
+     * The engine declares HashTable as a typedef of struct _zend_array, so both generated
+     * views name the very same struct and either one is accepted here.
+     *
+     * @param CData|HashTableStruct|zend_array $hashInstance
      */
     public static function fromCData(object $hashInstance): static
     {
@@ -214,6 +219,7 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
      *
      * @return Traversable<int|string, ReflectionValue> Borrowed views over the bucket zvals
      */
+    #[\Override]
     public function getIterator(): Traversable
     {
         $iterator = function () {
@@ -249,6 +255,112 @@ class HashTable implements IteratorAggregate, ReferenceCountedInterface
         };
 
         return $iterator();
+    }
+
+    /**
+     * Returns the number of live elements stored in the table
+     *
+     * This is the engine's own nNumOfElements, ie the number of entries iteration yields:
+     * deleted buckets still occupying a slot (nNumUsed) are not counted.
+     */
+    #[\Override]
+    public function count(): int
+    {
+        // The engine field is an uint32_t; the clamp only states that for the analyser
+        return max($this->pointer->nNumOfElements, 0);
+    }
+
+    /**
+     * Returns the engine's own key block of the bucket stored under the given key
+     *
+     * The result is a BORROWED view over the zend_string the table itself points at, which
+     * is how the storage class of a key is inspected (interned, permanent, persistent) -
+     * unlike a StringEntry built from the PHP key, which is an unrelated copy.
+     *
+     * @return StringEntry|null The bucket key block, or null when no such string key exists
+     * @internal
+     */
+    public function findKeyEntry(string $key): ?StringEntry
+    {
+        $bucket = $this->findBucket($key);
+        if ($bucket === null) {
+            return null;
+        }
+        $keyBlock = $bucket->key;
+        // findBucket() only ever returns string-keyed buckets
+        assert($keyBlock !== null);
+
+        return StringEntry::fromCData($keyBlock);
+    }
+
+    /**
+     * Swaps the key block of one bucket for an equivalent zend_string
+     *
+     * Only the bucket's key POINTER is rewritten: the stored value, the bucket hash and the
+     * table's collision index stay as they are, so the replacement MUST carry the same
+     * content as the current key (enforced below) - this is a storage-class swap of a key
+     * block, never a rename. No refcounting happens on either side: the caller keeps
+     * ownership of the new block and must keep it alive at least as long as the table
+     * (interned and persistent-interned blocks are never released by the engine).
+     *
+     * Packed tables carry plain zvals with implicit integer keys and are reported as a miss.
+     *
+     * @param string      $currentKey Content of the key whose block is replaced
+     * @param StringEntry $newKey     Replacement block, same content, outliving the table
+     *
+     * @return bool Whether a bucket key was actually rewritten
+     * @internal
+     */
+    public function replaceKey(string $currentKey, StringEntry $newKey): bool
+    {
+        if ($newKey->getStringValue() !== $currentKey) {
+            throw new \LogicException(
+                'A hashtable key block can only be replaced by one with identical content: '
+                . "\"{$currentKey}\" cannot become \"{$newKey->getStringValue()}\" without rehashing",
+            );
+        }
+        $bucket = $this->findBucket($currentKey);
+        if ($bucket === null) {
+            return false;
+        }
+        $bucket->key = $newKey->getRawValue();
+
+        return true;
+    }
+
+    /**
+     * Returns the string-keyed bucket holding the given key, or null when there is none
+     *
+     * The engine's own bucket lookup (zend_hash_find_bucket) is inline-only and not
+     * exported, so the walk is done here - the single place in the framework that knows
+     * how buckets are laid out.
+     *
+     * @return Bucket|null
+     */
+    private function findBucket(string $key): ?object
+    {
+        // Packed tables store plain zvals with implicit integer keys - no string keys at all
+        if (($this->pointer->u->flags & self::HASH_FLAG_PACKED) !== 0) {
+            return null;
+        }
+        $numUsed = $this->pointer->nNumUsed;
+        $arData  = $this->pointer->arData;
+        // Initialized tables always carry a data block (the shared sentinel at minimum)
+        assert($arData !== null);
+        $buckets = new StructArray($arData, $numUsed);
+        for ($index = 0; $index < $numUsed; $index++) {
+            $bucket   = $buckets[$index];
+            $keyBlock = $bucket->key;
+            // Integer-keyed and deleted buckets carry no key block
+            if ($keyBlock === null) {
+                continue;
+            }
+            if (StringEntry::fromCData($keyBlock)->getStringValue() === $key) {
+                return $bucket;
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -61,8 +61,8 @@ namespace ZEngine;
         return;
     }
 
-    $preloadScript = (string) ini_get('opcache.preload');
-    $includedFiles = get_included_files();
+    $preloadScript  = (string) ini_get('opcache.preload');
+    $includedFiles  = get_included_files();
     $isPreloadStage = $preloadScript !== ''
         && isset($includedFiles[0])
         && realpath($preloadScript) === $includedFiles[0];
