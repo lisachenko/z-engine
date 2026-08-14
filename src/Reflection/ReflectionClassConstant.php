@@ -175,7 +175,7 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
         $docComment = $container->doc_comment;
         if ($docComment !== null) {
             assert($docComment instanceof CData);
-            StringEntry::fromCData($docComment)->copy();
+            StringEntry::fromCData($docComment)->addReference();
         }
         $adopted->referenceAttributes(1);
 
