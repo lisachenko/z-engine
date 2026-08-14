@@ -13,12 +13,15 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension\Hook;
 
+use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zend_string;
 
 /**
  * Receiving hook for object field unset operation
  */
-class UnsetPropertyHook extends AbstractPropertyHook
+final class UnsetPropertyHook extends AbstractPropertyHook
 {
     protected const HOOK_FIELD = 'unset_property';
 
@@ -29,7 +32,15 @@ class UnsetPropertyHook extends AbstractPropertyHook
      */
     public function handle(...$rawArguments): void
     {
-        [$this->object, $this->member, $this->cacheSlot] = $rawArguments;
+        /**
+         * @var zend_object $object    Narrowed to the stub views at the engine callback boundary
+         * @var zend_string $member
+         * @var CData|null  $cacheSlot
+         */
+        [$object, $member, $cacheSlot] = $rawArguments;
+        $this->object                  = $object;
+        $this->member                  = $member;
+        $this->cacheSlot               = $cacheSlot;
 
         ($this->userHandler)($this);
     }
@@ -37,14 +48,10 @@ class UnsetPropertyHook extends AbstractPropertyHook
     /**
      * Proceeds with default handler
      */
-    public function proceed()
+    public function proceed(): void
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
-
         // As we will play with EG(fake_scope), we won't be able to access private or protected members, need to unpack
-        $originalHandler = $this->originalHandler;
+        $originalHandler = $this->getOriginalCallable();
 
         $object    = $this->object;
         $member    = $this->member;

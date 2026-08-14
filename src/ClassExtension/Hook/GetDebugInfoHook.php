@@ -15,6 +15,8 @@ namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_array;
+use ZEngine\Generated\zend_object;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\HashTable;
@@ -39,17 +41,22 @@ use ZEngine\Type\ObjectEntry;
  *  - The user handler must not let exceptions escape: handle() is entered by the engine
  *    through an FFI trampoline with no PHP frame around it to catch them (see issue #50).
  */
-class GetDebugInfoHook extends AbstractHook
+final class GetDebugInfoHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'get_debug_info';
 
     /**
      * Object instance to provide debug info for
+     *
+     * @var zend_object Typed view of the engine handle; the runtime value is the raw
+     *                  FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected CData $object;
+    protected object $object;
 
     /**
      * Engine-provided output flag (int *): whether the returned table is temporary
+     *
+     * A raw `int *` out-parameter: no engine struct and therefore no stub view.
      */
     protected CData $isTemp;
 
@@ -57,14 +64,17 @@ class GetDebugInfoHook extends AbstractHook
      * typedef HashTable *(*zend_object_get_debug_info_t)(zend_object *object, int *is_temp);
      *
      * @inheritDoc
-     * @return \FFI\CData
+     * @return zend_array
      */
     public function handle(...$rawArguments): object
     {
+        /**
+         * @var zend_object $object Narrowed to the stub view at the engine callback boundary
+         * @var CData       $isTemp
+         */
         [$object, $isTemp] = $rawArguments;
-        assert($object instanceof CData && $isTemp instanceof CData);
-        $this->object = $object;
-        $this->isTemp = $isTemp;
+        $this->object      = $object;
+        $this->isTemp      = $isTemp;
 
         $result   = ($this->userHandler)($this);
         $refValue = new ReflectionValue($result);
@@ -97,10 +107,6 @@ class GetDebugInfoHook extends AbstractHook
      */
     public function proceed(): array
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
-
         $originalHandler = $this->getOriginalCallable();
 
         $object = $this->object;

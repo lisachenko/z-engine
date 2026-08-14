@@ -240,14 +240,14 @@ class ObjectEntry implements ReferenceCountedInterface
      * Returns a borrowed view of one inline property slot (properties_table[$index])
      *
      * The returned value owns neither the zval container nor a payload reference; it is
-     * valid only while the object itself is alive.
+     * valid only while the object itself is alive. The slot count is a property of the
+     * object's class, so the bounds come from ReflectionClass (the count is only
+     * meaningful while this object's class entry is the live one).
      */
     public function getPropertySlot(int $index): ReflectionValue
     {
         $this->assertObjectAlive();
-        $classEntry = $this->pointer->ce;
-        assert($classEntry !== null);
-        $propertiesCount = $classEntry->default_properties_count;
+        $propertiesCount = $this->getClass()->getDefaultPropertiesCount();
         if ($index < 0 || $index >= $propertiesCount) {
             throw new \OutOfBoundsException("Property slot {$index} is out of bounds 0.." . ($propertiesCount - 1));
         }

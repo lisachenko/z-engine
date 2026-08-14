@@ -2801,7 +2801,7 @@ class ReflectionClass extends NativeReflectionClass
      *
      * This method is useful within create_object handler
      *
-     * @param CData $classType zend_class_entry type to create
+     * @param CData|zend_class_entry $classType zend_class_entry type to create
      * @param bool $persistent Whether object should be allocated persistent or not. Low-level feature!
      *
      * @return CData Instance of zend_object *
@@ -2832,6 +2832,20 @@ class ReflectionClass extends NativeReflectionClass
     public static function getObjectSize(object $classType): int
     {
         return Core::sizeOfType(zend_object::class) + self::getObjectPropertiesSize($classType);
+    }
+
+    /**
+     * Returns the number of inline property slots this class declares for its instances
+     *
+     * The number of zval slots the engine reserves in every instance (properties_table),
+     * the property-guard slot included when the class uses guards. Machinery that works
+     * on an object whose class entry may be stale (persistent graphs re-attached in a
+     * later request) resolves the entry itself and reads the count through
+     * ReflectionClass::fromCData($entry)->getDefaultPropertiesCount().
+     */
+    public function getDefaultPropertiesCount(): int
+    {
+        return $this->pointer->default_properties_count;
     }
 
     /**

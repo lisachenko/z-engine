@@ -177,7 +177,7 @@ class Compiler
      */
     public function setCompilationMode(bool $enabled): void
     {
-        $this->pointer->in_compilation = (int) $enabled;
+        $this->pointer->in_compilation = $enabled;
     }
 
     /**
@@ -189,7 +189,7 @@ class Compiler
             throw new \LogicException('Not in compilation process');
         }
 
-        return NodeFactory::fromCData($this->pointer->ast);
+        return NodeFactory::fromCData(Core::cast('zend_ast *', $this->pointer->ast));
     }
 
     /**
@@ -399,15 +399,22 @@ class Compiler
      * @param int $size Size of arena to create
      * @see zend_arena.h:zend_arena_create
      *
-     * @return array{CData, CData} The initialized zend_arena pointer and the underlying raw buffer
+     * @return array{zend_arena, CData} The initialized arena (typed stub view over the raw
+     *                                  CData handle) and the underlying raw buffer
      */
     private function createArena(int $size): array
     {
         $rawBuffer = Core::new("char[$size]", false);
-        $arena     = Core::cast('zend_arena *', $rawBuffer);
+        /** @var zend_arena $arena Narrowed to the stub view at the owning boundary */
+        $arena = Core::cast('zend_arena *', $rawBuffer);
 
-        $arena->ptr  = $rawBuffer + Core::getAlignedSize(Core::sizeOfType(zend_arena::class));
-        $arena->end  = $rawBuffer + $size;
+        $arenaPtr = $rawBuffer + Core::getAlignedSize(Core::sizeOfType(zend_arena::class));
+        assert($arenaPtr instanceof CData);
+        $arenaEnd = $rawBuffer + $size;
+        assert($arenaEnd instanceof CData);
+
+        $arena->ptr  = $arenaPtr;
+        $arena->end  = $arenaEnd;
         $arena->prev = null;
 
         return [$arena, $rawBuffer];

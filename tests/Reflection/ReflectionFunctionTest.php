@@ -54,9 +54,13 @@ class ReflectionFunctionTest extends TestCase
 
                 return true;
             }, E_DEPRECATED);
+            // Buffer the dump output: the deprecation still fires, but the print
+            // would otherwise mark the test risky under beStrictAboutOutputDuringTests
+            ob_start();
             try {
                 var_dump(42);
             } finally {
+                ob_end_clean();
                 restore_error_handler();
             }
 

@@ -312,8 +312,10 @@ class Core
             self::$executor = new Executor(self::threadGlobals('zend_executor_globals', $engine->executor_globals_offset));
             self::$compiler = new Compiler(self::threadGlobals('zend_compiler_globals', $engine->compiler_globals_offset));
         } else {
-            self::$executor = new Executor($engine->executor_globals);
-            self::$compiler = new Compiler($engine->compiler_globals);
+            self::$executor  = new Executor($engine->executor_globals);
+            $compilerGlobals = $engine->compiler_globals;
+            assert($compilerGlobals instanceof CData);
+            self::$compiler = new Compiler($compilerGlobals);
         }
         self::$modules = HashTable::fromCData(Core::addr($engine->module_registry));
 
