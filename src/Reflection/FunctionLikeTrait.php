@@ -113,13 +113,7 @@ trait FunctionLikeTrait
      */
     public function setClosureFlag(bool $isClosure = true): void
     {
-        $commonPointer = $this->getCommonPointer();
-        $flags         = $commonPointer->fn_flags;
-        if ($isClosure) {
-            $commonPointer->fn_flags = $flags | Core::ZEND_ACC_CLOSURE;
-        } else {
-            $commonPointer->fn_flags = $flags & (~Core::ZEND_ACC_CLOSURE);
-        }
+        $this->setFunctionFlag(Core::ZEND_ACC_CLOSURE, $isClosure);
     }
 
     /**
@@ -127,11 +121,7 @@ trait FunctionLikeTrait
     */
     public function setDeprecated(bool $isDeprecated = true): void
     {
-        if ($isDeprecated) {
-            $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_DEPRECATED;
-        } else {
-            $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_DEPRECATED);
-        }
+        $this->setFunctionFlag(Core::ZEND_ACC_DEPRECATED, $isDeprecated);
     }
 
     /**
@@ -142,11 +132,7 @@ trait FunctionLikeTrait
      */
     public function setVariadic(bool $isVariadic = true): void
     {
-        if ($isVariadic) {
-            $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_VARIADIC;
-        } else {
-            $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_VARIADIC);
-        }
+        $this->setFunctionFlag(Core::ZEND_ACC_VARIADIC, $isVariadic);
     }
 
     /**
@@ -157,11 +143,31 @@ trait FunctionLikeTrait
      */
     public function setGenerator(bool $isGenerator = true): void
     {
-        if ($isGenerator) {
-            $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_GENERATOR;
-        } else {
-            $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_GENERATOR);
-        }
+        $this->setFunctionFlag(Core::ZEND_ACC_GENERATOR, $isGenerator);
+    }
+
+    /**
+     * Turns exactly one ZEND_ACC_* flag of this entry on or off
+     */
+    private function setFunctionFlag(int $mask, bool $isEnabled): void
+    {
+        $this->replaceFunctionFlags($isEnabled ? 0 : $mask, $isEnabled ? $mask : 0);
+    }
+
+    /**
+     * Clears the given fn_flags and sets the given ones, in a single write
+     *
+     * One read/modify/write against one getCommonPointer() lookup: the seven flag setters
+     * built on it used to repeat the `if ($on) { |= M; } else { &= ~M; }` dance and to
+     * resolve the common pointer twice per call.
+     */
+    private function replaceFunctionFlags(int $clearMask, int $setMask): void
+    {
+        $commonPointer = $this->getCommonPointer();
+        $flags         = $commonPointer->fn_flags;
+        assert(is_int($flags));
+
+        $commonPointer->fn_flags = ($flags & (~$clearMask)) | $setMask;
     }
 
     /**

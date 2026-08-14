@@ -69,6 +69,7 @@ use ZEngine\Generated\zend_class_name;
 use ZEngine\Generated\zend_object;
 use ZEngine\Generated\zend_trait_precedence;
 use ZEngine\Generated\zval;
+use ZEngine\Hook\AbstractHook;
 use ZEngine\OpCache\SharedMemoryException;
 use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\HashTable;
@@ -130,6 +131,43 @@ class ReflectionClass extends NativeReflectionClass
         '__serialize',
         '__unserialize',
     ];
+
+    /**
+     * Class-extension hook registry: interface => [magic method that implements it, installer]
+     *
+     * The map is the single source of truth for installExtensionHandlers(): registration
+     * happens in insertion order, and ObjectCreateInterface comes first because the
+     * create_object handler is the mandatory prerequisite of every other one. Supporting a
+     * new hook interface is one line here, nothing else.
+     *
+     * @var array<class-string, array{string, string}>
+     */
+    private const EXTENSION_HANDLERS = [
+        ObjectCreateInterface::class             => ['__init', 'setCreateObjectHandler'],
+        ObjectCastInterface::class               => ['__cast', 'setCastObjectHandler'],
+        ObjectDoOperationInterface::class        => ['__doOperation', 'setDoOperationHandler'],
+        ObjectCompareValuesInterface::class      => ['__compare', 'setCompareValuesHandler'],
+        ObjectReadPropertyInterface::class       => ['__fieldRead', 'setReadPropertyHandler'],
+        ObjectWritePropertyInterface::class      => ['__fieldWrite', 'setWritePropertyHandler'],
+        ObjectGetPropertyPointerInterface::class => ['__fieldPointer', 'setGetPropertyPointerHandler'],
+        ObjectHasPropertyInterface::class        => ['__fieldIsset', 'setHasPropertyHandler'],
+        ObjectUnsetPropertyInterface::class      => ['__fieldUnset', 'setUnsetPropertyHandler'],
+        ObjectGetPropertiesForInterface::class   => ['__getFields', 'setGetPropertiesForHandler'],
+        ObjectGetDebugInfoInterface::class       => ['__getDebugInfo', 'setGetDebugInfoHandler'],
+        ObjectCloneInterface::class              => ['__cloneObject', 'setCloneObjectHandler'],
+        ObjectReadDimensionInterface::class      => ['__dimensionRead', 'setReadDimensionHandler'],
+        ObjectWriteDimensionInterface::class     => ['__dimensionWrite', 'setWriteDimensionHandler'],
+        ObjectHasDimensionInterface::class       => ['__dimensionHas', 'setHasDimensionHandler'],
+        ObjectUnsetDimensionInterface::class     => ['__dimensionUnset', 'setUnsetDimensionHandler'],
+        ObjectCountElementsInterface::class      => ['__count', 'setCountElementsHandler'],
+        ObjectGetClassNameInterface::class       => ['__getClassName', 'setGetClassNameHandler'],
+        ObjectGetConstructorInterface::class     => ['__getConstructor', 'setGetConstructorHandler'],
+        ObjectGetPropertiesInterface::class      => ['__getProperties', 'setGetPropertiesHandler'],
+        ObjectGetClosureInterface::class         => ['__getClosure', 'setGetClosureHandler'],
+        ObjectGetMethodInterface::class          => ['__getMethod', 'setGetMethodHandler'],
+        ObjectGetIteratorInterface::class        => ['__getIterator', 'setGetIteratorHandler'],
+    ];
+
 
     /**
      * Remembers the slot capacity of the engine-allocated properties_info_table per class
@@ -2197,19 +2235,10 @@ class ReflectionClass extends NativeReflectionClass
     #[\ReturnTypeWillChange]
     public function getDefaultProperties(): iterable
     {
-        $iterator = function () {
-            $propertyIndex = 0;
-            $count         = $this->pointer->default_properties_count;
-            $rawTable      = $this->pointer->default_properties_table;
-            $table         = $rawTable !== null ? new StructArray($rawTable, $count) : null;
-            while ($propertyIndex < $count) {
-                assert($table !== null);
-                yield $propertyIndex => ReflectionValue::fromValueEntry($table[$propertyIndex]);
-                $propertyIndex++;
-            }
-        };
-
-        return iterator_to_array($iterator());
+        return $this->readZvalTable(
+            $this->pointer->default_properties_table,
+            $this->pointer->default_properties_count,
+        );
     }
 
     /**
@@ -2219,19 +2248,36 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function getDefaultStaticMembers(): iterable
     {
-        $iterator = function () {
-            $propertyIndex = 0;
-            $count         = $this->pointer->default_static_members_count;
-            $rawTable      = $this->pointer->default_static_members_table;
-            $table         = $rawTable !== null ? new StructArray($rawTable, $count) : null;
-            while ($propertyIndex < $count) {
-                assert($table !== null);
-                yield $propertyIndex => ReflectionValue::fromValueEntry($table[$propertyIndex]);
-                $propertyIndex++;
-            }
-        };
+        return $this->readZvalTable(
+            $this->pointer->default_static_members_table,
+            $this->pointer->default_static_members_count,
+        );
+    }
 
-        return iterator_to_array($iterator());
+    /**
+     * Wraps every entry of a contiguous class-level zval table into a ReflectionValue
+     *
+     * Both default tables of zend_class_entry (properties and static members) are plain
+     * zval arrays sized by their own counter field, so one bounds-checked read serves both.
+     *
+     * @param mixed $rawTable zval * of the first entry (CData or null for an empty table)
+     * @param mixed $count    Number of entries behind the pointer
+     *
+     * @return array<int, ReflectionValue>
+     */
+    private function readZvalTable(mixed $rawTable, mixed $count): array
+    {
+        assert(is_int($count));
+        if ($rawTable === null || $count <= 0) {
+            return [];
+        }
+        assert($rawTable instanceof CData);
+        $entries = [];
+        foreach (new StructArray($rawTable, $count) as $index => $valueEntry) {
+            $entries[$index] = ReflectionValue::fromValueEntry($valueEntry);
+        }
+
+        return $entries;
     }
 
     /**
@@ -2260,117 +2306,12 @@ class ReflectionClass extends NativeReflectionClass
             throw new \ReflectionException($str);
         }
 
-        $handler = parent::getMethod('__init')->getClosure();
-        $this->setCreateObjectHandler($handler);
-
-        if ($this->implementsInterface(ObjectCastInterface::class)) {
-            $handler = parent::getMethod('__cast')->getClosure();
-            $this->setCastObjectHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectDoOperationInterface::class)) {
-            $handler = parent::getMethod('__doOperation')->getClosure();
-            $this->setDoOperationHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectCompareValuesInterface::class)) {
-            $handler = parent::getMethod('__compare')->getClosure();
-            $this->setCompareValuesHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectReadPropertyInterface::class)) {
-            $handler = parent::getMethod('__fieldRead')->getClosure();
-            $this->setReadPropertyHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectWritePropertyInterface::class)) {
-            $handler = parent::getMethod('__fieldWrite')->getClosure();
-            $this->setWritePropertyHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectGetPropertyPointerInterface::class)) {
-            $handler = parent::getMethod('__fieldPointer')->getClosure();
-            $this->setGetPropertyPointerHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectHasPropertyInterface::class)) {
-            $handler = parent::getMethod('__fieldIsset')->getClosure();
-            $this->setHasPropertyHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectUnsetPropertyInterface::class)) {
-            $handler = parent::getMethod('__fieldUnset')->getClosure();
-            $this->setUnsetPropertyHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectGetPropertiesForInterface::class)) {
-            $handler = parent::getMethod('__getFields')->getClosure();
-            $this->setGetPropertiesForHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectGetDebugInfoInterface::class)) {
-            $handler = parent::getMethod('__getDebugInfo')->getClosure();
-            $this->setGetDebugInfoHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectCloneInterface::class)) {
-            $handler = parent::getMethod('__cloneObject')->getClosure();
-            $this->setCloneObjectHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectReadDimensionInterface::class)) {
-            $handler = parent::getMethod('__dimensionRead')->getClosure();
-            $this->setReadDimensionHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectWriteDimensionInterface::class)) {
-            $handler = parent::getMethod('__dimensionWrite')->getClosure();
-            $this->setWriteDimensionHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectHasDimensionInterface::class)) {
-            $handler = parent::getMethod('__dimensionHas')->getClosure();
-            $this->setHasDimensionHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectUnsetDimensionInterface::class)) {
-            $handler = parent::getMethod('__dimensionUnset')->getClosure();
-            $this->setUnsetDimensionHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectCountElementsInterface::class)) {
-            $handler = parent::getMethod('__count')->getClosure();
-            $this->setCountElementsHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectGetClassNameInterface::class)) {
-            $handler = parent::getMethod('__getClassName')->getClosure();
-            $this->setGetClassNameHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectGetConstructorInterface::class)) {
-            $handler = parent::getMethod('__getConstructor')->getClosure();
-            $this->setGetConstructorHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectGetPropertiesInterface::class)) {
-            $handler = parent::getMethod('__getProperties')->getClosure();
-            $this->setGetPropertiesHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectGetClosureInterface::class)) {
-            $handler = parent::getMethod('__getClosure')->getClosure();
-            $this->setGetClosureHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectGetMethodInterface::class)) {
-            $handler = parent::getMethod('__getMethod')->getClosure();
-            $this->setGetMethodHandler($handler);
-        }
-
-        if ($this->implementsInterface(ObjectGetIteratorInterface::class)) {
-            $handler = parent::getMethod('__getIterator')->getClosure();
-            $this->setGetIteratorHandler($handler);
+        foreach (self::EXTENSION_HANDLERS as $interfaceName => [$methodName, $installerName]) {
+            if (!$this->implementsInterface($interfaceName)) {
+                continue;
+            }
+            $handler = parent::getMethod($methodName)->getClosure();
+            $this->{$installerName}($handler);
         }
     }
 
@@ -2390,12 +2331,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setCastObjectHandler(Closure $handler): CastObjectHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new CastObjectHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(CastObjectHook::class, $handler);
     }
 
     /**
@@ -2407,12 +2343,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setCompareValuesHandler(Closure $handler): CompareValuesHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new CompareValuesHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(CompareValuesHook::class, $handler);
     }
 
     /**
@@ -2424,12 +2355,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setReadPropertyHandler(Closure $handler): ReadPropertyHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new ReadPropertyHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(ReadPropertyHook::class, $handler);
     }
 
     /**
@@ -2441,12 +2367,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setWritePropertyHandler(Closure $handler): WritePropertyHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new WritePropertyHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(WritePropertyHook::class, $handler);
     }
 
     /**
@@ -2458,12 +2379,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setUnsetPropertyHandler(Closure $handler): UnsetPropertyHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new UnsetPropertyHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(UnsetPropertyHook::class, $handler);
     }
 
     /**
@@ -2475,12 +2391,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setHasPropertyHandler(Closure $handler): HasPropertyHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new HasPropertyHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(HasPropertyHook::class, $handler);
     }
 
     /**
@@ -2492,12 +2403,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setGetPropertyPointerHandler(Closure $handler): GetPropertyPointerHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new GetPropertyPointerHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(GetPropertyPointerHook::class, $handler);
     }
 
     /**
@@ -2509,12 +2415,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setGetPropertiesForHandler(Closure $handler): GetPropertiesForHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new GetPropertiesForHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(GetPropertiesForHook::class, $handler);
     }
 
     /**
@@ -2526,12 +2427,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setGetPropertiesHandler(Closure $handler): GetPropertiesHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new GetPropertiesHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(GetPropertiesHook::class, $handler);
     }
 
     /**
@@ -2543,12 +2439,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setGetDebugInfoHandler(Closure $handler): GetDebugInfoHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new GetDebugInfoHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(GetDebugInfoHook::class, $handler);
     }
 
     /**
@@ -2560,12 +2451,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setCloneObjectHandler(Closure $handler): CloneObjectHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new CloneObjectHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(CloneObjectHook::class, $handler);
     }
 
     /**
@@ -2577,12 +2463,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setReadDimensionHandler(Closure $handler): ReadDimensionHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new ReadDimensionHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(ReadDimensionHook::class, $handler);
     }
 
     /**
@@ -2594,12 +2475,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setWriteDimensionHandler(Closure $handler): WriteDimensionHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new WriteDimensionHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(WriteDimensionHook::class, $handler);
     }
 
     /**
@@ -2611,12 +2487,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setHasDimensionHandler(Closure $handler): HasDimensionHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new HasDimensionHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(HasDimensionHook::class, $handler);
     }
 
     /**
@@ -2628,12 +2499,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setUnsetDimensionHandler(Closure $handler): UnsetDimensionHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new UnsetDimensionHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(UnsetDimensionHook::class, $handler);
     }
 
     /**
@@ -2645,12 +2511,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setCountElementsHandler(Closure $handler): CountElementsHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new CountElementsHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(CountElementsHook::class, $handler);
     }
 
     /**
@@ -2662,12 +2523,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setGetMethodHandler(Closure $handler): GetMethodHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new GetMethodHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(GetMethodHook::class, $handler);
     }
 
     /**
@@ -2679,12 +2535,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setGetClosureHandler(Closure $handler): GetClosureHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new GetClosureHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(GetClosureHook::class, $handler);
     }
 
     /**
@@ -2696,12 +2547,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setGetConstructorHandler(Closure $handler): GetConstructorHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new GetConstructorHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(GetConstructorHook::class, $handler);
     }
 
     /**
@@ -2713,12 +2559,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setGetClassNameHandler(Closure $handler): GetClassNameHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new GetClassNameHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(GetClassNameHook::class, $handler);
     }
 
     /**
@@ -2730,12 +2571,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setDoOperationHandler(Closure $handler): DoOperationHook
     {
-        $handlers = self::getObjectHandlers($this->pointer);
-
-        $hook = new DoOperationHook($handler, $handlers);
-        $hook->install();
-
-        return $hook;
+        return $this->installObjectHook(DoOperationHook::class, $handler);
     }
 
     /**
@@ -2791,6 +2627,30 @@ class ReflectionClass extends NativeReflectionClass
         }
 
         $hook = new InterfaceGetsImplementedHook($handler, $this->pointer);
+        $hook->install();
+
+        return $hook;
+    }
+
+    /**
+     * Installs one zend_object_handlers hook of the given kind for the current class
+     *
+     * Every setXxxHandler() above is this one operation with a different hook class: the
+     * class gets its own writable copy of the handlers block (allocated on first use) and
+     * the hook writes its trampoline into the matching field. The template parameter keeps
+     * the precise hook type on the caller side, so the public setters stay exactly typed.
+     *
+     * @template THook of AbstractHook
+     *
+     * @param class-string<THook> $hookClass Hook to instantiate for this handler field
+     *
+     * @return THook
+     */
+    private function installObjectHook(string $hookClass, Closure $handler): AbstractHook
+    {
+        $handlers = self::getObjectHandlers($this->pointer);
+
+        $hook = new $hookClass($handler, $handlers);
         $hook->install();
 
         return $hook;
