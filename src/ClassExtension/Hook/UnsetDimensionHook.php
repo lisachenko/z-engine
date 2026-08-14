@@ -13,12 +13,13 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension\Hook;
 
-use FFI\CData;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zval;
 
 /**
  * Receiving hook for object dimension unset operation (unset($object[$offset]))
  */
-class UnsetDimensionHook extends AbstractDimensionHook
+final class UnsetDimensionHook extends AbstractDimensionHook
 {
     protected const HOOK_FIELD = 'unset_dimension';
 
@@ -29,10 +30,13 @@ class UnsetDimensionHook extends AbstractDimensionHook
      */
     public function handle(...$rawArguments): void
     {
+        /**
+         * @var zend_object $object Narrowed to the stub views at the engine callback boundary
+         * @var zval|null   $offset
+         */
         [$object, $offset] = $rawArguments;
-        assert($object instanceof CData && ($offset === null || $offset instanceof CData));
-        $this->object = $object;
-        $this->offset = $offset;
+        $this->object      = $object;
+        $this->offset      = $offset;
 
         ($this->userHandler)($this);
     }
@@ -42,11 +46,8 @@ class UnsetDimensionHook extends AbstractDimensionHook
      */
     public function proceed(): void
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
+        $originalHandler = $this->getOriginalCallable();
 
-        // @phpstan-ignore callable.nonCallable (engine function pointers are callable CData)
-        ($this->originalHandler)($this->object, $this->offset);
+        ($originalHandler)($this->object, $this->offset);
     }
 }

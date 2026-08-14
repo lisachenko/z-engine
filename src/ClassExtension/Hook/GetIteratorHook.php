@@ -16,6 +16,8 @@ namespace ZEngine\ClassExtension\Hook;
 use FFI\CData;
 use Iterator;
 use Throwable;
+use ZEngine\Generated\zend_class_entry;
+use ZEngine\Generated\zval;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\ObjectEntry;
@@ -47,19 +49,24 @@ use ZEngine\Type\ObjectEntry;
  *    foreach falls back to default property iteration; iterations already in flight keep
  *    their bridged iterator until their loop ends.
  */
-class GetIteratorHook extends AbstractHook
+final class GetIteratorHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'get_iterator';
 
     /**
      * Class entry of the object being iterated
+     *
+     * @var zend_class_entry Typed view of the engine handle; the runtime value is the raw
+     *                       FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected CData $classType;
+    protected object $classType;
 
     /**
      * Object being iterated (zval *)
+     *
+     * @var zval Typed view of the engine handle; the runtime value is the raw FFI\CData pointer
      */
-    protected CData $object;
+    protected object $object;
 
     /**
      * Whether by-reference iteration was requested
@@ -74,11 +81,15 @@ class GetIteratorHook extends AbstractHook
      */
     public function handle(...$rawArguments): ?object
     {
+        /**
+         * @var zend_class_entry $classType Narrowed to the stub views at the engine callback boundary
+         * @var zval             $object
+         * @var int              $byRef
+         */
         [$classType, $object, $byRef] = $rawArguments;
-        assert($classType instanceof CData && $object instanceof CData && is_int($byRef));
-        $this->classType = $classType;
-        $this->object    = $object;
-        $this->byRef     = $byRef;
+        $this->classType              = $classType;
+        $this->object                 = $object;
+        $this->byRef                  = $byRef;
 
         if ($byRef !== 0) {
             // No iterator + no exception: the engine raises the standard Error itself

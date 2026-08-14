@@ -13,26 +13,32 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension\Hook;
 
-use FFI\CData;
+use ZEngine\Generated\zend_class_entry;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionClass;
 
 /**
  * Receiving hook for interface implementation
  */
-class InterfaceGetsImplementedHook extends AbstractHook
+final class InterfaceGetsImplementedHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'interface_gets_implemented';
 
     /**
      * Interface type that is implemented
+     *
+     * @var zend_class_entry Typed view of the engine handle; the runtime value is the raw
+     *                       FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected CData $interfaceType;
+    protected object $interfaceType;
 
     /**
      * Class that implements interface
+     *
+     * @var zend_class_entry Typed view of the engine handle; the runtime value is the raw
+     *                       FFI\CData pointer
      */
-    protected CData $classType;
+    protected object $classType;
 
     /**
      * int (*interface_gets_implemented)(zend_class_entry *iface, zend_class_entry *class_type);
@@ -41,9 +47,16 @@ class InterfaceGetsImplementedHook extends AbstractHook
      */
     public function handle(...$rawArguments): int
     {
-        [$this->interfaceType, $this->classType] = $rawArguments;
+        /**
+         * @var zend_class_entry $interfaceType Narrowed to the stub views at the engine callback boundary
+         * @var zend_class_entry $classType
+         */
+        [$interfaceType, $classType] = $rawArguments;
+        $this->interfaceType         = $interfaceType;
+        $this->classType             = $classType;
 
         $result = ($this->userHandler)($this);
+        assert(is_int($result));
 
         return $result;
     }
@@ -58,14 +71,16 @@ class InterfaceGetsImplementedHook extends AbstractHook
 
     /**
      * Proceeds with default handler
+     *
+     * @return int Core::SUCCESS when the original handler accepted the implementation,
+     *             Core::FAILURE when it rejected it
      */
-    public function proceed()
+    public function proceed(): int
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
+        $originalHandler = $this->getOriginalCallable();
 
-        $result = ($this->originalHandler)($this->interfaceType, $this->classType);
+        $result = ($originalHandler)($this->interfaceType, $this->classType);
+        assert(is_int($result));
 
         return $result;
     }
