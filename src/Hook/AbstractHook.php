@@ -88,7 +88,7 @@ abstract class AbstractHook implements HookInterface
         }
         $this->originalHandler = $this->rawStructure->{static::HOOK_FIELD};
 
-        $this->rawStructure->{static::HOOK_FIELD} = Closure::fromCallable([$this, 'handle']);
+        $this->rawStructure->{static::HOOK_FIELD} = $this->handle(...);
         $this->installed                          = true;
         Core::registerHook($this);
     }
@@ -211,7 +211,7 @@ abstract class AbstractHook implements HookInterface
         if (!$this->installed) {
             return;
         }
-        $this->rawStructure->{static::HOOK_FIELD} = Closure::fromCallable([$this, 'handle']);
+        $this->rawStructure->{static::HOOK_FIELD} = $this->handle(...);
     }
 
     /**
