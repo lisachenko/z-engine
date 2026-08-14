@@ -78,7 +78,7 @@ final class IteratorBridge implements HookInterface
     /**
      * Live bridged iterators keyed by zend_object_iterator address
      *
-     * @var array<int, array{iterator: Iterator, pointer: CData, broken: bool}>
+     * @var array<int, BridgedIterator>
      */
     private static array $activeIterators = [];
 
@@ -108,11 +108,7 @@ final class IteratorBridge implements HookInterface
         $iterator->funcs = Core::addr(self::$vtable);
         // FFI zero-fills new blocks, so iterator.data already reads as IS_UNDEF
 
-        self::$activeIterators[Core::addressOf($pointer)] = [
-            'iterator' => $userIterator,
-            'pointer'  => $pointer,
-            'broken'   => false,
-        ];
+        self::$activeIterators[Core::addressOf($pointer)] = new BridgedIterator($userIterator, $pointer);
 
         return $pointer;
     }
@@ -175,7 +171,7 @@ final class IteratorBridge implements HookInterface
         }
         if (!Core::isShutdown()) {
             foreach (self::$activeIterators as $state) {
-                $iterator = $state['pointer'];
+                $iterator = $state->pointer;
                 self::releaseCurrentData($iterator);
                 $std = $iterator->std;
                 assert($std instanceof CData);
@@ -268,13 +264,13 @@ final class IteratorBridge implements HookInterface
     private static function iteratorValid(object $iterator): int
     {
         $state = self::$activeIterators[Core::addressOf($iterator)] ?? null;
-        if ($state === null || $state['broken']) {
+        if ($state === null || $state->broken) {
             return Core::FAILURE;
         }
         try {
-            return $state['iterator']->valid() ? Core::SUCCESS : Core::FAILURE;
+            return $state->iterator->valid() ? Core::SUCCESS : Core::FAILURE;
         } catch (Throwable $error) {
-            self::breakIteration($iterator, 'valid', $error);
+            self::breakIteration($state, 'valid', $error);
 
             return Core::FAILURE;
         }
@@ -293,13 +289,13 @@ final class IteratorBridge implements HookInterface
     private static function iteratorCurrentData(object $iterator): ?object
     {
         $state = self::$activeIterators[Core::addressOf($iterator)] ?? null;
-        if ($state === null || $state['broken']) {
+        if ($state === null || $state->broken) {
             return null;
         }
         try {
-            $value = $state['iterator']->current();
+            $value = $state->iterator->current();
         } catch (Throwable $error) {
-            self::breakIteration($iterator, 'current', $error);
+            self::breakIteration($state, 'current', $error);
 
             return null;
         }
@@ -323,11 +319,11 @@ final class IteratorBridge implements HookInterface
     {
         $state    = self::$activeIterators[Core::addressOf($iterator)] ?? null;
         $keyValue = null;
-        if ($state !== null && !$state['broken']) {
+        if ($state !== null && !$state->broken) {
             try {
-                $keyValue = $state['iterator']->key();
+                $keyValue = $state->iterator->key();
             } catch (Throwable $error) {
-                self::breakIteration($iterator, 'key', $error);
+                self::breakIteration($state, 'key', $error);
                 $keyValue = null;
             }
         }
@@ -342,13 +338,13 @@ final class IteratorBridge implements HookInterface
     private static function iteratorMoveForward(object $iterator): void
     {
         $state = self::$activeIterators[Core::addressOf($iterator)] ?? null;
-        if ($state === null || $state['broken']) {
+        if ($state === null || $state->broken) {
             return;
         }
         try {
-            $state['iterator']->next();
+            $state->iterator->next();
         } catch (Throwable $error) {
-            self::breakIteration($iterator, 'next', $error);
+            self::breakIteration($state, 'next', $error);
         }
     }
 
@@ -360,13 +356,13 @@ final class IteratorBridge implements HookInterface
     private static function iteratorRewind(object $iterator): void
     {
         $state = self::$activeIterators[Core::addressOf($iterator)] ?? null;
-        if ($state === null || $state['broken']) {
+        if ($state === null || $state->broken) {
             return;
         }
         try {
-            $state['iterator']->rewind();
+            $state->iterator->rewind();
         } catch (Throwable $error) {
-            self::breakIteration($iterator, 'rewind', $error);
+            self::breakIteration($state, 'rewind', $error);
         }
     }
 
@@ -375,21 +371,17 @@ final class IteratorBridge implements HookInterface
      *
      * The iteration is marked broken - valid() reports the end from now on, so the engine
      * terminates the loop cleanly - and the swallowed Throwable is surfaced as a warning.
-     *
-     * @param \FFI\CData $iterator
+     * The caller already holds the state record, so the flag is written straight through it.
      */
-    private static function breakIteration(object $iterator, string $method, Throwable $error): void
+    private static function breakIteration(BridgedIterator $state, string $method, Throwable $error): void
     {
-        $address = Core::addressOf($iterator);
-        if (isset(self::$activeIterators[$address])) {
-            self::$activeIterators[$address]['broken'] = true;
+        $state->broken = true;
 
-            $iteratorClass = get_class(self::$activeIterators[$address]['iterator']);
-            trigger_error(
-                "Engine iteration terminated: {$iteratorClass}::{$method}() threw " . get_class($error)
-                . ": {$error->getMessage()} (exceptions cannot cross the FFI boundary, see issue #50)",
-                E_USER_WARNING,
-            );
-        }
+        $iteratorClass = get_class($state->iterator);
+        trigger_error(
+            "Engine iteration terminated: {$iteratorClass}::{$method}() threw " . get_class($error)
+            . ": {$error->getMessage()} (exceptions cannot cross the FFI boundary, see issue #50)",
+            E_USER_WARNING,
+        );
     }
 }

@@ -15,6 +15,7 @@ namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_object;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\ObjectEntry;
@@ -43,27 +44,36 @@ use ZEngine\Type\StringEntry;
  *  - The user handler must not let exceptions escape (see issue #50), and must stay
  *    side-effect-free when isCheckOnly() reports a pure callability probe.
  */
-class GetClosureHook extends AbstractHook
+final class GetClosureHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'get_closure';
 
     /**
      * Object instance being resolved to a closure
+     *
+     * @var zend_object Typed view of the engine handle; the runtime value is the raw
+     *                  FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected CData $object;
+    protected object $object;
 
     /**
      * Out-parameter: resolved calling scope (zend_class_entry **)
+     *
+     * A double pointer: the stubs model structs, not pointer-to-pointer handles.
      */
     protected CData $cePtr;
 
     /**
      * Out-parameter: resolved function (zend_function **)
+     *
+     * A double pointer: the stubs model structs, not pointer-to-pointer handles.
      */
     protected CData $fptrPtr;
 
     /**
      * Out-parameter: resolved bound object (zend_object **)
+     *
+     * A double pointer: the stubs model structs, not pointer-to-pointer handles.
      */
     protected CData $objPtr;
 
@@ -86,10 +96,15 @@ class GetClosureHook extends AbstractHook
      */
     public function handle(...$rawArguments): int
     {
+        /**
+         * @var zend_object $object  Narrowed to the stub view at the engine callback boundary
+         * @var CData       $cePtr
+         * @var CData       $fptrPtr
+         * @var CData       $objPtr
+         */
         [$object, $cePtr, $fptrPtr, $objPtr, $checkOnly] = $rawArguments;
-        assert($object instanceof CData && $cePtr instanceof CData);
         // libffi marshals the _Bool argument as an integer scalar
-        assert($fptrPtr instanceof CData && $objPtr instanceof CData && (is_bool($checkOnly) || is_int($checkOnly)));
+        assert(is_bool($checkOnly) || is_int($checkOnly));
         $this->object    = $object;
         $this->cePtr     = $cePtr;
         $this->fptrPtr   = $fptrPtr;
@@ -155,9 +170,6 @@ class GetClosureHook extends AbstractHook
      */
     public function proceed(): ?\Closure
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
         $originalHandler = $this->getOriginalCallable();
 
         $result = ($originalHandler)($this->object, $this->cePtr, $this->fptrPtr, $this->objPtr, $this->checkOnly);

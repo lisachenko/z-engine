@@ -15,6 +15,7 @@ namespace ZEngine\System;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_class_entry;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\HashTable;
 use ZEngine\Type\ObjectEntry;
@@ -92,7 +93,7 @@ class Executor
      * Set a new fake scope and returns previous value (to restore it later)
      *
      * @return CData|null
-     * @param \FFI\CData|null $newScope
+     * @param \FFI\CData|zend_class_entry|null $newScope
      */
     public function setFakeScope(?object $newScope): ?object
     {
@@ -112,8 +113,8 @@ class Executor
      * therefore happens in a finally block, and this helper is the only supported way to install
      * a temporary scope - never pair setFakeScope() calls by hand.
      *
-     * @param \FFI\CData|null $scope   Class entry to impersonate, or null to drop the fake scope
-     * @param \Closure        $body    Callback to invoke while the fake scope is installed
+     * @param \FFI\CData|zend_class_entry|null $scope Class entry to impersonate, or null to drop the fake scope
+     * @param \Closure                         $body  Callback to invoke while the fake scope is installed
      *
      * @return mixed Whatever the callback returned
      */

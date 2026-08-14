@@ -15,6 +15,8 @@ namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_array;
+use ZEngine\Generated\zend_object;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\ObjectEntry;
@@ -22,14 +24,17 @@ use ZEngine\Type\ObjectEntry;
 /**
  * Receiving hook for casting to array, debugging, etc
  */
-class GetPropertiesForHook extends AbstractHook
+final class GetPropertiesForHook extends AbstractHook
 {
     protected const HOOK_FIELD = 'get_properties_for';
 
     /**
      * Object instance
+     *
+     * @var zend_object Typed view of the engine handle; the runtime value is the raw
+     *                  FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected CData $object;
+    protected object $object;
 
     /**
      * Calling reason
@@ -42,10 +47,17 @@ class GetPropertiesForHook extends AbstractHook
      * zend_array *(*zend_object_get_properties_for_t)(zend_object *object, zend_prop_purpose purpose);
      *
      * @inheritDoc
+     * @return zend_array
      */
-    public function handle(...$rawArguments)
+    public function handle(...$rawArguments): object
     {
-        [$this->object, $this->purpose] = $rawArguments;
+        /**
+         * @var zend_object $object Narrowed to the stub view at the engine callback boundary
+         * @var int         $purpose
+         */
+        [$object, $purpose] = $rawArguments;
+        $this->object       = $object;
+        $this->purpose      = $purpose;
 
         $result   = ($this->userHandler)($this);
         $refValue = new ReflectionValue($result);
@@ -87,22 +99,24 @@ class GetPropertiesForHook extends AbstractHook
 
     /**
      * Proceeds with default handler
+     *
+     * @return \FFI\CData|null zend_array* produced by the original handler, NULL when it
+     *                         reported no dedicated table for this purpose
      */
-    public function proceed()
+    public function proceed(): ?object
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
-
         // As we will play with EG(fake_scope), we won't be able to access private or protected members, need to unpack
-        $originalHandler = $this->originalHandler;
+        $originalHandler = $this->getOriginalCallable();
 
         $object  = $this->object;
         $purpose = $this->purpose;
 
-        return Core::$executor->withFakeScope(
+        $rawArray = Core::$executor->withFakeScope(
             $object->ce,
             static fn() => ($originalHandler)($object, $purpose),
         );
+        assert($rawArray === null || $rawArray instanceof CData);
+
+        return $rawArray;
     }
 }

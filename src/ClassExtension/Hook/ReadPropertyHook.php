@@ -15,12 +15,15 @@ namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zend_string;
+use ZEngine\Generated\zval;
 use ZEngine\Reflection\ReflectionValue;
 
 /**
  * Receiving hook for object field read operation
  */
-class ReadPropertyHook extends AbstractPropertyHook
+final class ReadPropertyHook extends AbstractPropertyHook
 {
     protected const HOOK_FIELD = 'read_property';
 
@@ -31,18 +34,32 @@ class ReadPropertyHook extends AbstractPropertyHook
 
     /**
      * Internal pointer of retval (for native callback only)
+     *
+     * @var zval Engine-provided scratch slot; every VM caller supplies one
      */
-    private ?CData $rv;
+    private object $rv;
 
     /**
      * typedef zval *(*zend_object_read_property_t)(zend_object *object, zend_string *member, int type, void **cache_slot, zval *rv);
      *
      * @inheritDoc
-     * @return \FFI\CData
+     * @return zval
      */
     public function handle(...$rawArguments): object
     {
-        [$this->object, $this->member, $this->type, $this->cacheSlot, $this->rv] = $rawArguments;
+        /**
+         * @var zend_object $object    Narrowed to the stub views at the engine callback boundary
+         * @var zend_string $member
+         * @var int         $type
+         * @var CData|null  $cacheSlot
+         * @var zval        $rv
+         */
+        [$object, $member, $type, $cacheSlot, $rv] = $rawArguments;
+        $this->object                              = $object;
+        $this->member                              = $member;
+        $this->type                                = $type;
+        $this->cacheSlot                           = $cacheSlot;
+        $this->rv                                  = $rv;
 
         $result = ($this->userHandler)($this);
 
@@ -66,15 +83,13 @@ class ReadPropertyHook extends AbstractPropertyHook
 
     /**
      * Proceeds with default handler
+     *
+     * @return mixed The property value the engine handler produced, as a PHP value
      */
-    public function proceed()
+    public function proceed(): mixed
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
-
         // As we will play with EG(fake_scope), we won't be able to access private or protected members, need to unpack
-        $originalHandler = $this->originalHandler;
+        $originalHandler = $this->getOriginalCallable();
 
         $object    = $this->object;
         $member    = $this->member;
@@ -86,6 +101,9 @@ class ReadPropertyHook extends AbstractPropertyHook
             $object->ce,
             static fn() => ($originalHandler)($object, $member, $type, $cacheSlot, $rv),
         );
+        // Engine contract: zend_std_read_property always reports a slot (&EG(uninitialized_zval)
+        // on the error paths), so there is no NULL result to guard against here
+        assert($result instanceof CData);
 
         ReflectionValue::fromValueEntry($result)->getNativeValue($phpResult);
 
