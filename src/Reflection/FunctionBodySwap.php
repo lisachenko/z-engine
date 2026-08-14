@@ -68,7 +68,7 @@ final class FunctionBodySwap
      * cache and a temporaries count sized for the OLD opcodes onto the new body - the VM
      * then reads cache slots out of bounds and crashes.
      */
-    public const BODY_LEVEL_FUNCTION_FLAGS = Core::ZEND_ACC_HEAP_RT_CACHE
+    public const int BODY_LEVEL_FUNCTION_FLAGS = Core::ZEND_ACC_HEAP_RT_CACHE
         | Core::ZEND_ACC_GENERATOR
         | Core::ZEND_ACC_VARIADIC
         | Core::ZEND_ACC_RETURN_REFERENCE
@@ -242,7 +242,7 @@ final class FunctionBodySwap
         // The published bucket owns one reference on the name and one body share
         $namePointer = $containerCommon->function_name;
         assert($namePointer !== null);
-        StringEntry::fromCData($namePointer)->copy();
+        StringEntry::fromCData($namePointer)->addReference();
 
         self::addBodyReference($containerFunction);
         self::installFreshRunTimeCache($containerFunction);
@@ -259,7 +259,7 @@ final class FunctionBodySwap
     {
         $namePointer = $entryFunction->getCommonPointer()->function_name;
         assert($namePointer instanceof CData);
-        StringEntry::fromCData($namePointer)->copy();
+        StringEntry::fromCData($namePointer)->addReference();
 
         self::addBodyReference($entryFunction);
     }

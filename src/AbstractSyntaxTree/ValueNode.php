@@ -35,6 +35,13 @@ class ValueNode extends Node
      *
      * @param mixed $value      Any valid value
      * @param int   $attributes Additional attributes
+     *
+     * The value is deliberately never named in the body: it is read back out of the
+     * engine frame this very constructor runs in (argument slot 0), which is the only way
+     * to reach the caller's own zval instead of a copy. Removing the parameter would
+     * remove the zval the constructor is built to capture.
+     *
+     * @phpstan-ignore constructor.unusedParameter (captured from the frame's argument slot 0)
      */
     public function __construct($value, int $attributes = 0)
     {
@@ -61,6 +68,7 @@ class ValueNode extends Node
      *
      * @inheritDoc
      */
+    #[\Override]
     public function getLine(): int
     {
         return $this->getValue()->getExtraValue();
@@ -70,6 +78,7 @@ class ValueNode extends Node
      * @inheritDoc
      * Value node doesn't have children nodes
      */
+    #[\Override]
     public function getChildrenCount(): int
     {
         return 0;
@@ -78,6 +87,7 @@ class ValueNode extends Node
     /**
      * @inheritDoc
      */
+    #[\Override]
     public function dumpThis(int $indent = 0): string
     {
         $line = parent::dumpThis($indent);

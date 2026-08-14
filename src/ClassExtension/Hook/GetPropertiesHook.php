@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
+use ZEngine\Generated\HashTable as HashTableStruct;
+use ZEngine\Generated\zend_object;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\HashTable;
@@ -63,14 +65,17 @@ use ZEngine\Type\ObjectEntry;
  *    cycles running through them are reclaimed only at request shutdown by the object
  *    store - delayed collection, never corruption.
  */
-class GetPropertiesHook extends AbstractHook
+final class GetPropertiesHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'get_properties';
+    protected const string HOOK_FIELD = 'get_properties';
 
     /**
      * Object instance
+     *
+     * @var zend_object Typed view of the engine handle; the runtime value is the raw
+     *                  FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected CData $object;
+    protected object $object;
 
     /**
      * Guards against re-entering the user handler from inside itself
@@ -102,12 +107,13 @@ class GetPropertiesHook extends AbstractHook
      * typedef HashTable *(*zend_object_get_properties_t)(zend_object *object);
      *
      * @inheritDoc
-     * @return \FFI\CData
+     * @return HashTableStruct
      */
+    #[\Override]
     public function handle(...$rawArguments): object
     {
-        [$object] = $rawArguments;
-        assert($object instanceof CData);
+        /** @var zend_object $object Narrowed to the stub view at the engine callback boundary */
+        [$object]     = $rawArguments;
         $this->object = $object;
 
         // Serve the anchored table without userland for reentrant calls and - defense in
@@ -142,6 +148,7 @@ class GetPropertiesHook extends AbstractHook
         }
 
         $refValue = new ReflectionValue($result);
+        /** @var HashTableStruct $rawArray zend_array and HashTable are the same engine struct */
         $rawArray = $refValue->getRawArray();
         // Exactly one payload reference is handed over to the object below; the
         // temporary zval container is freed right away
@@ -181,9 +188,6 @@ class GetPropertiesHook extends AbstractHook
      */
     public function proceed(): array
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
         $originalHandler = $this->getOriginalCallable();
 
         $rawArray = ($originalHandler)($this->object);
@@ -245,21 +249,19 @@ class GetPropertiesHook extends AbstractHook
      * Used for reentrant calls: the table anchored by the previous handle() run (or the
      * one the original handler builds into the object) is the engine's current view.
      *
-     * @param \FFI\CData $object
-     * @return \FFI\CData
+     * @param zend_object $object
+     * @return HashTableStruct
      */
     private function currentEngineTable(object $object): object
     {
         $properties = $object->properties;
         if ($properties !== null) {
-            assert($properties instanceof CData);
-
             return $properties;
         }
 
         $originalHandler = $this->getOriginalCallable();
-        $table           = ($originalHandler)($object);
-        assert($table instanceof CData);
+        /** @var HashTableStruct $table Narrowed to the stub view at the engine callback boundary */
+        $table = ($originalHandler)($object);
 
         return $table;
     }

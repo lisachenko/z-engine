@@ -40,14 +40,14 @@ final class OpCodeHook implements HookInterface
      * zend_user_opcode_handlers table (not in a hookable struct field), and every opcode
      * forms its own independent chain
      */
-    private const FIELD_KEY_PREFIX = 'user-opcode';
+    private const string FIELD_KEY_PREFIX = 'user-opcode';
 
     /**
      * Class-name prefix of z-engine's own code: opcodes executed by a frame whose scope
      * starts with it never reach a user handler, which keeps the framework from calling
      * back into itself (see docs/self-debugging.md)
      */
-    private const ENGINE_SCOPE_PREFIX = 'ZEngine';
+    private const string ENGINE_SCOPE_PREFIX = 'ZEngine';
 
     /**
      * Custom user handler with signature function($scope): int
@@ -86,6 +86,7 @@ final class OpCodeHook implements HookInterface
      * restores its predecessor. The Core registry keeps a strong reference to the installed
      * hook: the trampoline can never be collected while the engine still points at it.
      */
+    #[\Override]
     public function install(): void
     {
         if ($this->installed) {
@@ -112,6 +113,7 @@ final class OpCodeHook implements HookInterface
      * Only the most recently installed hook of an opcode may be uninstalled: restoring an
      * older hook first would clobber the newer trampoline with a stale pointer.
      */
+    #[\Override]
     public function uninstall(): void
     {
         if (!$this->installed) {
@@ -149,6 +151,7 @@ final class OpCodeHook implements HookInterface
     /**
      * Checks if this hook is currently installed as the user opcode handler
      */
+    #[\Override]
     public function isInstalled(): bool
     {
         return $this->installed;
@@ -157,6 +160,7 @@ final class OpCodeHook implements HookInterface
     /**
      * Checks if a previously installed user opcode handler was captured at install() time
      */
+    #[\Override]
     public function hasOriginalHandler(): bool
     {
         return $this->originalHandler !== null;
@@ -173,6 +177,7 @@ final class OpCodeHook implements HookInterface
     /**
      * @inheritDoc
      */
+    #[\Override]
     public function getHookFieldKey(): string
     {
         return self::fieldKeyFor($this->opCode);
@@ -194,6 +199,7 @@ final class OpCodeHook implements HookInterface
      * Core::reinstallHooks() refreshes chains in installation order, so for stacked hooks
      * the top hook's trampoline is written last and stays the one the engine dispatches to.
      */
+    #[\Override]
     public function refreshTrampoline(): void
     {
         if (!$this->installed) {
@@ -216,6 +222,7 @@ final class OpCodeHook implements HookInterface
      *
      * @param mixed ...$rawArguments Raw C arguments of this callback (zend_execute_data*)
      */
+    #[\Override]
     public function handle(...$rawArguments): int
     {
         [$state] = $rawArguments;

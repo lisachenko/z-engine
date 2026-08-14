@@ -38,7 +38,7 @@ class ReflectionExtensionTest extends TestCase
     public function testModuleWasStarted(): void
     {
         // Built-in modules always started, only our custom modules may be in non-started state
-        $this->assertSame(true, $this->refExtension->wasModuleStarted());
+        $this->assertTrue($this->refExtension->wasModuleStarted());
     }
 
     public function testReturnsModuleNumber(): void

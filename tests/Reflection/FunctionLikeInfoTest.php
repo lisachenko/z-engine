@@ -17,7 +17,6 @@ use PHPUnit\Framework\TestCase;
 use ZEngine\Type\ArgumentEntry;
 use ZEngine\Type\ClosureEntry;
 use ZEngine\Type\LiveRange;
-use ZEngine\Type\TryCatchElement;
 
 /**
  * Functions to reflect: argument info entries
@@ -292,7 +291,6 @@ class FunctionLikeInfoTest extends TestCase
         $elements = $refFunction->getTryCatchElements();
         $this->assertCount(1, $elements);
         $element = $elements[0];
-        $this->assertInstanceOf(TryCatchElement::class, $element);
         $this->assertTrue($element->hasCatch());
         $this->assertTrue($element->hasFinally());
         $this->assertGreaterThan($element->getTryOp(), $element->getCatchOp());

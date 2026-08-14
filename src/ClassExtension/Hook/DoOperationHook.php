@@ -13,17 +13,17 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension\Hook;
 
-use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\zval;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionValue;
 
 /**
  * Receiving hook for performing operation on object
  */
-class DoOperationHook extends AbstractHook
+final class DoOperationHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'do_operation';
+    protected const string HOOK_FIELD = 'do_operation';
 
     /**
      * Operation opcode
@@ -32,27 +32,45 @@ class DoOperationHook extends AbstractHook
 
     /**
      * Holds a return value
+     *
+     * @var zval Typed view of the engine handle; the runtime value is the raw
+     *           FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected CData $returnValue;
+    protected object $returnValue;
 
     /**
      * First operand
+     *
+     * @var zval Typed view of the engine handle; the runtime value is the raw FFI\CData pointer
      */
-    protected CData $op1;
+    protected object $op1;
 
     /**
      * Second operand
+     *
+     * @var zval Typed view of the engine handle; the runtime value is the raw FFI\CData pointer
      */
-    protected CData $op2;
+    protected object $op2;
 
     /**
      * typedef int (*zend_object_do_operation_t)(zend_uchar opcode, zval *result, zval *op1, zval *op2);
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): int
     {
-        [$this->opCode, $this->returnValue, $this->op1, $this->op2] = $rawArguments;
+        /**
+         * @var int  $opCode Narrowed to the stub views at the engine callback boundary
+         * @var zval $returnValue
+         * @var zval $op1
+         * @var zval $op2
+         */
+        [$opCode, $returnValue, $op1, $op2] = $rawArguments;
+        $this->opCode                       = $opCode;
+        $this->returnValue                  = $returnValue;
+        $this->op1                          = $op1;
+        $this->op2                          = $op2;
 
         $result = ($this->userHandler)($this);
         $target = ReflectionValue::fromValueEntry($this->returnValue);
@@ -79,7 +97,7 @@ class DoOperationHook extends AbstractHook
     /**
      * Returns first operand
      */
-    public function getFirst()
+    public function getFirst(): mixed
     {
         ReflectionValue::fromValueEntry($this->op1)->getNativeValue($value);
 
@@ -89,7 +107,7 @@ class DoOperationHook extends AbstractHook
     /**
      * Returns second operand
      */
-    public function getSecond()
+    public function getSecond(): mixed
     {
         ReflectionValue::fromValueEntry($this->op2)->getNativeValue($value);
 
@@ -99,7 +117,7 @@ class DoOperationHook extends AbstractHook
     /**
      * Returns result of casting (eg from call to proceed)
      */
-    public function getResult()
+    public function getResult(): mixed
     {
         ReflectionValue::fromValueEntry($this->returnValue)->getNativeValue($result);
 
@@ -108,13 +126,16 @@ class DoOperationHook extends AbstractHook
 
     /**
      * Proceeds with object custom operation
+     *
+     * @return int Core::SUCCESS when the original handler produced a value in the result slot,
+     *             Core::FAILURE when the operation is not supported for these operands
      */
-    public function proceed()
+    public function proceed(): int
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
-        $result = ($this->originalHandler)($this->opCode, $this->returnValue, $this->op1, $this->op2);
+        $originalHandler = $this->getOriginalCallable();
+
+        $result = ($originalHandler)($this->opCode, $this->returnValue, $this->op1, $this->op2);
+        assert(is_int($result));
 
         return $result;
     }

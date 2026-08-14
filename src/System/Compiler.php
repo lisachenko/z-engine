@@ -19,6 +19,7 @@ use ZEngine\AbstractSyntaxTree\NodeFactory;
 use ZEngine\AbstractSyntaxTree\NodeInterface;
 use ZEngine\Core;
 use ZEngine\Generated\zend_arena;
+use ZEngine\Generated\zend_compiler_globals;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\HashTable;
@@ -40,84 +41,95 @@ class Compiler
      */
 
     /* generate extended debug information */
-    public const COMPILE_EXTENDED_STMT  = (1 << 0);
-    public const COMPILE_EXTENDED_FCALL = (1 << 1);
-    public const COMPILE_EXTENDED_INFO  = (self::COMPILE_EXTENDED_STMT | self::COMPILE_EXTENDED_FCALL);
+    public const int COMPILE_EXTENDED_STMT  = (1 << 0);
+    public const int COMPILE_EXTENDED_FCALL = (1 << 1);
+    public const int COMPILE_EXTENDED_INFO  = (self::COMPILE_EXTENDED_STMT | self::COMPILE_EXTENDED_FCALL);
 
     /* call op_array handler of extendions */
-    public const COMPILE_HANDLE_OP_ARRAY = (1 << 2);
+    public const int COMPILE_HANDLE_OP_ARRAY = (1 << 2);
 
     /* generate INIT_FCALL_BY_NAME for internal functions instead of INIT_FCALL */
-    public const COMPILE_IGNORE_INTERNAL_FUNCTIONS = (1 << 3);
+    public const int COMPILE_IGNORE_INTERNAL_FUNCTIONS = (1 << 3);
 
     /* don't perform early binding for classes inherited form internal ones;
      * in namespaces assume that internal class that doesn't exist at compile-time
      * may apper in run-time */
-    public const COMPILE_IGNORE_INTERNAL_CLASSES = (1 << 4);
+    public const int COMPILE_IGNORE_INTERNAL_CLASSES = (1 << 4);
 
     /* generate DECLARE_CLASS_DELAYED opcode to delay early binding */
-    public const COMPILE_DELAYED_BINDING = (1 << 5);
+    public const int COMPILE_DELAYED_BINDING = (1 << 5);
 
     /* disable constant substitution at compile-time */
-    public const COMPILE_NO_CONSTANT_SUBSTITUTION = (1 << 6);
+    public const int COMPILE_NO_CONSTANT_SUBSTITUTION = (1 << 6);
 
     /* generate INIT_FCALL_BY_NAME for userland functions instead of INIT_FCALL */
-    public const COMPILE_IGNORE_USER_FUNCTIONS = (1 << 9);
+    public const int COMPILE_IGNORE_USER_FUNCTIONS = (1 << 9);
 
     /* force ACC_USE_GUARDS for all classes */
-    public const COMPILE_GUARDS = (1 << 10);
+    public const int COMPILE_GUARDS = (1 << 10);
 
     /* disable builtin special case function calls */
-    public const COMPILE_NO_BUILTINS = (1 << 11);
+    public const int COMPILE_NO_BUILTINS = (1 << 11);
 
     /* this flag is set when compiler invoked by opcache_compile_file() */
-    public const COMPILE_WITHOUT_EXECUTION = (1 << 14);
+    public const int COMPILE_WITHOUT_EXECUTION = (1 << 14);
 
     /* this flag is set when compiler invoked during preloading */
-    public const COMPILE_PRELOAD = (1 << 15);
+    public const int COMPILE_PRELOAD = (1 << 15);
 
     /* disable jumptable optimization for switch statements */
-    public const COMPILE_NO_JUMPTABLES = (1 << 16);
+    public const int COMPILE_NO_JUMPTABLES = (1 << 16);
 
     /* this flag is set when compiler invoked during preloading in separate process */
-    public const COMPILE_PRELOAD_IN_CHILD = (1 << 17);
+    public const int COMPILE_PRELOAD_IN_CHILD = (1 << 17);
 
     /* The default value for CG(compiler_options) */
-    public const COMPILE_DEFAULT = self::COMPILE_HANDLE_OP_ARRAY;
+    public const int COMPILE_DEFAULT = self::COMPILE_HANDLE_OP_ARRAY;
 
     /* The default value for CG(compiler_options) during eval() */
-    public const COMPILE_DEFAULT_FOR_EVAL = 0;
+    public const int COMPILE_DEFAULT_FOR_EVAL = 0;
+
+    /**
+     * The engine views below are bound to their compiler-globals table once, in the constructor,
+     * and are therefore published as `public private(set)`: everybody may read (and mutate through)
+     * the wrapper, nobody may swap the wrapper itself. A replaced view would silently detach the
+     * whole process from the engine table it is supposed to reflect.
+     */
 
     /**
      * Contains a hashtable with all registered classes
      *
      * @var HashTable|ReflectionValue[]
      */
-    public HashTable $classTable;
+    public private(set) HashTable $classTable;
 
     /**
      * Contains a hashtable with all registered functions
      *
      * @var HashTable|ReflectionValue[]
      */
-    public HashTable $functionTable;
+    public private(set) HashTable $functionTable;
 
     /**
      * Holds an internal pointer to the compiler_globals structure
+     *
+     * @var zend_compiler_globals Typed view; the runtime value is the raw FFI\CData
+     *                            handle (see stubs/zend-engine-structs.php)
      */
-    private CData $pointer;
-    /**
-     * @param \FFI\CData $pointer
-     */
+    private object $pointer;
 
+    /**
+     * @param CData|zend_compiler_globals $pointer
+     */
     public function __construct(object $pointer)
     {
+        /** @var zend_compiler_globals $pointer Narrowed to the stub view at the owning boundary */
         $this->pointer = $pointer;
 
         $classTable = $pointer->class_table;
-        assert($classTable instanceof CData);
+        assert($classTable !== null);
         $functionTable = $pointer->function_table;
-        assert($functionTable instanceof CData);
+        assert($functionTable !== null);
 
         $this->classTable    = HashTable::fromCData($classTable);
         $this->functionTable = HashTable::fromCData($functionTable);
@@ -172,7 +184,7 @@ class Compiler
      */
     public function setCompilationMode(bool $enabled): void
     {
-        $this->pointer->in_compilation = (int) $enabled;
+        $this->pointer->in_compilation = $enabled;
     }
 
     /**
@@ -394,15 +406,22 @@ class Compiler
      * @param int $size Size of arena to create
      * @see zend_arena.h:zend_arena_create
      *
-     * @return array{CData, CData} The initialized zend_arena pointer and the underlying raw buffer
+     * @return array{zend_arena, CData} The initialized arena (typed stub view over the raw
+     *                                  CData handle) and the underlying raw buffer
      */
     private function createArena(int $size): array
     {
         $rawBuffer = Core::new("char[$size]", false);
-        $arena     = Core::cast('zend_arena *', $rawBuffer);
+        /** @var zend_arena $arena Narrowed to the stub view at the owning boundary */
+        $arena = Core::cast('zend_arena *', $rawBuffer);
 
-        $arena->ptr  = $rawBuffer + Core::getAlignedSize(Core::sizeOfType(zend_arena::class));
-        $arena->end  = $rawBuffer + $size;
+        /** @var CData $arenaPtr FFI pointer arithmetic, untyped for the analyser */
+        $arenaPtr = $rawBuffer + Core::getAlignedSize(Core::sizeOfType(zend_arena::class));
+        /** @var CData $arenaEnd FFI pointer arithmetic, untyped for the analyser */
+        $arenaEnd = $rawBuffer + $size;
+
+        $arena->ptr  = $arenaPtr;
+        $arena->end  = $arenaEnd;
         $arena->prev = null;
 
         return [$arena, $rawBuffer];

@@ -40,6 +40,7 @@ abstract class AbstractModuleLifecycleHook extends AbstractHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): int
     {
         if (Core::isShutdown()) {

@@ -13,14 +13,15 @@ declare(strict_types=1);
 
 namespace ZEngine\ClassExtension\Hook;
 
-use FFI\CData;
+use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zval;
 
 /**
  * Receiving hook for object dimension check operation (isset($object[$offset])/empty($object[$offset]))
  */
-class HasDimensionHook extends AbstractDimensionHook
+final class HasDimensionHook extends AbstractDimensionHook
 {
-    protected const HOOK_FIELD = 'has_dimension';
+    protected const string HOOK_FIELD = 'has_dimension';
 
     /**
      * Check type:
@@ -34,14 +35,18 @@ class HasDimensionHook extends AbstractDimensionHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): int
     {
+        /**
+         * @var zend_object $object Narrowed to the stub views at the engine callback boundary
+         * @var zval|null   $offset
+         * @var int         $type
+         */
         [$object, $offset, $type] = $rawArguments;
-        assert($object instanceof CData && ($offset === null || $offset instanceof CData));
-        assert(is_int($type));
-        $this->object = $object;
-        $this->offset = $offset;
-        $this->type   = $type;
+        $this->object             = $object;
+        $this->offset             = $offset;
+        $this->type               = $type;
 
         $result = ($this->userHandler)($this);
         assert(is_int($result));
@@ -64,12 +69,9 @@ class HasDimensionHook extends AbstractDimensionHook
      */
     public function proceed(): int
     {
-        if (!$this->hasOriginalHandler()) {
-            throw new \LogicException('Original handler is not available');
-        }
+        $originalHandler = $this->getOriginalCallable();
 
-        // @phpstan-ignore callable.nonCallable (engine function pointers are callable CData)
-        $result = ($this->originalHandler)($this->object, $this->offset, $this->type);
+        $result = ($originalHandler)($this->object, $this->offset, $this->type);
         assert(is_int($result));
 
         return $result;

@@ -50,7 +50,7 @@ class ReflectionClassConstantTest extends TestCase
 
         // We can override+call protected method from child by making it public
         $child = new class extends TestClass {
-            public function getConstant()
+            public function getConstant(): int
             {
                 // return parent const which is protected now
                 return parent::SOME_CONST;

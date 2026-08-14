@@ -27,6 +27,7 @@ use ZEngine\Type\StructArray;
 
 class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInterface
 {
+    use AccessFlagsTrait;
     use FunctionLikeTrait;
 
     /**
@@ -148,7 +149,7 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
         // board instead: the native constructor resolves the function through the board
         // but adopts the hook's own scope, so the reflection still reports the real
         // declaring class, and no shared engine structure is ever written.
-        $boardName   = get_class(self::publicationBoard());
+        $boardName   = self::publicationBoard()::class;
         $methodTable = (new ReflectionClass($boardName))->getMethodTable();
 
         // The temporary container is released right after the engine copied it into a bucket
@@ -255,11 +256,7 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      */
     public function setFinal(bool $isFinal = true): void
     {
-        if ($isFinal) {
-            $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_FINAL;
-        } else {
-            $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_FINAL);
-        }
+        $this->setAccessFlag(Core::ZEND_ACC_FINAL, $isFinal);
     }
 
     /**
@@ -267,38 +264,7 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      */
     public function setAbstract(bool $isAbstract = true): void
     {
-        if ($isAbstract) {
-            $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_ABSTRACT;
-        } else {
-            $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_ABSTRACT);
-        }
-    }
-
-    /**
-     * Declares method as public
-     */
-    public function setPublic(): void
-    {
-        $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_PUBLIC;
-    }
-
-    /**
-     * Declares method as protected
-     */
-    public function setProtected(): void
-    {
-        $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_PROTECTED;
-    }
-
-    /**
-     * Declares method as private
-     */
-    public function setPrivate(): void
-    {
-        $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_PRIVATE;
+        $this->setAccessFlag(Core::ZEND_ACC_ABSTRACT, $isAbstract);
     }
 
     /**
@@ -306,11 +272,17 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      */
     public function setStatic(bool $isStatic = true): void
     {
-        if ($isStatic) {
-            $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_STATIC;
-        } else {
-            $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_STATIC);
-        }
+        $this->setAccessFlag(Core::ZEND_ACC_STATIC, $isStatic);
+    }
+
+    /**
+     * A method keeps its access flags in the fn_flags field of the common function structure
+     *
+     * @see AccessFlagsTrait for setPublic()/setProtected()/setPrivate()
+     */
+    protected function replaceAccessFlags(int $clearMask, int $setMask): void
+    {
+        $this->replaceFunctionFlags($clearMask, $setMask);
     }
 
     /**
@@ -318,6 +290,7 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      *
      * @throws \InvalidArgumentException If scope is not available
      */
+    #[\Override]
     public function getDeclaringClass(): ReflectionClass
     {
         $scope = $this->getCommonPointer()->scope;
@@ -349,6 +322,7 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      * Returns the method prototype or null if no prototype for this method
      */
     #[\ReturnTypeWillChange]
+    #[\Override]
     public function getPrototype(): ?ReflectionMethod
     {
         $prototype = $this->getCommonPointer()->prototype;
@@ -377,10 +351,13 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
         $thisOpArray  = $this->getOpArrayPointer();
         $otherOpArray = $other->getOpArrayPointer();
 
-        foreach (['last', 'last_var', 'last_literal', 'T', 'num_args', 'required_num_args', 'fn_flags'] as $field) {
-            if ($thisOpArray->{$field} !== $otherOpArray->{$field}) {
-                return false;
-            }
+        $bodyMetrics  = ['last', 'last_var', 'last_literal', 'T', 'num_args', 'required_num_args', 'fn_flags'];
+        $metricsAgree = array_all(
+            $bodyMetrics,
+            static fn(string $field): bool => $thisOpArray->{$field} === $otherOpArray->{$field},
+        );
+        if (!$metricsAgree) {
+            return false;
         }
         $opcodesSize = $thisOpArray->last * Core::sizeOfType(zend_op::class);
         if ($opcodesSize > 0) {

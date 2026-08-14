@@ -33,6 +33,8 @@ use ZEngine\Type\StringEntry;
  */
 class ReflectionClassConstant extends NativeReflectionClassConstant
 {
+    use AccessFlagsTrait;
+
     /**
      * @var zend_class_constant Typed view of the wrapped constant entry; the runtime value
      *                          is the raw FFI\CData handle (see stubs/zend-engine-structs.php)
@@ -173,7 +175,7 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
         $docComment = $container->doc_comment;
         if ($docComment !== null) {
             assert($docComment instanceof CData);
-            StringEntry::fromCData($docComment)->copy();
+            StringEntry::fromCData($docComment)->addReference();
         }
         $adopted->referenceAttributes(1);
 
@@ -220,35 +222,24 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
     }
 
     /**
-     * Declares constant as public
+     * A class constant keeps its access flags in the u2 union of its own zval value
+     *
+     * @see AccessFlagsTrait for setPublic()/setProtected()/setPrivate()
      */
-    public function setPublic(): void
+    protected function replaceAccessFlags(int $clearMask, int $setMask): void
     {
-        $this->pointer->value->u2->constant_flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->pointer->value->u2->constant_flags |= Core::ZEND_ACC_PUBLIC;
-    }
+        $flagsHolder = $this->pointer->value->u2;
+        assert($flagsHolder instanceof CData);
+        $flags = $flagsHolder->constant_flags;
+        assert(is_int($flags));
 
-    /**
-     * Declares constant as protected
-     */
-    public function setProtected(): void
-    {
-        $this->pointer->value->u2->constant_flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->pointer->value->u2->constant_flags |= Core::ZEND_ACC_PROTECTED;
-    }
-
-    /**
-     * Declares constant as private
-     */
-    public function setPrivate(): void
-    {
-        $this->pointer->value->u2->constant_flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->pointer->value->u2->constant_flags |= Core::ZEND_ACC_PRIVATE;
+        $flagsHolder->constant_flags = ($flags & (~$clearMask)) | $setMask;
     }
 
     /**
      * Gets the declaring class
      */
+    #[\Override]
     public function getDeclaringClass(): ReflectionClass
     {
         $classEntry = $this->pointer->ce;

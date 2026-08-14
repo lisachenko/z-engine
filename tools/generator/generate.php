@@ -1,6 +1,17 @@
 <?php
 
 /**
+ * Z-Engine framework
+ *
+ * @copyright Copyright 2026, Lisachenko Alexander <lisachenko.it@gmail.com>
+ *
+ * This source file is subject to the license that is bundled
+ * with this source code in the file LICENSE.
+ *
+ */
+declare(strict_types=1);
+
+/**
  * Host-side generator driver: builds the generator docker image for every
  * requested (PHP minor, thread-safety) combination and exports the generated
  * FFI artifacts into include/{minor}/{os}-{arch}-{ts}/.
@@ -23,8 +34,6 @@
  * caches in the temp directory. --php-dev=DIR (or Z_ENGINE_PHP_DEVPACK) points
  * at an already extracted one instead.
  */
-
-declare(strict_types=1);
 
 error_reporting(E_ALL);
 

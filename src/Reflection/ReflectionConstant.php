@@ -44,14 +44,14 @@ class ReflectionConstant
      *
      * @see zend_constants.h:ZEND_CONSTANT_FLAGS(c) macro
      */
-    private const CONSTANT_FLAGS_MASK = 0xFF;
+    private const int CONSTANT_FLAGS_MASK = 0xFF;
 
     /**
      * Bit shift of the module number inside zval.u2.constant_flags
      *
      * @see zend_constants.h:ZEND_CONSTANT_MODULE_NUMBER(c) macro
      */
-    private const MODULE_NUMBER_SHIFT = 8;
+    private const int MODULE_NUMBER_SHIFT = 8;
 
     /**
      * Pointer to the zend_constant structure

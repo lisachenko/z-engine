@@ -49,6 +49,7 @@ final class PersistentHashTable extends HashTable
     /**
      * Allocation class for the inherited constructor: malloc-backed, outlives the request
      */
+    #[\Override]
     protected static function isPersistentAllocation(): bool
     {
         return true;
@@ -59,6 +60,7 @@ final class PersistentHashTable extends HashTable
      * scan a persistent table, and every engine (re)allocation of the data block must go
      * through pemalloc(..., 1)
      */
+    #[\Override]
     protected static function gcTypeInfo(): int
     {
         return Core::engineConstant('GC_ARRAY')
@@ -73,6 +75,7 @@ final class PersistentHashTable extends HashTable
      * addref and no request-lifetime string can leak into the table. The engine copies
      * the source zval into its bucket; the container stays with the caller.
      */
+    #[\Override]
     public function add(string $key, ReflectionValue $value): void
     {
         $this->addInterned(StringEntry::persistentInterned($key), $value);
@@ -107,6 +110,7 @@ final class PersistentHashTable extends HashTable
     /**
      * Upserts a value under an integer key
      */
+    #[\Override]
     public function addIndex(int $key, ReflectionValue $value): void
     {
         $result = Core::call(
@@ -159,6 +163,7 @@ final class PersistentHashTable extends HashTable
      * uninitialized table keeps the shared sentinel and is skipped), and the struct block
      * itself was minted with malloc by the FFI persistent allocator.
      */
+    #[\Override]
     public function destroy(): void
     {
         // Sealed tables sit at the immutable refcount of 2; the engine asserts <= 1

@@ -23,7 +23,7 @@ use ZEngine\Type\StringEntry;
 class ReflectionValueTest extends TestCase
 {
     #[DataProvider('valueTypeProvider')]
-    public function testConstructorWorks($value, int $expectedType)
+    public function testConstructorWorks(mixed $value, int $expectedType): void
     {
         $refValue = new ReflectionValue($value);
         $type     = $refValue->getType() & 0xFF;
@@ -32,7 +32,7 @@ class ReflectionValueTest extends TestCase
     }
 
     #[DataProvider('valueProvider')]
-    public function testGetNativeValue($value): void
+    public function testGetNativeValue(mixed $value): void
     {
         // This prevents optimization of opcodes and $value variable GC
         static $currentValue;
@@ -42,6 +42,9 @@ class ReflectionValueTest extends TestCase
         $this->assertSame($currentValue, $returnedValue);
     }
 
+    /**
+     * @return list<array{mixed}>
+     */
     public static function valueProvider(): array
     {
         return [
@@ -54,7 +57,7 @@ class ReflectionValueTest extends TestCase
     }
 
     #[DataProvider('valueTypeProvider')]
-    public function testGetType($value, int $expectedType): void
+    public function testGetType(mixed $value, int $expectedType): void
     {
         $argument         = Core::$executor->getExecutionState()->getArgument(0);
         $argType          = ($argument->getType() & 0xFF); // Use only low byte to get type name
@@ -67,6 +70,9 @@ class ReflectionValueTest extends TestCase
         );
     }
 
+    /**
+     * @return list<array{mixed, int}>
+     */
     public static function valueTypeProvider(): array
     {
         // Note: live resources are intentionally NOT yielded here - a data
@@ -109,13 +115,13 @@ class ReflectionValueTest extends TestCase
     /**
      * The frame argument inspection needs the value passed as a real argument
      */
-    private function assertResourceArgumentType($value): void
+    private function assertResourceArgumentType(mixed $value): void
     {
         $argument = Core::$executor->getExecutionState()->getArgument(0);
         $this->assertSame(ReflectionValue::IS_RESOURCE, $argument->getType() & 0xFF);
     }
 
-    public function testGetRawClass()
+    public function testGetRawClass(): void
     {
         $classEntry = Core::$executor->classTable->find(strtolower(self::class));
         $rawClass   = $classEntry->getRawClass();
@@ -126,7 +132,7 @@ class ReflectionValueTest extends TestCase
         $this->assertSame(self::class, $className->getStringValue());
     }
 
-    public function testGetRawFunction()
+    public function testGetRawFunction(): void
     {
         $functionEntry = Core::$executor->functionTable->find('var_dump');
         $rawFunction   = $functionEntry->getRawFunction();
@@ -137,7 +143,7 @@ class ReflectionValueTest extends TestCase
         $this->assertSame('var_dump', $functionName->getStringValue());
     }
 
-    public function testGetRawValue()
+    public function testGetRawValue(): void
     {
         $classEntry = Core::$executor->classTable->find(strtolower(self::class));
         $rawValue   = $classEntry->getRawValue();
@@ -146,12 +152,12 @@ class ReflectionValueTest extends TestCase
         $this->assertEquals(ReflectionValue::IS_PTR, $valueEntry->getType());
     }
 
-    public function testSetNativeValue()
+    public function testSetNativeValue(): void
     {
         $this->markTestSkipped('Can not construct ReflectionValue by hand now');
     }
 
-    public function testGetRawObject()
+    public function testGetRawObject(): void
     {
         $thisValue = Core::$executor->getExecutionState()->getThis();
         $this->assertNotNull($thisValue);
@@ -202,7 +208,7 @@ class ReflectionValueTest extends TestCase
         $this->assertSame($dereferenced, $dereferenced->dereference());
     }
 
-    public function testGetRawString()
+    public function testGetRawString(): void
     {
         $value = self::class;
         get_defined_vars(); // This triggers Symbol Table rebuilt under the hood

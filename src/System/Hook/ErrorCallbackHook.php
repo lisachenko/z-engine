@@ -13,7 +13,7 @@ declare(strict_types=1);
 
 namespace ZEngine\System\Hook;
 
-use FFI\CData;
+use ZEngine\Generated\zend_string;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Type\StringEntry;
 
@@ -32,9 +32,9 @@ use ZEngine\Type\StringEntry;
  * default callback to bail out and never return - swallowing a fatal error
  * resumes execution in a state the engine considers unreachable.
  */
-class ErrorCallbackHook extends AbstractHook
+final class ErrorCallbackHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'zend_error_cb';
+    protected const string HOOK_FIELD = 'zend_error_cb';
 
     /**
      * Raw E_* severity of the diagnostic
@@ -43,8 +43,11 @@ class ErrorCallbackHook extends AbstractHook
 
     /**
      * Raw zend_string pointer with the file name (never null: the engine always resolves one)
+     *
+     * @var zend_string Typed view of the engine handle; the runtime value is the raw
+     *                  FFI\CData pointer (see stubs/zend-engine-structs.php)
      */
-    protected CData $fileName;
+    protected object $fileName;
 
     /**
      * Line that raised the diagnostic
@@ -53,22 +56,31 @@ class ErrorCallbackHook extends AbstractHook
 
     /**
      * Raw zend_string pointer with the diagnostic message
+     *
+     * @var zend_string Typed view of the engine handle; the runtime value is the raw
+     *                  FFI\CData pointer
      */
-    protected CData $message;
+    protected object $message;
 
     /**
      * void (*zend_error_cb)(int type, zend_string *error_filename, const uint32_t error_lineno, zend_string *message);
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): void
     {
+        /**
+         * @var int         $type     Narrowed to the stub views at the engine callback boundary
+         * @var zend_string $fileName
+         * @var int         $line
+         * @var zend_string $message
+         */
         [$type, $fileName, $line, $message] = $rawArguments;
-        assert(is_int($type) && $fileName instanceof CData && is_int($line) && $message instanceof CData);
-        $this->type     = $type;
-        $this->fileName = $fileName;
-        $this->line     = $line;
-        $this->message  = $message;
+        $this->type                         = $type;
+        $this->fileName                     = $fileName;
+        $this->line                         = $line;
+        $this->message                      = $message;
 
         ($this->userHandler)($this);
     }

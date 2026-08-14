@@ -51,6 +51,7 @@ class ListNode extends Node
     /**
      * Returns children node count
      */
+    #[\Override]
     public function getChildrenCount(): int
     {
         // List stores the number of nodes in separate field

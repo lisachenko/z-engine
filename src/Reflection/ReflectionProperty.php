@@ -38,6 +38,8 @@ use ZEngine\Type\StringEntry;
  */
 class ReflectionProperty extends NativeReflectionProperty
 {
+    use AccessFlagsTrait;
+
     /**
      * @var zend_property_info Typed view of the wrapped property info; the runtime value
      *                         is the raw FFI\CData handle (see stubs/zend-engine-structs.php)
@@ -147,6 +149,7 @@ class ReflectionProperty extends NativeReflectionProperty
     /**
      * Checks if this property is declared static
      */
+    #[\Override]
     public function isStatic(): bool
     {
         return ($this->getFlags() & Core::ZEND_ACC_STATIC) !== 0;
@@ -155,6 +158,7 @@ class ReflectionProperty extends NativeReflectionProperty
     /**
      * Checks if this property is virtual (hooked, no backing storage slot)
      */
+    #[\Override]
     public function isVirtual(): bool
     {
         return ($this->getFlags() & Core::ZEND_ACC_VIRTUAL) !== 0;
@@ -176,6 +180,7 @@ class ReflectionProperty extends NativeReflectionProperty
     /**
      * Checks if this property declares at least one property hook (PHP 8.4+)
      */
+    #[\Override]
     public function hasHooks(): bool
     {
         return $this->pointer->hooks !== null;
@@ -194,6 +199,7 @@ class ReflectionProperty extends NativeReflectionProperty
      *
      * @param \PropertyHookType|int $kind Hook kind
      */
+    #[\Override]
     public function getHook(\PropertyHookType|int $kind): ?ReflectionMethod
     {
         if ($kind instanceof \PropertyHookType) {
@@ -240,47 +246,30 @@ class ReflectionProperty extends NativeReflectionProperty
     }
 
     /**
-     * Declares property as public
-     */
-    public function setPublic(): void
-    {
-        $this->pointer->flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->pointer->flags |= Core::ZEND_ACC_PUBLIC;
-    }
-
-    /**
-     * Declares property as protected
-     */
-    public function setProtected(): void
-    {
-        $this->pointer->flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->pointer->flags |= Core::ZEND_ACC_PROTECTED;
-    }
-
-    /**
-     * Declares property as private
-     */
-    public function setPrivate(): void
-    {
-        $this->pointer->flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->pointer->flags |= Core::ZEND_ACC_PRIVATE;
-    }
-
-    /**
      * Declares property as static/non-static
      */
     public function setStatic(bool $isStatic = true): void
     {
-        if ($isStatic) {
-            $this->pointer->flags |= Core::ZEND_ACC_STATIC;
-        } else {
-            $this->pointer->flags &= (~Core::ZEND_ACC_STATIC);
-        }
+        $this->setAccessFlag(Core::ZEND_ACC_STATIC, $isStatic);
+    }
+
+    /**
+     * A property keeps its access flags in the flags field of its zend_property_info
+     *
+     * @see AccessFlagsTrait for setPublic()/setProtected()/setPrivate()
+     */
+    protected function replaceAccessFlags(int $clearMask, int $setMask): void
+    {
+        $flags = $this->pointer->flags;
+        assert(is_int($flags));
+
+        $this->pointer->flags = ($flags & (~$clearMask)) | $setMask;
     }
 
     /**
      * Gets the declaring class
      */
+    #[\Override]
     public function getDeclaringClass(): ReflectionClass
     {
         $classEntry = $this->pointer->ce;

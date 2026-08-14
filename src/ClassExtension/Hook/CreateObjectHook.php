@@ -14,22 +14,29 @@ declare(strict_types=1);
 namespace ZEngine\ClassExtension\Hook;
 
 use FFI\CData;
+use ZEngine\Generated\zend_class_entry;
 use ZEngine\Hook\AbstractHook;
 use ZEngine\Reflection\ReflectionClass;
 
 /**
  * Receiving hook for performing operation on object
  */
-class CreateObjectHook extends AbstractHook
+final class CreateObjectHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'create_object';
+    protected const string HOOK_FIELD = 'create_object';
 
-    private CData $classType;
+    /**
+     * Class entry the object is created for
+     *
+     * @var zend_class_entry Typed view of the engine handle; the runtime value is the raw
+     *                       FFI\CData pointer (see stubs/zend-engine-structs.php)
+     */
+    private object $classType;
 
     /**
      * Returns a raw class type (zend_class_entry)
      *
-     * @return \FFI\CData
+     * @return zend_class_entry
      */
     public function getClassType(): object
     {
@@ -39,10 +46,11 @@ class CreateObjectHook extends AbstractHook
     /**
      * Changes a class type to create
      *
-     * @param \FFI\CData $classType
+     * @param \FFI\CData|zend_class_entry $classType
      */
     public function setClassType(object $classType): void
     {
+        /** @var zend_class_entry $classType Narrowed to the stub view at the owning boundary */
         $this->classType = $classType;
     }
 
@@ -52,11 +60,17 @@ class CreateObjectHook extends AbstractHook
      * @inheritDoc
      * @return \FFI\CData
      */
+    #[\Override]
     public function handle(...$rawArguments): object
     {
-        [$this->classType] = $rawArguments;
+        /** @var zend_class_entry $classType Narrowed to the stub view at the engine callback boundary */
+        [$classType]     = $rawArguments;
+        $this->classType = $classType;
 
-        return ($this->userHandler)($this);
+        $rawObject = ($this->userHandler)($this);
+        assert($rawObject instanceof CData);
+
+        return $rawObject;
     }
 
     /**
@@ -66,10 +80,11 @@ class CreateObjectHook extends AbstractHook
      */
     public function proceed(): object
     {
-        if ($this->originalHandler === null) {
+        if (!$this->hasOriginalHandler()) {
             $object = ReflectionClass::newInstanceRaw($this->classType);
         } else {
-            $object = ($this->originalHandler)($this->classType);
+            $originalHandler = $this->getOriginalCallable();
+            $object          = ($originalHandler)($this->classType);
             assert($object instanceof CData);
         }
 
