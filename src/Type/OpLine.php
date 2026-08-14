@@ -231,24 +231,16 @@ class OpLine
      */
     private function getValuePointer(object $node, int $opType): ?ReflectionValue
     {
-        $pointer = null;
+        // IS_UNUSED is still used by some opcodes, in most cases it points to an IS_UNDEF value
+        $pointer = match ($opType) {
+            self::IS_CONST => self::getRuntimeConstant(Core::cast('zend_op *', $this->opline), $node),
+            // All these types requires context to be present, otherwise we can't resolve such nodes
+            self::IS_TMP_VAR, self::IS_VAR, self::IS_CV, self::IS_UNUSED => isset($this->context)
+                ? $this->context->getCallVariable(Core::cast('znode_op *', $node)->var)
+                : null,
+            default => throw new \InvalidArgumentException('Received invalid opcode type: ' . $opType),
+        };
 
-        switch ($opType) {
-            case self::IS_CONST:
-                $pointer = self::getRuntimeConstant(Core::cast('zend_op *', $this->opline), $node);
-                break;
-            case self::IS_TMP_VAR:
-            case self::IS_VAR:
-            case self::IS_CV:
-            case self::IS_UNUSED: // For some opcodes IS_UNUSED still used, in most cases it points to an IS_UNDEF value
-                // All these types requires context to be present, otherwise we can't resolve such nodes
-                if (isset($this->context)) {
-                    $pointer = $this->context->getCallVariable(Core::cast('znode_op *', $node)->var);
-                }
-                break;
-            default:
-                throw new \InvalidArgumentException('Received invalid opcode type: ' . $opType);
-        }
         $value = isset($pointer) ? ReflectionValue::fromValueEntry($pointer) : null;
 
         return $value;
