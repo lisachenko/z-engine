@@ -27,6 +27,7 @@ use ZEngine\Type\StructArray;
 
 class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInterface
 {
+    use AccessFlagsTrait;
     use FunctionLikeTrait;
 
     /**
@@ -255,11 +256,7 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      */
     public function setFinal(bool $isFinal = true): void
     {
-        if ($isFinal) {
-            $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_FINAL;
-        } else {
-            $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_FINAL);
-        }
+        $this->setAccessFlag(Core::ZEND_ACC_FINAL, $isFinal);
     }
 
     /**
@@ -267,38 +264,7 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      */
     public function setAbstract(bool $isAbstract = true): void
     {
-        if ($isAbstract) {
-            $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_ABSTRACT;
-        } else {
-            $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_ABSTRACT);
-        }
-    }
-
-    /**
-     * Declares method as public
-     */
-    public function setPublic(): void
-    {
-        $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_PUBLIC;
-    }
-
-    /**
-     * Declares method as protected
-     */
-    public function setProtected(): void
-    {
-        $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_PROTECTED;
-    }
-
-    /**
-     * Declares method as private
-     */
-    public function setPrivate(): void
-    {
-        $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_PPP_MASK);
-        $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_PRIVATE;
+        $this->setAccessFlag(Core::ZEND_ACC_ABSTRACT, $isAbstract);
     }
 
     /**
@@ -306,11 +272,17 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      */
     public function setStatic(bool $isStatic = true): void
     {
-        if ($isStatic) {
-            $this->getCommonPointer()->fn_flags |= Core::ZEND_ACC_STATIC;
-        } else {
-            $this->getCommonPointer()->fn_flags &= (~Core::ZEND_ACC_STATIC);
-        }
+        $this->setAccessFlag(Core::ZEND_ACC_STATIC, $isStatic);
+    }
+
+    /**
+     * A method keeps its access flags in the fn_flags field of the common function structure
+     *
+     * @see AccessFlagsTrait for setPublic()/setProtected()/setPrivate()
+     */
+    protected function replaceAccessFlags(int $clearMask, int $setMask): void
+    {
+        $this->replaceFunctionFlags($clearMask, $setMask);
     }
 
     /**
