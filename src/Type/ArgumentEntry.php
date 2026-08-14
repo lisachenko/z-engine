@@ -61,6 +61,9 @@ class ArgumentEntry
      * Argument send modes as returned by getSendMode()
      *
      * @see zend_compile.h:ZEND_SEND_BY_VAL/ZEND_SEND_BY_REF/ZEND_SEND_PREFER_REF
+     *
+     * @deprecated Use the SendMode enum (SendMode::ByValue/ByReference/PreferReference) instead;
+     *             these int aliases are kept for consumers that compare getSendMode() by value
      */
     public const int SEND_BY_VAL     = 0;
     public const int SEND_BY_REF     = 1;
@@ -139,11 +142,25 @@ class ArgumentEntry
     }
 
     /**
+     * Returns the argument send mode decoded from the type mask
+     *
+     * The engine only ever encodes three of the four bit patterns the two-bit field can hold, so
+     * the strict from() doubles as an invariant guard: a fourth pattern means the entry was read
+     * at a wrong offset and a ValueError is far better than a plausible-looking wrong answer.
+     */
+    public function sendMode(): SendMode
+    {
+        return SendMode::from(($this->typeMask >> self::SEND_MODE_SHIFT) & 3);
+    }
+
+    /**
      * Returns the argument send mode (one of the SEND_* constants)
+     *
+     * @deprecated Use sendMode() instead, which returns the SendMode enum
      */
     public function getSendMode(): int
     {
-        return ($this->typeMask >> self::SEND_MODE_SHIFT) & 3;
+        return $this->sendMode()->value;
     }
 
     /**
@@ -151,7 +168,7 @@ class ArgumentEntry
      */
     public function isByReference(): bool
     {
-        return $this->getSendMode() !== self::SEND_BY_VAL;
+        return $this->sendMode()->isByReference();
     }
 
     /**

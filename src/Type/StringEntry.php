@@ -223,19 +223,39 @@ class StringEntry implements ReferenceCountedInterface
     }
 
     /**
-     * Creates a copy of string value
+     * Takes one more engine reference on this string and returns the very same entry
+     *
+     * No copy is made and no new wrapper is produced: this is zend_string_copy(), which shares
+     * the existing string by bumping its counter, and is what a call site needs when an engine
+     * structure starts holding the string too. Interned and other immutable strings are handled
+     * exactly as the engine does - they are immortal, so no reference is taken - which is what
+     * separates this from the raw incrementReferenceCount() primitive underneath (that one
+     * refuses immutable payloads outright).
      *
      * @see zend_string.h::zend_string_copy function
-     *
-     * @return self
      */
-    public function copy(): self
+    public function addReference(): self
     {
         if (!$this->isInterned()) {
             $this->incrementReferenceCount();
         }
 
         return $this;
+    }
+
+    /**
+     * Creates a copy of string value
+     *
+     * @see zend_string.h::zend_string_copy function
+     *
+     * @return self
+     *
+     * @deprecated Use addReference() instead - this method never copied anything
+     */
+    #[\Deprecated(message: 'use StringEntry::addReference() instead - this method never copied anything', since: '8.4.1')]
+    public function copy(): self
+    {
+        return $this->addReference();
     }
 
     /**

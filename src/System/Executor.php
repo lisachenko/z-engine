@@ -23,18 +23,25 @@ use ZEngine\Type\ObjectEntry;
 class Executor
 {
     /**
+     * The engine views below are bound to their executor-globals table once, in the constructor,
+     * and are therefore published as `public private(set)`: everybody may read (and mutate through)
+     * the wrapper, nobody may swap the wrapper itself. A replaced view would silently detach the
+     * whole process from the engine table it is supposed to reflect.
+     */
+
+    /**
      * Contains a hashtable with all registered classes
      *
      * @var HashTable|ReflectionValue[string]
      */
-    public HashTable $classTable;
+    public private(set) HashTable $classTable;
 
     /**
      * Contains a hashtable with all registered functions
      *
      * @var HashTable|ReflectionValue[]
      */
-    public HashTable $functionTable;
+    public private(set) HashTable $functionTable;
 
     /**
      * Contains a hashtable with all registered constants (EG(zend_constants))
@@ -42,14 +49,14 @@ class Executor
      * Bucket values are IS_PTR zvals pointing to zend_constant structures, keyed by the
      * case-sensitive constant name (including persistent engine/extension constants).
      */
-    public HashTable $constantTable;
+    public private(set) HashTable $constantTable;
 
     /**
      * Represents the global object storage
      *
      * @var ObjectStore|ObjectEntry[]
      */
-    public ObjectStore $objectStore;
+    public private(set) ObjectStore $objectStore;
 
     /**
      * Holds an internal pointer to the executor_globals structure

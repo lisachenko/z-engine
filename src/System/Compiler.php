@@ -90,18 +90,25 @@ class Compiler
     public const int COMPILE_DEFAULT_FOR_EVAL = 0;
 
     /**
+     * The engine views below are bound to their compiler-globals table once, in the constructor,
+     * and are therefore published as `public private(set)`: everybody may read (and mutate through)
+     * the wrapper, nobody may swap the wrapper itself. A replaced view would silently detach the
+     * whole process from the engine table it is supposed to reflect.
+     */
+
+    /**
      * Contains a hashtable with all registered classes
      *
      * @var HashTable|ReflectionValue[]
      */
-    public HashTable $classTable;
+    public private(set) HashTable $classTable;
 
     /**
      * Contains a hashtable with all registered functions
      *
      * @var HashTable|ReflectionValue[]
      */
-    public HashTable $functionTable;
+    public private(set) HashTable $functionTable;
 
     /**
      * Holds an internal pointer to the compiler_globals structure

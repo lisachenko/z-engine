@@ -261,7 +261,7 @@ final class FunctionBodySwap
         // The published bucket owns one reference on the name and one body share
         $namePointer = $containerCommon->function_name;
         assert($namePointer !== null);
-        StringEntry::fromCData($namePointer)->copy();
+        StringEntry::fromCData($namePointer)->addReference();
 
         self::addBodyReference($containerFunction);
         self::installFreshRunTimeCache($containerFunction);
@@ -278,7 +278,7 @@ final class FunctionBodySwap
     {
         $namePointer = $entryFunction->getCommonPointer()->function_name;
         assert($namePointer instanceof CData);
-        StringEntry::fromCData($namePointer)->copy();
+        StringEntry::fromCData($namePointer)->addReference();
 
         self::addBodyReference($entryFunction);
     }

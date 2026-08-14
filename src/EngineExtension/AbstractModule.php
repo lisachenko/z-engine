@@ -378,15 +378,15 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
             $rawDependency = $rawDependencies[$index];
             \assert($rawDependency instanceof CData);
             $rawDependency->name = self::newPersistentString($dependency->getName());
-            $relation            = $dependency->getRelation();
+            $relation            = $dependency->versionRelation();
             if ($relation !== null) {
-                $rawDependency->rel = self::newPersistentString($relation);
+                $rawDependency->rel = self::newPersistentString($relation->value);
             }
             $version = $dependency->getVersion();
             if ($version !== null) {
                 $rawDependency->version = self::newPersistentString($version);
             }
-            $rawDependency->type = $dependency->getDependencyType();
+            $rawDependency->type = $dependency->dependencyType()->value;
             $index++;
         }
         // The trailing element stays zero-initialized: the NULL terminator the engine

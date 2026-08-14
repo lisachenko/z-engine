@@ -37,13 +37,19 @@ final class CacheMetaInfo
      */
     public const string MAGIC = "OPCACHE\0";
 
+    /**
+     * The fields are published as public readonly and every reconstruction below passes them by
+     * NAME: four of the six are plain ints, so a positional call that transposes two of them
+     * compiles, runs and silently writes a corrupt cache header that only surfaces as a cache
+     * miss or a wrong payload much later.
+     */
     private function __construct(
-        private readonly SystemId $systemId,
-        private readonly int $memSize,
-        private readonly int $strSize,
-        private readonly int $scriptOffset,
-        private readonly int $timestamp,
-        private readonly int $checksum,
+        public readonly SystemId $systemId,
+        public readonly int $memSize,
+        public readonly int $strSize,
+        public readonly int $scriptOffset,
+        public readonly int $timestamp,
+        public readonly int $checksum,
     ) {}
 
     /**
@@ -65,12 +71,12 @@ final class CacheMetaInfo
         }
 
         return new self(
-            SystemId::fromBinary(FFI::string($struct->system_id, SystemId::LENGTH)),
-            $struct->mem_size,
-            $struct->str_size,
-            $struct->script_offset,
-            $struct->timestamp,
-            $struct->checksum,
+            systemId: SystemId::fromBinary(FFI::string($struct->system_id, SystemId::LENGTH)),
+            memSize: $struct->mem_size,
+            strSize: $struct->str_size,
+            scriptOffset: $struct->script_offset,
+            timestamp: $struct->timestamp,
+            checksum: $struct->checksum,
         );
     }
 
@@ -85,7 +91,14 @@ final class CacheMetaInfo
         int $timestamp,
         int $checksum,
     ): self {
-        return new self($systemId, $memSize, $strSize, $scriptOffset, $timestamp, $checksum);
+        return new self(
+            systemId: $systemId,
+            memSize: $memSize,
+            strSize: $strSize,
+            scriptOffset: $scriptOffset,
+            timestamp: $timestamp,
+            checksum: $checksum,
+        );
     }
 
     /**
@@ -113,6 +126,11 @@ final class CacheMetaInfo
         return (int) hexdec(hash('adler32', $payloadAndStrings));
     }
 
+    /**
+     * The accessors below are kept as the established reading API of this value object; each one
+     * is a thin delegate to the identically named public readonly property, so both spellings
+     * always agree and neither can be made to disagree by a future edit.
+     */
     public function systemId(): SystemId
     {
         return $this->systemId;
@@ -149,12 +167,26 @@ final class CacheMetaInfo
      */
     public function withTimestamp(int $timestamp): self
     {
-        return new self($this->systemId, $this->memSize, $this->strSize, $this->scriptOffset, $timestamp, $this->checksum);
+        return new self(
+            systemId: $this->systemId,
+            memSize: $this->memSize,
+            strSize: $this->strSize,
+            scriptOffset: $this->scriptOffset,
+            timestamp: $timestamp,
+            checksum: $this->checksum,
+        );
     }
 
     public function withChecksum(int $checksum): self
     {
-        return new self($this->systemId, $this->memSize, $this->strSize, $this->scriptOffset, $this->timestamp, $checksum);
+        return new self(
+            systemId: $this->systemId,
+            memSize: $this->memSize,
+            strSize: $this->strSize,
+            scriptOffset: $this->scriptOffset,
+            timestamp: $this->timestamp,
+            checksum: $checksum,
+        );
     }
 
     /**
@@ -162,7 +194,14 @@ final class CacheMetaInfo
      */
     public function withStrSize(int $strSize): self
     {
-        return new self($this->systemId, $this->memSize, $strSize, $this->scriptOffset, $this->timestamp, $this->checksum);
+        return new self(
+            systemId: $this->systemId,
+            memSize: $this->memSize,
+            strSize: $strSize,
+            scriptOffset: $this->scriptOffset,
+            timestamp: $this->timestamp,
+            checksum: $this->checksum,
+        );
     }
 
     /**

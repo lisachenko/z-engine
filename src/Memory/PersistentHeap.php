@@ -72,17 +72,6 @@ use ZEngine\Type\StructArray;
 final class PersistentHeap
 {
     /**
-     * Descriptor slot indexes (integer keys inside a key's descriptor table)
-     */
-    private const int SLOT_ROOT           = 0;
-    private const int SLOT_OBJECTS        = 1;
-    private const int SLOT_OBJECT_CLASSES = 2;
-    private const int SLOT_OBJECT_SIZES   = 3;
-    private const int SLOT_STRINGS        = 4;
-    private const int SLOT_ARRAYS         = 5;
-    private const int SLOT_BYTES          = 6;
-
-    /**
      * Keys re-attached in the current request (per-request state, reset by the hooks)
      *
      * @var array<string, true>
@@ -193,13 +182,13 @@ final class PersistentHeap
         }
 
         $descriptor = new PersistentHashTable();
-        $this->addPointerEntry($descriptor, self::SLOT_ROOT, $graph->root);
-        $this->addPointerEntry($descriptor, self::SLOT_OBJECTS, $objectsTable->getRawValue());
-        $this->addPointerEntry($descriptor, self::SLOT_OBJECT_CLASSES, $classesTable->getRawValue());
-        $this->addPointerEntry($descriptor, self::SLOT_OBJECT_SIZES, $sizesTable->getRawValue());
-        $this->addPointerEntry($descriptor, self::SLOT_STRINGS, $stringsTable->getRawValue());
-        $this->addPointerEntry($descriptor, self::SLOT_ARRAYS, $arraysTable->getRawValue());
-        $this->addLongEntry($descriptor, self::SLOT_BYTES, $graph->bytes);
+        $this->addPointerEntry($descriptor, DescriptorSlot::Root->value, $graph->root);
+        $this->addPointerEntry($descriptor, DescriptorSlot::Objects->value, $objectsTable->getRawValue());
+        $this->addPointerEntry($descriptor, DescriptorSlot::ObjectClasses->value, $classesTable->getRawValue());
+        $this->addPointerEntry($descriptor, DescriptorSlot::ObjectSizes->value, $sizesTable->getRawValue());
+        $this->addPointerEntry($descriptor, DescriptorSlot::Strings->value, $stringsTable->getRawValue());
+        $this->addPointerEntry($descriptor, DescriptorSlot::Arrays->value, $arraysTable->getRawValue());
+        $this->addLongEntry($descriptor, DescriptorSlot::Bytes->value, $graph->bytes);
 
         $descriptorValue = ReflectionValue::newEntry(ReflectionValue::IS_PTR, StructArray::at($descriptor->getRawValue()));
         $this->registry->addInterned($keyEntry, $descriptorValue);
@@ -228,7 +217,7 @@ final class PersistentHeap
 
         $this->attach($key, $descriptor);
 
-        $rootPointer = Core::cast('zend_object *', $this->requireEntry($descriptor, self::SLOT_ROOT)->getRawPointer());
+        $rootPointer = Core::cast('zend_object *', $this->requireEntry($descriptor, DescriptorSlot::Root->value)->getRawPointer());
 
         return ObjectEntry::fromCData($rootPointer)->getNativeValue();
     }
@@ -273,9 +262,9 @@ final class PersistentHeap
             $descriptor = PersistentHashTable::fromCData(Core::cast('HashTable *', $value->getRawPointer()));
 
             $keyStats = [
-                'objects' => $this->tableSlot($descriptor, self::SLOT_OBJECTS)->count(),
-                'strings' => $this->tableSlot($descriptor, self::SLOT_STRINGS)->count(),
-                'arrays'  => $this->tableSlot($descriptor, self::SLOT_ARRAYS)->count(),
+                'objects' => $this->tableSlot($descriptor, DescriptorSlot::Objects)->count(),
+                'strings' => $this->tableSlot($descriptor, DescriptorSlot::Strings)->count(),
+                'arrays'  => $this->tableSlot($descriptor, DescriptorSlot::Arrays)->count(),
                 'bytes'   => $this->byteCount($descriptor),
             ];
 
@@ -375,9 +364,9 @@ final class PersistentHeap
             return;
         }
 
-        $objectsTable = $this->tableSlot($descriptor, self::SLOT_OBJECTS);
-        $classesTable = $this->tableSlot($descriptor, self::SLOT_OBJECT_CLASSES);
-        $sizesTable   = $this->tableSlot($descriptor, self::SLOT_OBJECT_SIZES);
+        $objectsTable = $this->tableSlot($descriptor, DescriptorSlot::Objects);
+        $classesTable = $this->tableSlot($descriptor, DescriptorSlot::ObjectClasses);
+        $sizesTable   = $this->tableSlot($descriptor, DescriptorSlot::ObjectSizes);
 
         $objectCount = $objectsTable->count();
 
@@ -413,8 +402,8 @@ final class PersistentHeap
         foreach ($objects as $objectPointer) {
             $objectAddresses[Core::addressOf($objectPointer)] = true;
         }
-        $stringAddresses = $this->addressSet($this->tableSlot($descriptor, self::SLOT_STRINGS));
-        $arrayAddresses  = $this->addressSet($this->tableSlot($descriptor, self::SLOT_ARRAYS));
+        $stringAddresses = $this->addressSet($this->tableSlot($descriptor, DescriptorSlot::Strings));
+        $arrayAddresses  = $this->addressSet($this->tableSlot($descriptor, DescriptorSlot::Arrays));
 
         foreach ($objects as $index => $objectPointer) {
             // A stored object still carries the class entry of the request that minted the
@@ -466,11 +455,11 @@ final class PersistentHeap
      */
     private function evict(string $key, PersistentHashTable $descriptor): void
     {
-        $objectsTable = $this->tableSlot($descriptor, self::SLOT_OBJECTS);
-        $classesTable = $this->tableSlot($descriptor, self::SLOT_OBJECT_CLASSES);
-        $sizesTable   = $this->tableSlot($descriptor, self::SLOT_OBJECT_SIZES);
-        $stringsTable = $this->tableSlot($descriptor, self::SLOT_STRINGS);
-        $arraysTable  = $this->tableSlot($descriptor, self::SLOT_ARRAYS);
+        $objectsTable = $this->tableSlot($descriptor, DescriptorSlot::Objects);
+        $classesTable = $this->tableSlot($descriptor, DescriptorSlot::ObjectClasses);
+        $sizesTable   = $this->tableSlot($descriptor, DescriptorSlot::ObjectSizes);
+        $stringsTable = $this->tableSlot($descriptor, DescriptorSlot::Strings);
+        $arraysTable  = $this->tableSlot($descriptor, DescriptorSlot::Arrays);
 
         $objectCount = $objectsTable->count();
         $objects     = [];
@@ -541,7 +530,7 @@ final class PersistentHeap
             if ($descriptor === null) {
                 continue;
             }
-            $objectsTable = $this->tableSlot($descriptor, self::SLOT_OBJECTS);
+            $objectsTable = $this->tableSlot($descriptor, DescriptorSlot::Objects);
             $objectCount  = $objectsTable->count();
             for ($index = 0; $index < $objectCount; $index++) {
                 $this->releasePropertiesCache(
@@ -669,7 +658,7 @@ final class PersistentHeap
      */
     private function byteCount(PersistentHashTable $descriptor): int
     {
-        $this->requireEntry($descriptor, self::SLOT_BYTES)->getNativeValue($bytes);
+        $this->requireEntry($descriptor, DescriptorSlot::Bytes->value)->getNativeValue($bytes);
         assert(is_int($bytes));
 
         return $bytes;
@@ -678,10 +667,10 @@ final class PersistentHeap
     /**
      * Resolves a descriptor slot holding a nested inventory table
      */
-    private function tableSlot(PersistentHashTable $descriptor, int $slot): PersistentHashTable
+    private function tableSlot(PersistentHashTable $descriptor, DescriptorSlot $slot): PersistentHashTable
     {
         return PersistentHashTable::fromCData(
-            Core::cast('HashTable *', $this->requireEntry($descriptor, $slot)->getRawPointer()),
+            Core::cast('HashTable *', $this->requireEntry($descriptor, $slot->value)->getRawPointer()),
         );
     }
 
