@@ -97,7 +97,7 @@ parameters:
 			path: src/AbstractSyntaxTree/Node.php
 
 		-
-			message: '#^Parameter \#1 \$node of static method ZEngine\\AbstractSyntaxTree\\NodeFactory\:\:fromCData\(\) expects FFI\\CData, mixed given\.$#'
+			message: '#^Parameter \#1 \$node of static method ZEngine\\AbstractSyntaxTree\\NodeFactory\:\:fromCData\(\) expects FFI\\CData\|ZEngine\\Generated\\zend_ast, mixed given\.$#'
 			identifier: argument.type
 			count: 3
 			path: src/AbstractSyntaxTree/Node.php
@@ -106,6 +106,12 @@ parameters:
 			message: '#^Parameter \#2 \$pointer of static method ZEngine\\Core\:\:cast\(\) expects object, mixed given\.$#'
 			identifier: argument.type
 			count: 5
+			path: src/AbstractSyntaxTree/Node.php
+
+		-
+			message: '#^Property ZEngine\\AbstractSyntaxTree\\Node\:\:\$node \(FFI\\CData\) does not accept FFI\\CData\|ZEngine\\Generated\\zend_ast\.$#'
+			identifier: assign.propertyType
+			count: 1
 			path: src/AbstractSyntaxTree/Node.php
 
 		-
@@ -125,12 +131,6 @@ parameters:
 			identifier: argument.type
 			count: 1
 			path: src/AbstractSyntaxTree/NodeFactory.php
-
-		-
-			message: '#^Constructor of class ZEngine\\AbstractSyntaxTree\\ValueNode has an unused parameter \$value\.$#'
-			identifier: constructor.unusedParameter
-			count: 1
-			path: src/AbstractSyntaxTree/ValueNode.php
 
 		-
 			message: '#^Parameter \#1 \$valueEntry of static method ZEngine\\Reflection\\ReflectionValue\:\:fromValueEntry\(\) expects FFI\\CData\|ZEngine\\Generated\\zval, mixed given\.$#'
@@ -199,12 +199,6 @@ parameters:
 			path: src/Core.php
 
 		-
-			message: '#^Call to function count\(\) on a separate line has no effect\.$#'
-			identifier: function.resultUnused
-			count: 1
-			path: src/Core.php
-
-		-
 			message: '#^Cannot access offset ''fields'' on mixed\.$#'
 			identifier: offsetAccess.nonOffsetAccessible
 			count: 1
@@ -249,12 +243,6 @@ parameters:
 		-
 			message: '#^Method ZEngine\\Core\:\:sizeof\(\) has parameter \$cType with no type specified\.$#'
 			identifier: missingType.parameter
-			count: 1
-			path: src/Core.php
-
-		-
-			message: '#^PHPDoc tag @var with type array\<SplFileInfo\> is not subtype of native type RecursiveIteratorIterator\<RecursiveDirectoryIterator\>\.$#'
-			identifier: varTag.nativeType
 			count: 1
 			path: src/Core.php
 
@@ -685,12 +673,6 @@ parameters:
 			path: src/Reflection/ReflectionValue.php
 
 		-
-			message: '#^Constructor of class ZEngine\\Reflection\\ReflectionValue has an unused parameter \$value\.$#'
-			identifier: constructor.unusedParameter
-			count: 1
-			path: src/Reflection/ReflectionValue.php
-
-		-
 			message: '#^Binary operation "\+" between FFI\\CData and int results in an error\.$#'
 			identifier: binaryOp.invalid
 			count: 2
@@ -703,18 +685,6 @@ parameters:
 			path: src/System/Compiler.php
 
 		-
-			message: '#^Parameter \#1 \$node of static method ZEngine\\AbstractSyntaxTree\\NodeFactory\:\:fromCData\(\) expects FFI\\CData, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/System/Compiler.php
-
-		-
-			message: '#^Parameter \#1 \$stringPointer of static method ZEngine\\Type\\StringEntry\:\:fromCData\(\) expects FFI\\CData\|ZEngine\\Generated\\zend_string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/System/Compiler.php
-
-		-
 			message: '#^Strict comparison using \=\=\= between null and null will always evaluate to true\.$#'
 			identifier: identical.alwaysTrue
 			count: 2
@@ -723,6 +693,12 @@ parameters:
 		-
 			message: '#^Unreachable statement \- code above always terminates\.$#'
 			identifier: deadCode.unreachable
+			count: 1
+			path: src/System/Compiler.php
+
+		-
+			message: '#^Parameter \#1 \$stringPointer of static method ZEngine\\Type\\StringEntry\:\:fromCData\(\) expects FFI\\CData\|ZEngine\\Generated\\zend_string, mixed given\.$#'
+			identifier: argument.type
 			count: 1
 			path: src/System/Compiler.php
 
@@ -759,12 +735,6 @@ parameters:
 		-
 			message: '#^Method ZEngine\\System\\ExecutionData\:\:getFunction\(\) has invalid return type ZEngine\\Reflection\\FunctionLikeTrait\.$#'
 			identifier: return.trait
-			count: 1
-			path: src/System/ExecutionData.php
-
-		-
-			message: '#^PHPDoc tag @param references unknown parameter\: \$call$#'
-			identifier: parameter.notFound
 			count: 1
 			path: src/System/ExecutionData.php
 
@@ -883,12 +853,6 @@ parameters:
 			path: src/System/ObjectStore.php
 
 		-
-			message: '#^Constructor of class ZEngine\\Type\\ClosureEntry has an unused parameter \$closure\.$#'
-			identifier: constructor.unusedParameter
-			count: 1
-			path: src/Type/ClosureEntry.php
-
-		-
 			message: '#^Method ZEngine\\Type\\ObjectEntry\:\:getNativeValue\(\) should return object but returns mixed\.$#'
 			identifier: return.type
 			count: 1
@@ -925,12 +889,6 @@ parameters:
 			path: src/Type/OpLine.php
 
 		-
-			message: '#^Constructor of class ZEngine\\Type\\ReferenceEntry has an unused parameter \$reference\.$#'
-			identifier: constructor.unusedParameter
-			count: 1
-			path: src/Type/ReferenceEntry.php
-
-		-
 			message: '#^Method ZEngine\\Type\\ReferenceEntry\:\:__construct\(\) has parameter \$reference with no type specified\.$#'
 			identifier: missingType.parameter
 			count: 1
@@ -945,12 +903,6 @@ parameters:
 		-
 			message: '#^Binary operation "\+" between FFI\\CData and int\<0, max\> results in an error\.$#'
 			identifier: binaryOp.invalid
-			count: 1
-			path: src/Type/StringEntry.php
-
-		-
-			message: '#^Constructor of class ZEngine\\Type\\StringEntry has an unused parameter \$value\.$#'
-			identifier: constructor.unusedParameter
 			count: 1
 			path: src/Type/StringEntry.php
 
@@ -1033,10 +985,34 @@ parameters:
 			path: tests/Memory/scenarios/property-read-hook.php
 
 		-
-			message: '#^Method ZEngine\\Stub\\TestClass@anonymous/tests/Reflection/ReflectionClassConstantTest\.php\:52\:\:getConstant\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Reflection\\\\ReflectionClass'' and ZEngine\\Reflection\\ReflectionClass will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
 			count: 1
 			path: tests/Reflection/ReflectionClassConstantTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with 123 and 123 will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 3
+			path: tests/Reflection/ReflectionClassConstantTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with ''child\-const'' and ''child\-const'' will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Reflection/ReflectionClassParentTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with ''parent\-const'' and ''parent\-const'' will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 2
+			path: tests/Reflection/ReflectionClassParentTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with array\{parentProperty\: 130, childProperty\: 21\} and array\{parentProperty\: int, childProperty\: int, parentProperty\: int, ''\000ZEngine\\Stub\\TestParentClass\000parentSecret''\: string\} will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 1
+			path: tests/Reflection/ReflectionClassParentTest.php
 
 		-
 			message: '#^Access to an undefined property ZEngine\\Stub\\TestClass\:\:\$unknown\.$#'
@@ -1135,12 +1111,6 @@ parameters:
 			path: tests/Reflection/ReflectionClassTest.php
 
 		-
-			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsObject\(\) with object will always evaluate to true\.$#'
-			identifier: method.alreadyNarrowedType
-			count: 1
-			path: tests/Reflection/ReflectionClassTest.php
-
-		-
 			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotInstanceOf\(\) with ''ZEngine\\\\Stub\\\\TestInterface'' and ZEngine\\Stub\\TestInterface will always evaluate to false\.$#'
 			identifier: method.impossibleType
 			count: 1
@@ -1213,66 +1183,6 @@ parameters:
 			path: tests/Reflection/ReflectionClassTest.php
 
 		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionClassTest\:\:testAddMethod\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Reflection/ReflectionClassTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionClassTest\:\:testAddTraits\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Reflection/ReflectionClassTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionClassTest\:\:testGetClassConstantsReturnsExtendedClass\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Reflection/ReflectionClassTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionClassTest\:\:testRemoveMethods\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Reflection/ReflectionClassTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionClassTest\:\:testRemoveTraits\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Reflection/ReflectionClassTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionClassTest\:\:testSetAbstract\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Reflection/ReflectionClassTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionClassTest\:\:testSetFileName\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Reflection/ReflectionClassTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionClassTest\:\:testSetFinal\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Reflection/ReflectionClassTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionClassTest\:\:testSetNonAbstract\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Reflection/ReflectionClassTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionClassTest\:\:testSetNonFinal\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Reflection/ReflectionClassTest.php
-
-		-
 			message: '#^Parameter \#1 \$e of closure expects ZEngine\\Stub\\TestInterface, Closure given\.$#'
 			identifier: argument.type
 			count: 1
@@ -1315,6 +1225,72 @@ parameters:
 			path: tests/Reflection/ReflectionClassTest.php
 
 		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Stub\\\\DebuggableCloneable'' and ZEngine\\Stub\\DebuggableCloneable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Stub\\\\TestClass'' and ZEngine\\Stub\\TestClass will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 3
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Stub\\\\TestClass'' and ZEngine\\Stub\\TestClass@anonymous/tests/Reflection/ReflectionClassTest\.php\:140 will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Stub\\\\TestInterface'' and ZEngine\\Stub\\TestClass will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Stub\\\\TestInterface'' and ZEngine\\Stub\\TestInterface will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Stub\\\\TestInterface'' and ZEngine\\Stub\\TestInterface@anonymous/tests/Reflection/ReflectionClassTest\.php\:282 will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with ''unknown'' and ''property'' will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with \*NEVER\* and ZEngine\\Stub\\TestInterface will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with arguments 1, 1 and ''Uninstalled handler…'' will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with array\{a\: 1, b\: true, c\: 42\.0\} and array\{property\: int, ''\000ZEngine\\Stub\\TestClass\000secret''\: int\} will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with array\{a\: 1, b\: true, c\: 42\.0\} and array\{property\: int\|null, absent\: int\|null\} will always evaluate to false\.$#'
+			identifier: method.impossibleType
+			count: 1
+			path: tests/Reflection/ReflectionClassTest.php
+
+		-
 			message: '#^Anonymous function never returns null so it can be removed from the return type\.$#'
 			identifier: return.unusedType
 			count: 1
@@ -1345,6 +1321,12 @@ parameters:
 			path: tests/Reflection/ReflectionMethodTest.php
 
 		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Reflection\\\\ReflectionClass'' and ZEngine\\Reflection\\ReflectionClass will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 1
+			path: tests/Reflection/ReflectionMethodTest.php
+
+		-
 			message: '#^Cannot call method getRawClass\(\) on ZEngine\\Reflection\\ReflectionValue\|null\.$#'
 			identifier: method.nonObject
 			count: 1
@@ -1359,84 +1341,6 @@ parameters:
 		-
 			message: '#^Cannot call method getRawValue\(\) on ZEngine\\Reflection\\ReflectionValue\|null\.$#'
 			identifier: method.nonObject
-			count: 1
-			path: tests/Reflection/ReflectionValueTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionValueTest\:\:assertResourceArgumentType\(\) has parameter \$value with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: tests/Reflection/ReflectionValueTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionValueTest\:\:testConstructorWorks\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Reflection/ReflectionValueTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionValueTest\:\:testConstructorWorks\(\) has parameter \$value with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: tests/Reflection/ReflectionValueTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionValueTest\:\:testGetNativeValue\(\) has parameter \$value with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: tests/Reflection/ReflectionValueTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionValueTest\:\:testGetRawClass\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Reflection/ReflectionValueTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionValueTest\:\:testGetRawFunction\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Reflection/ReflectionValueTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionValueTest\:\:testGetRawObject\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Reflection/ReflectionValueTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionValueTest\:\:testGetRawString\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Reflection/ReflectionValueTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionValueTest\:\:testGetRawValue\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Reflection/ReflectionValueTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionValueTest\:\:testGetType\(\) has parameter \$value with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: tests/Reflection/ReflectionValueTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionValueTest\:\:testSetNativeValue\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Reflection/ReflectionValueTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionValueTest\:\:valueProvider\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: tests/Reflection/ReflectionValueTest.php
-
-		-
-			message: '#^Method ZEngine\\Reflection\\ReflectionValueTest\:\:valueTypeProvider\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
 			count: 1
 			path: tests/Reflection/ReflectionValueTest.php
 
@@ -1459,30 +1363,6 @@ parameters:
 			path: tests/Stub/NativeNumber.php
 
 		-
-			message: '#^Binary operation "\*" between int\|string and int\|string results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: tests/Stub/NativeNumber.php
-
-		-
-			message: '#^Binary operation "\+" between int\|string and int\|string results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: tests/Stub/NativeNumber.php
-
-		-
-			message: '#^Binary operation "\-" between int\|string and int\|string results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: tests/Stub/NativeNumber.php
-
-		-
-			message: '#^Binary operation "/" between int\|string and int\|string results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: tests/Stub/NativeNumber.php
-
-		-
 			message: '#^Cannot cast mixed to float\.$#'
 			identifier: cast.double
 			count: 1
@@ -1491,36 +1371,6 @@ parameters:
 		-
 			message: '#^Cannot cast mixed to int\.$#'
 			identifier: cast.int
-			count: 1
-			path: tests/Stub/NativeNumber.php
-
-		-
-			message: '#^Method ZEngine\\Stub\\NativeNumber\:\:__construct\(\) has parameter \$value with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: tests/Stub/NativeNumber.php
-
-		-
-			message: '#^Method ZEngine\\Stub\\NativeNumber\:\:getNumericValue\(\) has parameter \$one with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: tests/Stub/NativeNumber.php
-
-		-
-			message: '#^Method ZEngine\\Stub\\NativeNumber\:\:getNumericValue\(\) should return int\|string but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: tests/Stub/NativeNumber.php
-
-		-
-			message: '#^PHPDoc tag @param references unknown parameter\: \$instance$#'
-			identifier: parameter.notFound
-			count: 1
-			path: tests/Stub/NativeNumber.php
-
-		-
-			message: '#^Property ZEngine\\Stub\\NativeNumber\:\:\$value has no type specified\.$#'
-			identifier: missingType.property
 			count: 1
 			path: tests/Stub/NativeNumber.php
 
@@ -1549,112 +1399,46 @@ parameters:
 			path: tests/Stub/TestTrait.php
 
 		-
-			message: '#^Method ZEngine\\System\\ExecutionDataTest\:\:argumentProvider\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Reflection\\\\ReflectionValue'' and ZEngine\\Reflection\\ReflectionValue will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
 			count: 1
 			path: tests/System/ExecutionDataTest.php
 
 		-
-			message: '#^Method ZEngine\\System\\ExecutionDataTest\:\:testGetArgument\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\System\\\\ExecutionData'' and ZEngine\\System\\ExecutionData will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
 			count: 1
 			path: tests/System/ExecutionDataTest.php
 
 		-
-			message: '#^Method ZEngine\\System\\ExecutionDataTest\:\:testGetArgument\(\) has parameter \$firstPhpArgument with no type specified\.$#'
-			identifier: missingType.parameter
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Type\\\\OpLine'' and ZEngine\\Type\\OpLine will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
 			count: 1
 			path: tests/System/ExecutionDataTest.php
 
 		-
-			message: '#^Method ZEngine\\System\\ExecutionDataTest\:\:testGetArgument\(\) has parameter \$rest with no type specified\.$#'
-			identifier: missingType.parameter
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''stdClass'' and \$this\(ZEngine\\System\\ExecutionDataTest\) will always evaluate to false\.$#'
+			identifier: method.impossibleType
 			count: 1
 			path: tests/System/ExecutionDataTest.php
 
 		-
-			message: '#^Method ZEngine\\System\\ExecutionDataTest\:\:testGetArguments\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Type\\\\HashTable'' and ZEngine\\Type\\HashTable will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
 			count: 1
-			path: tests/System/ExecutionDataTest.php
+			path: tests/System/ExecutorTest.php
 
 		-
-			message: '#^Method ZEngine\\System\\ExecutionDataTest\:\:testGetArguments\(\) has parameter \$arg1 with no type specified\.$#'
-			identifier: missingType.parameter
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotEmpty\(\) with non\-empty\-list\<int\|string\> will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
 			count: 1
-			path: tests/System/ExecutionDataTest.php
+			path: tests/System/ExecutorTest.php
 
 		-
-			message: '#^Method ZEngine\\System\\ExecutionDataTest\:\:testGetArguments\(\) has parameter \$arg2 with no type specified\.$#'
-			identifier: missingType.parameter
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\System\\\\Hook\\\\OpCodeHook'' and ZEngine\\System\\Hook\\OpCodeHook will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
 			count: 1
-			path: tests/System/ExecutionDataTest.php
-
-		-
-			message: '#^Method ZEngine\\System\\ExecutionDataTest\:\:testGetArguments\(\) has parameter \$arg3 with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: tests/System/ExecutionDataTest.php
-
-		-
-			message: '#^Method ZEngine\\System\\ExecutionDataTest\:\:testGetCallVariable\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/System/ExecutionDataTest.php
-
-		-
-			message: '#^Method ZEngine\\System\\ExecutionDataTest\:\:testGetCallVariableByNumber\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/System/ExecutionDataTest.php
-
-		-
-			message: '#^Method ZEngine\\System\\ExecutionDataTest\:\:testGetFunction\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/System/ExecutionDataTest.php
-
-		-
-			message: '#^Method ZEngine\\System\\ExecutionDataTest\:\:testGetNumberOfArguments\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/System/ExecutionDataTest.php
-
-		-
-			message: '#^Method ZEngine\\System\\ExecutionDataTest\:\:testGetNumberOfArguments\(\) has parameter \$args with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: tests/System/ExecutionDataTest.php
-
-		-
-			message: '#^Method ZEngine\\System\\ExecutionDataTest\:\:testGetOpline\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/System/ExecutionDataTest.php
-
-		-
-			message: '#^Method ZEngine\\System\\ExecutionDataTest\:\:testGetPrevious\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/System/ExecutionDataTest.php
-
-		-
-			message: '#^Method ZEngine\\System\\ExecutionDataTest\:\:testGetReturnValue\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/System/ExecutionDataTest.php
-
-		-
-			message: '#^Method ZEngine\\System\\ExecutionDataTest\:\:testGetThis\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/System/ExecutionDataTest.php
-
-		-
-			message: '#^Method ZEngine\\System\\ExecutionDataTest\:\:testHasPrevious\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/System/ExecutionDataTest.php
+			path: tests/System/Hook/OpCodeHookTest.php
 
 		-
 			message: '#^Cannot call method getNativeValue\(\) on ZEngine\\Type\\ObjectEntry\|null\.$#'
@@ -1693,28 +1477,16 @@ parameters:
 			path: tests/Type/PersistentHashTableTest.php
 
 		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertSame\(\) with arguments 2, 2 and ''Both the mutable…'' will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
 			count: 1
-			path: tests/Type/ResourceEntryTest.php
+			path: tests/Type/PersistentHashTableTest.php
 
 		-
-			message: '#^Method ZEngine\\Type\\ResourceEntryTest\:\:testGetRawData\(\) has no return type specified\.$#'
-			identifier: missingType.return
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertInstanceOf\(\) with ''ZEngine\\\\Reflection\\\\ReflectionValue'' and ZEngine\\Reflection\\ReflectionValue will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
 			count: 1
-			path: tests/Type/ResourceEntryTest.php
-
-		-
-			message: '#^Method ZEngine\\Type\\ResourceEntryTest\:\:testGetType\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Type/ResourceEntryTest.php
-
-		-
-			message: '#^Method ZEngine\\Type\\ResourceEntryTest\:\:testSetType\(\) has no return type specified\.$#'
-			identifier: missingType.return
-			count: 1
-			path: tests/Type/ResourceEntryTest.php
+			path: tests/Type/ReferenceEntryTest.php
 
 		-
 			message: '#^Offset 1 might not exist on array\{\}\|array\{non\-falsy\-string, non\-empty\-string\}\.$#'
@@ -1729,16 +1501,46 @@ parameters:
 			path: tests/Type/ResourceEntryTest.php
 
 		-
-			message: '#^Parameter \#1 \$stream of function fclose expects resource, mixed given\.$#'
-			identifier: argument.type
+			message: '#^Binary operation "\*" between mixed and 2 results in an error\.$#'
+			identifier: binaryOp.invalid
 			count: 1
-			path: tests/Type/ResourceEntryTest.php
+			path: tools/examples/worker-loop.php
 
 		-
-			message: '#^Property ZEngine\\Type\\ResourceEntryTest\:\:\$file has no type specified\.$#'
-			identifier: missingType.property
+			message: '#^Cannot access offset ''seed'' on mixed\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
 			count: 1
-			path: tests/Type/ResourceEntryTest.php
+			path: tools/examples/worker-loop.php
+
+		-
+			message: '#^Cannot access offset 0 on ZEngine\\Generated\\HashTable\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tools/examples/worker-loop.php
+
+		-
+			message: '#^Cannot access offset 0 on ZEngine\\Generated\\zend_object\.$#'
+			identifier: offsetAccess.nonOffsetAccessible
+			count: 1
+			path: tools/examples/worker-loop.php
+
+		-
+			message: '#^Cannot access property \$counter on mixed\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tools/examples/worker-loop.php
+
+		-
+			message: '#^Parameter \#1 \$sourceObject of static method ZEngine\\Type\\PersistentObjectFactory\:\:persistentClone\(\) expects FFI\\CData, ZEngine\\Generated\\zend_object given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tools/examples/worker-loop.php
+
+		-
+			message: '#^Parameter \#2 \$value of static method ZEngine\\Reflection\\ReflectionValue\:\:newEntry\(\) expects object, mixed given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tools/examples/worker-loop.php
 
 		-
 			message: '#^Argument of an invalid type mixed supplied for foreach, only iterables are supported\.$#'

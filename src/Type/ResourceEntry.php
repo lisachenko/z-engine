@@ -75,8 +75,7 @@ class ResourceEntry implements ReferenceCountedInterface
 
     /**
      * Creates a resource entry from the zend_resource structure (borrowed, does not addref)
-     */
-    /**
+     *
      * @param CData|zend_resource $pointer
      */
     public static function fromCData(object $pointer): ResourceEntry

@@ -66,6 +66,8 @@ final class HookLifecycleTest extends TestCase
         $hook->uninstall();
         $log    = '';
         $second = new class implements TestInterface {};
+        // The hook writes $log by reference from an engine callback, which no analyser can see
+        // @phpstan-ignore method.alreadyNarrowedType (the point of the test is that nothing wrote to it)
         $this->assertSame('', $log);
     }
 
