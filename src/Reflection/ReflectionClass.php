@@ -1137,7 +1137,10 @@ class ReflectionClass extends NativeReflectionClass
             $excludedTraits = [];
             $totalExcludes  = $precedenceEntry->num_excludes;
             assert(is_int($totalExcludes));
-            foreach (self::precedenceExcludeNames($precedenceEntry, $totalExcludes) as $rawExcludeName) {
+            $excludeNames = self::precedenceExcludeNames($precedenceEntry);
+            for ($excludeIndex = 0; $excludeIndex < $totalExcludes; $excludeIndex++) {
+                $rawExcludeName = $excludeNames[$excludeIndex];
+                assert($rawExcludeName instanceof CData);
                 $excludedTraits[] = StringEntry::fromCData($rawExcludeName)->getStringValue();
             }
             $traitPrecedences[$reference] = $excludedTraits;
@@ -1282,9 +1285,9 @@ class ReflectionClass extends NativeReflectionClass
         $traitMethodRef->method_name   = $this->newOwnedNamePointer($methodName, $isPersistent);
         $traitMethodRef->class_name    = $this->newOwnedNamePointer($traitName, $isPersistent);
         $precedenceEntry->num_excludes = $totalExcludes;
-        $excludeNames                  = self::precedenceExcludeNames($precedenceEntry, $totalExcludes);
+        $excludeNames                  = self::precedenceExcludeNames($precedenceEntry);
         foreach (array_values($insteadOf) as $position => $excludedTrait) {
-            $excludeNames->storePointer($position, $this->newOwnedNamePointer($excludedTrait, $isPersistent));
+            self::storeAdaptationListSlot($excludeNames, $position, $this->newOwnedNamePointer($excludedTrait, $isPersistent));
         }
 
         $this->pointer->trait_precedences = $this->appendToTraitAdaptationList(
@@ -1330,8 +1333,9 @@ class ReflectionClass extends NativeReflectionClass
                 self::releaseEngineName($rawTraitName);
                 $totalExcludes = $precedenceEntry->num_excludes;
                 assert(is_int($totalExcludes));
-                foreach (self::precedenceExcludeNames($precedenceEntry, $totalExcludes) as $excludeName) {
-                    self::releaseEngineName($excludeName);
+                $excludeNames = self::precedenceExcludeNames($precedenceEntry);
+                for ($excludeIndex = 0; $excludeIndex < $totalExcludes; $excludeIndex++) {
+                    self::releaseEngineName($excludeNames[$excludeIndex]);
                 }
                 $this->freeTraitAdaptation($precedenceEntry);
                 $this->pointer->trait_precedences = $this->removeFromTraitAdaptationList(
@@ -1427,33 +1431,19 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
-     * Returns a bounds-checked view over the flexible exclude_class_names array of a
-     * zend_trait_precedence
+     * Returns a freely indexable pointer to the flexible exclude_class_names array
      *
-     * The FFI view of the declared `zend_string *exclude_class_names[1]` field only covers
-     * the first slot, so the runtime-sized tail is addressed through the raw field offset
-     * and handed out as a StructArray sized by the entry's own num_excludes counter.
+     * The FFI view of the declared zend_string *exclude_class_names[1] field is
+     * bounds-checked, so the runtime-sized tail is addressed through the raw field offset.
      *
-     * zend_trait_precedence is a sub-structure of the class entry this class owns, so the
-     * accessor lives here; ClassSpecializer (which already depends on ReflectionClass) calls
-     * it instead of keeping a verbatim copy.
-     *
-     * @internal
-     *
-     * @param CData $precedenceEntry zend_trait_precedence entry to read the array of
-     * @param int   $totalExcludes   Entry's own num_excludes value
-     *
-     * @return StructArray<CData>
+     * @param \FFI\CData $precedenceEntry
+     * @return \FFI\CData
      */
-    public static function precedenceExcludeNames(object $precedenceEntry, int $totalExcludes): StructArray
+    private static function precedenceExcludeNames(object $precedenceEntry): object
     {
         $excludeOffset = Core::type('zend_trait_precedence')->getStructFieldOffset('exclude_class_names');
-        $excludeNames  = Core::pointerAtAddress(
-            'zend_string **',
-            Core::addressOf($precedenceEntry) + $excludeOffset,
-        );
 
-        return new StructArray($excludeNames, $totalExcludes);
+        return Core::pointerAtAddress('zend_string **', Core::addressOf($precedenceEntry) + $excludeOffset);
     }
 
     /**
@@ -1485,16 +1475,30 @@ class ReflectionClass extends NativeReflectionClass
         $totalItems = count($existingItems);
         // One extra slot keeps the list NULL-terminated (FFI zero-initializes new blocks)
         $memory = Core::trackedNew("{$itemType} *[" . ($totalItems + 2) . ']', $this->isPersistentAllocation());
-        $slots  = new StructArray($memory, $totalItems + 2);
         foreach ($existingItems as $position => $existingItem) {
-            $slots->storePointer($position, $existingItem);
+            self::storeAdaptationListSlot($memory, $position, $existingItem);
         }
-        $slots->storePointer($totalItems, $item);
+        self::storeAdaptationListSlot($memory, $totalItems, $item);
         if ($list !== null) {
             Core::untrackAndFree($list);
         }
 
         return Core::cast("{$itemType} **", Core::addr($memory));
+    }
+
+    /**
+     * Stores one structure pointer into the given slot of an adaptation list block
+     *
+     * The write mutates engine-visible memory behind the FFI pointer, which static
+     * analysis cannot see - hence the explicit impurity marker.
+     *
+     * @phpstan-impure
+     * @param \FFI\CData $listMemory
+     * @param \FFI\CData $item
+     */
+    private static function storeAdaptationListSlot(object $listMemory, int $position, object $item): void
+    {
+        $listMemory[$position] = $item;
     }
 
     /**
@@ -1519,14 +1523,12 @@ class ReflectionClass extends NativeReflectionClass
 
             return null;
         }
-        $totalSurviving = count($survivingItems);
-        $memory         = Core::trackedNew(
-            "{$itemType} *[" . ($totalSurviving + 1) . ']',
+        $memory = Core::trackedNew(
+            "{$itemType} *[" . (count($survivingItems) + 1) . ']',
             $this->isPersistentAllocation(),
         );
-        $slots = new StructArray($memory, $totalSurviving + 1);
         foreach ($survivingItems as $position => $survivingItem) {
-            $slots->storePointer($position, $survivingItem);
+            self::storeAdaptationListSlot($memory, $position, $survivingItem);
         }
         Core::untrackAndFree($list);
 
@@ -1797,12 +1799,11 @@ class ReflectionClass extends NativeReflectionClass
         $infoTable = $this->pointer->properties_info_table;
         if ($infoTable !== null) {
             assert($infoTable instanceof CData);
-            $infoSlots = new StructArray($infoTable, $totalSlots);
             foreach ($ownSlotInfos as $oldSlot => $rawInfo) {
-                $infoSlots->storePointer($newSlotByOldSlot[$oldSlot], $rawInfo);
+                self::storePropertyInfoSlot($infoTable, $newSlotByOldSlot[$oldSlot], $rawInfo);
             }
             for ($slot = $nextSlot; $slot < $totalSlots; $slot++) {
-                $infoSlots->storePointer($slot, null);
+                self::storePropertyInfoSlot($infoTable, $slot, null);
             }
         }
 
@@ -1878,6 +1879,22 @@ class ReflectionClass extends NativeReflectionClass
         $typeUnion = $zvalEntry->u1;
         assert($typeUnion instanceof CData);
         $typeUnion->type_info = ReflectionValue::IS_UNDEF;
+    }
+
+    /**
+     * Stores a zend_property_info pointer (or null for an empty slot) into the slot-indexed
+     * properties_info_table
+     *
+     * The offset write mutates engine memory behind the FFI pointer, which static analysis
+     * cannot see - hence the explicit impurity marker.
+     *
+     * @phpstan-impure
+     * @param \FFI\CData $infoTable
+     * @param \FFI\CData|null $propertyInfo
+     */
+    private static function storePropertyInfoSlot(object $infoTable, int $slot, ?object $propertyInfo): void
+    {
+        $infoTable[$slot] = $propertyInfo;
     }
 
     /**
@@ -2112,9 +2129,8 @@ class ReflectionClass extends NativeReflectionClass
         $totalSlots  = $this->pointer->default_properties_count;
         assert(is_int($totalSlots));
 
-        $infoSlots = new StructArray($infoTable, $totalSlots);
         for ($slot = 0; $slot < $totalSlots; $slot++) {
-            $infoSlots->storePointer($slot, null);
+            self::storePropertyInfoSlot($infoTable, $slot, null);
         }
         $parentTable = $parentEntry->properties_info_table;
         if ($parentTable !== null) {
@@ -2122,11 +2138,9 @@ class ReflectionClass extends NativeReflectionClass
             $parentSlots = $parentEntry->default_properties_count;
             assert(is_int($parentSlots));
             for ($slot = 0; $slot < $parentSlots; $slot++) {
-                // Empty slots are read raw: the table is a nullable pointer array, a shape the
-                // element-typed StructArray view deliberately does not model
                 $parentInfo = $parentTable[$slot];
                 assert($parentInfo === null || $parentInfo instanceof CData);
-                $infoSlots->storePointer($slot, $parentInfo);
+                self::storePropertyInfoSlot($infoTable, $slot, $parentInfo);
             }
         }
         foreach ($this->propertiesTable as $propertyValue) {
@@ -2137,7 +2151,7 @@ class ReflectionClass extends NativeReflectionClass
             assert(is_int($flags) && is_int($offset) && $declaringClass instanceof CData);
             $isOwn = Core::addressOf($declaringClass) === $selfAddress;
             if ($isOwn && ($flags & (Core::ZEND_ACC_STATIC | Core::ZEND_ACC_VIRTUAL)) === 0) {
-                $infoSlots->storePointer(intdiv($offset - $slotBase, $zvalSize), $rawInfo);
+                self::storePropertyInfoSlot($infoTable, intdiv($offset - $slotBase, $zvalSize), $rawInfo);
             }
         }
     }
