@@ -172,7 +172,7 @@ class Node implements NodeInterface
     final public function getChild(int $index): ?NodeInterface
     {
         $totalChildren = $this->getChildrenCount();
-        if ($index >= $totalChildren) {
+        if ($index < 0 || $index >= $totalChildren) {
             throw new \OutOfBoundsException('Child index is out of range, there are ' . $totalChildren . ' children.');
         }
         $castChildren = Core::cast('zend_ast **', $this->node->child);
@@ -192,7 +192,7 @@ class Node implements NodeInterface
     public function replaceChild(int $index, NodeInterface $node): void
     {
         $totalChildren = $this->getChildrenCount();
-        if ($index >= $totalChildren) {
+        if ($index < 0 || $index >= $totalChildren) {
             throw new \OutOfBoundsException('Child index is out of range, there are ' . $totalChildren . ' children.');
         }
         $castChildren         = Core::cast('zend_ast **', $this->node->child);
@@ -207,7 +207,7 @@ class Node implements NodeInterface
     public function removeChild(int $index): NodeInterface
     {
         $totalChildren = $this->getChildrenCount();
-        if ($index >= $totalChildren) {
+        if ($index < 0 || $index >= $totalChildren) {
             throw new \OutOfBoundsException('Child index is out of range, there are ' . $totalChildren . ' children.');
         }
         $castChildren = Core::cast('zend_ast **', $this->node->child);

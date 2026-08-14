@@ -43,6 +43,12 @@ parameters:
 			path: src/AbstractSyntaxTree/DeclarationNode.php
 
 		-
+			message: '#^Access to an undefined property ZEngine\\AbstractSyntaxTree\\NodeInterface\:\:\$node\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/AbstractSyntaxTree/ListNode.php
+
+		-
 			message: '#^Method ZEngine\\AbstractSyntaxTree\\ListNode\:\:getChildrenCount\(\) should return int but returns mixed\.$#'
 			identifier: return.type
 			count: 1
@@ -51,8 +57,14 @@ parameters:
 		-
 			message: '#^Parameter \#2 \$pointer of static method ZEngine\\Core\:\:cast\(\) expects object, mixed given\.$#'
 			identifier: argument.type
-			count: 2
+			count: 3
 			path: src/AbstractSyntaxTree/ListNode.php
+
+		-
+			message: '#^Access to an undefined property ZEngine\\AbstractSyntaxTree\\NodeInterface\:\:\$node\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/AbstractSyntaxTree/Node.php
 
 		-
 			message: '#^Method ZEngine\\AbstractSyntaxTree\\Node\:\:getAttributes\(\) should return int but returns mixed\.$#'
@@ -85,9 +97,15 @@ parameters:
 			path: src/AbstractSyntaxTree/Node.php
 
 		-
+			message: '#^Parameter \#1 \$node of static method ZEngine\\AbstractSyntaxTree\\NodeFactory\:\:fromCData\(\) expects FFI\\CData, mixed given\.$#'
+			identifier: argument.type
+			count: 3
+			path: src/AbstractSyntaxTree/Node.php
+
+		-
 			message: '#^Parameter \#2 \$pointer of static method ZEngine\\Core\:\:cast\(\) expects object, mixed given\.$#'
 			identifier: argument.type
-			count: 1
+			count: 5
 			path: src/AbstractSyntaxTree/Node.php
 
 		-
