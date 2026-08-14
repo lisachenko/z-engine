@@ -44,6 +44,7 @@ final class ReadDimensionHook extends AbstractDimensionHook
      * @inheritDoc
      * @return zval
      */
+    #[\Override]
     public function handle(...$rawArguments): object
     {
         /**

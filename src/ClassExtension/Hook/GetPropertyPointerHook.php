@@ -40,6 +40,7 @@ final class GetPropertyPointerHook extends AbstractPropertyHook
      * would turn a userland contract violation into a TypeError raised inside an FFI
      * trampoline, where it cannot be caught (see issue #50).
      */
+    #[\Override]
     public function handle(...$rawArguments): mixed
     {
         /**

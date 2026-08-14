@@ -38,6 +38,7 @@ final class AstProcessHook extends AbstractHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): void
     {
         /** @var CData $ast Narrowed at the engine callback boundary */

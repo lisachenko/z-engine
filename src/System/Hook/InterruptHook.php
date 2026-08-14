@@ -54,6 +54,7 @@ final class InterruptHook extends AbstractHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): void
     {
         /** @var zend_execute_data $executeData Narrowed to the stub view at the engine callback boundary */

@@ -31,6 +31,7 @@ class ModuleInfoHook extends AbstractHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): void
     {
         if (Core::isShutdown()) {

@@ -290,6 +290,7 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      *
      * @throws \InvalidArgumentException If scope is not available
      */
+    #[\Override]
     public function getDeclaringClass(): ReflectionClass
     {
         $scope = $this->getCommonPointer()->scope;
@@ -321,6 +322,7 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      * Returns the method prototype or null if no prototype for this method
      */
     #[\ReturnTypeWillChange]
+    #[\Override]
     public function getPrototype(): ?ReflectionMethod
     {
         $prototype = $this->getCommonPointer()->prototype;

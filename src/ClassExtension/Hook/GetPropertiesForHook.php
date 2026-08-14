@@ -49,6 +49,7 @@ final class GetPropertiesForHook extends AbstractHook
      * @inheritDoc
      * @return zend_array
      */
+    #[\Override]
     public function handle(...$rawArguments): object
     {
         /**

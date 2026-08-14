@@ -67,6 +67,7 @@ final class ErrorCallbackHook extends AbstractHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): void
     {
         /**

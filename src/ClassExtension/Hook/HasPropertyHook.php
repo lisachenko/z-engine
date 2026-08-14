@@ -38,6 +38,7 @@ final class HasPropertyHook extends AbstractPropertyHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): int
     {
         /**

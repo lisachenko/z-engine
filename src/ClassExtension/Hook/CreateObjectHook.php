@@ -60,6 +60,7 @@ final class CreateObjectHook extends AbstractHook
      * @inheritDoc
      * @return \FFI\CData
      */
+    #[\Override]
     public function handle(...$rawArguments): object
     {
         /** @var zend_class_entry $classType Narrowed to the stub view at the engine callback boundary */

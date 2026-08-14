@@ -38,6 +38,7 @@ final class WriteDimensionHook extends AbstractDimensionHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): void
     {
         /**

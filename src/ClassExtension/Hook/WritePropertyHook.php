@@ -40,6 +40,7 @@ final class WritePropertyHook extends AbstractPropertyHook
      * @inheritDoc
      * @return \FFI\CData
      */
+    #[\Override]
     public function handle(...$rawArguments): object
     {
         /**

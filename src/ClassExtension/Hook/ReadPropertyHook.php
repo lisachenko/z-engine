@@ -45,6 +45,7 @@ final class ReadPropertyHook extends AbstractPropertyHook
      * @inheritDoc
      * @return zval
      */
+    #[\Override]
     public function handle(...$rawArguments): object
     {
         /**

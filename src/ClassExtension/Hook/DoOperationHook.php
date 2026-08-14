@@ -57,6 +57,7 @@ final class DoOperationHook extends AbstractHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): int
     {
         /**

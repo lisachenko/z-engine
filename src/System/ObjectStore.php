@@ -43,6 +43,7 @@ final class ObjectStore implements Countable, ArrayAccess
     /**
      * @inheritDoc
      */
+    #[\Override]
     public function count(): int
     {
         return $this->pointer->top - 1;
@@ -51,6 +52,7 @@ final class ObjectStore implements Countable, ArrayAccess
     /**
      * @inheritDoc
      */
+    #[\Override]
     public function offsetExists($offset): bool
     {
         $isValidOffset = ($offset >= 0) && ($offset < $this->pointer->top);
@@ -66,6 +68,7 @@ final class ObjectStore implements Countable, ArrayAccess
      *
      * @see spl_object_id()
      */
+    #[\Override]
     public function offsetGet($offset): ?ObjectEntry
     {
         if (!\is_int($offset)) {
@@ -91,6 +94,7 @@ final class ObjectStore implements Countable, ArrayAccess
     /**
      * @inheritDoc
      */
+    #[\Override]
     public function offsetSet($offset, $value): void
     {
         throw new \LogicException('Object store is read-only structure');
@@ -99,6 +103,7 @@ final class ObjectStore implements Countable, ArrayAccess
     /**
      * @inheritDoc
      */
+    #[\Override]
     public function offsetUnset($offset): void
     {
         throw new \LogicException('Object store is read-only structure');

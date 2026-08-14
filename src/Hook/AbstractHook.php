@@ -79,6 +79,7 @@ abstract class AbstractHook implements HookInterface
      *
      * @link https://www.php.net/manual/en/ffi.examples-callback.php
      */
+    #[\Override]
     final public function install(): void
     {
         if ($this->installed) {
@@ -100,6 +101,7 @@ abstract class AbstractHook implements HookInterface
      * Only the most recently installed hook of a field may be uninstalled: restoring an
      * older hook first would clobber the newer trampoline with a stale pointer.
      */
+    #[\Override]
     final public function uninstall(): void
     {
         if (!$this->installed) {
@@ -134,6 +136,7 @@ abstract class AbstractHook implements HookInterface
     /**
      * Checks if this hook is currently installed into the engine structure
      */
+    #[\Override]
     final public function isInstalled(): bool
     {
         return $this->installed;
@@ -142,6 +145,7 @@ abstract class AbstractHook implements HookInterface
     /**
      * Checks if an original handler is present to call it later with proceed
      */
+    #[\Override]
     final public function hasOriginalHandler(): bool
     {
         return $this->originalHandler !== null;
@@ -178,6 +182,7 @@ abstract class AbstractHook implements HookInterface
      *
      * @internal used by the Core hook registry to build per-field chains
      */
+    #[\Override]
     final public function getHookFieldKey(): string
     {
         if ($this->rawStructure instanceof FFI) {
@@ -202,6 +207,7 @@ abstract class AbstractHook implements HookInterface
      *
      * @internal escape hatch used by Core::reinstallHooks() for SAPIs that cycle FFI state
      */
+    #[\Override]
     final public function refreshTrampoline(): void
     {
         if (!$this->installed) {

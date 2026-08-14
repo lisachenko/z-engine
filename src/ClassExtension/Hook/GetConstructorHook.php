@@ -48,6 +48,7 @@ final class GetConstructorHook extends AbstractMethodResolutionHook
      * @inheritDoc
      * @return zend_function|zend_internal_function|null
      */
+    #[\Override]
     public function handle(...$rawArguments): ?object
     {
         /** @var zend_object $object Narrowed to the stub view at the engine callback boundary */

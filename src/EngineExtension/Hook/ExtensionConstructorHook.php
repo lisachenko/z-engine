@@ -40,6 +40,7 @@ class ExtensionConstructorHook extends AbstractHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): void
     {
         [$this->globalMemoryPointer] = $rawArguments;

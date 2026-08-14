@@ -53,6 +53,7 @@ final class CloneObjectHook extends AbstractHook
      * @inheritDoc
      * @return zend_object
      */
+    #[\Override]
     public function handle(...$rawArguments): object
     {
         /** @var zend_object $object Narrowed to the stub view at the engine callback boundary */

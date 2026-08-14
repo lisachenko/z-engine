@@ -163,6 +163,7 @@ class ReflectionFunction extends NativeReflectionFunction implements FunctionLik
      * structure stays isolated here - callers receive the ReflectionClass wrapper,
      * never a raw scope pointer.
      */
+    #[\Override]
     public function getClosureScopeClass(): ?ReflectionClass
     {
         /** @var zend_function|zend_internal_function $entry Narrowed to the stub views at the owning boundary */

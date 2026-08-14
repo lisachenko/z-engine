@@ -61,6 +61,7 @@ class ValueNode extends Node
      *
      * @inheritDoc
      */
+    #[\Override]
     public function getLine(): int
     {
         return $this->getValue()->getExtraValue();
@@ -70,6 +71,7 @@ class ValueNode extends Node
      * @inheritDoc
      * Value node doesn't have children nodes
      */
+    #[\Override]
     public function getChildrenCount(): int
     {
         return 0;
@@ -78,6 +80,7 @@ class ValueNode extends Node
     /**
      * @inheritDoc
      */
+    #[\Override]
     public function dumpThis(int $indent = 0): string
     {
         $line = parent::dumpThis($indent);

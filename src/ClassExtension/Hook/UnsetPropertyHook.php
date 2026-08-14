@@ -30,6 +30,7 @@ final class UnsetPropertyHook extends AbstractPropertyHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): void
     {
         /**

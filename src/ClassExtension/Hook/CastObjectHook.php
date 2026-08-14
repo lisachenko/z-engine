@@ -61,6 +61,7 @@ final class CastObjectHook extends AbstractHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): int
     {
         /**

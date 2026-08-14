@@ -28,6 +28,7 @@ final class UnsetDimensionHook extends AbstractDimensionHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): void
     {
         /**

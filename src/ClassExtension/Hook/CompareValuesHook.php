@@ -44,6 +44,7 @@ final class CompareValuesHook extends AbstractHook
      *
      * @inheritDoc
      */
+    #[\Override]
     public function handle(...$rawArguments): int
     {
         /**

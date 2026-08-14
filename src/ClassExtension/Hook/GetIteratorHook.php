@@ -79,6 +79,7 @@ final class GetIteratorHook extends AbstractHook
      * @inheritDoc
      * @return \FFI\CData|null
      */
+    #[\Override]
     public function handle(...$rawArguments): ?object
     {
         /**

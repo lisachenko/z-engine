@@ -219,6 +219,7 @@ class HashTable implements IteratorAggregate, Countable, ReferenceCountedInterfa
      *
      * @return Traversable<int|string, ReflectionValue> Borrowed views over the bucket zvals
      */
+    #[\Override]
     public function getIterator(): Traversable
     {
         $iterator = function () {
@@ -262,6 +263,7 @@ class HashTable implements IteratorAggregate, Countable, ReferenceCountedInterfa
      * This is the engine's own nNumOfElements, ie the number of entries iteration yields:
      * deleted buckets still occupying a slot (nNumUsed) are not counted.
      */
+    #[\Override]
     public function count(): int
     {
         // The engine field is an uint32_t; the clamp only states that for the analyser

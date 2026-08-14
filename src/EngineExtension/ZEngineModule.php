@@ -63,11 +63,13 @@ final class ZEngineModule extends AbstractModule implements ModuleLifecycleInter
      */
     private ?PersistentHeap $heap = null;
 
+    #[\Override]
     public static function targetDebug(): bool
     {
         return ZEND_DEBUG_BUILD;
     }
 
+    #[\Override]
     public static function targetPersistent(): bool
     {
         // The module entry and its globals must survive request shutdown: they are the
@@ -75,11 +77,13 @@ final class ZEngineModule extends AbstractModule implements ModuleLifecycleInter
         return true;
     }
 
+    #[\Override]
     public static function targetThreadSafe(): bool
     {
         return ZEND_THREAD_SAFE;
     }
 
+    #[\Override]
     public static function globalType(): string
     {
         // One zval-sized persistent slot: the heap registry anchor
@@ -90,27 +94,32 @@ final class ZEngineModule extends AbstractModule implements ModuleLifecycleInter
      * @inheritDoc
      * @return list<ModuleDependency>
      */
+    #[\Override]
     public function getModuleDependencies(): array
     {
         // The whole framework runs through the FFI bridge
         return [ModuleDependency::required('ffi')];
     }
 
+    #[\Override]
     public function moduleStartup(): void
     {
         // Nothing to do: the anchor slot is zero-initialized (IS_UNDEF) at registration
     }
 
+    #[\Override]
     public function moduleShutdown(): void
     {
         // Best-effort only (docs/long-running.md); no MSHUTDOWN work is needed
     }
 
+    #[\Override]
     public function requestStartup(): void
     {
         $this->heap?->onRequestStartup();
     }
 
+    #[\Override]
     public function requestShutdown(): void
     {
         $this->heap?->onRequestShutdown();
@@ -133,6 +142,7 @@ final class ZEngineModule extends AbstractModule implements ModuleLifecycleInter
      * @inheritDoc
      * @return array<string, scalar>
      */
+    #[\Override]
     public function getDisplayInfo(): array
     {
         $rows = [
