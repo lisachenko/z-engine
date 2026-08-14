@@ -166,6 +166,13 @@ class ReflectionValue implements ReferenceCountedInterface
      * payload (when the payload is refcounted); both are dropped by release()/__destruct.
      *
      * @param mixed $value Any value to be reflected
+     *
+     * The value is deliberately never named in the body: it is read back out of the
+     * engine frame this very constructor runs in (argument slot 0), which is the only way
+     * to reach the caller's own zval instead of a copy. Removing the parameter would
+     * remove the zval the constructor is built to capture.
+     *
+     * @phpstan-ignore constructor.unusedParameter (captured from the frame's argument slot 0)
      */
     public function __construct(mixed $value)
     {
@@ -230,8 +237,7 @@ class ReflectionValue implements ReferenceCountedInterface
      * The flags are derived from the payload's GC header, exactly like the engine's IS_*_EX macros do.
      *
      * @see zend_types.h:IS_STRING_EX/IS_ARRAY_EX/IS_OBJECT_EX macro family
-     */
-    /**
+     *
      * @param CData|zval $zvalEntry
      */
     private static function buildTypeInfo(int $type, object $zvalEntry): int
@@ -323,8 +329,7 @@ class ReflectionValue implements ReferenceCountedInterface
      *
      * The previous content is saved aside and released only after the copy took its own
      * reference, so a self-assignment of a refcount-1 payload cannot use freed memory.
-     */
-    /**
+     *
      * @param CData|zval $dstZval
      */
     private static function copyAndReleasePrevious(ReflectionValue $source, object $dstZval): void
@@ -380,8 +385,7 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * Type-friendly getter to return zend_class_entry directly
-     */
-    /**
+     *
      * @return zend_class_entry
      */
     public function getRawClass(): object
@@ -397,8 +401,7 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * Type-friendly getter to return zend_function/zend_internal_function directly
-     */
-    /**
+     *
      * @return zend_function|zend_internal_function
      */
     public function getRawFunction(): object
@@ -419,8 +422,7 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * Type-friendly getter to return zend_string directly
-     */
-    /**
+     *
      * @return zend_string
      */
     public function getRawString(): object
@@ -436,8 +438,7 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * Type-friendly getter to return zend_array directly
-     */
-    /**
+     *
      * @return zend_array
      */
     public function getRawArray(): object
@@ -453,8 +454,7 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * Type-friendly getter to return zend_object directly
-     */
-    /**
+     *
      * @return zend_object
      */
     public function getRawObject(): object
@@ -470,8 +470,7 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * Type-friendly getter to return zend_resource directly
-     */
-    /**
+     *
      * @return zend_resource
      */
     public function getRawResource(): object
@@ -487,8 +486,7 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * Type-friendly getter to return zend_resource directly
-     */
-    /**
+     *
      * @return zend_reference
      */
     public function getRawReference(): object
@@ -549,8 +547,7 @@ class ReflectionValue implements ReferenceCountedInterface
      * The pointer is a live view into engine memory: reads reflect the current zval
      * state and writes go straight to the engine. Prefer the typed accessors
      * (getType(), getNativeValue(), equals()) over poking fields on the result.
-     */
-    /**
+     *
      * @return zval
      */
     public function getRawValue(): object
@@ -577,8 +574,7 @@ class ReflectionValue implements ReferenceCountedInterface
      * the bucket destructor - the previous pointer is simply overwritten.
      *
      * @internal used by the copy-out-of-SHM path
-     */
-    /**
+     *
      * @param CData|object $pointer Runtime value is always CData; statically stub-typed views are accepted
      */
     public function setPointer(object $pointer): void
@@ -709,8 +705,7 @@ class ReflectionValue implements ReferenceCountedInterface
     /**
      * Returns a zval POINTER for engine calls, whether this wrapper holds an embedded
      * zval struct (a table slot / constant value) or a zval pointer (a container)
-     */
-    /**
+     *
      * @return CData|zval
      */
     private function zvalPointer(): object

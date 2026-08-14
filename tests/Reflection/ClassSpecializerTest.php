@@ -65,7 +65,11 @@ class ClassSpecializerTest extends TestCase
 
         $instance = new $newName(3);
         $this->assertSame($newName, get_class($instance));
+        // The specialized class only exists at runtime; the analysis stub in
+        // tests/phpstan/specialization-class-stubs.php declares the very hierarchy asserted here
+        // @phpstan-ignore method.alreadyNarrowedType (runtime-generated class, stub-declared parent)
         $this->assertInstanceOf(TestSpecializationBase::class, $instance);
+        // @phpstan-ignore method.alreadyNarrowedType (runtime-generated class, stub-declared interface)
         $this->assertInstanceOf(TestInterface::class, $instance);
         // A sibling copy, not a subclass of the template (the name is read back through
         // the engine so the runtime-only relation is not constant-folded away)
@@ -321,7 +325,8 @@ class ClassSpecializerTest extends TestCase
 
         $instance        = new $newName();
         $instance->union = new TestClass();
-        $this->assertInstanceOf(TestClass::class, $instance->union);
+        // Read back through reflection: the union slot itself is what the specializer rewrote
+        $this->assertInstanceOf(TestClass::class, (new \ReflectionProperty($newName, 'union'))->getValue($instance));
     }
 
     public function testInvalidSubstitutionMapIsRejected(): void

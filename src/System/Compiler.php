@@ -19,6 +19,7 @@ use ZEngine\AbstractSyntaxTree\NodeFactory;
 use ZEngine\AbstractSyntaxTree\NodeInterface;
 use ZEngine\Core;
 use ZEngine\Generated\zend_arena;
+use ZEngine\Generated\zend_compiler_globals;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\HashTable;
@@ -104,20 +105,24 @@ class Compiler
 
     /**
      * Holds an internal pointer to the compiler_globals structure
+     *
+     * @var zend_compiler_globals Typed view; the runtime value is the raw FFI\CData
+     *                            handle (see stubs/zend-engine-structs.php)
      */
-    private CData $pointer;
-    /**
-     * @param \FFI\CData $pointer
-     */
+    private object $pointer;
 
+    /**
+     * @param CData|zend_compiler_globals $pointer
+     */
     public function __construct(object $pointer)
     {
+        /** @var zend_compiler_globals $pointer Narrowed to the stub view at the owning boundary */
         $this->pointer = $pointer;
 
         $classTable = $pointer->class_table;
-        assert($classTable instanceof CData);
+        assert($classTable !== null);
         $functionTable = $pointer->function_table;
-        assert($functionTable instanceof CData);
+        assert($functionTable !== null);
 
         $this->classTable    = HashTable::fromCData($classTable);
         $this->functionTable = HashTable::fromCData($functionTable);
@@ -172,7 +177,7 @@ class Compiler
      */
     public function setCompilationMode(bool $enabled): void
     {
-        $this->pointer->in_compilation = (int) $enabled;
+        $this->pointer->in_compilation = $enabled;
     }
 
     /**
@@ -394,15 +399,22 @@ class Compiler
      * @param int $size Size of arena to create
      * @see zend_arena.h:zend_arena_create
      *
-     * @return array{CData, CData} The initialized zend_arena pointer and the underlying raw buffer
+     * @return array{zend_arena, CData} The initialized arena (typed stub view over the raw
+     *                                  CData handle) and the underlying raw buffer
      */
     private function createArena(int $size): array
     {
         $rawBuffer = Core::new("char[$size]", false);
-        $arena     = Core::cast('zend_arena *', $rawBuffer);
+        /** @var zend_arena $arena Narrowed to the stub view at the owning boundary */
+        $arena = Core::cast('zend_arena *', $rawBuffer);
 
-        $arena->ptr  = $rawBuffer + Core::getAlignedSize(Core::sizeOfType(zend_arena::class));
-        $arena->end  = $rawBuffer + $size;
+        /** @var CData $arenaPtr FFI pointer arithmetic, untyped for the analyser */
+        $arenaPtr = $rawBuffer + Core::getAlignedSize(Core::sizeOfType(zend_arena::class));
+        /** @var CData $arenaEnd FFI pointer arithmetic, untyped for the analyser */
+        $arenaEnd = $rawBuffer + $size;
+
+        $arena->ptr  = $arenaPtr;
+        $arena->end  = $arenaEnd;
         $arena->prev = null;
 
         return [$arena, $rawBuffer];

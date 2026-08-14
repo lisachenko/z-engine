@@ -394,9 +394,12 @@ class ExecutionData
     /**
      * Returns call variable from the stack by number
      *
+     * The pointer math mirrors ZEND_CALL_VAR_NUM(call, n) over the wrapped frame,
+     * where call is this frame's CData|zend_execute_data handle (see the stub view
+     * in stubs/zend-engine-structs.php for the structure phpstan infers against).
+     *
      * <span style="color:red; font-weight: bold">Only for the Z-Engine library</span>
      *
-     * @param CData $call zend_execute_data
      * @param int $variableNum Variable number
      *
      * @return CData zval* pointer

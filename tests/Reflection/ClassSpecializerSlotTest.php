@@ -63,7 +63,8 @@ class ClassSpecializerSlotTest extends TestCase
 
         $instance        = new $newName();
         $instance->value = new TestClass();
-        self::assertInstanceOf(TestClass::class, $instance->value);
+        // Read back through reflection: the slot itself is what the specializer rewrote
+        self::assertInstanceOf(TestClass::class, (new \ReflectionProperty($newName, 'value'))->getValue($instance));
 
         $this->expectException(\TypeError::class);
         $instance->value = 42;

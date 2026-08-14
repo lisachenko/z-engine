@@ -21,6 +21,7 @@ use ReflectionClass;
 use function strpos;
 
 use ZEngine\Core;
+use ZEngine\Generated\zend_ast;
 use ZEngine\Reflection\ReflectionMethod;
 
 /**
@@ -76,7 +77,7 @@ class Node implements NodeInterface
      * Node static constructor.
      *
      * @param AstOwnership|null $owner Ownership handle that must stay alive while this node is used
-     * @param \FFI\CData $node
+     * @param CData|zend_ast $node Pointer to the structure
      */
     public static function fromCData(object $node, ?AstOwnership $owner = null): Node
     {
