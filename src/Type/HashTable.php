@@ -392,7 +392,7 @@ class HashTable implements IteratorAggregate, Countable, ReferenceCountedInterfa
         $stringEntry = new StringEntry($key);
         $result      = Core::call('zend_hash_del', $this->pointer, $stringEntry->getRawValue());
         if ($result === Core::FAILURE) {
-            throw new \RuntimeException("Can not delete an item with key {$key}");
+            throw TypeOperationException::cannotDeleteKey($key);
         }
     }
 
@@ -430,7 +430,7 @@ class HashTable implements IteratorAggregate, Countable, ReferenceCountedInterfa
     {
         $result = Core::call('zend_hash_index_del', $this->pointer, $key);
         if ($result === Core::FAILURE) {
-            throw new \RuntimeException("Can not delete an item with index {$key}");
+            throw TypeOperationException::cannotDeleteIndex($key);
         }
     }
 
@@ -452,7 +452,7 @@ class HashTable implements IteratorAggregate, Countable, ReferenceCountedInterfa
             self::HASH_ADD,
         );
         if ($result === null) {
-            throw new \RuntimeException("Can not add an item with key {$key}");
+            throw TypeOperationException::cannotAddKey($key);
         }
     }
 
@@ -490,7 +490,7 @@ class HashTable implements IteratorAggregate, Countable, ReferenceCountedInterfa
         // wrapper APIs like redefine() operate on the entry the engine will actually dispatch
         $storedEntry = $this->find($lowerKey);
         if ($storedEntry === null) {
-            throw new \RuntimeException("Function {$key} was not published in the table");
+            throw TypeOperationException::functionNotPublished($key);
         }
 
         return $storedEntry->getRawFunction();
@@ -532,7 +532,7 @@ class HashTable implements IteratorAggregate, Countable, ReferenceCountedInterfa
             self::HASH_ADD_NEW,
         );
         if ($result === null) {
-            throw new \RuntimeException("Can not add an item with index {$key}");
+            throw TypeOperationException::cannotAddIndex($key);
         }
     }
 

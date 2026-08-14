@@ -82,10 +82,9 @@ class WritePropertyHook extends AbstractPropertyHook
         $value     = $this->value;
         $cacheSlot = $this->cacheSlot;
 
-        $previousScope = Core::$executor->setFakeScope($object->ce);
-        $result        = ($originalHandler)($object, $member, $value, $cacheSlot);
-        Core::$executor->setFakeScope($previousScope);
-
-        return $result;
+        return Core::$executor->withFakeScope(
+            $object->ce,
+            static fn() => ($originalHandler)($object, $member, $value, $cacheSlot),
+        );
     }
 }

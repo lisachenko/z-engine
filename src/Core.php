@@ -970,20 +970,18 @@ class Core
 
         // Unpublish generated global functions while writing the engine is still safe. Their
         // buckets point at a zend_function embedded in an immortalized closure object, so the
-        // table destructor (zend_function_dtor) must NOT run over them - delete each entry with
-        // the destructor disabled, exactly like ReflectionMethod::fromHookCData() does.
+        // table destructor (zend_function_dtor) must NOT run over them - each entry goes out
+        // through HashTable::deleteWithoutDestructor(), which disables the destructor for the
+        // duration of the delete and restores it even if the delete fails.
         if (self::$generatedFunctions !== [] && isset(self::$executor)) {
             $functionTable = self::$executor->functionTable;
-            $rawTable      = $functionTable->getRawValue();
-            $previousDtor  = $rawTable->pDestructor;
-
-            $rawTable->pDestructor = null;
             foreach (array_keys(self::$generatedFunctions) as $functionName) {
+                // zend_hash_del() reports an absent key as a failure, which delete() turns
+                // into an exception - only remove what is actually still published
                 if ($functionTable->find($functionName) !== null) {
-                    $functionTable->delete($functionName);
+                    $functionTable->deleteWithoutDestructor($functionName);
                 }
             }
-            $rawTable->pDestructor = $previousDtor;
         }
         self::$generatedFunctions = [];
 

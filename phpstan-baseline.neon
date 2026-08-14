@@ -331,7 +331,7 @@ parameters:
 			path: src/ClassExtension/Hook/GetPropertiesForHook.php
 
 		-
-			message: '#^Parameter \#1 \$newScope of method ZEngine\\System\\Executor\:\:setFakeScope\(\) expects FFI\\CData\|null, mixed given\.$#'
+			message: '#^Parameter \#1 \$scope of method ZEngine\\System\\Executor\:\:withFakeScope\(\) expects FFI\\CData\|null, mixed given\.$#'
 			identifier: argument.type
 			count: 1
 			path: src/ClassExtension/Hook/GetPropertiesForHook.php
@@ -373,7 +373,7 @@ parameters:
 			path: src/ClassExtension/Hook/GetPropertyPointerHook.php
 
 		-
-			message: '#^Parameter \#1 \$newScope of method ZEngine\\System\\Executor\:\:setFakeScope\(\) expects FFI\\CData\|null, mixed given\.$#'
+			message: '#^Parameter \#1 \$scope of method ZEngine\\System\\Executor\:\:withFakeScope\(\) expects FFI\\CData\|null, mixed given\.$#'
 			identifier: argument.type
 			count: 1
 			path: src/ClassExtension/Hook/GetPropertyPointerHook.php
@@ -421,7 +421,7 @@ parameters:
 			path: src/ClassExtension/Hook/HasPropertyHook.php
 
 		-
-			message: '#^Parameter \#1 \$newScope of method ZEngine\\System\\Executor\:\:setFakeScope\(\) expects FFI\\CData\|null, mixed given\.$#'
+			message: '#^Parameter \#1 \$scope of method ZEngine\\System\\Executor\:\:withFakeScope\(\) expects FFI\\CData\|null, mixed given\.$#'
 			identifier: argument.type
 			count: 1
 			path: src/ClassExtension/Hook/HasPropertyHook.php
@@ -505,7 +505,7 @@ parameters:
 			path: src/ClassExtension/Hook/ReadPropertyHook.php
 
 		-
-			message: '#^Parameter \#1 \$newScope of method ZEngine\\System\\Executor\:\:setFakeScope\(\) expects FFI\\CData\|null, mixed given\.$#'
+			message: '#^Parameter \#1 \$scope of method ZEngine\\System\\Executor\:\:withFakeScope\(\) expects FFI\\CData\|null, mixed given\.$#'
 			identifier: argument.type
 			count: 1
 			path: src/ClassExtension/Hook/ReadPropertyHook.php
@@ -559,7 +559,7 @@ parameters:
 			path: src/ClassExtension/Hook/UnsetPropertyHook.php
 
 		-
-			message: '#^Parameter \#1 \$newScope of method ZEngine\\System\\Executor\:\:setFakeScope\(\) expects FFI\\CData\|null, ZEngine\\Generated\\zend_class_entry\|null given\.$#'
+			message: '#^Parameter \#1 \$scope of method ZEngine\\System\\Executor\:\:withFakeScope\(\) expects FFI\\CData\|null, ZEngine\\Generated\\zend_class_entry\|null given\.$#'
 			identifier: argument.type
 			count: 1
 			path: src/ClassExtension/Hook/UnsetPropertyHook.php
@@ -613,7 +613,7 @@ parameters:
 			path: src/ClassExtension/Hook/WritePropertyHook.php
 
 		-
-			message: '#^Parameter \#1 \$newScope of method ZEngine\\System\\Executor\:\:setFakeScope\(\) expects FFI\\CData\|null, mixed given\.$#'
+			message: '#^Parameter \#1 \$scope of method ZEngine\\System\\Executor\:\:withFakeScope\(\) expects FFI\\CData\|null, mixed given\.$#'
 			identifier: argument.type
 			count: 1
 			path: src/ClassExtension/Hook/WritePropertyHook.php
@@ -853,12 +853,6 @@ parameters:
 			path: src/Core.php
 
 		-
-			message: '#^Parameter \#1 \$string of function strtolower expects string, string\|null given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/EngineExtension/AbstractModule.php
-
-		-
 			message: '#^Property ZEngine\\EngineExtension\\Hook\\ExtensionConstructorHook\:\:\$globalMemoryPointer \(FFI\\CData\) does not accept mixed\.$#'
 			identifier: assign.propertyType
 			count: 1
@@ -998,12 +992,6 @@ parameters:
 
 		-
 			message: '#^Cannot call method getName\(\) on ZEngine\\Reflection\\ReflectionClass\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: src/Reflection/ReflectionClass.php
-
-		-
-			message: '#^Cannot call method getRawClass\(\) on ZEngine\\Reflection\\ReflectionValue\|null\.$#'
 			identifier: method.nonObject
 			count: 1
 			path: src/Reflection/ReflectionClass.php

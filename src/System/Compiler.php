@@ -18,6 +18,7 @@ use ZEngine\AbstractSyntaxTree\AstOwnership;
 use ZEngine\AbstractSyntaxTree\NodeFactory;
 use ZEngine\AbstractSyntaxTree\NodeInterface;
 use ZEngine\Core;
+use ZEngine\Generated\zend_arena;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\HashTable;
@@ -400,7 +401,7 @@ class Compiler
         $rawBuffer = Core::new("char[$size]", false);
         $arena     = Core::cast('zend_arena *', $rawBuffer);
 
-        $arena->ptr  = $rawBuffer + Core::getAlignedSize(Core::sizeof(Core::type('zend_arena')));
+        $arena->ptr  = $rawBuffer + Core::getAlignedSize(Core::sizeOfType(zend_arena::class));
         $arena->end  = $rawBuffer + $size;
         $arena->prev = null;
 

@@ -57,8 +57,6 @@ class ObjectEntry implements ReferenceCountedInterface
     use ReferenceCountedTrait;
     use ReleasableTrait;
 
-    private HashTable $properties;
-
     /**
      * @var zend_object Typed view of the wrapped engine object; the runtime value is
      *                  the raw FFI\CData handle (see stubs/zend-engine-structs.php)
@@ -128,7 +126,7 @@ class ObjectEntry implements ReferenceCountedInterface
         // Engine invariant: every live object carries its class entry
         assert($classEntry !== null);
 
-        return ReflectionClass::fromCData(Core::cast('zend_class_entry *', $classEntry));
+        return ReflectionClass::fromCData($classEntry);
     }
 
     /**
@@ -368,8 +366,12 @@ class ObjectEntry implements ReferenceCountedInterface
             'handle'   => $this->getHandle(),
             'refcount' => $this->getReferenceCount(),
         ];
-        if (isset($this->properties)) {
-            $info['properties'] = $this->properties;
+        // Resolved from the live pointer on every dump: setDynamicPropertiesPointer() may
+        // have replaced (or dropped) the table since this entry was built, and a cached
+        // wrapper would then dump a stale or already-freed HashTable
+        $properties = $this->getDynamicPropertiesPointer();
+        if ($properties !== null) {
+            $info['properties'] = HashTable::fromCData($properties);
         }
 
         return $info;
@@ -407,10 +409,6 @@ class ObjectEntry implements ReferenceCountedInterface
     {
         /** @var zend_object $pointer Narrowed to the stub view at the owning boundary */
         $this->pointer = $pointer;
-        $properties    = $this->pointer->properties;
-        if ($properties !== null) {
-            $this->properties = HashTable::fromCData($properties);
-        }
     }
 
     /**
@@ -419,7 +417,7 @@ class ObjectEntry implements ReferenceCountedInterface
     private function assertObjectAlive(): void
     {
         if ($this->weakSource !== null && $this->weakSource->get() === null) {
-            throw new \RuntimeException('The underlying object has been destroyed, this entry is dangling');
+            throw TypeOperationException::danglingObjectEntry();
         }
     }
 }

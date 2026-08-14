@@ -15,8 +15,10 @@ namespace ZEngine\Memory;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\HashTable as HashTableStruct;
 use ZEngine\Generated\zend_array;
 use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zval;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\Type\HashTable;
@@ -190,7 +192,7 @@ final class PersistentGraphCloner
             }
         }
 
-        $slotCount = $entry->getPropertySlotCount();
+        $slotCount = $entry->getClass()->getDefaultPropertiesCount();
         for ($index = 0; $index < $slotCount; $index++) {
             $this->validateValue($entry->getPropertySlot($index), "{$path}({$className})->slot#{$index}");
         }
@@ -289,7 +291,7 @@ final class PersistentGraphCloner
 
         // The clone is a byte copy, so it still carries the source class entry: its slot
         // count is the live one for the whole cloning pass
-        $slotCount = $cloneEntry->getPropertySlotCount();
+        $slotCount = $cloneEntry->getClass()->getDefaultPropertiesCount();
         for ($index = 0; $index < $slotCount; $index++) {
             $this->rewriteValue($cloneEntry->getPropertySlot($index));
         }
@@ -301,7 +303,7 @@ final class PersistentGraphCloner
      * Rewrites one clone-owned value in place: request-lifetime payload pointers are
      * replaced by persistent ones, scalar byte copies are left untouched
      *
-     * Every replacement is written NON-REFCOUNTED (setUncountedPayload): the persistent
+     * Every replacement is written NON-REFCOUNTED (writeUncountedPayload): the persistent
      * blocks minted here are interned strings, sealed arrays and refcount-pinned objects,
      * which the engine copies by pointer and never releases.
      */
@@ -312,18 +314,47 @@ final class PersistentGraphCloner
             $content = StringEntry::fromCData($value->getRawString())->getStringValue();
 
             // Interned-style payload: consumers copy the pointer without refcounting
-            $value->setUncountedPayload(ReflectionValue::IS_STRING, $this->persistString($content)->getRawValue());
+            $this->writeUncountedPayload($value, ReflectionValue::IS_STRING, $this->persistString($content)->getRawValue());
         } elseif ($type === ReflectionValue::IS_ARRAY) {
             // Immutable payload: copy-on-write into request memory on mutation
-            $value->setUncountedPayload(ReflectionValue::IS_ARRAY, $this->cloneArray($value->getRawArray()));
+            $this->writeUncountedPayload($value, ReflectionValue::IS_ARRAY, $this->cloneArray($value->getRawArray()));
         } elseif ($type === ReflectionValue::IS_OBJECT) {
             // Standard refcounted object shape: alias churn lands on the pinned counter,
             // and GC_NOT_COLLECTABLE in the clone header keeps the collector away
-            $value->setUncountedPayload(
+            $this->writeUncountedPayload(
+                $value,
                 ReflectionValue::IS_OBJECT | $this->objectTypeFlags,
                 $this->cloneObject($value->getRawObject()),
             );
         }
+    }
+
+    /**
+     * Writes a payload pointer together with its complete type_info word into a
+     * clone-owned slot, WITHOUT any refcounting on either the previous or the new content
+     *
+     * The primitive behind the engine's non-refcounted value shapes: interned strings,
+     * immutable (sealed) arrays and refcount-pinned persistent objects are copied around
+     * by pointer and never addref'd or released. The whole u1.type_info word is written
+     * so the slot carries the exact flags the shape requires.
+     *
+     * This is NOT an assignment: the previous content is overwritten in place, which is
+     * only legal on slots this cloner minted itself (byte copies of source zvals, fresh
+     * persistent clones) whose previous payload nobody has to release. That precondition
+     * cannot be expressed as an API contract, which is why the write lives here as
+     * cloner-private machinery instead of on ReflectionValue.
+     *
+     * @param int          $typeInfo Full type_info word: base type | (type flags << Z_TYPE_FLAGS_SHIFT)
+     * @param CData|object $payload  Payload block; the runtime value is always CData
+     */
+    private function writeUncountedPayload(ReflectionValue $slot, int $typeInfo, object $payload): void
+    {
+        /** @var zval $zval Raw escape hatch: the slot is cloner-owned, see the docblock */
+        $zval = $slot->getRawValue();
+        // Every zend_value member is pointer-sized, so the void* member writes the payload
+        // bytes for whichever shape the type_info word declares
+        $zval->value->ptr    = Core::cast('void *', $payload);
+        $zval->u1->type_info = $typeInfo;
     }
 
     /**
@@ -346,9 +377,9 @@ final class PersistentGraphCloner
         // through an object cycle
         $this->arrayMap[$address] = $rawTable;
         $this->arrays[]           = $rawTable;
-        $this->bytes += Core::sizeof(Core::type('HashTable'));
+        $this->bytes += Core::sizeOfType(HashTableStruct::class);
 
-        $zvalSize = Core::sizeof(Core::type('zval'));
+        $zvalSize = Core::sizeOfType(zval::class);
         foreach (HashTable::fromCData($sourceArray) as $key => $sourceElement) {
             // Start from a byte copy of the source element, then rewrite it in place;
             // the engine copies the fixed-up bytes into its own bucket on insert

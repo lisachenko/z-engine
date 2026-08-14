@@ -13,11 +13,18 @@ permissions:
   contents: read
   pull-requests: write
 
+# Two pushes in quick succession would otherwise run the "is a merge-up PR
+# already open?" check concurrently and both create one. Serialize per branch
+# without cancelling, so every push still gets its cascade evaluated.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   merge-up:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Resolve successor branch
         id: flow
