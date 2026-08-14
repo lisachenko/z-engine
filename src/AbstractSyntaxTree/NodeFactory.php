@@ -34,22 +34,17 @@ class NodeFactory
     {
         /** @var zend_ast $node Narrowed to the stub view at the owning boundary */
         $kind = $node->kind;
-        switch (true) {
+
+        return match (true) {
             // There are special node types ZVAL, CONSTANT, ZNODE
-            case $kind === NodeKind::AST_ZVAL:
-                $node = Core::cast('zend_ast_zval *', $node);
-                return ValueNode::fromCData($node, $owner);
-            case $kind === NodeKind::AST_CONSTANT:
-            case $kind === NodeKind::AST_ZNODE:
-                throw new \RuntimeException('Not yet supported: ' . NodeKind::name($kind));
-            case NodeKind::isSpecial($kind):
-                $node = Core::cast('zend_ast_decl *', $node);
-                return DeclarationNode::fromCData($node, $owner);
-            case NodeKind::isList($kind):
-                $node = Core::cast('zend_ast_list *', $node);
-                return ListNode::fromCData($node, $owner);
-            default:
-                return Node::fromCData($node, $owner);
-        }
+            $kind === NodeKind::AST_ZVAL => ValueNode::fromCData(Core::cast('zend_ast_zval *', $node), $owner),
+            $kind === NodeKind::AST_CONSTANT,
+            $kind === NodeKind::AST_ZNODE => throw new \RuntimeException(
+                'Not yet supported: ' . NodeKind::name($kind),
+            ),
+            NodeKind::isSpecial($kind) => DeclarationNode::fromCData(Core::cast('zend_ast_decl *', $node), $owner),
+            NodeKind::isList($kind)    => ListNode::fromCData(Core::cast('zend_ast_list *', $node), $owner),
+            default                    => Node::fromCData($node, $owner),
+        };
     }
 }

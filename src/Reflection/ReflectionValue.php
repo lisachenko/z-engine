@@ -115,41 +115,41 @@ class ReflectionValue implements ReferenceCountedInterface
     use ReleasableTrait;
 
     /* regular data types */
-    public const IS_UNDEF        = 0;
-    public const IS_NULL         = 1;
-    public const IS_FALSE        = 2;
-    public const IS_TRUE         = 3;
-    public const IS_LONG         = 4;
-    public const IS_DOUBLE       = 5;
-    public const IS_STRING       = 6;
-    public const IS_ARRAY        = 7;
-    public const IS_OBJECT       = 8;
-    public const IS_RESOURCE     = 9;
-    public const IS_REFERENCE    = 10;
-    public const IS_CONSTANT_AST = 11; /* constant expressions */
+    public const int IS_UNDEF        = 0;
+    public const int IS_NULL         = 1;
+    public const int IS_FALSE        = 2;
+    public const int IS_TRUE         = 3;
+    public const int IS_LONG         = 4;
+    public const int IS_DOUBLE       = 5;
+    public const int IS_STRING       = 6;
+    public const int IS_ARRAY        = 7;
+    public const int IS_OBJECT       = 8;
+    public const int IS_RESOURCE     = 9;
+    public const int IS_REFERENCE    = 10;
+    public const int IS_CONSTANT_AST = 11; /* constant expressions */
 
     /**
      * Fake types used only for type hinting.
      * These are allowed to overlap with the types below.
      */
-    public const IS_CALLABLE = 12;
-    public const IS_ITERABLE = 13;
-    public const IS_VOID     = 14;
-    public const IS_STATIC   = 15;
-    public const IS_MIXED    = 16;
-    public const IS_NEVER    = 17;
+    public const int IS_CALLABLE = 12;
+    public const int IS_ITERABLE = 13;
+    public const int IS_VOID     = 14;
+    public const int IS_STATIC   = 15;
+    public const int IS_MIXED    = 16;
+    public const int IS_NEVER    = 17;
 
     /* internal types */
-    public const IS_INDIRECT  = 12;
-    public const IS_PTR       = 13;
-    public const IS_ALIAS_PTR = 14;
-    public const _IS_ERROR    = 15;
+    public const int IS_INDIRECT  = 12;
+    public const int IS_PTR       = 13;
+    public const int IS_ALIAS_PTR = 14;
+    public const int _IS_ERROR    = 15;
 
     /* used for casts */
-    public const _IS_BOOL   = 18;
-    public const _IS_NUMBER = 19;
+    public const int _IS_BOOL   = 18;
+    public const int _IS_NUMBER = 19;
 
-    private const Z_TYPE_FLAGS_MASK = 0xFF00;
+    private const int Z_TYPE_FLAGS_MASK = 0xFF00;
 
     /**
      * Stores the pointer to the zval structure associated with this variable
@@ -602,27 +602,31 @@ class ReflectionValue implements ReferenceCountedInterface
         }
         $thisValue  = $this->valueUnion();
         $otherValue = $other->valueUnion();
-        switch ($type) {
-            case self::IS_UNDEF:
-            case self::IS_NULL:
-            case self::IS_FALSE:
-            case self::IS_TRUE:
-                return true;
-            case self::IS_LONG:
-                return $thisValue->lval === $otherValue->lval;
-            case self::IS_DOUBLE:
-                return $thisValue->dval === $otherValue->dval;
-            case self::IS_STRING:
-                $thisString  = $thisValue->str;
-                $otherString = $otherValue->str;
-                assert($thisString !== null && $otherString !== null);
 
-                return StringEntry::fromCData($thisString)->getStringValue()
-                    === StringEntry::fromCData($otherString)->getStringValue();
-            default:
-                // Arrays, objects and constant expressions: conservatively different
-                return false;
-        }
+        return match ($type) {
+            self::IS_LONG   => $thisValue->lval === $otherValue->lval,
+            self::IS_DOUBLE => $thisValue->dval === $otherValue->dval,
+            self::IS_STRING => self::stringSlotsEqual($thisValue->str, $otherValue->str),
+            // Payload-less types: the base-type check above already decided them
+            self::IS_UNDEF, self::IS_NULL, self::IS_FALSE, self::IS_TRUE => true,
+            // Arrays, objects and constant expressions: conservatively different
+            default => false,
+        };
+    }
+
+    /**
+     * Compares the zend_string slots of two IS_STRING zvals by their PHP string value
+     *
+     * @param zend_string|null $thisString
+     * @param zend_string|null $otherString
+     */
+    private static function stringSlotsEqual(?object $thisString, ?object $otherString): bool
+    {
+        // Engine invariant: an IS_STRING zval always carries its zend_string
+        assert($thisString !== null && $otherString !== null);
+
+        return StringEntry::fromCData($thisString)->getStringValue()
+            === StringEntry::fromCData($otherString)->getStringValue();
     }
 
     /**
@@ -863,6 +867,6 @@ class ReflectionValue implements ReferenceCountedInterface
      */
     private function isTypeInfoRefCounted(int $typeInfo): bool
     {
-        return ($typeInfo & self::Z_TYPE_FLAGS_MASK) != 0;
+        return ($typeInfo & self::Z_TYPE_FLAGS_MASK) !== 0;
     }
 }
