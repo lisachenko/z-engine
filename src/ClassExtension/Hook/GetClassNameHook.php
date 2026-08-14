@@ -36,7 +36,7 @@ use ZEngine\Type\StringEntry;
  */
 final class GetClassNameHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'get_class_name';
+    protected const string HOOK_FIELD = 'get_class_name';
 
     /**
      * Object instance to report the class name for (const zend_object *)

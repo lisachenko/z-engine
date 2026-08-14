@@ -43,7 +43,7 @@ use ZEngine\Type\ObjectEntry;
  */
 final class GetDebugInfoHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'get_debug_info';
+    protected const string HOOK_FIELD = 'get_debug_info';
 
     /**
      * Object instance to provide debug info for

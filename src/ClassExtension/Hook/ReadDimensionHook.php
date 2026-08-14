@@ -24,7 +24,7 @@ use ZEngine\Reflection\ReflectionValue;
  */
 final class ReadDimensionHook extends AbstractDimensionHook
 {
-    protected const HOOK_FIELD = 'read_dimension';
+    protected const string HOOK_FIELD = 'read_dimension';
 
     /**
      * Hook access type (BP_VAR_R, BP_VAR_IS, ...)

@@ -51,7 +51,7 @@ use ZEngine\Type\ObjectEntry;
  */
 final class GetIteratorHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'get_iterator';
+    protected const string HOOK_FIELD = 'get_iterator';
 
     /**
      * Class entry of the object being iterated

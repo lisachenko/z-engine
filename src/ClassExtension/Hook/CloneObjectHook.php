@@ -37,7 +37,7 @@ use ZEngine\Type\ObjectEntry;
  */
 final class CloneObjectHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'clone_obj';
+    protected const string HOOK_FIELD = 'clone_obj';
 
     /**
      * Object instance being cloned

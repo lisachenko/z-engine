@@ -23,7 +23,7 @@ use ZEngine\Hook\AbstractHook;
  */
 final class AstProcessHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'zend_ast_process';
+    protected const string HOOK_FIELD = 'zend_ast_process';
 
     /**
      * Instance of top-level AST node

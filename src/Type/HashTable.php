@@ -69,21 +69,21 @@ class HashTable implements IteratorAggregate, Countable, ReferenceCountedInterfa
 {
     use ReferenceCountedTrait;
 
-    protected const HASH_UPDATE          = (1 << 0);
-    protected const HASH_ADD             = (1 << 1);
-    protected const HASH_UPDATE_INDIRECT = (1 << 2);
-    protected const HASH_ADD_NEW         = (1 << 3);
-    protected const HASH_ADD_NEXT        = (1 << 4);
+    protected const int HASH_UPDATE          = (1 << 0);
+    protected const int HASH_ADD             = (1 << 1);
+    protected const int HASH_UPDATE_INDIRECT = (1 << 2);
+    protected const int HASH_ADD_NEW         = (1 << 3);
+    protected const int HASH_ADD_NEXT        = (1 << 4);
 
     /**
      * Corresponds to the HASH_FLAG_PACKED flag in zend_types.h
      */
-    protected const HASH_FLAG_PACKED = (1 << 2);
+    protected const int HASH_FLAG_PACKED = (1 << 2);
 
     /**
      * @see zend_hash.c:uninitialized_bucket - two uint32_t slots holding HT_INVALID_IDX
      */
-    private const HT_INVALID_IDX = 0xFFFFFFFF;
+    private const int HT_INVALID_IDX = 0xFFFFFFFF;
 
     /**
      * Process-lifetime stand-in for the engine's static uninitialized_bucket

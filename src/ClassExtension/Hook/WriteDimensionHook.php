@@ -24,7 +24,7 @@ use ZEngine\Reflection\ReflectionValue;
  */
 final class WriteDimensionHook extends AbstractDimensionHook
 {
-    protected const HOOK_FIELD = 'write_dimension';
+    protected const string HOOK_FIELD = 'write_dimension';
 
     /**
      * Value to write

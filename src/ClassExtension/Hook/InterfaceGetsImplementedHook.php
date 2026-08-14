@@ -22,7 +22,7 @@ use ZEngine\Reflection\ReflectionClass;
  */
 final class InterfaceGetsImplementedHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'interface_gets_implemented';
+    protected const string HOOK_FIELD = 'interface_gets_implemented';
 
     /**
      * Interface type that is implemented

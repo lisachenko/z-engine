@@ -31,9 +31,9 @@ namespace ZEngine\EngineExtension;
  */
 final class ModuleDependency
 {
-    public const MODULE_REQUIRED  = 1;
-    public const MODULE_CONFLICTS = 2;
-    public const MODULE_OPTIONAL  = 3;
+    public const int MODULE_REQUIRED  = 1;
+    public const int MODULE_CONFLICTS = 2;
+    public const int MODULE_OPTIONAL  = 3;
 
     /**
      * Version relationships understood by the engine (zend_modules.h)

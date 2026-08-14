@@ -21,7 +21,7 @@ use ZEngine\Hook\AbstractHook;
  */
 class ExtensionConstructorHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'globals_ctor';
+    protected const string HOOK_FIELD = 'globals_ctor';
 
     private CData $globalMemoryPointer;
 

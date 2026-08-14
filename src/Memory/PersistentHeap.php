@@ -74,13 +74,13 @@ final class PersistentHeap
     /**
      * Descriptor slot indexes (integer keys inside a key's descriptor table)
      */
-    private const SLOT_ROOT           = 0;
-    private const SLOT_OBJECTS        = 1;
-    private const SLOT_OBJECT_CLASSES = 2;
-    private const SLOT_OBJECT_SIZES   = 3;
-    private const SLOT_STRINGS        = 4;
-    private const SLOT_ARRAYS         = 5;
-    private const SLOT_BYTES          = 6;
+    private const int SLOT_ROOT           = 0;
+    private const int SLOT_OBJECTS        = 1;
+    private const int SLOT_OBJECT_CLASSES = 2;
+    private const int SLOT_OBJECT_SIZES   = 3;
+    private const int SLOT_STRINGS        = 4;
+    private const int SLOT_ARRAYS         = 5;
+    private const int SLOT_BYTES          = 6;
 
     /**
      * Keys re-attached in the current request (per-request state, reset by the hooks)

@@ -45,12 +45,12 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
     /**
      * @see zend_modules.h:MODULE_PERSISTENT
      */
-    private const MODULE_PERSISTENT = 1;
+    private const int MODULE_PERSISTENT = 1;
 
     /**
      * @see zend_modules.h:MODULE_TEMPORARY
      */
-    private const MODULE_TEMPORARY = 2;
+    private const int MODULE_TEMPORARY = 2;
 
     /**
      * Unique name of this module

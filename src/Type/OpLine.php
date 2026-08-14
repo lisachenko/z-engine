@@ -41,14 +41,14 @@ class OpLine
     /**
      * Unused operand
      */
-    public const IS_UNUSED = 0;
+    public const int IS_UNUSED = 0;
 
     /**
      * This opcode node type is used for literal values in PHP code.
      *
      * For example, the integer literal 1 or string literal 'Hello, World!' will both be of this type.
      */
-    public const IS_CONST = (1 << 0);
+    public const int IS_CONST = (1 << 0);
 
     /**
      * This opcode node type is used for temporary variables.
@@ -59,7 +59,7 @@ class OpLine
      *
      * For example, the return value of $a++ will be of this type.
      */
-    public const IS_TMP_VAR = (1 << 1);
+    public const int IS_TMP_VAR = (1 << 1);
 
     /**
      * This opcode node type is used for complex variables in PHP code.
@@ -67,7 +67,7 @@ class OpLine
      * For example, the variable $obj->a is considered to be a complex variable, however the variable $a is not
      * (it is instead an IS_CV type).
      */
-    public const IS_VAR = (1 << 2);
+    public const int IS_VAR = (1 << 2);
 
     /**
      * This opcode node type is used for simple variables in PHP code.
@@ -75,7 +75,7 @@ class OpLine
      * For example, the variable $a is considered to be a simple variable,
      * however the variable $obj->a is not (it is instead an IS_VAR type).
      */
-    public const IS_CV = (1 << 3);
+    public const int IS_CV = (1 << 3);
 
     /**
      * Execution context (if present).

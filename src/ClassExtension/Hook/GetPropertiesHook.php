@@ -67,7 +67,7 @@ use ZEngine\Type\ObjectEntry;
  */
 final class GetPropertiesHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'get_properties';
+    protected const string HOOK_FIELD = 'get_properties';
 
     /**
      * Object instance

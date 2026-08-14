@@ -25,7 +25,7 @@ use ZEngine\Type\ObjectEntry;
  */
 final class CastObjectHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'cast_object';
+    protected const string HOOK_FIELD = 'cast_object';
 
     /**
      * Object instance to perform casting

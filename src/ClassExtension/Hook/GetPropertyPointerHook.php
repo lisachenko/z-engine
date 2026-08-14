@@ -23,7 +23,7 @@ use ZEngine\Generated\zend_string;
  */
 final class GetPropertyPointerHook extends AbstractPropertyHook
 {
-    protected const HOOK_FIELD = 'get_property_ptr_ptr';
+    protected const string HOOK_FIELD = 'get_property_ptr_ptr';
 
     /**
      * Hook access type

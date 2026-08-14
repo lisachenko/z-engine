@@ -34,7 +34,7 @@ use ZEngine\Type\StringEntry;
  */
 final class ErrorCallbackHook extends AbstractHook
 {
-    protected const HOOK_FIELD = 'zend_error_cb';
+    protected const string HOOK_FIELD = 'zend_error_cb';
 
     /**
      * Raw E_* severity of the diagnostic

@@ -23,7 +23,7 @@ use ZEngine\Generated\zend_string;
  */
 final class UnsetPropertyHook extends AbstractPropertyHook
 {
-    protected const HOOK_FIELD = 'unset_property';
+    protected const string HOOK_FIELD = 'unset_property';
 
     /**
      * typedef void (*zend_object_unset_property_t)(zend_object *object, zend_string *member, void **cache_slot);

@@ -40,14 +40,14 @@ final class OpCodeHook implements HookInterface
      * zend_user_opcode_handlers table (not in a hookable struct field), and every opcode
      * forms its own independent chain
      */
-    private const FIELD_KEY_PREFIX = 'user-opcode';
+    private const string FIELD_KEY_PREFIX = 'user-opcode';
 
     /**
      * Class-name prefix of z-engine's own code: opcodes executed by a frame whose scope
      * starts with it never reach a user handler, which keeps the framework from calling
      * back into itself (see docs/self-debugging.md)
      */
-    private const ENGINE_SCOPE_PREFIX = 'ZEngine';
+    private const string ENGINE_SCOPE_PREFIX = 'ZEngine';
 
     /**
      * Custom user handler with signature function($scope): int
