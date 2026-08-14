@@ -189,7 +189,7 @@ class Compiler
             throw new \LogicException('Not in compilation process');
         }
 
-        return NodeFactory::fromCData(Core::cast('zend_ast *', $this->pointer->ast));
+        return NodeFactory::fromCData($this->pointer->ast);
     }
 
     /**
@@ -408,10 +408,10 @@ class Compiler
         /** @var zend_arena $arena Narrowed to the stub view at the owning boundary */
         $arena = Core::cast('zend_arena *', $rawBuffer);
 
+        /** @var CData $arenaPtr FFI pointer arithmetic, untyped for the analyser */
         $arenaPtr = $rawBuffer + Core::getAlignedSize(Core::sizeOfType(zend_arena::class));
-        assert($arenaPtr instanceof CData);
+        /** @var CData $arenaEnd FFI pointer arithmetic, untyped for the analyser */
         $arenaEnd = $rawBuffer + $size;
-        assert($arenaEnd instanceof CData);
 
         $arena->ptr  = $arenaPtr;
         $arena->end  = $arenaEnd;

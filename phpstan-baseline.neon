@@ -97,7 +97,7 @@ parameters:
 			path: src/AbstractSyntaxTree/Node.php
 
 		-
-			message: '#^Parameter \#1 \$node of static method ZEngine\\AbstractSyntaxTree\\NodeFactory\:\:fromCData\(\) expects FFI\\CData, mixed given\.$#'
+			message: '#^Parameter \#1 \$node of static method ZEngine\\AbstractSyntaxTree\\NodeFactory\:\:fromCData\(\) expects FFI\\CData\|ZEngine\\Generated\\zend_ast, mixed given\.$#'
 			identifier: argument.type
 			count: 3
 			path: src/AbstractSyntaxTree/Node.php
@@ -106,6 +106,12 @@ parameters:
 			message: '#^Parameter \#2 \$pointer of static method ZEngine\\Core\:\:cast\(\) expects object, mixed given\.$#'
 			identifier: argument.type
 			count: 5
+			path: src/AbstractSyntaxTree/Node.php
+
+		-
+			message: '#^Property ZEngine\\AbstractSyntaxTree\\Node\:\:\$node \(FFI\\CData\) does not accept FFI\\CData\|ZEngine\\Generated\\zend_ast\.$#'
+			identifier: assign.propertyType
+			count: 1
 			path: src/AbstractSyntaxTree/Node.php
 
 		-
