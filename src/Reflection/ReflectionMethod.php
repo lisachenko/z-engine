@@ -351,10 +351,13 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
         $thisOpArray  = $this->getOpArrayPointer();
         $otherOpArray = $other->getOpArrayPointer();
 
-        foreach (['last', 'last_var', 'last_literal', 'T', 'num_args', 'required_num_args', 'fn_flags'] as $field) {
-            if ($thisOpArray->{$field} !== $otherOpArray->{$field}) {
-                return false;
-            }
+        $bodyMetrics  = ['last', 'last_var', 'last_literal', 'T', 'num_args', 'required_num_args', 'fn_flags'];
+        $metricsAgree = array_all(
+            $bodyMetrics,
+            static fn(string $field): bool => $thisOpArray->{$field} === $otherOpArray->{$field},
+        );
+        if (!$metricsAgree) {
+            return false;
         }
         $opcodesSize = $thisOpArray->last * Core::sizeOfType(zend_op::class);
         if ($opcodesSize > 0) {

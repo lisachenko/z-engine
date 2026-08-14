@@ -132,10 +132,12 @@ final class HotSwap
         // Keep the parsed tree (and its arena) alive until the walk is complete
         unset($tree);
 
-        foreach ($declaredNames as $declaredName) {
-            if (strcasecmp($declaredName, $shortName) === 0) {
-                return;
-            }
+        $declaresTarget = array_any(
+            $declaredNames,
+            static fn(string $declaredName): bool => strcasecmp($declaredName, $shortName) === 0,
+        );
+        if ($declaresTarget) {
+            return;
         }
 
         throw HotSwapException::sourceMissingClass(

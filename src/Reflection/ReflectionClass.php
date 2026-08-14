@@ -872,18 +872,19 @@ class ReflectionClass extends NativeReflectionClass
     public function getMagicSlotFor(ReflectionMethod $method): ?string
     {
         $methodAddress = $method->getAddress();
-        foreach (self::INHERITED_FUNCTION_POINTERS as $fieldName) {
-            $fieldFunction = $this->pointer->{$fieldName};
-            if ($fieldFunction === null) {
-                continue;
-            }
-            assert($fieldFunction instanceof CData);
-            if (Core::addressOf($fieldFunction) === $methodAddress) {
-                return $fieldName;
-            }
-        }
 
-        return null;
+        return array_find(
+            self::INHERITED_FUNCTION_POINTERS,
+            function (string $fieldName) use ($methodAddress): bool {
+                $fieldFunction = $this->pointer->{$fieldName};
+                if ($fieldFunction === null) {
+                    return false;
+                }
+                assert($fieldFunction instanceof CData);
+
+                return Core::addressOf($fieldFunction) === $methodAddress;
+            },
+        );
     }
 
     /**
