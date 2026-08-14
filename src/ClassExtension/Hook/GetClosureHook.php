@@ -214,7 +214,7 @@ final class GetClosureHook extends AbstractHook
             $callable = [$instance, $methodName];
             assert(is_callable($callable));
 
-            return \Closure::fromCallable($callable);
+            return $callable(...);
         }
 
         $scope = $common->scope;
@@ -224,6 +224,6 @@ final class GetClosureHook extends AbstractHook
         $callable = StringEntry::fromCData($scopeName)->getStringValue() . '::' . $methodName;
         assert(is_callable($callable));
 
-        return \Closure::fromCallable($callable);
+        return $callable(...);
     }
 }
