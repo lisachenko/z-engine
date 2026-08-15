@@ -61,26 +61,26 @@ class CompilerTest extends TestCase
         $this->assertNull(Core::$compiler->getActiveClassEntry());
     }
 
-    public function testWithoutCompilationModeReturnsResultAndRestoresPreviousMode(): void
+    public function testProcessInCompilationModeReturnsResultAndRestoresPreviousMode(): void
     {
         $modeInside = null;
 
-        $result = Core::$compiler->withoutCompilationMode(function () use (&$modeInside): int {
+        $result = Core::$compiler->processInCompilationMode(true, function () use (&$modeInside): int {
             $modeInside = Core::$compiler->isInCompilation();
 
             return 42;
         });
 
         $this->assertSame(42, $result);
-        $this->assertFalse($modeInside);
+        $this->assertTrue($modeInside);
         // Outside of compilation the previous mode was false and must be restored as false
         $this->assertFalse(Core::$compiler->isInCompilation());
     }
 
-    public function testWithoutCompilationModeRestoresModeWhenOperationThrows(): void
+    public function testProcessInCompilationModeRestoresModeWhenOperationThrows(): void
     {
         try {
-            Core::$compiler->withoutCompilationMode(function (): void {
+            Core::$compiler->processInCompilationMode(false, function (): void {
                 throw new \RuntimeException('boom');
             });
             $this->fail('The operation exception must propagate');

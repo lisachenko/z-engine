@@ -188,24 +188,27 @@ class Compiler
     }
 
     /**
-     * Runs an operation with CG(in_compilation) temporarily cleared, restoring the previous mode
+     * Runs an operation with CG(in_compilation) set to the given mode, restoring the previous one
      *
-     * While CG(in_compilation) is set, the engine promotes every internally-raised exception
-     * to an immediate fatal error BEFORE any catch block runs - including exceptions that are
-     * thrown and caught entirely inside library code, such as Core::cast()'s array-decay
-     * probe. Nearly every AST accessor crosses such a code path, so work performed inside a
-     * `zend_ast_process` callback must run through this bracket to keep normal exception
-     * semantics. The previous mode is restored in a finally block, so the bracket is
-     * exception-safe and also correct when no compilation is running.
+     * The enter/leave is automatic and exception-safe: whatever the operation does, the
+     * previous mode is put back in a finally block before control returns to the caller.
+     *
+     * The `false` direction is the important one: while CG(in_compilation) is set, the
+     * engine promotes every internally-raised exception to an immediate fatal error BEFORE
+     * any catch block runs - including exceptions that are thrown and caught entirely
+     * inside library code, such as Core::cast()'s array-decay probe. Nearly every AST
+     * accessor crosses such a code path, so work performed inside a `zend_ast_process`
+     * callback must run through this bracket to keep normal exception semantics (see
+     * AstProcessHook::withoutCompilationMode() for the consumer-facing shorthand).
      */
-    public function withoutCompilationMode(\Closure $operation): mixed
+    public function processInCompilationMode(bool $isEnabled, \Closure $process): mixed
     {
-        $wasCompiling = $this->isInCompilation();
-        $this->setCompilationMode(false);
+        $previousMode = $this->isInCompilation();
+        $this->setCompilationMode($isEnabled);
         try {
-            return $operation();
+            return $process();
         } finally {
-            $this->setCompilationMode($wasCompiling);
+            $this->setCompilationMode($previousMode);
         }
     }
 

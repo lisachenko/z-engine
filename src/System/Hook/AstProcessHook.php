@@ -85,7 +85,7 @@ final class AstProcessHook extends AbstractHook
      */
     public function withoutCompilationMode(\Closure $operation): mixed
     {
-        return Core::$compiler->withoutCompilationMode($operation);
+        return Core::$compiler->processInCompilationMode(false, $operation);
     }
 
     /**
