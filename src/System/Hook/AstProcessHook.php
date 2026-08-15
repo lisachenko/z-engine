@@ -21,6 +21,20 @@ use ZEngine\Hook\AbstractHook;
 
 /**
  * Receiving hook for processing an AST
+ *
+ * The callback runs while CG(in_compilation) is set, and in that state the engine promotes
+ * every internally-raised exception to an immediate fatal error before any catch runs -
+ * including thrown-and-caught ones inside library code, such as Core::cast()'s array-decay
+ * probe, which nearly every AST accessor crosses. Consumers therefore bracket their tree
+ * work with Compiler::processInCompilationMode(), which restores the previous mode in a
+ * finally block:
+ *
+ *     Core::setASTProcessHandler(function (AstProcessHook $hook): void {
+ *         Core::$compiler->processInCompilationMode(false, fn () => rewrite($hook->getAST()));
+ *         if ($hook->hasOriginalHandler()) {
+ *             $hook->proceed();
+ *         }
+ *     });
  */
 final class AstProcessHook extends AbstractHook
 {
@@ -66,26 +80,6 @@ final class AstProcessHook extends AbstractHook
     public function getFileName(): string
     {
         return Core::$compiler->getFileName();
-    }
-
-    /**
-     * Runs an operation with CG(in_compilation) temporarily cleared, restoring the previous mode
-     *
-     * While CG(in_compilation) is set, the engine promotes every internally-raised exception
-     * to an immediate fatal error before any catch runs - including thrown-and-caught ones
-     * inside library code, such as Core::cast()'s array-decay probe, which nearly every AST
-     * accessor crosses. Consumers therefore run their tree work through this bracket:
-     *
-     *     Core::setASTProcessHandler(function (AstProcessHook $hook): void {
-     *         $hook->withoutCompilationMode(fn () => rewrite($hook->getAST()));
-     *         if ($hook->hasOriginalHandler()) {
-     *             $hook->proceed();
-     *         }
-     *     });
-     */
-    public function withoutCompilationMode(\Closure $operation): mixed
-    {
-        return Core::$compiler->processInCompilationMode(false, $operation);
     }
 
     /**

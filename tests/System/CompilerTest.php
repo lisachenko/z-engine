@@ -183,7 +183,7 @@ class CompilerTest extends TestCase
      */
     #[Group('internal')]
     #[RunInSeparateProcess]
-    public function testWithoutCompilationModeKeepsEngineExceptionsCatchableInsideAstProcessHook(): void
+    public function testProcessInCompilationModeKeepsEngineExceptionsCatchableInsideAstProcessHook(): void
     {
         $probeOutcome      = null;
         $modeInsideBracket = null;
@@ -193,7 +193,8 @@ class CompilerTest extends TestCase
 
         $hook = Core::setASTProcessHandler(
             function (AstProcessHook $hook) use (&$probeOutcome, &$modeInsideBracket, &$modeAfterBracket, $nonArrayPointer): void {
-                $probeOutcome = $hook->withoutCompilationMode(
+                $probeOutcome = Core::$compiler->processInCompilationMode(
+                    false,
                     function () use (&$modeInsideBracket, $nonArrayPointer): string {
                         $modeInsideBracket = Core::$compiler->isInCompilation();
                         try {
