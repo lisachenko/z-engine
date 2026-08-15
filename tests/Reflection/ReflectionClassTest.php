@@ -766,6 +766,33 @@ class ReflectionClassTest extends TestCase
         $this->assertContains('fields:' . TestPropertyHandlers::class, TestPropertyHandlers::$log);
     }
 
+    public function testFromClassTableFindsALoadedClassWithoutAutoloading(): void
+    {
+        $reflection = ReflectionClass::fromClassTable(TestClass::class);
+
+        $this->assertNotNull($reflection);
+        $this->assertSame(TestClass::class, $reflection->getName());
+        // The lookup is keyed the way the engine keys its table, so the case does not matter
+        $this->assertNotNull(ReflectionClass::fromClassTable(strtoupper(TestClass::class)));
+    }
+
+    public function testFromClassTableReportsAnUnknownClassAsNullInsteadOfAutoloading(): void
+    {
+        $autoloaderCalls = [];
+        $autoloader      = static function (string $className) use (&$autoloaderCalls): void {
+            $autoloaderCalls[] = $className;
+        };
+        spl_autoload_register($autoloader);
+        try {
+            $missing = ReflectionClass::fromClassTable('ZEngine\\Stub\\ThereIsNoSuchClass');
+        } finally {
+            spl_autoload_unregister($autoloader);
+        }
+
+        $this->assertNull($missing);
+        $this->assertSame([], $autoloaderCalls, 'The class-table probe must not trigger autoloading');
+    }
+
     public function testInstallExtensionHandlers(): void
     {
         $refClass = new ReflectionClass(NativeNumber::class);

@@ -18,6 +18,8 @@ use ReflectionClass;
 use ZEngine\Core;
 use ZEngine\Generated\zend_refcounted_h;
 use ZEngine\Generated\zend_string;
+use ZEngine\Memory\Allocator;
+use ZEngine\Memory\EngineAllocator;
 use ZEngine\Reflection\ReflectionValue;
 
 /**
@@ -130,19 +132,25 @@ class StringEntry implements ReferenceCountedInterface
      * (internal classes and their members), which the engine releases with the persistent
      * allocator. The struct is built manually because no persistent string constructor is
      * exported; the layout is verified at boot by the engine layout checks.
+     *
+     * @param Allocator|null $allocator Source of the string block; the default is z-engine's
+     *                                  untracked malloc-backed allocator, ie the immortal
+     *                                  block this method has always minted. A foreign
+     *                                  allocator puts the string into ITS memory instead.
      */
-    public static function persistent(string $value): StringEntry
+    public static function persistent(string $value, ?Allocator $allocator = null): StringEntry
     {
         $length    = strlen($value);
-        $valOffset = Core::type(zend_string::class)->getStructFieldOffset('val');
+        $valOffset = Core::offsetOfField(zend_string::class, 'val');
 
-        $buffer = Core::new('char[' . ($valOffset + $length + 1) . ']', false, true);
-        $string = Core::cast(zend_string::class, $buffer);
+        $allocator ??= EngineAllocator::persistent();
+        $address = $allocator->allocate($valOffset + $length + 1, Allocator::ENGINE_STRUCT_ALIGNMENT);
+        $string  = Core::pointerAtAddress(zend_string::class, $address);
 
         $string->gc->refcount     = 1;
         $string->gc->u->type_info = Core::engineConstant('GC_STRING') | Core::engineConstant('GC_PERSISTENT');
         $string->len              = $length;
-        $valPointer               = Core::cast('char *', $buffer) + $valOffset;
+        $valPointer               = Core::pointerAtAddress('char *', $address + $valOffset);
         assert($valPointer instanceof CData);
         Core::memcpy($valPointer, $value . "\0", $length + 1);
         $hash = Core::call('zend_string_hash_func', $string);
@@ -168,10 +176,12 @@ class StringEntry implements ReferenceCountedInterface
      * The string is never registered in the engine's interned tables, so equality
      * against a real interned string falls back to a content compare - same contract
      * as opcache SHM strings in processes that attach without the interning pass.
+     *
+     * @param Allocator|null $allocator Source of the string block (see persistent())
      */
-    public static function persistentInterned(string $value): StringEntry
+    public static function persistentInterned(string $value, ?Allocator $allocator = null): StringEntry
     {
-        $stringEntry = static::persistent($value);
+        $stringEntry = static::persistent($value, $allocator);
         $pointer     = $stringEntry->pointer;
 
         $pointer->gc->u->type_info |= Core::engineConstant('GC_IMMUTABLE');
