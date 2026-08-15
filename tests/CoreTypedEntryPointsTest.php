@@ -56,6 +56,25 @@ final class CoreTypedEntryPointsTest extends TestCase
         $this->assertSame($address, Core::addressOf(Core::pointerAtAddress(zval::class, $address)));
     }
 
+    public function testFieldOffsetsAreReachableWithoutATypeHandle(): void
+    {
+        // The named replacement for type(...)->getStructFieldOffset(...): a consumer must be
+        // able to ask where a field starts without a raw FFI\CType crossing the boundary
+        $this->assertSame(
+            Core::type('zend_string')->getStructFieldOffset('val'),
+            Core::offsetOfField(zend_string::class, 'val'),
+        );
+        $this->assertSame(
+            Core::offsetOfField('zend_string', 'val'),
+            Core::offsetOfField(zend_string::class, 'val'),
+        );
+
+        // The first field of a struct sits at offset zero, the next ones behind it
+        $this->assertSame(0, Core::offsetOfField(zend_string::class, 'gc'));
+        $this->assertGreaterThan(0, Core::offsetOfField(zend_string::class, 'len'));
+        $this->assertLessThan(Core::sizeOfType(zend_string::class), Core::offsetOfField(zend_string::class, 'len'));
+    }
+
     public function testStubClassesAreNeverLoadedAtRuntime(): void
     {
         $this->assertFalse(class_exists(zval::class, false), 'stub classes must stay analysis-only');

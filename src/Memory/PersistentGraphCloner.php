@@ -18,6 +18,7 @@ use ZEngine\Core;
 use ZEngine\Generated\HashTable as HashTableStruct;
 use ZEngine\Generated\zend_array;
 use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zend_string;
 use ZEngine\Generated\zval;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionValue;
@@ -115,7 +116,15 @@ final class PersistentGraphCloner
      */
     private readonly int $objectTypeFlags;
 
-    public function __construct()
+    /**
+     * @param Allocator|null $allocator Source of every persistent byte this cloner mints -
+     *                                  object clones, interned string blocks and table
+     *                                  structs alike. Null keeps each primitive on its own
+     *                                  historical default (z-engine's malloc-backed FFI
+     *                                  allocator), which is not the same allocator for all
+     *                                  three: strings are minted untracked, the rest tracked.
+     */
+    public function __construct(private readonly ?Allocator $allocator = null)
     {
         $refcounted = Core::engineConstant('IS_TYPE_REFCOUNTED') | Core::engineConstant('IS_TYPE_COLLECTABLE');
 
@@ -273,7 +282,7 @@ final class PersistentGraphCloner
             return $this->objectMap[$address];
         }
 
-        $clone      = PersistentObjectFactory::persistentClone($sourceObject);
+        $clone      = PersistentObjectFactory::persistentClone($sourceObject, $this->allocator);
         $cloneEntry = ObjectEntry::fromCData($clone);
         // The byte-copied handle belongs to the source in the CURRENT request; the clone
         // receives a fresh handle at every re-attachment (ObjectStore::put)
@@ -370,7 +379,7 @@ final class PersistentGraphCloner
             return $this->arrayMap[$address];
         }
 
-        $table    = new PersistentHashTable();
+        $table    = new PersistentHashTable($this->allocator);
         $rawTable = $table->getRawValue();
 
         // Record the mapping before filling: an element may reach this very array again
@@ -411,11 +420,11 @@ final class PersistentGraphCloner
             return $this->stringPool[$content];
         }
 
-        $entry = StringEntry::persistentInterned($content);
+        $entry = StringEntry::persistentInterned($content, $this->allocator);
 
         $this->stringPool[$content] = $entry;
         $this->strings[]            = $entry->getRawValue();
-        $this->bytes += Core::type('zend_string')->getStructFieldOffset('val') + strlen($content) + 1;
+        $this->bytes += Core::offsetOfField(zend_string::class, 'val') + strlen($content) + 1;
 
         return $entry;
     }
