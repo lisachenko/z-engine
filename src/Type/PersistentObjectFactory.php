@@ -17,6 +17,8 @@ use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Generated\zend_object;
 use ZEngine\Generated\zend_object_handlers;
+use ZEngine\Memory\Allocator;
+use ZEngine\Memory\EngineAllocator;
 use ZEngine\Reflection\ReflectionClass;
 
 /**
@@ -63,10 +65,17 @@ final class PersistentObjectFactory
      * Creates a persistent byte-clone of a live zend_object
      *
      * @param CData|zend_object $sourceObject zend_object* to clone (must use std_object_handlers)
+     * @param Allocator|null    $allocator    Source of the clone's memory; the default is
+     *                                        z-engine's tracked malloc-backed allocator, ie
+     *                                        exactly the process-heap block this factory has
+     *                                        always minted. A foreign allocator (a fork-shared
+     *                                        arena, say) puts the clone into ITS memory, and
+     *                                        the caller releases it the same way it does the
+     *                                        rest of that region.
      *
      * @return zend_object zend_object* in persistent memory, not yet registered in the store
      */
-    public static function persistentClone(object $sourceObject): object
+    public static function persistentClone(object $sourceObject, ?Allocator $allocator = null): object
     {
         /** @var zend_object $source Narrowed to the stub view at the owning boundary */
         $source      = $sourceObject;
@@ -74,10 +83,13 @@ final class PersistentObjectFactory
         // Engine invariant: every live object carries its class entry
         assert($sourceClass !== null);
         $totalSize = ReflectionClass::getObjectSize($sourceClass);
-        $memory    = Core::trackedNew("char[{$totalSize}]", true);
-        $object    = Core::cast(zend_object::class, $memory);
+        $allocator ??= EngineAllocator::trackedPersistent();
+        $object = Core::pointerAtAddress(
+            zend_object::class,
+            $allocator->allocate($totalSize, Allocator::ENGINE_STRUCT_ALIGNMENT),
+        );
 
-        Core::memcpy($memory, Core::cast('char *', $sourceObject), $totalSize);
+        Core::memcpy($object, Core::cast('char *', $sourceObject), $totalSize);
 
         $object->gc->refcount     = self::PIN_BASELINE;
         $object->gc->u->type_info = Core::engineConstant('GC_OBJECT')

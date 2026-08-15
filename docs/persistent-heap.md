@@ -104,6 +104,49 @@ Persistent strings are interned-style (immutable, non-refcounted), persistent ar
 sealed immutable tables — both are copied into zvals without refcounting and any userland
 mutation copy-on-writes into request memory, leaving the persistent block untouched.
 
+## Where the persistent bytes come from (the allocator seam)
+
+Every persistent block the framework mints — an object clone, an interned string block, a
+hashtable struct — is allocated through a `ZEngine\Memory\Allocator`. The default is
+`EngineAllocator`, which reproduces the three shapes z-engine used to hardcode (tracked
+malloc, tracked request memory, untracked malloc), so a caller that passes nothing sees no
+change at all.
+
+Passing one is what lets a graph live somewhere other than the process heap — a
+fork-shared mmap arena, a shared-memory segment:
+
+```php
+$graph = (new PersistentGraphCloner($arena))->persist($root);          // objects + strings + tables
+$clone = PersistentObjectFactory::persistentClone($rawObject, $arena); // one object
+$block = StringEntry::persistentInterned('key', $arena);               // one string
+$table = new PersistentHashTable($arena);                              // one table struct
+```
+
+The interface speaks in **addresses**, never `FFI\CData` (AGENTS.md): an implementation in
+a consumer package binds its own `mmap`/`shm` primitives with `FFI::cdef` and returns the
+integer it computed. It also reports whether it keeps ownership of what it hands out —
+`ownsAllocations()`. A structure built on such memory refuses `destroy()`: both frees
+assume z-engine's own allocator, and the arena owner releases the region as a whole.
+
+A table's struct is only half its memory; the buckets are the other half, and the engine
+would `pemalloc` them on the first insert. `PersistentHashTable::installExternalStorage()`
+takes that half too:
+
+```php
+$capacity = 1024;                                                  // a power of two
+$address  = $arena->allocate(PersistentHashTable::externalStorageSize($capacity));
+$table    = PersistentHashTable::withExternalStorage($address, $capacity, $arena);
+```
+
+The installed block carries the engine's own `HT_SIZE_EX` layout (two `uint32_t` hash slots
+per bucket, reset to `HT_INVALID_IDX`, followed by the `Bucket` area), and installation is
+only allowed **before the first insert**, so the engine never allocates storage of its own.
+Growth is the hazard afterwards — the engine grows a full table by `perealloc`ing exactly
+that block — and is guarded from both sides: inserts through the wrapper refuse the write
+that would trigger the resize (`getRemainingCapacity()` reports the headroom), and
+`assertNoGrowth()` diagnoses a relocation caused by engine paths the wrapper cannot
+intercept.
+
 ## Storage layout and the anchor
 
 Everything the heap needs across requests lives in engine-visible persistent memory —

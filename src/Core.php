@@ -1023,6 +1023,23 @@ class Core
     }
 
     /**
+     * Returns the byte offset of a field inside an engine structure
+     *
+     * The named form of the type(...)->getStructFieldOffset(...) pair, and the one consumers
+     * should use: it answers "where do the inline properties start in a zend_object?" without
+     * a raw FFI\CType ever crossing the API boundary - the same remedy sizeOfType() is for
+     * sizeof(type(...)).
+     *
+     * @param class-string|string $type  Name of the engine type (eg "zend_object") or a
+     *                                   generated struct stub class
+     * @param string              $field Name of the declared field
+     */
+    public static function offsetOfField(string $type, string $field): int
+    {
+        return self::$engine->type(self::resolveCName($type))->getStructFieldOffset($field);
+    }
+
+    /**
      * Returns a CType definition for engine by type name
      *
      * @param string $type Name of the type
