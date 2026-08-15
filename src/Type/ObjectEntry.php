@@ -170,6 +170,52 @@ class ObjectEntry implements ReferenceCountedInterface
     }
 
     /**
+     * Registers this object in the object store of the CURRENT request
+     *
+     * An object the engine did not allocate through zend_object_std_init - a persistent
+     * clone re-attached for this request, an object minted into foreign memory - is
+     * invisible to the engine until it holds a slot in EG(objects_store): spl_object_id(),
+     * object iteration and every store walk go through that table. The store dies with the
+     * request, so a cross-request object is registered again in every request that uses it.
+     *
+     * The store does NOT take ownership: the object memory stays with whoever allocated it,
+     * and it must be unregister()ed before that memory goes away - a bucket still pointing
+     * at released memory is walked by the engine at request shutdown.
+     *
+     * @return int The handle the engine assigned (== spl_object_id of this object)
+     */
+    public function register(): int
+    {
+        $this->assertObjectAlive();
+
+        return Core::$executor->objectStore->put($this->pointer);
+    }
+
+    /**
+     * Returns this object's store slot to the free list, leaving the object itself untouched
+     *
+     * The counterpart of register(): the bucket stops pointing at this object and the slot
+     * becomes reusable, without any destructor running and without the object being freed.
+     * The handle is read from the object at call time, and the slot is verified to actually
+     * hold THIS object before it is recycled - a stale handle (never registered, already
+     * unregistered, or a slot meanwhile reused by another object) is refused instead of
+     * silently detaching somebody else's object.
+     */
+    public function unregister(): void
+    {
+        $this->assertObjectAlive();
+
+        $store  = Core::$executor->objectStore;
+        $handle = $this->pointer->handle;
+        $bucket = $store->offsetExists($handle) ? $store[$handle] : null;
+        if ($bucket === null || Core::addressOf($bucket->getRawValue()) !== Core::addressOf($this->pointer)) {
+            throw TypeOperationException::objectNotRegistered($handle);
+        }
+
+        $store->recycle($handle);
+    }
+
+    /**
      * Checks if this object is a lazy object (PHP 8.4 ReflectionClass::newLazyGhost()/newLazyProxy())
      *
      * Mirrors the engine's zend_object_is_lazy(): true for an uninitialized lazy ghost and for

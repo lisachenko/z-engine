@@ -135,6 +135,18 @@ class TypeOperationException extends \RuntimeException
         );
     }
 
+    /**
+     * Raised when an object is unregistered from a store slot that does not hold it
+     */
+    public static function objectNotRegistered(int $handle): self
+    {
+        return new self(
+            "This object does not occupy the object store slot {$handle}: it was never "
+            . 'registered in this request, has already been unregistered, or the slot has '
+            . 'meanwhile been reused by another object',
+        );
+    }
+
     public static function danglingObjectEntry(): self
     {
         return new self('The underlying object has been destroyed, this entry is dangling');
