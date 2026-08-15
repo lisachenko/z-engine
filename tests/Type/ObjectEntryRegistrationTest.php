@@ -48,6 +48,10 @@ class ObjectEntryRegistrationTest extends TestCase
         $instance = $entry->getNativeValue();
         $this->assertSame($handle, spl_object_id($instance));
         $this->assertSame(TestPersistentCandidate::class, $instance::class);
+        // The materialized value is a REAL PHP alias of the clone: releasing it makes the
+        // engine write a refcount into the object, so it has to be gone before the memory
+        // is - the same ordering rule the unregister() contract states for the store slot
+        unset($instance);
 
         $entry->unregister();
         Core::untrackAndFree($clone);
@@ -84,9 +88,12 @@ class ObjectEntryRegistrationTest extends TestCase
 
         // Every request re-registers the same clone, which is what makes a persistent object
         // usable across requests: the handle is per-registration, the object is not
+        $instance = $entry->getNativeValue();
         $this->assertGreaterThan(0, $second);
         $this->assertSame($second, $entry->getHandle());
-        $this->assertSame($second, spl_object_id($entry->getNativeValue()));
+        $this->assertSame($second, spl_object_id($instance));
+        // Aliases go before the memory does (see the first test)
+        unset($instance);
 
         $entry->unregister();
         Core::untrackAndFree($clone);

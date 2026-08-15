@@ -182,6 +182,14 @@ class ObjectEntry implements ReferenceCountedInterface
      * and it must be unregister()ed before that memory goes away - a bucket still pointing
      * at released memory is walked by the engine at request shutdown.
      *
+     * Registration makes the object REACHABLE FROM USERLAND, and that outlives the store
+     * slot: every value materialized from it (getNativeValue(), a lookup through the store,
+     * anything var_dump() handed out) is a real PHP alias whose release writes a refcount
+     * into the object. Such aliases must therefore be gone BEFORE the memory is released
+     * too - the write lands at offset 0 of the block, which is exactly where an allocator
+     * keeps its free-list bookkeeping, so a late alias corrupts the heap instead of
+     * segfaulting where the mistake was made.
+     *
      * @return int The handle the engine assigned (== spl_object_id of this object)
      */
     public function register(): int
