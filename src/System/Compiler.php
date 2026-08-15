@@ -188,6 +188,28 @@ class Compiler
     }
 
     /**
+     * Runs an operation with CG(in_compilation) temporarily cleared, restoring the previous mode
+     *
+     * While CG(in_compilation) is set, the engine promotes every internally-raised exception
+     * to an immediate fatal error BEFORE any catch block runs - including exceptions that are
+     * thrown and caught entirely inside library code, such as Core::cast()'s array-decay
+     * probe. Nearly every AST accessor crosses such a code path, so work performed inside a
+     * `zend_ast_process` callback must run through this bracket to keep normal exception
+     * semantics. The previous mode is restored in a finally block, so the bracket is
+     * exception-safe and also correct when no compilation is running.
+     */
+    public function withoutCompilationMode(\Closure $operation): mixed
+    {
+        $wasCompiling = $this->isInCompilation();
+        $this->setCompilationMode(false);
+        try {
+            return $operation();
+        } finally {
+            $this->setCompilationMode($wasCompiling);
+        }
+    }
+
+    /**
      * Returns the Abstract Syntax Tree for given source file
      */
     public function getAST(): NodeInterface
@@ -201,14 +223,31 @@ class Compiler
 
     /**
      * Returns the file name which is compiled at the moment
+     *
+     * This accessor must stay callable from inside a `zend_ast_process` callback, where
+     * CG(in_compilation) is set and any engine-raised exception is promoted to a fatal
+     * error before a catch could run (see withoutCompilationMode()). The StringEntry path
+     * crosses Core::cast()'s thrown-and-caught probe, so the bytes are read directly off
+     * the zend_string instead: `val` is a char[1] flexible array member, and taking the
+     * element address turns the read into an unbounded char* that FFI::string() copies
+     * without any throwing code path.
      */
     public function getFileName(): string
     {
-        if ($this->pointer->compiled_filename === null) {
+        $compiledFilename = $this->pointer->compiled_filename;
+        if ($compiledFilename === null) {
             throw new \LogicException('Not in compilation process');
         }
+        $length = $compiledFilename->len;
+        if ($length < 1) {
+            return '';
+        }
 
-        return StringEntry::fromCData($this->pointer->compiled_filename)->getStringValue();
+        // The element access must stay inline: only in FFI::addr()'s by-ref argument
+        // position does a char element remain a CData proxy (assigned to a variable it
+        // materializes to a PHP string).
+        // @phpstan-ignore argument.type (the char[1] element proxy is CData at runtime)
+        return \FFI::string(\FFI::addr($compiledFilename->val[0]), $length);
     }
 
     /**

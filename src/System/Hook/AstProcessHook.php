@@ -16,6 +16,7 @@ namespace ZEngine\System\Hook;
 use FFI\CData;
 use ZEngine\AbstractSyntaxTree\NodeFactory;
 use ZEngine\AbstractSyntaxTree\NodeInterface;
+use ZEngine\Core;
 use ZEngine\Hook\AbstractHook;
 
 /**
@@ -54,6 +55,37 @@ final class AstProcessHook extends AbstractHook
     public function getAST(): NodeInterface
     {
         return NodeFactory::fromCData($this->ast);
+    }
+
+    /**
+     * Returns the name of the compilation unit this hook fires for
+     *
+     * Safe to call inside the callback: the underlying accessor reads the zend_string
+     * directly and never crosses a throwing code path (see Compiler::getFileName()).
+     */
+    public function getFileName(): string
+    {
+        return Core::$compiler->getFileName();
+    }
+
+    /**
+     * Runs an operation with CG(in_compilation) temporarily cleared, restoring the previous mode
+     *
+     * While CG(in_compilation) is set, the engine promotes every internally-raised exception
+     * to an immediate fatal error before any catch runs - including thrown-and-caught ones
+     * inside library code, such as Core::cast()'s array-decay probe, which nearly every AST
+     * accessor crosses. Consumers therefore run their tree work through this bracket:
+     *
+     *     Core::setASTProcessHandler(function (AstProcessHook $hook): void {
+     *         $hook->withoutCompilationMode(fn () => rewrite($hook->getAST()));
+     *         if ($hook->hasOriginalHandler()) {
+     *             $hook->proceed();
+     *         }
+     *     });
+     */
+    public function withoutCompilationMode(\Closure $operation): mixed
+    {
+        return Core::$compiler->withoutCompilationMode($operation);
     }
 
     /**
