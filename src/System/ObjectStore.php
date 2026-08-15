@@ -110,11 +110,55 @@ final class ObjectStore implements Countable, ArrayAccess
     }
 
     /**
+     * Returns the object store of the CURRENT request
+     *
+     * The public entry point into EG(objects_store): the engine-global wrappers behind
+     * Core::$executor are core-layer state and not a consumer API (AGENTS.md), so a package
+     * that has to hand the engine an object of its own asks here instead of reaching through
+     * them. The returned view is the one the executor itself uses - stores are never copies.
+     */
+    public static function current(): self
+    {
+        return Core::$executor->objectStore;
+    }
+
+    /**
      * Returns the free head (aka next handle)
      */
     public function nextHandle(): int
     {
         return $this->pointer->free_list_head;
+    }
+
+    /**
+     * Registers an object in this request's store and returns the handle it received
+     *
+     * The named, CData-free form of put(): an object that was NOT built by
+     * zend_object_std_init - a persistent clone re-attached for this request, say - becomes
+     * visible to the engine (spl_object_id, object iteration, var_dump) only after it is
+     * registered here, and every request needs its own registration because the store dies
+     * with the request.
+     *
+     * The store does not take ownership: the caller still owns the object memory and must
+     * unregister() the handle before that memory goes away, or the engine walks a bucket
+     * pointing at released memory at request shutdown.
+     */
+    public function register(ObjectEntry $object): int
+    {
+        return $this->put($object->getRawValue());
+    }
+
+    /**
+     * Returns a handle obtained from register() to the store's free list
+     *
+     * The named, ownership-explicit form of recycle(): the bucket stops pointing at the
+     * object and the slot becomes reusable, without any destructor running and without the
+     * object itself being freed - which is exactly what an owner of externally allocated
+     * objects needs at the end of a request.
+     */
+    public function unregister(int $handle): void
+    {
+        $this->recycle($handle);
     }
 
     /**

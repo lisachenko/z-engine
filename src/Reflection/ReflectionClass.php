@@ -236,6 +236,29 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
+     * Looks a class up in the engine class table WITHOUT autoloading it
+     *
+     * The named public form of the EG(class_table) lookup: the engine-global wrappers behind
+     * Core::$executor are core-layer state and not a consumer API (AGENTS.md), so a package
+     * asking "is this class already in the engine, and which entry is it?" asks here.
+     *
+     * Unlike the constructor (and unlike `new \ReflectionClass($name)`) this neither triggers
+     * the autoloader nor throws for a class the engine does not know: a miss is null, which is
+     * what makes it usable as a probe before re-attaching data recorded for that class name.
+     *
+     * Names are matched the way the engine keys its table, lowercased.
+     */
+    public static function fromClassTable(string $className): ?ReflectionClass
+    {
+        $classEntryValue = Core::$executor->classTable->find(strtolower($className));
+        if ($classEntryValue === null) {
+            return null;
+        }
+
+        return static::fromCData($classEntryValue->getRawClass());
+    }
+
+    /**
      * @inheritDoc
      */
     #[\ReturnTypeWillChange]
