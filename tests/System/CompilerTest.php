@@ -61,6 +61,36 @@ class CompilerTest extends TestCase
         $this->assertNull(Core::$compiler->getActiveClassEntry());
     }
 
+    public function testProcessInCompilationModeReturnsResultAndRestoresPreviousMode(): void
+    {
+        $modeInside = null;
+
+        $result = Core::$compiler->processInCompilationMode(true, function () use (&$modeInside): int {
+            $modeInside = Core::$compiler->isInCompilation();
+
+            return 42;
+        });
+
+        $this->assertSame(42, $result);
+        $this->assertTrue($modeInside);
+        // Outside of compilation the previous mode was false and must be restored as false
+        $this->assertFalse(Core::$compiler->isInCompilation());
+    }
+
+    public function testProcessInCompilationModeRestoresModeWhenOperationThrows(): void
+    {
+        try {
+            Core::$compiler->processInCompilationMode(false, function (): void {
+                throw new \RuntimeException('boom');
+            });
+            $this->fail('The operation exception must propagate');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('boom', $exception->getMessage());
+        }
+
+        $this->assertFalse(Core::$compiler->isInCompilation());
+    }
+
     public function testGetActiveOpArrayIsNullOutsideCompilation(): void
     {
         $this->assertNull(Core::$compiler->getActiveOpArray());
@@ -114,6 +144,83 @@ class CompilerTest extends TestCase
         // Compilation is over: the engine has restored both pointers
         $this->assertNull(Core::$compiler->getActiveOpArray());
         $this->assertNull(Core::$compiler->getActiveClassEntry());
+    }
+
+    /**
+     * getFileName() must be callable from inside the zend_ast_process callback. While
+     * CG(in_compilation) is set the engine promotes every internally-raised exception to
+     * a fatal error BEFORE any catch runs, so the accessor may not cross a throwing code
+     * path (like Core::cast()'s thrown-and-caught array-decay probe) - this test dies
+     * with a fatal instead of failing if it ever does.
+     */
+    #[Group('internal')]
+    #[RunInSeparateProcess]
+    public function testGetFileNameIsSafeInsideAstProcessHook(): void
+    {
+        $fileNameInsideHook = null;
+
+        $hook = Core::setASTProcessHandler(
+            function (AstProcessHook $hook) use (&$fileNameInsideHook): void {
+                $fileNameInsideHook = $hook->getFileName();
+            },
+        );
+
+        try {
+            eval('return 1 + 1;');
+        } finally {
+            $hook->uninstall();
+        }
+
+        $this->assertIsString($fileNameInsideHook);
+        $this->assertStringContainsString("eval()'d code", $fileNameInsideHook);
+    }
+
+    /**
+     * The bracket restores normal exception semantics inside the zend_ast_process
+     * callback: an engine-raised, thrown-and-caught FFI\Exception (count() on a
+     * non-array CData - the exact shape of Core::cast()'s array-decay probe) must stay
+     * catchable instead of being promoted to a fatal error by CG(in_compilation).
+     */
+    #[Group('internal')]
+    #[RunInSeparateProcess]
+    public function testProcessInCompilationModeKeepsEngineExceptionsCatchableInsideAstProcessHook(): void
+    {
+        $probeOutcome      = null;
+        $modeInsideBracket = null;
+        $modeAfterBracket  = null;
+
+        $nonArrayPointer = \FFI::addr(\FFI::cdef('')->new('int'));
+
+        $hook = Core::setASTProcessHandler(
+            function (AstProcessHook $hook) use (&$probeOutcome, &$modeInsideBracket, &$modeAfterBracket, $nonArrayPointer): void {
+                $probeOutcome = Core::$compiler->processInCompilationMode(
+                    false,
+                    function () use (&$modeInsideBracket, $nonArrayPointer): string {
+                        $modeInsideBracket = Core::$compiler->isInCompilation();
+                        try {
+                            // @phpstan-ignore function.resultUnused, argument.type (the throw is the point of the probe)
+                            \count($nonArrayPointer);
+
+                            return 'no exception raised';
+                        } catch (\FFI\Exception) {
+                            return 'caught';
+                        }
+                    },
+                );
+                $modeAfterBracket = Core::$compiler->isInCompilation();
+            },
+        );
+
+        try {
+            eval('return 2 + 2;');
+        } finally {
+            $hook->uninstall();
+        }
+
+        $this->assertSame('caught', $probeOutcome);
+        $this->assertFalse($modeInsideBracket);
+        // The hook fires during compilation, so the bracket must restore mode = true
+        $this->assertTrue($modeAfterBracket);
     }
 
     /**
