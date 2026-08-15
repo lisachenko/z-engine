@@ -25,6 +25,8 @@ use ZEngine\Generated\zend_array;
 use ZEngine\Generated\zend_function;
 use ZEngine\Generated\zend_internal_function;
 use ZEngine\Generated\zend_refcounted_h;
+use ZEngine\Memory\Allocator;
+use ZEngine\Memory\EngineAllocator;
 use ZEngine\Reflection\ReflectionValue;
 
 /**
@@ -97,6 +99,14 @@ class HashTable implements IteratorAggregate, Countable, ReferenceCountedInterfa
     protected object $pointer;
 
     /**
+     * Whether the struct block belongs to a FOREIGN allocator (an arena, a shared segment)
+     *
+     * Set from the allocator's own ownership report at construction time and false for every
+     * borrowed (fromCData) view: destroy() refuses to free memory z-engine did not allocate.
+     */
+    protected bool $externallyAllocated = false;
+
+    /**
      * Creates a NEW empty engine-compatible hashtable OWNED by this wrapper
      *
      * Field-for-field port of zend_hash.c:_zend_hash_init_int(ht, HT_MIN_SIZE, NULL,
@@ -108,11 +118,25 @@ class HashTable implements IteratorAggregate, Countable, ReferenceCountedInterfa
      * by the debug-build leak gate).
      *
      * A BORROWED view over an engine-owned table is a different construction: fromCData().
+     *
+     * @param Allocator|null $allocator Source of the struct block; the default is z-engine's
+     *                                  own tracked FFI allocator in the allocation class of
+     *                                  this table (malloc for persistent subclasses, request
+     *                                  memory otherwise). A foreign allocator (arena, shared
+     *                                  segment) keeps ownership of the block: such a table
+     *                                  refuses destroy(), its owner reclaims the memory.
      */
-    public function __construct()
+    public function __construct(?Allocator $allocator = null)
     {
-        $memory  = Core::trackedNew(HashTableStruct::class, static::isPersistentAllocation());
-        $pointer = Core::cast(HashTableStruct::class, Core::addr($memory));
+        $allocator ??= static::defaultAllocator();
+
+        $address = $allocator->allocate(
+            Core::sizeOfType(HashTableStruct::class),
+            Allocator::ENGINE_STRUCT_ALIGNMENT,
+        );
+        $pointer = Core::pointerAtAddress(HashTableStruct::class, $address);
+
+        $this->externallyAllocated = $allocator->ownsAllocations();
 
         $gcHeader   = $pointer->gc;
         $gcInfo     = $gcHeader->u;
@@ -161,9 +185,15 @@ class HashTable implements IteratorAggregate, Countable, ReferenceCountedInterfa
      * view. Stored payloads are not touched (pDestructor is NULL by construction), so
      * whoever wrote a value into the table still owns it. Sealed persistent tables are
      * handled by the PersistentHashTable override.
+     *
+     * A table built on a FOREIGN allocator is refused: both frees below assume z-engine's
+     * own allocator, and running them over an arena block would corrupt somebody else's
+     * heap. The arena owner reclaims such a table by dropping the whole region.
      */
     public function destroy(): void
     {
+        $this->assertOwnedMemory();
+
         Core::call('zend_hash_destroy', $this->pointer);
 
         // The engine-grown data block is gone; release the struct through the
@@ -177,6 +207,27 @@ class HashTable implements IteratorAggregate, Countable, ReferenceCountedInterfa
     protected static function isPersistentAllocation(): bool
     {
         return false;
+    }
+
+    /**
+     * Refuses any release path for memory that belongs to a foreign allocator
+     */
+    protected function assertOwnedMemory(): void
+    {
+        if ($this->externallyAllocated) {
+            throw TypeOperationException::externallyAllocatedTable();
+        }
+    }
+
+    /**
+     * Allocator used when the constructor is not given one: z-engine's tracked FFI blocks
+     * in the allocation class this table declares
+     */
+    protected static function defaultAllocator(): Allocator
+    {
+        return static::isPersistentAllocation()
+            ? EngineAllocator::trackedPersistent()
+            : EngineAllocator::trackedRequest();
     }
 
     /**
