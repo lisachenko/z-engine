@@ -871,6 +871,12 @@ parameters:
 			path: src/Type/ObjectEntry.php
 
 		-
+			message: '#^Binary operation "\+" between FFI\\CData and int results in an error\.$#'
+			identifier: binaryOp.invalid
+			count: 1
+			path: src/Type/OpLine.php
+
+		-
 			message: '#^Parameter \#2 \$pointer of static method ZEngine\\Core\:\:cast\(\) expects object, mixed given\.$#'
 			identifier: argument.type
 			count: 1
