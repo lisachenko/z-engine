@@ -16,6 +16,8 @@ namespace ZEngine\Type;
 use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Generated\zend_op;
+use ZEngine\Generated\znode_op;
+use ZEngine\Generated\zval;
 use ZEngine\Reflection\ReflectionValue;
 use ZEngine\System\ExecutionData;
 use ZEngine\System\OpCode;
@@ -222,8 +224,8 @@ class OpLine
     /**
      * This utility function returns a pointer to value for given op_node and it's type
      *
-     * @param CData|object $node   Instance of op1/op2/result node (znode_op union view)
-     * @param int          $opType operation code type, eg IS_CONST, IS_CV...
+     * @param znode_op $node   Typed view of the op1/op2/result node; the runtime value is raw CData
+     * @param int      $opType operation code type, eg IS_CONST, IS_CV...
      *
      * @return ReflectionValue|null Extracted value or null, if value could not be resolved (eg. not in runtime)
      *
@@ -231,12 +233,19 @@ class OpLine
      */
     private function getValuePointer(object $node, int $opType): ?ReflectionValue
     {
+        // $node is already the znode_op union itself, so its fields are read straight off
+        // it. Casting it to `znode_op *` first would be asking FFI to reinterpret a 4-byte
+        // union VALUE as an 8-byte pointer, which it refuses with "attempt to cast to
+        // larger type" - the operand of every IS_CV/IS_VAR/IS_TMP_VAR opline became
+        // unreadable, and a caller reading operands from inside an opcode handler (where a
+        // throw cannot escape) saw the failure only as a silently skipped read.
+        //
         // IS_UNUSED is still used by some opcodes, in most cases it points to an IS_UNDEF value
         $pointer = match ($opType) {
-            self::IS_CONST => self::getRuntimeConstant(Core::cast('zend_op *', $this->opline), $node),
+            self::IS_CONST => self::getRuntimeConstant($this->opline, $node),
             // All these types requires context to be present, otherwise we can't resolve such nodes
             self::IS_TMP_VAR, self::IS_VAR, self::IS_CV, self::IS_UNUSED => isset($this->context)
-                ? $this->context->getCallVariable(Core::cast('znode_op *', $node)->var)
+                ? $this->context->getCallVariable($node->var)
                 : null,
             default => throw new \InvalidArgumentException('Received invalid opcode type: ' . $opType),
         };
@@ -251,15 +260,16 @@ class OpLine
      *
      * @see zend_compile.h:RT_CONSTANT macro definition
      *
-     * @return CData zval* pointer
-     * @param \FFI\CData $opline
+     * @return zval zval* pointer; the runtime value is always raw CData
+     * @param CData|zend_op $opline Typed view of the opline; the runtime value is raw CData
+     * @param znode_op      $node   Typed view of the node; the runtime value is raw CData
      */
     private static function getRuntimeConstant(object $opline, object $node): object
     {
         // ((zval*)(((char*)(opline)) + (int32_t)(node).constant))
-        $constantOffset = Core::cast('znode_op *', $node)->constant;
+        $constantOffset = $node->constant;
         $pointer        = Core::cast('char *', $opline) + $constantOffset;
 
-        return Core::cast('zval *', $pointer);
+        return Core::cast(zval::class, $pointer);
     }
 }
