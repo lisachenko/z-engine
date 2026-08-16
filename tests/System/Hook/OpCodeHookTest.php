@@ -21,6 +21,7 @@ use PHPUnit\Framework\TestCase;
 use ZEngine\Core;
 use ZEngine\System\ExecutionData;
 use ZEngine\System\OpCode;
+use ZEngine\Type\OpLine;
 
 /**
  * Lifecycle of user opcode handlers: install, chaining, guarded uninstall and Core::shutdown
@@ -240,6 +241,77 @@ final class OpCodeHookTest extends TestCase
      * an op_array compiled against a user opcode keeps dispatching through the user
      * handler table for its whole lifetime.
      */
+    /**
+     * A handler exists to inspect the instruction it intercepts, and the operands are the
+     * whole of what there is to inspect - so a handler that cannot read op1 is a handler
+     * that cannot do its job.
+     *
+     * The read used to be routed through a `znode_op *` cast of the operand, which asks
+     * FFI to reinterpret the 4-byte union VALUE as an 8-byte pointer; it answered "attempt
+     * to cast to larger type" for every compiled-variable operand. Consumers meet that as
+     * silence rather than as an error: an opcode handler runs inside an FFI callback, so
+     * they catch everything, and the failed read simply looked like an instruction that
+     * never arrived.
+     */
+    public function testHandlerCanReadCompiledVariableOperands(): void
+    {
+        $log  = new ArrayObject();
+        $hook = OpCode::setHandler(OpCode::ADD, static function (ExecutionData $scope) use ($log): int {
+            try {
+                $operand = $scope->getOpline()->getOp1();
+                $value   = null;
+                $operand?->getNativeValue($value);
+                $log->append($value);
+            } catch (\Throwable $error) {
+                $log->append($error::class . ': ' . $error->getMessage());
+            }
+
+            return Core::ZEND_USER_OPCODE_DISPATCH;
+        });
+
+        try {
+            $probe = self::compileProbe('$a + $b');
+            $this->assertSame(5, $probe(2, 3));
+        } finally {
+            $hook->uninstall();
+        }
+
+        // op1 of `$a + $b` is the compiled variable $a, holding the first argument
+        $this->assertSame([2], $log->getArrayCopy());
+    }
+
+    /**
+     * The same read for a literal operand, which resolves through the runtime-constant
+     * offset rather than through a frame variable slot
+     */
+    public function testHandlerCanReadConstantOperands(): void
+    {
+        $log  = new ArrayObject();
+        $hook = OpCode::setHandler(OpCode::ADD, static function (ExecutionData $scope) use ($log): int {
+            try {
+                $opline = $scope->getOpline();
+                if ($opline->getOp2Type() === OpLine::IS_CONST) {
+                    $value = null;
+                    $opline->getOp2()?->getNativeValue($value);
+                    $log->append($value);
+                }
+            } catch (\Throwable $error) {
+                $log->append($error::class . ': ' . $error->getMessage());
+            }
+
+            return Core::ZEND_USER_OPCODE_DISPATCH;
+        });
+
+        try {
+            $probe = self::compileProbe('$a + 40');
+            $this->assertSame(42, $probe(2, 0));
+        } finally {
+            $hook->uninstall();
+        }
+
+        $this->assertSame([40], $log->getArrayCopy());
+    }
+
     private static function compileProbe(string $expression): Closure
     {
         $name = str_replace('.', '_', uniqid('zengine_opcode_probe_', true));
