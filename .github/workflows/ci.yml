@@ -327,6 +327,11 @@ jobs:
     # own source (a full PHP compile) and run the tests in it. The build goes
     # through buildx so its layers can be cached across runs with actions/cache
     # - a warm cache turns the multi-minute compile into a layer restore.
+    #
+    # The cache key names every input that can change the image: OS,
+    # architecture, thread safety, PHP minor, the recipe, and the digest of the
+    # base image. See "Resolve the base image digest" below for why the last one
+    # is not optional.
     strategy:
       fail-fast: false
       matrix:
@@ -357,32 +362,105 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      # `php:<minor>-cli` is a moving tag: every PHP patch release and every
+      # Debian security rebuild gives it a new digest, and buildx then rightly
+      # invalidates the compile layer built on top of it. A key that cannot
+      # notice that is a cache that can never be repaired - actions/cache reports
+      # a hit, refuses to overwrite the entry it already holds ("Cache hit
+      # occurred on the primary key ..., not saving cache"), and the freshly
+      # rebuilt layers are discarded at the end of every run. From then on every
+      # run recompiles PHP from source, forever, until somebody edits the
+      # Dockerfile. Putting the digest in the key makes the entry expire exactly
+      # when a rebuild would produce something different - and only then.
+      # imagetools reads the manifest from the registry, so this costs one API
+      # call rather than the layers a hit exists to avoid pulling.
+      - name: Resolve the base image digest
+        id: image-cache-key
+        run: |
+          # Prints the raw manifest only on success, so a failed attempt cannot
+          # feed half a response into the hash and make the key drift.
+          resolve() {
+            local raw
+            for attempt in 1 2 3; do
+              if raw="$(docker buildx imagetools inspect "$1" --raw)" && [ -n "$raw" ]; then
+                printf '%s' "$raw"
+                return 0
+              fi
+              sleep "$((attempt * 3))"
+            done
+            return 1
+          }
+          if digest="$(resolve "php:${PHP_MINOR}-cli" | sha256sum | cut -d' ' -f1)" && [ "${#digest}" -eq 64 ]; then
+            echo "php:${PHP_MINOR}-cli is sha256:${digest}"
+          else
+            # A registry hiccup must not fail this job over a cache key. A
+            # run-unique value guarantees a miss, so the restore-keys still give a
+            # warm start, the build is still correct, and the entry written under
+            # it is simply never matched again.
+            digest="unresolved-${{ github.run_id }}"
+            echo "::warning::Could not resolve the php:${PHP_MINOR}-cli digest - building without an exact cache key"
+          fi
+          # Thread safety and minor come first so the loosest restore-key below
+          # still matches entries written before OS/arch joined the key.
+          prefix="docker-debug-${{ matrix.ts }}-${PHP_MINOR}-${{ runner.os }}-${{ runner.arch }}-"
+          {
+            echo "prefix=${prefix}"
+            echo "recipe=${prefix}${{ hashFiles('tools/docker/php-debug.Dockerfile') }}-"
+            echo "key=${prefix}${{ hashFiles('tools/docker/php-debug.Dockerfile') }}-${digest}"
+          } >> "$GITHUB_OUTPUT"
+
+      # restore/save rather than the combined action: on an exact hit every layer
+      # in the directory is still valid, so there is nothing to write back and the
+      # `--cache-to` export below can be skipped outright. That export is not free
+      # - the header-drift job measures it at 13-15s per target - and today it is
+      # paid on every run only to be thrown away. The prefix keys still give a warm
+      # start when the base image moved, which is what keeps that rebuild
+      # incremental instead of a compile from zero.
       - name: Restore the debug image layer cache
-        uses: actions/cache@v6
+        id: layer-cache
+        uses: actions/cache/restore@v6
         with:
           path: /tmp/.buildx-cache
-          key: docker-debug-${{ matrix.ts }}-${{ env.PHP_MINOR }}-${{ hashFiles('tools/docker/php-debug.Dockerfile') }}
+          key: ${{ steps.image-cache-key.outputs.key }}
           restore-keys: |
+            ${{ steps.image-cache-key.outputs.recipe }}
+            ${{ steps.image-cache-key.outputs.prefix }}
             docker-debug-${{ matrix.ts }}-${{ env.PHP_MINOR }}-
 
       - name: Build the debug PHP image
         run: |
           mkdir -p /tmp/.buildx-cache
+          # Export the layers only when this run may actually store them.
+          cache_to=""
+          if [ "${{ steps.layer-cache.outputs.cache-hit }}" != "true" ]; then
+            cache_to="--cache-to=type=local,dest=/tmp/.buildx-cache-new,mode=max"
+          fi
           docker buildx build \
             -f tools/docker/php-debug.Dockerfile \
             --build-arg "PHP_VERSION=${PHP_MINOR}" \
             --build-arg "PHP_TS=${{ matrix.ts }}" \
             --cache-from "type=local,src=/tmp/.buildx-cache" \
-            --cache-to "type=local,dest=/tmp/.buildx-cache-new,mode=max" \
+            $cache_to \
             --load \
             -t z-engine-php:debug .
 
       # Rotate instead of appending: a reused local cache dir accumulates stale
       # layers without bound, so each run saves only the layers it actually used
       - name: Rotate the layer cache
+        if: steps.layer-cache.outputs.cache-hit != 'true'
         run: |
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+      # Saved before the tests run, not in a post step: these layers are the
+      # expensive part and they are already correct here, so a failing test
+      # should not cost the next run the compile as well.
+      - name: Save the debug image layer cache
+        if: steps.layer-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ steps.image-cache-key.outputs.key }}
 
       - name: Run internal group with process isolation
         run: |
@@ -408,17 +486,71 @@ jobs:
       # Caches the generator image's toolchain layers (apt/clang/ext-ffi); the
       # emit stage itself always re-runs - it is the step that produces the
       # artifacts being drift-checked. generate.php rotates per-target subdirs.
+      #
+      # Both base images go into the key: this job builds one image per target
+      # and nts starts from `php:<minor>-cli` while zts starts from
+      # `php:<minor>-zts`, so either tag moving invalidates the toolchain layer.
+      # Without them the entry freezes at whatever the first run produced and can
+      # never be rewritten - which is the state this job was already in, paying
+      # ~16s to reinstall clang and ~15s to export a cache nobody would store, on
+      # every single run. See the same reasoning in tests-internal-debug.
+      - name: Resolve the base image digests
+        id: gen-cache-key
+        run: |
+          # Same helper as tests-internal-debug: prints the raw manifest only on
+          # success, so a failed attempt cannot feed half a response into the hash.
+          resolve() {
+            local raw
+            for attempt in 1 2 3; do
+              if raw="$(docker buildx imagetools inspect "$1" --raw)" && [ -n "$raw" ]; then
+                printf '%s' "$raw"
+                return 0
+              fi
+              sleep "$((attempt * 3))"
+            done
+            return 1
+          }
+          if cli="$(resolve "php:${PHP_MINOR}-cli")" && zts="$(resolve "php:${PHP_MINOR}-zts")"; then
+            digest="$(printf '%s%s' "$cli" "$zts" | sha256sum | cut -d' ' -f1)"
+            echo "php:${PHP_MINOR}-cli + php:${PHP_MINOR}-zts hash to ${digest}"
+          else
+            # As above: a registry hiccup costs an exact key, never the job.
+            digest="unresolved-${{ github.run_id }}"
+            echo "::warning::Could not resolve the php:${PHP_MINOR} base image digests - building without an exact cache key"
+          fi
+          prefix="docker-gen-${PHP_MINOR}-${{ runner.os }}-${{ runner.arch }}-"
+          {
+            echo "prefix=${prefix}"
+            echo "recipe=${prefix}${{ hashFiles('tools/generator/Dockerfile') }}-"
+            echo "key=${prefix}${{ hashFiles('tools/generator/Dockerfile') }}-${digest}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Restore the generator image layer cache
-        uses: actions/cache@v6
+        id: gen-layer-cache
+        uses: actions/cache/restore@v6
         with:
           path: /tmp/.buildx-gen-cache
-          key: docker-gen-${{ env.PHP_MINOR }}-${{ hashFiles('tools/generator/Dockerfile') }}
+          key: ${{ steps.gen-cache-key.outputs.key }}
           restore-keys: |
+            ${{ steps.gen-cache-key.outputs.recipe }}
+            ${{ steps.gen-cache-key.outputs.prefix }}
             docker-gen-${{ env.PHP_MINOR }}-
+
+      # On an exact hit the restored layers are still valid, so generate.php is
+      # told to read the cache without exporting it again - the export is the
+      # expensive half and there would be nowhere to put the result.
       - name: Regenerate engine definitions
         run: composer gen-headers
         env:
           Z_ENGINE_BUILDX_CACHE_DIR: /tmp/.buildx-gen-cache
+          Z_ENGINE_BUILDX_CACHE_READONLY: ${{ steps.gen-layer-cache.outputs.cache-hit == 'true' && '1' || '' }}
+
+      - name: Save the generator image layer cache
+        if: steps.gen-layer-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: /tmp/.buildx-gen-cache
+          key: ${{ steps.gen-cache-key.outputs.key }}
       - name: Fail if the committed artifacts are stale
         run: |
           if ! git diff --exit-code -- include/ stubs/ .phpstorm.meta.php; then
