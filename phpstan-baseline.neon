@@ -871,14 +871,8 @@ parameters:
 			path: src/Type/ObjectEntry.php
 
 		-
-			message: '#^Binary operation "\+" between FFI\\CData and mixed results in an error\.$#'
+			message: '#^Binary operation "\+" between FFI\\CData and int results in an error\.$#'
 			identifier: binaryOp.invalid
-			count: 1
-			path: src/Type/OpLine.php
-
-		-
-			message: '#^Parameter \#1 \$variableOffset of method ZEngine\\System\\ExecutionData\:\:getCallVariable\(\) expects int, mixed given\.$#'
-			identifier: argument.type
 			count: 1
 			path: src/Type/OpLine.php
 
