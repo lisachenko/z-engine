@@ -467,6 +467,14 @@ if ($usesProxy && is_string($caBundle) && $caBundle !== '' && is_readable($caBun
 $layerCacheDir = getenv('Z_ENGINE_BUILDX_CACHE_DIR');
 $layerCacheDir = is_string($layerCacheDir) && $layerCacheDir !== '' ? rtrim($layerCacheDir, '/') : '';
 
+// Z_ENGINE_BUILDX_CACHE_READONLY=1 reads the cache without writing it back.
+// Exporting the layers again costs real time (13-15s per target) and is pure
+// waste when the caller already knows the cache it restored is current and will
+// not be storing a new copy - which is exactly the case on an actions/cache hit,
+// since its entries are immutable.
+$layerCacheReadOnly = getenv('Z_ENGINE_BUILDX_CACHE_READONLY');
+$layerCacheReadOnly = is_string($layerCacheReadOnly) && $layerCacheReadOnly !== '' && $layerCacheReadOnly !== '0';
+
 $failures = 0;
 foreach ($targets as $target) {
     $baseImage = $mirror . ($target['ts'] === 'zts' ? "php:{$target['php']}-zts" : "php:{$target['php']}-cli");
@@ -479,7 +487,9 @@ foreach ($targets as $target) {
         if (is_dir($targetCacheDir)) {
             $cacheArguments .= ' --cache-from ' . escapeshellarg("type=local,src={$targetCacheDir}");
         }
-        $cacheArguments .= ' --cache-to ' . escapeshellarg("type=local,dest={$targetCacheDir}-new,mode=max");
+        if (!$layerCacheReadOnly) {
+            $cacheArguments .= ' --cache-to ' . escapeshellarg("type=local,dest={$targetCacheDir}-new,mode=max");
+        }
     }
 
     $command = 'docker buildx build --progress=plain'

@@ -213,6 +213,35 @@ FFI `CData` access is dynamically typed and cannot be statically resolved;
 those violations are captured in `phpstan-baseline.neon`. New code must be
 clean at level max — do not add to the baseline without good reason.
 
+### A docker cache key must name the base image, not only the recipe
+
+Two CI jobs build docker images from a `php:<minor>-*` tag — `tests-internal-debug`
+(a full `--enable-debug` PHP compile) and `header-drift` (the generator toolchain) —
+and both wrap the buildx layer cache in `actions/cache`. Those tags **move**: every
+PHP patch release and every Debian security rebuild republishes them under a new
+digest, and buildx correctly invalidates every layer built on top.
+
+`actions/cache` entries are **immutable**. So a key derived only from the Dockerfile
+cannot express that change: the restore reports a hit, the save is refused (`Cache
+hit occurred on the primary key ..., not saving cache`), and the layers the run just
+rebuilt are discarded when it ends. Every later run then repeats the rebuild —
+minutes of PHP compile for the debug image — and can never repair itself until
+somebody happens to edit the Dockerfile. `header-drift` sat in exactly that state,
+paying ~16s to reinstall clang plus ~15s to export a cache that was never stored,
+on every run.
+
+So the key resolves the base image digest first (`docker buildx imagetools inspect
+--raw`, a registry read — do not `docker pull` for this) and carries it, alongside
+OS, architecture, thread safety and the PHP minor. The entry then expires exactly
+when a rebuild would produce something different, and only then. Two rules follow:
+
+- **Never reduce that key to the Dockerfile hash again**, and never "fix" a stale
+  image by bumping a version suffix by hand — the digest is the version suffix.
+- The `--cache-to` export is skipped on an exact hit (`Z_ENGINE_BUILDX_CACHE_READONLY`
+  for the generator), because an exact hit means every restored layer is still valid
+  and there is nowhere to store a new copy. Keep the restore/save split that makes
+  this possible instead of collapsing it back into `actions/cache`.
+
 ## Public APIs never leak CData
 
 Only the z-engine core layer (`Core`, the `Type\*`/`Reflection\*` wrappers) deals in
