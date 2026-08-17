@@ -34,7 +34,7 @@ jobs:
     # summary step below surfaces the outcome without blocking the merge.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Same engine-facing ini as the CI tests job: FFI on, assertions on and the
       # JIT off everywhere - the JIT rewrites the executor internals z-engine
