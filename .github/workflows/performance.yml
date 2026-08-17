@@ -49,7 +49,7 @@ jobs:
           coverage: none
 
       - name: Install dependencies
-        uses: ramsey/composer-install@v3
+        uses: ramsey/composer-install@v4
 
       # The group is excluded from every other suite, so this is the only place
       # the "zero FFI at call time" claim in the README is actually exercised.
