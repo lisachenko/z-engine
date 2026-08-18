@@ -16,7 +16,7 @@
 
 ---
 
-> **⚠️ Experimental — not for production.** Z-Engine operates on raw engine memory. Segfaults are a feature of the territory, not a bug in your code. Pin your PHP version, run it behind a debug build while developing, and never ship it in an app until 1.0.0.
+> **⚠️ Experimental — not for production.** Z-Engine operates on raw engine memory. Segfaults are a feature of the territory, not a bug in your code.
 
 ## Why this is different
 
@@ -38,13 +38,12 @@ FFI lets PHP load shared libraries, call C functions, and read C structures with
 ## Requirements & support matrix
 
 - PHP with the **FFI** extension enabled
-- **x64/arm64** builds, **NTS and ZTS** (the opcache file-cache relocator is not yet supported on ZTS — [#118](https://github.com/lisachenko/z-engine/issues/118) — nor on Windows — [#119](https://github.com/lisachenko/z-engine/issues/119))
 
 Engine memory layouts change between every PHP minor version, so each PHP minor has its own generated definitions and its own branch.
 
 | PHP | OS / Arch / TS | Branch | Status |
 |-----|----------------|--------|--------|
-| 8.5 | linux-x64-nts | `master` | 🚧 in progress |
+| 8.5 | linux-x64 (nts, zts), darwin-x64 (nts, zts), darwin-arm64 (nts, zts), windows-x64 (nts, zts) | `master` | ✅ supported |
 | 8.4 | linux-x64 (nts, zts), darwin-x64 (nts, zts), darwin-arm64 (nts, zts), windows-x64 (nts, zts) | `8.4` | ✅ supported |
 | 8.0 | linux-x64-nts | `8.0` | 🧊 frozen (legacy) |
 
