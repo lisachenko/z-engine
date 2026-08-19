@@ -253,6 +253,32 @@ final class PayloadRelocator
         return $address;
     }
 
+    /** UNSERIALIZE_PTR on a raw pointer slot, returning the resolved address (0 for a NULL slot) */
+    private function unPtrAt(int $slotAddress): int
+    {
+        $slot   = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $slotAddress));
+        $stored = (int) $slot[0];
+        if ($stored === 0) {
+            return 0;
+        }
+        $slot[0] = $this->base + $stored;
+
+        return $this->base + $stored;
+    }
+
+    /** SERIALIZE_PTR on a raw pointer slot, returning the pre-serialization address (0 for a NULL slot) */
+    private function serPtrAt(int $slotAddress): int
+    {
+        $slot    = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $slotAddress));
+        $address = (int) $slot[0];
+        if ($address === 0) {
+            return 0;
+        }
+        $slot[0] = $address - $this->base;
+
+        return $address;
+    }
+
     // --- interned-string primitives (UNSERIALIZE_STR / SERIALIZE_STR) ------
     /**
      * @param \FFI\CData $owner
@@ -290,6 +316,36 @@ final class PayloadRelocator
             return;
         }
         $this->writePtrField($owner, $field, $this->emitInterned($address));
+    }
+
+    /** UNSERIALIZE_STR on a raw zend_string* slot (no owning struct field) */
+    private function unStrAt(int $slotAddress): void
+    {
+        $slot   = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $slotAddress));
+        $stored = (int) $slot[0];
+        if ($stored === 0) {
+            return;
+        }
+        if (($stored & 1) !== 0) {
+            $slot[0] = $this->strSectionBase + ($stored & ~1);
+        } else {
+            $slot[0] = $this->base + $stored;
+        }
+    }
+
+    /** SERIALIZE_STR on a raw zend_string* slot (no owning struct field) */
+    private function serStrAt(int $slotAddress): void
+    {
+        $slot    = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $slotAddress));
+        $address = (int) $slot[0];
+        if ($address === 0) {
+            return;
+        }
+        if ($address >= $this->base && $address < $this->base + $this->size) {
+            $slot[0] = $address - $this->base;
+        } else {
+            $slot[0] = $this->emitInterned($address);
+        }
     }
 
     /**
@@ -921,7 +977,9 @@ final class PayloadRelocator
             $this->unserializeClassNames($ce, 'interface_names', $ce->num_interfaces);
         }
         if ($ce->num_traits !== 0) {
-            throw OpCacheException::unsupportedPayload('trait-using class relocation');
+            $this->unserializeClassNames($ce, 'trait_names', $ce->num_traits);
+            $this->unserializeTraitAliases($ce);
+            $this->unserializeTraitPrecedences($ce);
         }
         foreach (self::MAGIC_METHOD_FIELDS as $field) {
             $this->unPtr($ce, $field);
@@ -957,7 +1015,9 @@ final class PayloadRelocator
             $this->serializeClassNames($ce, 'interface_names', $ce->num_interfaces);
         }
         if ($ce->num_traits !== 0) {
-            throw OpCacheException::unsupportedPayload('trait-using class relocation');
+            $this->serializeClassNames($ce, 'trait_names', $ce->num_traits);
+            $this->serializeTraitAliases($ce);
+            $this->serializeTraitPrecedences($ce);
         }
         foreach (self::MAGIC_METHOD_FIELDS as $field) {
             $this->serPtr($ce, $field);
@@ -1061,6 +1121,88 @@ final class PayloadRelocator
             $name = Core::pointerAtAddress('zend_class_name *', $address + $i * $nameSize);
             $this->serStr($name, 'name');
             $this->serStr($name, 'lc_name');
+        }
+    }
+
+    // --- traits (the num_traits branch of zend_file_cache_(un)serialize_class)
+    /**
+     * @param \FFI\CData $ce
+     */
+
+    private function unserializeTraitAliases(object $ce): void
+    {
+        if ($this->ptrValue($ce, 'trait_aliases') === 0) {
+            return;
+        }
+        // A NULL-terminated zend_trait_alias* array; each entry's strings follow
+        $slotAddress = $this->unPtr($ce, 'trait_aliases');
+        while (($aliasAddress = $this->unPtrAt($slotAddress)) !== 0) {
+            $alias = Core::pointerAtAddress('zend_trait_alias *', $aliasAddress);
+            $this->unStr($alias->trait_method, 'method_name');
+            $this->unStr($alias->trait_method, 'class_name');
+            $this->unStr($alias, 'alias');
+            $slotAddress += PHP_INT_SIZE;
+        }
+    }
+    /**
+     * @param \FFI\CData $ce
+     */
+
+    private function serializeTraitAliases(object $ce): void
+    {
+        if ($this->ptrValue($ce, 'trait_aliases') === 0) {
+            return;
+        }
+        $slotAddress = $this->serPtr($ce, 'trait_aliases');
+        while (($aliasAddress = $this->serPtrAt($slotAddress)) !== 0) {
+            $alias = Core::pointerAtAddress('zend_trait_alias *', $aliasAddress);
+            $this->serStr($alias->trait_method, 'method_name');
+            $this->serStr($alias->trait_method, 'class_name');
+            $this->serStr($alias, 'alias');
+            $slotAddress += PHP_INT_SIZE;
+        }
+    }
+    /**
+     * @param \FFI\CData $ce
+     */
+
+    private function unserializeTraitPrecedences(object $ce): void
+    {
+        if ($this->ptrValue($ce, 'trait_precedences') === 0) {
+            return;
+        }
+        // A NULL-terminated zend_trait_precedence* array with inline exclude names
+        $slotAddress = $this->unPtr($ce, 'trait_precedences');
+        while (($precedenceAddress = $this->unPtrAt($slotAddress)) !== 0) {
+            $precedence = Core::pointerAtAddress('zend_trait_precedence *', $precedenceAddress);
+            $this->unStr($precedence->trait_method, 'method_name');
+            $this->unStr($precedence->trait_method, 'class_name');
+            $excludeBase = Core::addressOf($precedence->exclude_class_names);
+            for ($j = 0; $j < $precedence->num_excludes; $j++) {
+                $this->unStrAt($excludeBase + $j * PHP_INT_SIZE);
+            }
+            $slotAddress += PHP_INT_SIZE;
+        }
+    }
+    /**
+     * @param \FFI\CData $ce
+     */
+
+    private function serializeTraitPrecedences(object $ce): void
+    {
+        if ($this->ptrValue($ce, 'trait_precedences') === 0) {
+            return;
+        }
+        $slotAddress = $this->serPtr($ce, 'trait_precedences');
+        while (($precedenceAddress = $this->serPtrAt($slotAddress)) !== 0) {
+            $precedence = Core::pointerAtAddress('zend_trait_precedence *', $precedenceAddress);
+            $this->serStr($precedence->trait_method, 'method_name');
+            $this->serStr($precedence->trait_method, 'class_name');
+            $excludeBase = Core::addressOf($precedence->exclude_class_names);
+            for ($j = 0; $j < $precedence->num_excludes; $j++) {
+                $this->serStrAt($excludeBase + $j * PHP_INT_SIZE);
+            }
+            $slotAddress += PHP_INT_SIZE;
         }
     }
     /**
