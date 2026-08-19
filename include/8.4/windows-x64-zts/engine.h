@@ -1031,6 +1031,7 @@ extern zval * __vectorcall zend_hash_index_find(const HashTable *, zend_ulong);
 extern void __vectorcall zend_hash_destroy(HashTable *);
 extern zend_result zend_set_user_opcode_handler(uint8_t, user_opcode_handler_t);
 extern user_opcode_handler_t zend_get_user_opcode_handler(uint8_t);
+extern void __vectorcall zend_deserialize_opcode_handler(zend_op *);
 extern void zend_do_inheritance_ex(zend_class_entry *, zend_class_entry *, _Bool);
 extern zend_object * __vectorcall zend_objects_new(zend_class_entry *);
 extern void __vectorcall zend_object_std_init(zend_object *, zend_class_entry *);
