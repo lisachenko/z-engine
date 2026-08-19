@@ -29,6 +29,11 @@ use PHPUnit\Framework\TestCase;
  *
  * Before the fix the function/method series grew by a full function body per cycle
  * over the baseline; with the previous body destroyed the redefine cost is zero.
+ *
+ * The child pins opcache ON (issue #242): the measured functions live in the same
+ * cached script as their dispatch call sites, so the run doubles as the regression
+ * test for the first-redefine-under-opcache failure, and the fixed-donor series
+ * guards the per-swap run-time-cache release for shared-memory donor bodies.
  */
 class RedefineLeakPlateauTest extends TestCase
 {
@@ -57,11 +62,20 @@ class RedefineLeakPlateauTest extends TestCase
             '-d', 'display_errors=on',
             '-d', 'error_reporting=-1',
             '-d', 'memory_limit=512M',
-            // Pinned off so the measurement is hermetic whatever php.ini says (an
-            // opcache-active runner, or Ubuntu's PHP 8.5 default opcache.enable_cli=On).
-            // TODO(#242): with opcache active in this child the very first redefine()
-            // does not take effect ("warm-up dispatch failed") - unpin once fixed
-            '-d', 'opcache.enable_cli=0',
+            // Pinned ON (never inherited from php.ini) so the child deterministically
+            // exercises the issue #242 regression shape: the measured functions are
+            // declared in the same cached script as their dispatch call sites, and the
+            // first redefine() runs the shared-memory copy-out path. Where the opcache
+            // extension is not loaded these switches are inert and the child measures
+            // the plain in-place path, as before.
+            '-d', 'opcache.enable=1',
+            '-d', 'opcache.enable_cli=1',
+            // The JIT rewrites the executor internals z-engine hooks into (AGENTS.md)
+            '-d', 'opcache.jit=off',
+            '-d', 'opcache.jit_buffer_size=0',
+            // A fresh checkout must still publish the script from shared memory (the
+            // default opcache.file_update_protection=2 refuses files modified <2s ago)
+            '-d', 'opcache.file_update_protection=0',
             __DIR__ . '/scripts/redefine-plateau.php',
         ];
         $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
