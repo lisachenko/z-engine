@@ -194,18 +194,7 @@ trait FunctionLikeTrait
             $closureEntry       = ClosureEntry::fromCData(Core::cast('zend_closure *', $newCodeEntry));
             $newFunction        = $closureEntry->getRawFunction();
 
-            $isSharedMemoryEntry = $this->isImmutable();
-            if ($isSharedMemoryEntry) {
-                // Copy the entry out of SHM: the per-process bucket that publishes it is
-                // repointed at a writable container, the SHM original stays untouched
-                // (never written, never freed). A method entry lives inside the shared
-                // class entry, so the whole class is copied out and the swap targets the
-                // method entry of the writable copy.
-                $entryScope    = $this->getCommonPointer()->scope;
-                $this->pointer = $entryScope !== null
-                    ? $this->copyMethodOutOfSharedMemory($entryScope)
-                    : $this->copyOutOfSharedMemory();
-            }
+            $isSharedMemoryEntry = $this->copyEntryOutOfSharedMemory();
 
             $entryFunction = ReflectionFunction::fromCData($this->pointer);
             $donorFunction = ReflectionFunction::fromCData(Core::addr($newFunction));
@@ -232,6 +221,41 @@ trait FunctionLikeTrait
                 $rawValue->setNativeValue($result);
             };
         }
+    }
+
+    /**
+     * Copies an opcache-shared (ZEND_ACC_IMMUTABLE) entry out of shared memory and
+     * rebinds this reflection to the writable entry now published in its table
+     *
+     * A no-op for entries that are not opcache-shared. For a global function the
+     * per-process function-table bucket is repointed at a writable container; for a
+     * method the whole declaring class is copied out (a method table lives inside the
+     * class entry) and the reflection rebinds to the method entry of the writable
+     * copy. In both cases the SHM original stays untouched - never written, never
+     * freed. See docs/hot-swap.md for the support matrix and the copy-out caveats.
+     *
+     * @return bool True when the entry was opcache-shared and is now copied out
+     *
+     * @throws SharedMemoryException When the entry cannot be copied out of shared memory
+     *
+     * @internal called by redefine(); shared with the cache-image bridge (CacheImageSync)
+     */
+    public function copyEntryOutOfSharedMemory(): bool
+    {
+        if (!$this->isImmutable()) {
+            return false;
+        }
+        // Copy the entry out of SHM: the per-process bucket that publishes it is
+        // repointed at a writable container, the SHM original stays untouched
+        // (never written, never freed). A method entry lives inside the shared
+        // class entry, so the whole class is copied out and the swap targets the
+        // method entry of the writable copy.
+        $entryScope    = $this->getCommonPointer()->scope;
+        $this->pointer = $entryScope !== null
+            ? $this->copyMethodOutOfSharedMemory($entryScope)
+            : $this->copyOutOfSharedMemory();
+
+        return true;
     }
 
     /**

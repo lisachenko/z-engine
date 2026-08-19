@@ -87,8 +87,75 @@ Under `opcache.file_cache_only=1` there is no shared-memory copy, so writing the
 binary is enough for the next worker to load it. When opcache also uses shared
 memory, a script already resident in SHM is **not** re-read until it is
 invalidated — which is exactly what `refresh()` does. Loading a patched binary
-directly into shared memory (and wiring it to the function/method hot-swap API)
-is future work; see [hot-swap.md](hot-swap.md).
+directly into shared memory remains future work
+([#121](https://github.com/lisachenko/z-engine/issues/121)); applying a patched
+image to code **already loaded in the current process** is what
+`CacheImageSync` does — see the next section and [hot-swap.md](hot-swap.md).
+
+## Applying a patched image to the live process (`CacheImageSync`)
+
+`refresh()` only affects the *next* include. `ZEngine\HotSwap\CacheImageSync`
+closes the other half of the loop (issue #122): it diffs a (patched) image
+against the functions and classes **already loaded** in this process and swaps
+the changed compiled bodies in place, through the same runtime machinery
+`redefine()`/`ClassDelta` use — no re-include, warmed-up call sites keep
+dispatching the same entry pointers.
+
+```php
+$image = $file->getReflection();
+// ... patch literals/opcodes through the wrappers ...
+$sync = CacheImageSync::prepare($image);   // read-only diff
+$sync->getChangedFunctions();              // introspect the plan
+$report = $sync->apply();                  // swap the changed bodies, loudly
+$report->appliedMethods;                   // what actually happened, per entry
+```
+
+- **Diff basis.** `prepare()` compares each image body with its live
+  counterpart: body metrics (opcode/literal/CV/temporary/argument counts),
+  fn_flags without the storage-only bits, CV names, every opline in
+  canonicalized form (IS_CONST operands by literal index — the image stores
+  the serialized index form, the live side the runtime offset form — with
+  handlers and the garbage `op1.num` of implicit-`$this` receivers ignored),
+  every literal and static-variable default by value. The comparison is
+  conservative where value equality cannot be proven: array and
+  constant-expression literals always count as changed (a safe re-apply, like
+  `ReflectionMethod::equals()`); declaration-surface-only edits (arg_info
+  types/names, doc comments) are not part of the basis and do not trigger a
+  swap on their own.
+- **Execution normalization.** Donor bodies are materialized per entry
+  (`ImageFunctionDonor`): opcodes + literals are copied into one co-allocated
+  process block, IS_CONST operands are rewritten to the runtime form and the
+  handlers restored with the engine's own `zend_deserialize_opcode_handler()`.
+  The image buffer itself is never written, so `save()`/`refresh()` keep
+  producing valid binaries after an apply.
+- **Ordering and atomicity.** `apply()` validates refusals first (nothing is
+  touched if the plan contains one), then copies every opcache-shared target
+  out of SHM, then stages all swaps — functions before classes, alphabetically
+  within each group — and commits only when every swap staged; a failure rolls
+  all staged bodies back (completed copy-outs stay, they are
+  behavior-preserving).
+- **Scope.** Bodies of named global functions and of methods the live class
+  itself declares. Image-only entries (script never included here, methods or
+  functions only the patch added) are *reported* as not loaded — the next
+  include picks them up. The script's main op_array, class constants, property
+  defaults and attributes are out of scope.
+- **Refusals (throw-or-work, never silent).** Changed methods of an
+  enum/interface/trait throw `HotSwapException::unsupportedKind`; an image
+  entry colliding with an internal function/class throws; opcache-shared
+  targets follow the [hot-swap.md](hot-swap.md) copy-out matrix, so preloaded
+  classes and copy-unsupported shapes (property hooks, internal ancestors)
+  throw `SharedMemoryException`. Unchanged entries of a refused kind are not
+  operations and pass.
+- **Lifetime.** Swapped-in bodies execute out of the materialized blocks and
+  the relocated image buffer: the sync retains both (and the view retains the
+  buffer), all are request-lifetime allocations the engine provably never
+  frees through table teardown (the bodies carry no refcount, exactly like
+  shared-memory bodies). Apply per request, like every other runtime mutation.
+- **Seam for [#121](https://github.com/lisachenko/z-engine/issues/121).**
+  `prepare()` is application-agnostic: a future SHM publisher consumes the
+  same prepared diff (`getChangedFunctions()`/`getChangedMethods()` plus the
+  image handle) and replaces only the apply() target — per-process tables
+  today, ZCSG then.
 
 ## Scope and limits (v1)
 
@@ -107,8 +174,10 @@ is future work; see [hot-swap.md](hot-swap.md).
   writing a subtly corrupt binary. Global functions, classes with constants,
   typed properties, attributes (including constant-expression arguments), static
   variables, try/catch and enums are supported and round-trip byte-for-byte.
-- **Deferred.** Loading patched binaries into shared memory (ZCSG), and applying
-  a patched image to already-loaded classes via `redefine()` / `ClassDelta`.
+- **Deferred.** Loading patched binaries into shared memory (ZCSG,
+  [#121](https://github.com/lisachenko/z-engine/issues/121)). Applying a
+  patched image to already-loaded functions and classes landed as
+  `CacheImageSync` (see above).
 
 ## Failure modes
 
