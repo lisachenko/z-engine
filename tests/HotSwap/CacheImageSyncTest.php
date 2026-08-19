@@ -126,6 +126,17 @@ class CacheImageSyncTest extends TestCase
             // The JIT rewrites the executor internals z-engine hooks into (AGENTS.md)
             '-d', 'opcache.jit=off',
             '-d', 'opcache.jit_buffer_size=0',
+            // Hermeticity: the bridge diffs an image against a live entry compiled at
+            // the SAME optimization level, and the plain/refusal legs deliberately
+            // pair an optimizer-off image (compiled by BinaryCacheFile::compile with
+            // opcache.optimization_level=0) with an unoptimized live side loaded from
+            // source. The opcache-runner CI job sets opcache.enable_cli=1 in php.ini,
+            // which would otherwise leak into this child and optimize its live-side
+            // require - producing a genuinely different (spuriously non-empty) diff.
+            // Pin CLI opcache off here so the plain leg is deterministic whatever the
+            // runner's php.ini says; the shared-memory leg re-enables it via
+            // $extraOptions, which come last and win (php applies -d in order).
+            '-d', 'opcache.enable_cli=0',
             ...$extraOptions,
             $scriptPath,
             self::$cacheDir,
