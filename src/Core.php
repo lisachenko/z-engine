@@ -332,6 +332,7 @@ class Core
         self::$isShutdown = false;
 
         self::preloadFrameworkClasses();
+        self::loadEngineConstants();
 
         self::$initialized = true;
     }
@@ -1135,14 +1136,37 @@ class Core
      */
     public static function engineConstant(string $name): int
     {
-        self::$engineConstants ??= require self::resolveArtifact('constants.php');
-        if (!array_key_exists($name, self::$engineConstants)) {
+        $engineConstants = self::loadEngineConstants();
+        if (!array_key_exists($name, $engineConstants)) {
             throw new \InvalidArgumentException(
                 "Unknown engine constant {$name}: it is not exported by tools/generator/symbols.php",
             );
         }
 
-        return self::$engineConstants[$name];
+        return $engineConstants[$name];
+    }
+
+    /**
+     * Loads the generated engine-constants table (idempotent)
+     *
+     * Called eagerly from init(): the artifact must never be require'd lazily from
+     * inside an engine callback. With opcache active that include compiles through
+     * persistent_compile_file(), whose unconditional zend_begin_record_errors() nests
+     * inside the recording a linking path already holds (zend_do_link_class) and
+     * aborts debug builds - and the interface_gets_implemented hook is exactly such a
+     * callback-during-linking site.
+     *
+     * @return array<string, int>
+     */
+    private static function loadEngineConstants(): array
+    {
+        if (self::$engineConstants === null) {
+            /** @var array<string, int> $engineConstants The artifact returns the generated table */
+            $engineConstants       = require self::resolveArtifact('constants.php');
+            self::$engineConstants = $engineConstants;
+        }
+
+        return self::$engineConstants;
     }
 
     /**
