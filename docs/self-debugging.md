@@ -167,7 +167,16 @@ Locals come from the compiled-variable table, not the symbol table:
 - `ExecutionData::getLocalVariables()` pairs both into a `name => ReflectionValue`
   map of the live frame (IS_UNDEF slots skipped);
 - `ExecutionData::getLocalVariable($name)` also surfaces declared-but-unset slots so
-  an IDE can render "uninitialized".
+  an IDE can render "uninitialized";
+- `ExecutionData::hasLocalVariable($name)` / `getLocalVariableNames()` probe and
+  enumerate the CV slots the frame actually has - call these before the by-name
+  reader, which throws for a missing slot.
+
+Frame introspection reports the **optimized** op_array: with opcache active, the
+optimizer (SCCP, dead-code elimination, CV compaction) removes and renumbers CV
+slots, so a variable that exists in the source may have no slot on the live frame at
+all. Instrumentation that must observe every declared variable should run with
+`opcache.optimization_level=0`.
 
 The values are borrowed views into the live frame — valid while the frame is on the
 VM stack, which is precisely the suspended-in-a-hook situation. Object graphs expand
@@ -277,6 +286,7 @@ command is the interrupt hook above.
 | Constraint | Consequence |
 |------------|-------------|
 | Compile-order coverage | Only code compiled after debugger init is steppable; opcache-cached scripts escape unless the cache is cold or patched offline |
+| Optimizer rewrites CV slots | With opcache active, source variables may have no frame slot (SCCP + DCE + CV compaction); probe with `ExecutionData::hasLocalVariable()` or run instrumented processes with `opcache.optimization_level=0` |
 | FFI abort on live exception | No throw-hook/CATCH interception; handler code must never leak an exception (fatal) |
 | Observer API frozen pre-userland | No per-call begin/end events; profiling/tracing stays out of scope ([#106](https://github.com/lisachenko/z-engine/pull/106)) |
 | JIT must be off | The JIT bypasses the rewritten executor internals |
