@@ -84,11 +84,30 @@ script, so the next include picks up the patched binary.
 ## Refresh and shared memory
 
 Under `opcache.file_cache_only=1` there is no shared-memory copy, so writing the
-binary is enough for the next worker to load it. When opcache also uses shared
-memory, a script already resident in SHM is **not** re-read until it is
-invalidated — which is exactly what `refresh()` does. Loading a patched binary
-directly into shared memory (and wiring it to the function/method hot-swap API)
-is future work; see [hot-swap.md](hot-swap.md).
+binary is enough for the next worker to load it (`opcache_invalidate()` is a
+no-op in that mode). When opcache also uses shared memory, a script already
+resident in SHM is **not** re-read until it is invalidated — which is exactly
+what `refresh()` does.
+
+Two shared-memory subtleties `refresh()` accounts for:
+
+- **Invalidate before write.** In a process running SHM *with*
+  `opcache.file_cache`, `opcache_invalidate()` also unlinks the script's cache
+  binary (`zend_file_cache_invalidate`). `refresh()` therefore invalidates
+  first and writes second, so the unlink hits the stale binary — the worst
+  case if the write then fails is a cache miss and a recompile of the original
+  source, never a silently lost patch.
+- **Same-process pickup needs `opcache.revalidate_path=1`.** After an
+  in-process invalidation, opcache's default key lookup finds the invalidated
+  hash entry without resolving the script path and never consults the file
+  cache again, so a re-include in the *same* process recompiles the source.
+  With `opcache.revalidate_path=1` the path is resolved, the patched binary is
+  loaded from the file cache back into shared memory, and the re-include
+  executes the patched body. A **fresh** worker (an empty SHM — e.g. a pool
+  worker after restart) picks the patched binary up with default settings.
+
+Loading a patched binary directly into shared memory (and wiring it to the
+function/method hot-swap API) is future work; see [hot-swap.md](hot-swap.md).
 
 ## Scope and limits (v1)
 

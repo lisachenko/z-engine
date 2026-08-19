@@ -297,13 +297,28 @@ final class BinaryCacheFile
     }
 
     /**
-     * Writes the (patched) binary and invalidates opcache's in-memory copy of
-     * the source script, so the next include picks the patched binary up.
+     * Invalidates opcache's in-memory copy of the source script and writes the
+     * (patched) binary, so the next load picks the patched binary up.
      *
      * A script already resident in shared memory is not re-read until it is
      * invalidated, which is what this does; under opcache.file_cache_only there
-     * is no shared copy and the write alone suffices. Invalidation is a no-op
-     * when opcache is not active in this process (the write still happens).
+     * is no shared copy and the write alone suffices (opcache_invalidate() is
+     * a no-op there, and also when opcache is not active in this process - the
+     * write still happens either way).
+     *
+     * The order is deliberately invalidate-BEFORE-save: in a process running
+     * shared memory WITH opcache.file_cache, opcache_invalidate() also unlinks
+     * the script's cache binary (zend_file_cache_invalidate), so invalidating
+     * after the write would delete the patched binary it just produced (issue
+     * #252). With this order the unlink hits the stale binary, and the worst
+     * case when save() then fails is a cache miss - a recompile of the
+     * original source - never a silently lost patch.
+     *
+     * Same-process pickup caveat: after an in-process invalidation, opcache's
+     * default key lookup skips path resolution for the invalidated entry and
+     * never consults the file cache again - the patched binary is loaded on a
+     * re-include only under opcache.revalidate_path=1; a fresh worker picks it
+     * up with default settings.
      *
      * @param int|null $timestamp Source mtime to stamp; defaults to the script's
      *                            current mtime so the binary stays valid under
@@ -314,10 +329,10 @@ final class BinaryCacheFile
         if ($timestamp === null && $this->scriptPath !== null && is_file($this->scriptPath)) {
             $timestamp = filemtime($this->scriptPath) ?: null;
         }
-        $this->save(null, $timestamp);
-
         if ($this->scriptPath !== null && function_exists('opcache_invalidate')) {
             opcache_invalidate($this->scriptPath, true);
         }
+
+        $this->save(null, $timestamp);
     }
 }
