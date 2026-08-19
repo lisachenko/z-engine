@@ -40,7 +40,10 @@ class AbstractModuleTest extends TestCase
 
         $module->register();
         $this->assertTrue($module->isModuleRegistered());
-        $this->assertTrue(extension_loaded('lifecycle'));
+        // Runtime-built name on purpose: under an opcache-active runner the optimizer
+        // folds extension_loaded('<literal>') to constant false at compile time, before
+        // the module registers (issue #243)
+        $this->assertTrue(extension_loaded($module->getName()));
         $this->assertFalse($module->wasModuleStarted());
         $this->assertSame([], LifecycleModule::$events);
 

@@ -124,6 +124,21 @@ Runtime-registered modules are wired for the current request only: after `Core::
 the entry keeps no callback pointers, so subsequent requests of the same process (FPM,
 workers) see the module without lifecycle callbacks unless it is registered again.
 
+### Module visibility and opcache constant folding
+
+A runtime-registered module is a genuine `module_registry` entry, and every **runtime**
+lookup sees it: `extension_loaded($name)` with a runtime-built name,
+`get_loaded_extensions()`, `new \ReflectionExtension(...)`, the `phpinfo()` module
+section. But opcache's optimizer pre-evaluates `extension_loaded('<literal>')` while the
+calling script is being **compiled** (`zend_optimizer_eval_special_func_info()`): a module
+that is not in the registry at compile time — with `enable_dl` off — folds the call to
+constant `false`, baked into the cached op array. A z-engine module registers at runtime,
+after the caller was compiled, so with opcache active such literal call sites keep
+answering `false` no matter how the registration went; `dl()`-loaded extensions face the
+same fold ([#243](https://github.com/lisachenko/z-engine/issues/243)). Ask
+`ExtensionManager::has()` / `AbstractModule::isModuleRegistered()` instead (both are
+fold-proof by construction), or pass the extension name through a variable.
+
 ## Immortal-by-design allocations
 
 The debug-build leak gate treats the following as expected, by design:

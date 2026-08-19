@@ -36,11 +36,16 @@ class PersistentHeapRequestCycleTest extends TestCase
             '-d', 'report_memleaks=1',
             '-d', 'display_errors=on',
             '-d', 'error_reporting=' . (E_ALL & ~E_DEPRECATED),
-            // Pinned off so the scenario is hermetic whatever php.ini says (an
-            // opcache-active runner, or Ubuntu's PHP 8.5 default opcache.enable_cli=On).
-            // TODO(#243): with opcache active in this child the registered module is
-            // not visible ("FAILED: engine-entry-visible") - unpin once fixed
-            '-d', 'opcache.enable_cli=0',
+            // Pinned ON (JIT off, AGENTS.md) so the child hermetically runs the exact
+            // configuration issue #243 failed in: opcache's optimizer constant-folds
+            // literal extension_loaded() calls at compile time, which the scenario's
+            // engine-entry-visible checkpoint dodges with a runtime-built name. The
+            // opcache-off leg stays covered by the debug leak gate
+            // (MemoryLeakScenarioTest spawns the same scenario with php.ini defaults).
+            '-d', 'opcache.enable=1',
+            '-d', 'opcache.enable_cli=1',
+            '-d', 'opcache.jit=off',
+            '-d', 'opcache.jit_buffer_size=0',
             __DIR__ . '/scenarios/persistent-heap-request-cycle.php',
         ];
 
