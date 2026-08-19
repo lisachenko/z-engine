@@ -2645,7 +2645,7 @@ class ReflectionClass extends NativeReflectionClass
         if ($this->isInternal()) {
             trigger_error('Create object handler is available for user-defined classes only', E_USER_ERROR);
         }
-        $this->assertNotLazyLinkingCopy('create_object');
+        $this->keepLazyLinkingCopyProcessLocal('create_object');
         self::getObjectHandlers($this->pointer);
 
         $hook = new CreateObjectHook($handler, $this->pointer);
@@ -2668,7 +2668,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setGetIteratorHandler(Closure $handler): GetIteratorHook
     {
-        $this->assertNotLazyLinkingCopy('get_iterator');
+        $this->keepLazyLinkingCopyProcessLocal('get_iterator');
         $hook = new GetIteratorHook($handler, $this->pointer);
         $hook->install();
 
@@ -2687,7 +2687,7 @@ class ReflectionClass extends NativeReflectionClass
         }
         // An interface entry can itself be the lazy temporary while it links against
         // its own parent interfaces
-        $this->assertNotLazyLinkingCopy('interface_gets_implemented');
+        $this->keepLazyLinkingCopyProcessLocal('interface_gets_implemented');
 
         $hook = new InterfaceGetsImplementedHook($handler, $this->pointer);
         $hook->install();
@@ -2711,7 +2711,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     private function installObjectHook(string $hookClass, Closure $handler): AbstractHook
     {
-        $this->assertNotLazyLinkingCopy($hookClass);
+        $this->keepLazyLinkingCopyProcessLocal($hookClass);
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new $hookClass($handler, $handlers);
@@ -2721,23 +2721,36 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
-     * Rejects handler installation on a temporary lazy-linking class copy (issue #238)
+     * Makes handler installation on a temporary lazy-linking class copy stick (issue #241)
      *
-     * The handlers block is keyed to this entry's address; the temporary is discarded
-     * when opcache's inheritance cache persists the linked class, so the installation
-     * would silently do nothing. Probe with isLazyLinkingCopy() before installing from
-     * an interface_gets_implemented hook. Issue #241 (declining the inheritance cache
-     * for hooked classes) is the path to making this installation actually work.
+     * The handlers block is keyed to this entry's address; without intervention the
+     * temporary is discarded as soon as opcache's inheritance cache persists the linked
+     * class, silently losing every installed handler (issue #238). So the entry is
+     * recorded in the Core decline set: when its linking completes, the intercepted
+     * zend_inheritance_cache_add answers NULL (the engine's ordinary "not cached"
+     * outcome) and the temporary stays in the class table as a process-local class -
+     * the handlers remain valid for the request, the class is simply re-linked per
+     * process instead of reused from the cache, and no process-local trampoline
+     * address ever reaches shared memory.
+     *
+     * When the interception is unavailable (engine definitions generated before the
+     * zend_inheritance_cache_add symbol was exported), the loud guard of issue #238
+     * remains: the installation throws instead of being silently lost. Probe with
+     * isLazyLinkingCopy() before installing from an interface_gets_implemented hook.
      *
      * @param string $handlerName Handler field or hook class named in the diagnostic
      *
-     * @throws SharedMemoryException
+     * @throws SharedMemoryException When declining is unavailable in this process
      */
-    private function assertNotLazyLinkingCopy(string $handlerName): void
+    private function keepLazyLinkingCopyProcessLocal(string $handlerName): void
     {
-        if ($this->isLazyLinkingCopy()) {
+        if (!$this->isLazyLinkingCopy()) {
+            return;
+        }
+        if (!Core::canDeclineInheritanceCachePublication()) {
             throw SharedMemoryException::handlerInstallationDuringLazyLinking($this->getName(), $handlerName);
         }
+        Core::declineInheritanceCachePublication(Core::addressOf($this->pointer));
     }
 
     /**
