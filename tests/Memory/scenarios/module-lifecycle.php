@@ -22,7 +22,10 @@ $module = new LifecycleModule();
 $module->register();
 $module->startup();
 
-if (!extension_loaded('lifecycle')) {
+// Runtime-built name on purpose: opcache's optimizer folds extension_loaded('<literal>')
+// to constant false at compile time, before the module registers (issue #243) - and the
+// leak gate runs this scenario with whatever opcache state php.ini dictates
+if (!extension_loaded($module->getName())) {
     throw new RuntimeException('Module was not registered');
 }
 if (LifecycleModule::$events !== ['moduleStartup', 'requestStartup']) {
