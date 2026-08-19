@@ -191,12 +191,16 @@ $report->appliedMethods;                   // what actually happened, per entry
   `opcache.preload`-based features) keep rejecting Windows loudly, and the
   Windows half of the original platform ticket was retired when
   [#119](https://github.com/lisachenko/z-engine/issues/119) was rescoped to
-  macOS/arm64. ZTS payloads stay tracked in
-  [#118](https://github.com/lisachenko/z-engine/issues/118).
+  macOS/arm64. ZTS payloads are supported since
+  [#118](https://github.com/lisachenko/z-engine/issues/118): the file-cache
+  binary layout is thread-safety-agnostic (zend_file_cache.c has no ZTS
+  conditionals, and every struct the walker dereferences is layout-identical
+  across the modes — only EG/CG/module_entry differ, none of which appear in
+  a payload).
 - **Strict, never silent.** Anything the port cannot handle raises
   `unsupportedPayload` rather than writing a subtly corrupt binary; with every
   payload shape of the 8.4 walker now ported, that guard covers the platform
-  predicates above (Windows/32-bit, and ZTS until #118). Global functions,
+  predicates above (Windows/32-bit). Global functions,
   classes with constants, typed properties (union/intersection/DNF type lists
   included), trait-using classes (aliases and insteadof precedences included),
   closures and arrow functions (nested dynamic_func_defs included),

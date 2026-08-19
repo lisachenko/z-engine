@@ -35,9 +35,9 @@ jobs:
             opcache_gate: composer test:opcache
           - ts: zts
             ts_label: ZTS
-            # The file-cache relocator does not support ZTS payloads yet
-            # (issue #118): its tests self-skip on ZTS, so the non-skip gate
-            # excludes that group while still proving the SHM tests ran
+            # Since issue #118 the file-cache relocator supports ZTS payloads,
+            # so this gate covers the full opcache group (the script is the
+            # named alias the ZTS legs call; it no longer excludes anything)
             opcache_gate: composer test:opcache-zts
     steps:
       - uses: actions/checkout@v7
@@ -203,8 +203,8 @@ jobs:
         run: composer test
 
       # Same gates as the Linux legs (issue #124): the opcache/SHM tests must
-      # have RUN. As on Linux, the ZTS leg excludes the file-cache relocator
-      # group (no ZTS payload support yet, issue #118).
+      # have RUN. Since issue #118 the relocator group runs on ZTS too, so
+      # both legs cover the full opcache group.
       - name: Opcache/SHM coverage must not silently skip
         if: steps.artifacts.outputs.present == 'true'
         run: ${{ matrix.ts == 'zts' && 'composer test:opcache-zts' || 'composer test:opcache' }}
@@ -384,12 +384,12 @@ jobs:
         include:
           - ts: nts
             ts_label: NTS
-            # ZTS excludes the relocator tests (no ZTS payload support yet,
-            # issue #118) but still gates the SHM coverage against silent skips
             opcache_args: --group opcache --fail-on-skipped
           - ts: zts
             ts_label: ZTS
-            opcache_args: --group opcache --exclude-group opcache-relocator --fail-on-skipped
+            # Since issue #118 the relocator tests run on ZTS too - both legs
+            # gate the full opcache group against silent skips
+            opcache_args: --group opcache --fail-on-skipped
     steps:
       - uses: actions/checkout@v7
 
