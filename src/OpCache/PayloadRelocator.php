@@ -1312,13 +1312,38 @@ final class PayloadRelocator
      * @param \FFI\CData $ce
      */
 
+    /**
+     * zf_* field order matches the C walk (zend_file_cache.c), not the struct layout.
+     * Only linked classes carry these structs - a plain compile stores classes
+     * unlinked with both pointers NULL - but payloads from other producers (e.g.
+     * preload-era images) may hold them, and the walk must be faithful when they do.
+     */
+    private const ITERATOR_FUNC_FIELDS    = ['zf_new_iterator', 'zf_rewind', 'zf_valid', 'zf_key', 'zf_current', 'zf_next'];
+    private const ARRAYACCESS_FUNC_FIELDS = ['zf_offsetget', 'zf_offsetexists', 'zf_offsetset', 'zf_offsetunset'];
+
+    /**
+     * The get_iterator <-> HOOKED_ITERATOR_PLACEHOLDER swap the C load path performs
+     * is deliberately NOT mirrored: the image is never executed in this process, so
+     * the placeholder is preserved verbatim like every other execution-only field
+     * and the written file keeps the exact bytes the engine expects.
+     *
+     * @param \FFI\CData $ce
+     */
     private function unserializeIteratorFuncs(object $ce): void
     {
         if ($this->ptrValue($ce, 'iterator_funcs_ptr') !== 0) {
-            throw OpCacheException::unsupportedPayload('iterator-aware class relocation');
+            $address = $this->unPtr($ce, 'iterator_funcs_ptr');
+            $funcs   = Core::pointerAtAddress('zend_class_iterator_funcs *', $address);
+            foreach (self::ITERATOR_FUNC_FIELDS as $field) {
+                $this->unPtr($funcs, $field);
+            }
         }
         if ($this->ptrValue($ce, 'arrayaccess_funcs_ptr') !== 0) {
-            throw OpCacheException::unsupportedPayload('ArrayAccess class relocation');
+            $address = $this->unPtr($ce, 'arrayaccess_funcs_ptr');
+            $funcs   = Core::pointerAtAddress('zend_class_arrayaccess_funcs *', $address);
+            foreach (self::ARRAYACCESS_FUNC_FIELDS as $field) {
+                $this->unPtr($funcs, $field);
+            }
         }
     }
     /**
@@ -1327,11 +1352,23 @@ final class PayloadRelocator
 
     private function serializeIteratorFuncs(object $ce): void
     {
-        if ($this->ptrValue($ce, 'iterator_funcs_ptr') !== 0) {
-            throw OpCacheException::unsupportedPayload('iterator-aware class relocation');
+        // The C serialize converts the zf_* members through the still-real struct
+        // pointer first and the struct pointer itself last; mirrored exactly
+        $iteratorAddress = $this->ptrValue($ce, 'iterator_funcs_ptr');
+        if ($iteratorAddress !== 0) {
+            $funcs = Core::pointerAtAddress('zend_class_iterator_funcs *', $iteratorAddress);
+            foreach (self::ITERATOR_FUNC_FIELDS as $field) {
+                $this->serPtr($funcs, $field);
+            }
+            $this->serPtr($ce, 'iterator_funcs_ptr');
         }
-        if ($this->ptrValue($ce, 'arrayaccess_funcs_ptr') !== 0) {
-            throw OpCacheException::unsupportedPayload('ArrayAccess class relocation');
+        $arrayAccessAddress = $this->ptrValue($ce, 'arrayaccess_funcs_ptr');
+        if ($arrayAccessAddress !== 0) {
+            $funcs = Core::pointerAtAddress('zend_class_arrayaccess_funcs *', $arrayAccessAddress);
+            foreach (self::ARRAYACCESS_FUNC_FIELDS as $field) {
+                $this->serPtr($funcs, $field);
+            }
+            $this->serPtr($ce, 'arrayaccess_funcs_ptr');
         }
     }
 
