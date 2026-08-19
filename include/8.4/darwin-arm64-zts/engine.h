@@ -1058,4 +1058,6 @@ extern zend_ast_process_t zend_ast_process;
 extern void (*zend_error_cb)(int, zend_string *, const uint32_t, zend_string *);
 extern void (*zend_throw_exception_hook)(zend_object *);
 extern void (*zend_interrupt_function)(zend_execute_data *);
+extern zend_class_entry * (*zend_inheritance_cache_get)(zend_class_entry *, zend_class_entry *, zend_class_entry **);
+extern zend_class_entry * (*zend_inheritance_cache_add)(zend_class_entry *, zend_class_entry *, zend_class_entry *, zend_class_entry **, HashTable *);
 extern char zend_system_id[32];
