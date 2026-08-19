@@ -288,6 +288,53 @@ class ReflectionClassTest extends TestCase
         $this->assertStringContainsString('@anonymous', $log);
     }
 
+    public function testHandlersInstalledFromInterfaceHookFireWithoutOpcache(): void
+    {
+        if (function_exists('opcache_get_status') && opcache_get_status(false) !== false) {
+            self::markTestSkipped(
+                'With opcache active in the runner the implementor links on a lazy-linking copy and '
+                . 'handler installation is rejected (issue #238): that shape is covered by '
+                . 'OpcacheSupportMatrixTest::testHandlerInstallationDuringLazyLinkingIsRejected',
+            );
+        }
+
+        $lazyObservations = [];
+        $refInterface     = new ReflectionClass(TestInterface::class);
+        $interfaceHook    = $refInterface->setInterfaceGetsImplementedHandler(
+            function (InterfaceGetsImplementedHook $hook) use (&$lazyObservations) {
+                $implementor        = $hook->getClass();
+                $lazyObservations[] = $implementor->isLazyLinkingCopy();
+                $implementor->setCreateObjectHandler(Closure::fromCallable([ObjectCreateTrait::class, '__init']));
+                $implementor->setCompareValuesHandler(function (CompareValuesHook $comparison) {
+                    $left  = $comparison->getFirst();
+                    $right = $comparison->getSecond();
+
+                    return (is_object($left) ? spl_object_id($left) : 0) <=> (is_object($right) ? spl_object_id($right) : 0);
+                });
+
+                return Core::SUCCESS;
+            },
+        );
+
+        try {
+            $first  = new class implements TestInterface {};
+            $second = new $first();
+
+            // Without opcache the hook observes the real, already-usable class entry...
+            $this->assertSame([false], $lazyObservations);
+            // ...and the handlers installed from inside the hook actually take effect: two
+            // empty instances compare equal with stock handlers, but the installed comparison
+            // is by object identity (this assertion is exactly what opcache used to break
+            // silently in issue #238). The comparison runs behind an opaque boundary: the
+            // handler decides the outcome at runtime, which no analyser can see
+            $compareEquals = static fn(object $left, object $right): bool => $left == $right;
+            $this->assertFalse($compareEquals($first, $second));
+            $this->assertTrue($compareEquals($first, $first));
+        } finally {
+            $interfaceHook->uninstall();
+        }
+    }
+
     #[RunInSeparateProcess]
     public function testInstallCastObjectHandler(): void
     {

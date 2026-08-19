@@ -233,6 +233,36 @@ $assertSameString(
 );
 echo "runtime-class-swap: ok\n";
 
+// 6. The live static-variables table of an untouched shared-memory function must be
+//    read through its map-ptr offset slot (issue #239): the declaration defaults say 0,
+//    only the materialized live table knows about the calls made below
+$staticsFunction = new ReflectionFunction('zengine_shm_static_counter');
+if (!$staticsFunction->isImmutable()) {
+    // A mutable function means opcache did not publish the fixture from shared memory:
+    // the map-ptr offset branch under test would silently not be exercised
+    fwrite(STDERR, "zengine_shm_static_counter is not an immutable (shared-memory) function\n");
+    exit(2);
+}
+zengine_shm_static_counter();
+zengine_shm_static_counter();
+$staticsTable = $staticsFunction->getStaticVariables();
+if ($staticsTable === null) {
+    $fail('the shared-memory function reports no static-variables table at all');
+}
+$invocationsEntry = $staticsTable->find('invocations');
+if ($invocationsEntry === null) {
+    $fail('static variable $invocations is missing from the table');
+}
+// Bound slots hold IS_REFERENCE zvals shared with the function (see the
+// getStaticVariables() ownership contract) - unwrap before reading the value
+$observedCount = null;
+$invocationsEntry->dereference()->getNativeValue($observedCount);
+if ($observedCount !== 2) {
+    $observedExport = var_export($observedCount, true);
+    $fail("the live static-variables table was not read through the map-ptr slot (invocations = {$observedExport}, expected 2)");
+}
+echo "static-vars-live-table: ok\n";
+
 // Reaching this point with exit code 0 also proves the request shuts down cleanly:
 // issue #41 crashed in zend_function_dtor()/destroy_zend_class() at request shutdown
 echo "MATRIX OK\n";

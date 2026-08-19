@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace ZEngine\Reflection;
 
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ZEngine\Stub\TestClass;
 use ZEngine\Stub\TestSlotSpecializationTemplate;
@@ -117,6 +118,12 @@ class ClassSpecializerSlotTest extends TestCase
         $instance->setNamed('not an int');
     }
 
+    // TODO(#131): once literals are copied alongside opcodes the 2GB IS_CONST reach limit
+    // disappears and this test returns to the opcache-active runner job. Until then a
+    // shared-memory method body always refuses slot substitution (the template class is
+    // compiled into SHM when the runner itself has opcache active), so the substitution
+    // this test asserts cannot happen there by design.
+    #[Group('opcache-incompatible')]
     public function testBuiltinTypedParameterIsRewrittenAndEnforced(): void
     {
         $newName = 'ZEngine\Stub\Specialized\SlotBuiltinParamCopy';
@@ -183,6 +190,8 @@ class ClassSpecializerSlotTest extends TestCase
         ]));
     }
 
+    // TODO(#131): same 2GB IS_CONST reach refusal as testBuiltinTypedParameterIsRewrittenAndEnforced
+    #[Group('opcache-incompatible')]
     public function testOpcodeCopyPreservesLiteralsAndJumps(): void
     {
         $newName = 'ZEngine\Stub\Specialized\SlotOpcodeRelocationCopy';
