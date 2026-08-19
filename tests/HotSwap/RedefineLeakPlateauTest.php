@@ -57,6 +57,11 @@ class RedefineLeakPlateauTest extends TestCase
             '-d', 'display_errors=on',
             '-d', 'error_reporting=-1',
             '-d', 'memory_limit=512M',
+            // Pinned off so the measurement is hermetic whatever php.ini says (an
+            // opcache-active runner, or Ubuntu's PHP 8.5 default opcache.enable_cli=On).
+            // TODO(#242): with opcache active in this child the very first redefine()
+            // does not take effect ("warm-up dispatch failed") - unpin once fixed
+            '-d', 'opcache.enable_cli=0',
             __DIR__ . '/scripts/redefine-plateau.php',
         ];
         $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);

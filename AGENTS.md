@@ -196,6 +196,12 @@ composer test:internal   # destructive/segfault-prone group, process-isolated
   self-skip — ZTS payloads are not supported yet (issue #118). The non-skip
   gate for the remaining opcache/SHM coverage is `composer test:opcache-zts`;
   CI runs both release and debug test legs on NTS **and** ZTS.
+- `composer test:opcache-runner` runs the suite the way an opcache-enabled
+  consumer does — `opcache.enable_cli=1` in the **runner process itself**, so
+  every test file is compiled into shared memory (CI has a dedicated Linux job
+  for it). Tests that cannot hold in that environment carry the
+  `opcache-incompatible` group, each with a `TODO(#issue)` naming the tracking
+  issue that returns it to the job; never add a member without one.
 
 ## Quality gates (all enforced in CI)
 

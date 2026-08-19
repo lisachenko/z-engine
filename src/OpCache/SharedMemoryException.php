@@ -81,4 +81,24 @@ class SharedMemoryException extends \ReflectionException
     {
         return new self("Cannot copy out function {$lowerKey}: it is not published in the given table");
     }
+
+    /**
+     * Handler installation targeted a temporary lazy-linking class copy (issue #238)
+     *
+     * Handlers are tracked per class-entry address; the lazy-linking temporary is
+     * discarded as soon as opcache's inheritance cache persists the linked class, so
+     * anything installed on it would be silently lost. Throwing here is the loud
+     * failure until declining the inheritance cache for hooked classes (issue #241)
+     * makes the installation actually stick.
+     */
+    public static function handlerInstallationDuringLazyLinking(string $className, string $handlerName): self
+    {
+        return new self(
+            "Cannot install the {$handlerName} handler on {$className}: the class entry is the "
+            . 'temporary copy opcache links classes on (lazy loading for the inheritance cache) '
+            . 'and discards when linking completes, so the installed handlers would be silently '
+            . 'lost (issue #238). Install handlers after the class is fully linked, or run this '
+            . 'code path with opcache disabled',
+        );
+    }
 }

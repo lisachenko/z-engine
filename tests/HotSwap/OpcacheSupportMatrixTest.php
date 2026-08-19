@@ -46,7 +46,30 @@ class OpcacheSupportMatrixTest extends TestCase
         self::assertStringContainsString('add-method: ok', $stdout, $report);
         self::assertStringContainsString('hot-swap: ok', $stdout, $report);
         self::assertStringContainsString('runtime-class-swap: ok', $stdout, $report);
+        self::assertStringContainsString('static-vars-live-table: ok', $stdout, $report);
         self::assertStringContainsString('MATRIX OK', $stdout, $report);
+    }
+
+    /**
+     * The loud guard of issue #238: handlers installed from an interface_gets_implemented
+     * hook target the temporary class entry opcache links classes on, and the temporary is
+     * discarded once the inheritance cache persists the linked result - so the installation
+     * must throw instead of being silently lost (issue #241 tracks making it stick by
+     * declining the inheritance cache for hooked classes)
+     */
+    public function testHandlerInstallationDuringLazyLinkingIsRejected(): void
+    {
+        [$exitCode, $stdout, $report] = $this->runOpcacheChild(
+            __DIR__ . '/scripts/opcache-interface-hook.php',
+            // The lazy-linking path engages only for scripts opcache actually cached: the
+            // default opcache.file_update_protection=2 refuses files modified less than 2s
+            // before the request (a fresh checkout), silently degrading the reproduction
+            ['-d', 'opcache.file_update_protection=0'],
+        );
+
+        self::assertSame(0, $exitCode, "Interface-hook child exited with code {$exitCode}\n{$report}");
+        self::assertStringContainsString('lazy-linking-guard: ok', $stdout, $report);
+        self::assertStringContainsString('INTERFACE HOOK OK', $stdout, $report);
     }
 
     /**

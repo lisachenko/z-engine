@@ -20,6 +20,22 @@ function zengine_shm_function(): string
     return 'from-shm';
 }
 
+/**
+ * Target of the static-variables leg (issue #239)
+ *
+ * Its op_array is immutable, so the engine stores the live-table map pointer in
+ * offset form; the leg proves getStaticVariables() reads through that slot. Kept
+ * away from the redefine targets so its shared-memory body stays untouched.
+ */
+function zengine_shm_static_counter(): int
+{
+    static $invocations = 0;
+    assert(is_int($invocations));
+    ++$invocations;
+
+    return $invocations;
+}
+
 class ZEngineShmClass
 {
     public const KIND = 'shm';

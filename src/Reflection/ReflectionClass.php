@@ -584,6 +584,27 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
+     * Checks if this class entry is the temporary copy opcache links classes on
+     *
+     * Under opcache, a class declared in a cached script is linked on a temporary
+     * mutable copy of the shared-memory entry: zend_lazy_class_load() stamps
+     * ZEND_ACC_CACHED on the copy while ZEND_ACC_LINKED is still clear, and once
+     * linking completes the inheritance cache persists the linked result and discards
+     * the temporary. Only engine callbacks that fire mid-linking (the
+     * interface_gets_implemented hook) can ever observe this state - and anything
+     * keyed to the temporary's address, like installed object handlers, dies with it
+     * (issue #238). ZEND_ACC_CACHED is set by no non-opcache code path, so a true
+     * result implies opcache; with opcache off this is always false.
+     */
+    public function isLazyLinkingCopy(): bool
+    {
+        $classFlags = $this->getFlags();
+
+        return ($classFlags & Core::ZEND_ACC_CACHED) !== 0
+            && ($classFlags & Core::ZEND_ACC_LINKED) === 0;
+    }
+
+    /**
      * Whether this class entry came from an opcache preload region
      *
      * A preloaded entry is shared memory that is republished into every request of the worker
@@ -2624,6 +2645,7 @@ class ReflectionClass extends NativeReflectionClass
         if ($this->isInternal()) {
             trigger_error('Create object handler is available for user-defined classes only', E_USER_ERROR);
         }
+        $this->assertNotLazyLinkingCopy('create_object');
         self::getObjectHandlers($this->pointer);
 
         $hook = new CreateObjectHook($handler, $this->pointer);
@@ -2646,6 +2668,7 @@ class ReflectionClass extends NativeReflectionClass
      */
     public function setGetIteratorHandler(Closure $handler): GetIteratorHook
     {
+        $this->assertNotLazyLinkingCopy('get_iterator');
         $hook = new GetIteratorHook($handler, $this->pointer);
         $hook->install();
 
@@ -2662,6 +2685,9 @@ class ReflectionClass extends NativeReflectionClass
         if (!$this->isInterface()) {
             throw new \LogicException('Interface implemented handler can be installed only for interfaces');
         }
+        // An interface entry can itself be the lazy temporary while it links against
+        // its own parent interfaces
+        $this->assertNotLazyLinkingCopy('interface_gets_implemented');
 
         $hook = new InterfaceGetsImplementedHook($handler, $this->pointer);
         $hook->install();
@@ -2685,12 +2711,33 @@ class ReflectionClass extends NativeReflectionClass
      */
     private function installObjectHook(string $hookClass, Closure $handler): AbstractHook
     {
+        $this->assertNotLazyLinkingCopy($hookClass);
         $handlers = self::getObjectHandlers($this->pointer);
 
         $hook = new $hookClass($handler, $handlers);
         $hook->install();
 
         return $hook;
+    }
+
+    /**
+     * Rejects handler installation on a temporary lazy-linking class copy (issue #238)
+     *
+     * The handlers block is keyed to this entry's address; the temporary is discarded
+     * when opcache's inheritance cache persists the linked class, so the installation
+     * would silently do nothing. Probe with isLazyLinkingCopy() before installing from
+     * an interface_gets_implemented hook. Issue #241 (declining the inheritance cache
+     * for hooked classes) is the path to making this installation actually work.
+     *
+     * @param string $handlerName Handler field or hook class named in the diagnostic
+     *
+     * @throws SharedMemoryException
+     */
+    private function assertNotLazyLinkingCopy(string $handlerName): void
+    {
+        if ($this->isLazyLinkingCopy()) {
+            throw SharedMemoryException::handlerInstallationDuringLazyLinking($this->getName(), $handlerName);
+        }
     }
 
     /**

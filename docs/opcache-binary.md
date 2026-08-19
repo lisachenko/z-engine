@@ -94,7 +94,13 @@ is future work; see [hot-swap.md](hot-swap.md).
 
 - **Platform.** The relocator targets the bundled 64-bit non-Windows build; it
   asserts `PHP_INT_SIZE === 8` and a `/` path separator and throws
-  `OpCacheException::unsupportedPayload` otherwise.
+  `OpCacheException::unsupportedPayload` otherwise. **Windows opcache support
+  is an intentional non-goal**, not pending work: the relocator (and
+  `opcache.preload`-based features) keep rejecting Windows loudly, and the
+  Windows half of the original platform ticket was retired when
+  [#119](https://github.com/lisachenko/z-engine/issues/119) was rescoped to
+  macOS/arm64. ZTS payloads stay tracked in
+  [#118](https://github.com/lisachenko/z-engine/issues/118).
 - **Strict, never silent.** Structures the port does not yet handle
   (intersection/union type lists, property hooks, iterator/ArrayAccess funcs,
   trait-using classes, compile warnings) raise `unsupportedPayload` rather than

@@ -53,11 +53,24 @@ final class SharedMemoryExceptionTest extends TestCase
         self::assertInstanceOf(SharedMemoryException::class, $exception->getPrevious());
     }
 
+    public function testLazyLinkingRefusalNamesTheClassAndTheHandler(): void
+    {
+        $exception = SharedMemoryException::handlerInstallationDuringLazyLinking('Some\Implementor', 'write_property');
+
+        self::assertStringContainsString('Some\Implementor', $exception->getMessage());
+        self::assertStringContainsString('write_property', $exception->getMessage());
+        self::assertStringContainsString('issue #238', $exception->getMessage());
+    }
+
     public function testRuntimeDeclaredCodeIsNotReportedAsImmutable(): void
     {
-        // Detection is on the owning wrappers; code declared in this process
-        // (never opcache-shared) is never immutable
-        self::assertFalse((new ReflectionClass(self::class))->isImmutable());
+        // Detection is on the owning wrappers; code declared at runtime in this process is
+        // never opcache-shared, whatever the runner's opcache mode. The probe must be
+        // eval-declared: under an opcache-active runner (opcache.enable_cli=1) this test
+        // file's own classes ARE compiled into shared memory and correctly report immutable
+        $runtimeDeclared = eval('return new class () {};');
+        self::assertIsObject($runtimeDeclared);
+        self::assertFalse((new ReflectionClass($runtimeDeclared))->isImmutable());
         self::assertFalse((new ReflectionFunction('strlen'))->isImmutable());
     }
 }
