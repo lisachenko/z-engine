@@ -772,7 +772,12 @@ final class PayloadRelocator
         $this->unserializeArgInfo($opArray);
         $this->unserializeVars($opArray);
         if ($opArray->num_dynamic_func_defs !== 0) {
-            throw OpCacheException::unsupportedPayload('dynamic function definitions (closures/arrow fns) relocation');
+            // zend_op_array* array: relocate it, then recurse into each nested body
+            $defsAddress = $this->unPtr($opArray, 'dynamic_func_defs');
+            for ($i = 0; $i < $opArray->num_dynamic_func_defs; $i++) {
+                $defAddress = $this->unPtrAt($defsAddress + $i * PHP_INT_SIZE);
+                $this->unserializeOpArray(Core::pointerAtAddress('zend_op_array *', $defAddress));
+            }
         }
         $this->unStr($opArray, 'function_name');
         $this->unStr($opArray, 'filename');
@@ -831,7 +836,13 @@ final class PayloadRelocator
         $this->serializeArgInfo($opArray);
         $this->serializeVars($opArray);
         if ($opArray->num_dynamic_func_defs !== 0) {
-            throw OpCacheException::unsupportedPayload('dynamic function definitions (closures/arrow fns) relocation');
+            // Store offsets but keep walking through the still-real addresses,
+            // exactly like the C SERIALIZE_PTR/UNSERIALIZE_PTR pairs
+            $defsAddress = $this->serPtr($opArray, 'dynamic_func_defs');
+            for ($i = 0; $i < $opArray->num_dynamic_func_defs; $i++) {
+                $defAddress = $this->serPtrAt($defsAddress + $i * PHP_INT_SIZE);
+                $this->serializeOpArray(Core::pointerAtAddress('zend_op_array *', $defAddress));
+            }
         }
         $this->serStr($opArray, 'function_name');
         $this->serStr($opArray, 'filename');
