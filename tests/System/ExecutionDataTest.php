@@ -115,10 +115,19 @@ class ExecutionDataTest extends TestCase
             $conditional = 'assigned only for a positive probe';
         }
 
+        $state = Core::$executor->getExecutionState();
+        if (!$state->hasLocalVariable('conditional')) {
+            // The opcache optimizer proved the branch dead (random_int range inference)
+            // and dropped the never-assigned CV from the frame entirely: the documented
+            // contract is then a throw from the by-name reader, probed via
+            // hasLocalVariable() first
+            $this->expectException(\OutOfBoundsException::class);
+        }
+
         // The CV slot exists on the frame (compile-time allocation) but was never
         // assigned on this code path: unlike getLocalVariables() the by-name reader
         // exposes it so callers can distinguish "declared but unset"
-        $undefined = Core::$executor->getExecutionState()->getLocalVariable('conditional');
+        $undefined = $state->getLocalVariable('conditional');
         $this->assertSame(ReflectionValue::IS_UNDEF, $undefined->getType());
     }
 
@@ -133,7 +142,7 @@ class ExecutionDataTest extends TestCase
     {
         $marker = 'parent-frame-marker';
 
-        $observed = (function (): array {
+        [$markerHasSlot, $observed] = (function (): array {
             // The closure's own frame is the current state; its caller is this test
             $parentFrame  = Core::$executor->getExecutionState()->getPrevious();
             $parentLocals = $parentFrame->getLocalVariables();
@@ -145,10 +154,32 @@ class ExecutionDataTest extends TestCase
                 unset($value);
             }
 
-            return $values;
+            return [$parentFrame->hasLocalVariable('marker'), $values];
         })();
 
-        $this->assertSame(['marker' => $marker], $observed);
+        if ($markerHasSlot) {
+            $this->assertSame(['marker' => $marker], $observed);
+        } else {
+            // The opcache optimizer propagated the literal into its use site and dropped
+            // the dead store, so the parent frame has no marker CV at all - and the frame
+            // reader reports that consistently instead of inventing a value
+            $this->assertSame([], $observed);
+        }
+    }
+
+    public function testHasLocalVariableAndNamesReflectTheFrame(): void
+    {
+        // A runtime-computed value: the optimizer cannot fold it into its use site, so
+        // the CV slot survives any optimization level and the probes stay deterministic
+        $marker = random_int(1, PHP_INT_MAX);
+
+        $state = Core::$executor->getExecutionState();
+        $this->assertTrue($state->hasLocalVariable('marker'));
+        $this->assertFalse($state->hasLocalVariable('missing'));
+        $this->assertContains('marker', $state->getLocalVariableNames());
+
+        $state->getLocalVariable('marker')->getNativeValue($observedMarker);
+        $this->assertSame($marker, $observedMarker);
     }
 
     #[DataProvider('argumentProvider')]

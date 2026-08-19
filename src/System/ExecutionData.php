@@ -296,6 +296,10 @@ class ExecutionData
      * distinguish "declared on the frame but not assigned" from a real value.
      * The value is a BORROWED view into the live frame (see getLocalVariables()).
      *
+     * Throws for a name without a CV slot on this frame - which under the opcache
+     * optimizer includes variables that exist in the source (see hasLocalVariable(),
+     * the probe to call first when the slot may have been optimized away).
+     *
      * @param string $variableName Variable name without the '$' sigil
      */
     public function getLocalVariable(string $variableName): ReflectionValue
@@ -312,13 +316,33 @@ class ExecutionData
     }
 
     /**
+     * Checks whether this frame has a compiled-variable (CV) slot for the given name
+     *
+     * A variable that exists in the source may have no slot at runtime: opcache's
+     * optimizer (SCCP and dead-code elimination with CV compaction) removes and
+     * renumbers CV slots, so frame introspection sees the optimized truth. Probe here
+     * before getLocalVariable(), which throws for missing slots. Instrumentation that
+     * must observe every source variable should run with opcache.optimization_level=0
+     * (see docs/self-debugging.md).
+     *
+     * @param string $variableName Variable name without the '$' sigil
+     */
+    public function hasLocalVariable(string $variableName): bool
+    {
+        return in_array($variableName, $this->getLocalVariableNames(), true);
+    }
+
+    /**
      * Returns the compiled-variable names of this frame indexed by CV slot number
      *
+     * The enumeration counterpart of hasLocalVariable(): the slot numbers key the
+     * getCallVariableByNumber() addressing, and under the opcache optimizer the list
+     * reflects the optimized op_array, not the source (slots removed and renumbered).
      * Empty for frames that execute no user function (they have no CV slots).
      *
      * @return array<int, string>
      */
-    private function getLocalVariableNames(): array
+    public function getLocalVariableNames(): array
     {
         $functionEntry = $this->getFunctionEntry();
         if ($functionEntry === null) {

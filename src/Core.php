@@ -98,6 +98,7 @@ class Core
     public const int ZEND_ACC_RESOLVED_INTERFACES      = 0x40000;
     public const int ZEND_ACC_UNRESOLVED_VARIANCE      = 0x80000;
     public const int ZEND_ACC_NEARLY_LINKED            = 0x100000;
+    public const int ZEND_ACC_CACHED                   = 0x400000;
     public const int ZEND_ACC_ENUM                     = 0x10000000;
     public const int ZEND_ACC_NOT_SERIALIZABLE         = 0x20000000;
     public const int ZEND_ACC_USE_GUARDS               = 0x40000000; // was 0x800 before PHP 8.5

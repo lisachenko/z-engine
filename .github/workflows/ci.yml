@@ -86,6 +86,44 @@ jobs:
       - name: Worker-loop soak (flat memory after warm-up)
         run: php -d ffi.enable=1 -d zend.assertions=1 -d opcache.jit=off tools/examples/worker-loop.php
 
+  tests-opcache-runner:
+    name: Tests (opcache active in runner, NTS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up PHP
+        # Unlike the release legs above, opcache is ACTIVE in the runner process
+        # itself (opcache.enable_cli=1): this is the consumer-facing environment
+        # where every test file is compiled into shared memory and the library
+        # must either work or fail loudly (SharedMemoryException and friends).
+        # Tests that cannot hold under an opcache-active runner carry the
+        # `opcache-incompatible` group, each with a TODO naming the tracking
+        # issue that returns it to this job. Linux only by design: Windows
+        # opcache support is an intentional non-goal (issue #119), and the
+        # macOS legs stay artifact-gated.
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_MINOR }}
+          extensions: ffi, opcache
+          ini-values: ffi.enable=1, zend.assertions=1, opcache.enable=1, opcache.enable_cli=1, opcache.jit=off, opcache.jit_buffer_size=0
+          coverage: none
+
+      - name: Assert opcache is active in the test runner
+        run: |
+          php -r 'exit((extension_loaded("Zend OPcache") && ini_get("opcache.enable_cli")) ? 0 : 1);' \
+            || { echo "::error::Zend OPcache is not active in the runner - this job would test nothing"; exit 1; }
+
+      - name: Install dependencies
+        uses: ramsey/composer-install@v4
+
+      - name: Run test suite under an opcache-active runner
+        run: composer test:opcache-runner
+
+      # The child-process opcache/SHM coverage must hold in this environment too
+      - name: Opcache/SHM coverage must not silently skip
+        run: composer test:opcache
+
   tests-macos:
     name: Tests (macOS ${{ matrix.runner-arch.arch }}, ${{ matrix.ts }})
     runs-on: ${{ matrix.runner-arch.runner }}

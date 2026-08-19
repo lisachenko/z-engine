@@ -528,10 +528,11 @@ trait FunctionLikeTrait
      * values from the declaration, while the map pointer static_variables_ptr points to
      * the live table once it was materialized (on the first ZEND_BIND_STATIC execution,
      * or already at creation time for closures). The live table is returned whenever it
-     * is materialized as a plain pointer; the default table is returned otherwise -
-     * including the map-ptr offset form (low bit set) used by opcache-shared immutable
-     * functions, whose per-request table is not directly addressable. Returns null when
-     * the function declares no static variables at all.
+     * is materialized - as a plain pointer for regular functions, or through the map-ptr
+     * offset form (low bit set) opcache stores into shared immutable functions, whose
+     * slot in the per-process map-ptr area is dereferenced here. The default table is
+     * returned while no live table exists yet (before the first call binds the statics).
+     * Returns null when the function declares no static variables at all.
      *
      * Memory ownership contract (see docs/long-running.md): the returned HashTable is a
      * BORROWED view over the engine-owned table - no addref is taken, the view stays
@@ -552,8 +553,18 @@ trait FunctionLikeTrait
         }
         $opArray   = $this->getOpArrayPointer();
         $liveTable = $opArray->static_variables_ptr__ptr;
-        if ($liveTable !== null && (Core::addressOf($liveTable) & 1) === 0) {
-            return HashTable::fromCData($liveTable);
+        if ($liveTable !== null) {
+            $rawFieldValue = Core::addressOf($liveTable);
+            if (($rawFieldValue & 1) === 0) {
+                return HashTable::fromCData($liveTable);
+            }
+            // Immutable (opcache shared-memory) op_array: the field holds the offset form
+            // of ZEND_MAP_PTR - an odd byte offset into the per-process map-ptr area. The
+            // slot stays NULL until the first ZEND_BIND_STATIC materializes the live table
+            $materialized = $this->dereferenceMapPointerSlot($rawFieldValue);
+            if ($materialized !== null) {
+                return HashTable::fromCData($materialized);
+            }
         }
         $defaultTable = $opArray->static_variables;
         if ($defaultTable === null) {
@@ -561,6 +572,36 @@ trait FunctionLikeTrait
         }
 
         return HashTable::fromCData($defaultTable);
+    }
+
+    /**
+     * Dereferences the offset form of a ZEND_MAP_PTR field into the per-process map-ptr area
+     *
+     * The slot address is CG(map_ptr_base) + offset: the engine pre-biases the base, so no
+     * -1 adjustment is applied (see zend_map_ptr.h:ZEND_MAP_PTR_OFFSET2PTR and the identical
+     * arithmetic in StringEntry::setCachedClassEntry()). The bound check mirrors
+     * ZSTR_VALID_CE_CACHE: a slot beyond CG(map_ptr_last) was never handed out.
+     *
+     * @param int $slotOffset Raw field value with the low bit set (ZEND_MAP_PTR_IS_OFFSET)
+     *
+     * @return CData|null HashTable* stored in the slot, or null while the slot is not yet
+     *                    materialized (or the map-ptr area cannot vouch for it)
+     */
+    private function dereferenceMapPointerSlot(int $slotOffset): ?CData
+    {
+        $mapPointerBase = Core::$compiler->getMapPointerBaseAddress();
+        if ($mapPointerBase === 0) {
+            return null;
+        }
+        $slotIndex = intdiv($slotOffset - 1, Core::sizeOfType('void *'));
+        if ($slotIndex >= Core::$compiler->getMapPointerLast()) {
+            return null;
+        }
+        $slot         = Core::pointerAtAddress('HashTable **', $mapPointerBase + $slotOffset);
+        $materialized = $slot[0];
+        assert($materialized === null || $materialized instanceof CData);
+
+        return $materialized;
     }
 
     /**
