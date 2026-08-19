@@ -250,6 +250,7 @@ if ($emitHeader) {
     #include "zend_arena.h"
     #include "zend_exceptions.h"
     #include "zend_system_id.h"
+    #include "zend_vm.h"
     #include "Optimizer/zend_optimizer.h"
     #include "supplement.h"
     C;

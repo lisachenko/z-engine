@@ -108,6 +108,10 @@ return [
         // Opcode API
         'zend_set_user_opcode_handler',
         'zend_get_user_opcode_handler',
+        // Restores an opline's handler pointer from the index form the opcache
+        // file-cache serializer stores (zend_file_cache.c); the CacheImageSync
+        // bridge uses it to make relocated image bodies executable in-process
+        'zend_deserialize_opcode_handler',
         // Inheritance / object API
         'zend_do_inheritance_ex',
         'zend_objects_new',
