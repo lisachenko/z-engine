@@ -35,20 +35,21 @@ use ZEngine\Reflection\ReflectionValue;
  *  - within ONE worker process, save() alone leaves the SHM-resident body in
  *    service on re-include - the patched binary on disk is NOT re-read until
  *    invalidated, which is exactly the semantics that motivate refresh();
- *  - within ONE worker process, refresh() evicts the SHM-resident copy
- *    (opcache_is_script_cached() flips to false).
+ *  - within ONE worker process, refresh() evicts the SHM-resident copy, the
+ *    patched binary SURVIVES the invalidation (refresh() invalidates before
+ *    it writes, because opcache_invalidate() with opcache.file_cache set
+ *    unlinks the script's .bin - the ordering bug of issue #252), and a
+ *    re-include executes the patched body, loaded from the file cache back
+ *    into shared memory.
  *
- * Deliberately NOT asserted (found while building this test, reported from
- * issue #125): in the invalidating process itself a re-include after refresh()
- * does not pick the patched binary up. opcache_invalidate() with
- * opcache.file_cache set calls zend_file_cache_invalidate(), which UNLINKS the
- * .bin that refresh()'s save() has just written, so the re-include recompiles
- * the original source (and even with the ordering inverted, the re-include
- * only consults the file cache under opcache.revalidate_path=1 - with the
- * default key lookup the invalidated hash entry short-circuits path resolution
- * and zend_file_cache_script_load() bails on the unresolved opened_path).
- * Asserting the current behaviour would enshrine the bug; fixing it is
- * follow-up work on refresh(), not on this test.
+ * The same-process legs run with opcache.revalidate_path=1: after an
+ * in-process invalidation, opcache's default key lookup finds the invalidated
+ * hash entry without resolving the script path and never consults the file
+ * cache again, so same-process pickup of the patched binary requires path
+ * revalidation (a fresh worker needs no such thing - the fresh-worker leg
+ * keeps the default lookup on purpose). The negative control runs with the
+ * same ini, proving its staleness is genuine SHM shielding, not the lookup
+ * quirk.
  */
 #[Group('opcache')]
 #[Group('opcache-relocator')]
@@ -113,13 +114,15 @@ final class SharedMemoryRefreshTest extends TestCase
         self::assertSame('value=42 shm=1', self::runShmWorker($fixture, $cacheDir));
     }
 
-    public function testRefreshEvictsTheSharedMemoryResidentCopy(): void
+    public function testSameWorkerReExecutesPatchedBodyAfterRefresh(): void
     {
         $stdout = self::runShmPatchWorker('refresh', self::shmFixturePath(), self::freshShmCacheDir());
 
         self::assertStringContainsString('shm-populated: ok', $stdout);
         self::assertStringContainsString('patched-literal: ok', $stdout);
         self::assertStringContainsString('refresh-evicts-shm: ok', $stdout);
+        self::assertStringContainsString('bin-survives-refresh: ok', $stdout);
+        self::assertStringContainsString('patched-body-on-reinclude: ok', $stdout);
         self::assertStringContainsString('SHM REFRESH OK', $stdout);
     }
 
@@ -157,7 +160,12 @@ final class SharedMemoryRefreshTest extends TestCase
 
     /**
      * Runs the include -> patch -> save()/refresh() sequence inside ONE worker
-     * process whose private SHM holds the fixture, and returns its stdout
+     * process whose private SHM holds the fixture, and returns its stdout.
+     *
+     * revalidate_path=1 is what same-process pickup of a refreshed binary
+     * requires (see the class docblock); the save mode runs with it too, so
+     * its staleness is proven to be SHM shielding rather than the default
+     * lookup never consulting the file cache.
      */
     private static function runShmPatchWorker(string $mode, string $fixture, string $cacheDir): string
     {
@@ -169,6 +177,7 @@ final class SharedMemoryRefreshTest extends TestCase
             '-d', 'display_errors=on',
             '-d', 'error_reporting=-1',
             '-d', 'memory_limit=512M',
+            '-d', 'opcache.revalidate_path=1',
             ...self::sharedMemoryOptions($cacheDir),
             __DIR__ . '/scripts/shm-refresh-worker.php',
             $mode,
