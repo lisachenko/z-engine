@@ -38,6 +38,28 @@ if (!isset($cachedScripts[realpath(__DIR__ . '/opcache-shm-fixture.php')])) {
     exit(2);
 }
 
+// --- Same-file redefine targets (issue #242) --------------------------------------
+// Unlike everything in the fixture include, these two are declared in THIS cached
+// script: their compiled call sites live in the very shared-memory script that is
+// executing them, which is the shape the first-redefine failure of issue #242 came
+// from. The seed constant is defined at runtime, so no call to
+// zengine_samefile_function() can be pre-evaluated when the script is cached.
+define('ZENGINE_SAMEFILE_SEED', 'same-file-original');
+
+function zengine_samefile_function(): string
+{
+    return \ZENGINE_SAMEFILE_SEED;
+}
+
+/**
+ * Deliberately the optimizer-inlinable shape: a single return of a literal
+ * (see leg 8 - its same-file call sites are replaced by the constant at cache time)
+ */
+function zengine_samefile_baked(): string
+{
+    return 'baked';
+}
+
 /**
  * Fails the matrix with a diagnostic (exit code 1 = assertion failure)
  */
@@ -262,6 +284,54 @@ if ($observedCount !== 2) {
     $fail("the live static-variables table was not read through the map-ptr slot (invocations = {$observedExport}, expected 2)");
 }
 echo "static-vars-live-table: ok\n";
+
+// 7. Same-file callers (issue #242): the redefine target is declared in THIS cached
+//    script. A compiled call site that did not execute before the redefine resolves
+//    the callee through the repointed function-table bucket on its first run and
+//    must observe the writable copy - the dispatch closure below was compiled (and
+//    its op_array persisted) long before the redefine, but runs only after it
+$sameFileDispatches = static function (string $expected): bool {
+    return zengine_samefile_function() === $expected;
+};
+$sameFileFunction = new ReflectionFunction('zengine_samefile_function');
+if (!$sameFileFunction->isImmutable()) {
+    // Without shared memory behind the main script the same-file branch under test
+    // would silently not be exercised
+    fwrite(STDERR, "zengine_samefile_function is not an immutable (shared-memory) function\n");
+    exit(2);
+}
+$sameFileFunction->redefine(function (): string {
+    return 'redefined-same-file';
+});
+if (!$sameFileDispatches('redefined-same-file')) {
+    $fail('a same-file call site did not observe the redefined body');
+}
+if (zengine_samefile_function() !== 'redefined-same-file') {
+    $fail('the top-level same-file call site did not observe the redefined body');
+}
+echo "same-file-redefine: ok\n";
+
+// 8. The documented hard limitation behind issue #242: a same-file call to a function
+//    whose body merely returns a literal is inlined when the script is cached
+//    (zend_try_inline_call, optimizer pass 4) - the call site below was replaced by
+//    the constant 'baked' at cache time, so it does not exist at runtime and CANNOT
+//    observe any redefine, while a dynamic call resolves at runtime and observes it.
+//    If this leg ever fails on a new PHP build, the engine stopped inlining: revisit
+//    the copy-out caveat in docs/hot-swap.md together with this assertion.
+$bakedDispatches = static function (): string {
+    return zengine_samefile_baked();
+};
+(new ReflectionFunction('zengine_samefile_baked'))->redefine(function (): string {
+    return 'redefined-baked';
+});
+$dynamicCallee = 'zengine_samefile_baked';
+$assertSameString($dynamicCallee(), 'redefined-baked', 'a dynamic call does not observe the redefined body');
+$assertSameString(
+    $bakedDispatches(),
+    'baked',
+    'the optimizer-inlined call site changed behavior - engine inlining semantics moved',
+);
+echo "inlined-call-site-limitation: ok\n";
 
 // Reaching this point with exit code 0 also proves the request shuts down cleanly:
 // issue #41 crashed in zend_function_dtor()/destroy_zend_class() at request shutdown

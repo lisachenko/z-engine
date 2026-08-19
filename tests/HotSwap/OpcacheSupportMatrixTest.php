@@ -28,6 +28,8 @@ use PHPUnit\Framework\TestCase;
  *    copied out of shared memory and the mutation applies to the writable copy,
  *    while the shared-memory original stays byte-for-byte untouched
  *  - runtime-declared classes keep the full mutation surface under opcache
+ *  - same-file callers observe a redefine through the repointed bucket, and the
+ *    optimizer-inlined trivial-constant call sites stay baked (issue #242)
  *
  * The child exit code doubles as the shutdown check of issue #41, whose original
  * symptom was a zend_function_dtor() assertion failure and a SIGABRT while the
@@ -38,7 +40,18 @@ class OpcacheSupportMatrixTest extends TestCase
 {
     public function testSharedMemorySupportMatrix(): void
     {
-        [$exitCode, $stdout, $report] = $this->runOpcacheChild(__DIR__ . '/scripts/opcache-matrix.php');
+        [$exitCode, $stdout, $report] = $this->runOpcacheChild(
+            __DIR__ . '/scripts/opcache-matrix.php',
+            [
+                // The same-file legs (issue #242) need the matrix script itself in shared
+                // memory: the default opcache.file_update_protection=2 refuses files
+                // modified less than 2s before the request (a fresh checkout)
+                '-d', 'opcache.file_update_protection=0',
+                // The inlined-call-site leg asserts the behavior of the default optimizer
+                // pipeline (zend_try_inline_call runs in pass 4): pin it against php.ini
+                '-d', 'opcache.optimization_level=0x7FFEBFFF',
+            ],
+        );
 
         self::assertSame(0, $exitCode, "Opcache matrix child exited with code {$exitCode}\n{$report}");
         self::assertStringContainsString('function-copy-out: ok', $stdout, $report);
@@ -47,6 +60,8 @@ class OpcacheSupportMatrixTest extends TestCase
         self::assertStringContainsString('hot-swap: ok', $stdout, $report);
         self::assertStringContainsString('runtime-class-swap: ok', $stdout, $report);
         self::assertStringContainsString('static-vars-live-table: ok', $stdout, $report);
+        self::assertStringContainsString('same-file-redefine: ok', $stdout, $report);
+        self::assertStringContainsString('inlined-call-site-limitation: ok', $stdout, $report);
         self::assertStringContainsString('MATRIX OK', $stdout, $report);
     }
 

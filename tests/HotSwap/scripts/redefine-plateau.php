@@ -19,31 +19,43 @@ require __DIR__ . '/../../../vendor/autoload.php';
 
 Core::init();
 
+// Under opcache this whole script is cached and optimized before it runs, and the
+// optimizer inlines a same-file call to a function whose body merely returns a
+// literal (zend_try_inline_call, optimizer pass 4): such a call site is replaced by
+// the constant at cache time, so no redefine() can ever reach it - the original
+// failure of issue #242 (see the copy-out caveats in docs/hot-swap.md). The measured
+// bodies return a runtime-defined constant instead, which keeps every dispatch below
+// a real engine call under any optimization level.
+define('PLATEAU_ORIGINAL', 'original');
+
 function plateau_function(): string
 {
-    return 'original';
+    return \PLATEAU_ORIGINAL;
 }
 
 class PlateauClass
 {
     public function target(): string
     {
-        return 'original';
+        return \PLATEAU_ORIGINAL;
     }
 }
 
 $cycles      = 1000;
 $refFunction = new ReflectionFunction('plateau_function');
 $refMethod   = new ReflectionMethod(PlateauClass::class, 'target');
-$instance    = new PlateauClass();
 
 // Dispatch checks take the expected value as data: the bodies are replaced at
 // runtime, so no statically-known return value applies
 $functionDispatches = static function (string $expected): bool {
     return plateau_function() === $expected;
 };
-$methodDispatches = static function (string $expected) use ($instance): bool {
-    return $instance->target() === $expected;
+// The instance is created inside the dispatch: under opcache the first redefine
+// copies PlateauClass out of shared memory, and an instance created before that
+// would keep the shared class entry and dispatch the original body forever
+// (copy-out redirects name resolution only - docs/hot-swap.md caveats)
+$methodDispatches = static function (string $expected): bool {
+    return (new PlateauClass())->target() === $expected;
 };
 
 // A fixed rotation of equal-length payloads: every cycle compiles a brand-new
