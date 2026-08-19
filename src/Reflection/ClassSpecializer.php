@@ -1286,13 +1286,18 @@ class ClassSpecializer
 
             // A cached mask carrying a name or list bit means the compiler already routed this
             // parameter through the generic path that reads arg_info on every call, so the
-            // rewrite is live without touching an opcode - and the opcodes stay shared, which
-            // is both cheaper and free of the 32-bit reach limit below.
+            // rewrite is live without touching an opcode - and the opcodes stay shared with
+            // the template, which is the cheapest outcome of all.
             $routedThroughArgInfo = ($cachedMask & (
                 Core::engineConstant('_ZEND_TYPE_NAME_BIT') | Core::engineConstant('_ZEND_TYPE_LIST_BIT')
             )) !== 0;
             if (!$routedThroughArgInfo && $cachedMask !== $newMask) {
-                $patches[$index] = $newMask;
+                // Handlers are picked per OPLINE, not per opcode: opcache's optimizer gives a
+                // RECV whose cached mask is exactly MAY_BE_ANY (a `mixed` parameter) the
+                // RECV_NOTYPE variant, which tests nothing at all - so patching only the mask
+                // of such an opline would be silently unenforced. builtinTypeMask('mixed') IS
+                // MAY_BE_ANY, the very value the specialization rule compares against.
+                $patches[$index] = [$newMask, $cachedMask === self::builtinTypeMask('mixed')];
             }
         }
         if ($patches === []) {
@@ -1300,33 +1305,120 @@ class ClassSpecializer
         }
 
         $copiedOpcodes = $this->duplicateOpcodes($opArrayCopy, $sourceOpArray, $total);
-        foreach ($patches as $index => $newMask) {
+        foreach ($patches as $index => [$newMask, $needsCheckingHandler]) {
             $patched = $copiedOpcodes[$index];
             assert($patched instanceof CData);
             $cachedMask = $patched->op2;
             assert($cachedMask instanceof CData);
             $cachedMask->num = $newMask;
+            if ($needsCheckingHandler) {
+                self::restoreGenericReceiveHandler($patched);
+            }
         }
     }
 
     /**
-     * Copies a method's opcode array into request memory so the copy can be written to
+     * Rebinds a patched RECV opline to the engine's generic, mask-checking handler
      *
-     * Two of the three operand encodings survive a straight memcpy and one does not:
+     * pass_two() assigns every RECV the generic handler, which tests `op2.num` on each call.
+     * Opcache's optimizer re-derives handlers with type-specialization rules and assigns
+     * `ZEND_RECV_NOTYPE` - a variant that receives the argument WITHOUT any check - to every
+     * RECV whose cached mask equals MAY_BE_ANY, because a `mixed` parameter accepts
+     * everything. A mask patched onto such an opline would never be read, so the opline is
+     * rebound to the generic handler, exactly what the compiler assigns when a builtin
+     * parameter type is written in source. The handler value comes from a donor opline that
+     * is generic in every compile mode (see receiveHandlerDonor()); it is transplanted
+     * through a pointer-sized integer view because FFI wraps C function pointers in opaque
+     * closure handles that cannot be copied field-to-field.
+     *
+     * @param \FFI\CData $patchedOpline The relocated (request-memory) RECV opline to rebind
+     */
+    private static function restoreGenericReceiveHandler(object $patchedOpline): void
+    {
+        $donor = Core::cast(
+            'zend_op_array *',
+            (new ReflectionMethod(self::class, 'receiveHandlerDonor'))->getEntryPointer(),
+        );
+        $donorOpcodes = $donor->opcodes;
+        assert($donorOpcodes instanceof CData);
+        $donorOpline = $donorOpcodes[0];
+        assert($donorOpline instanceof CData);
+        if ($donorOpline->opcode !== OpCode::RECV) {
+            throw new ClassSpecializationException(
+                'Cannot rebind the RECV handler: the donor method did not compile to a leading '
+                . 'ZEND_RECV opline, which indicates an engine behavior change',
+            );
+        }
+        $handlerOffset = Core::type('zend_op')->getStructFieldOffset('handler');
+        $donorHandler  = Core::pointerAtAddress('uintptr_t *', Core::addressOf($donorOpcodes) + $handlerOffset)[0];
+        assert(is_int($donorHandler));
+        $patchedAddress = Core::addressOf(Core::addr($patchedOpline));
+        self::storeHandlerSlot(Core::pointerAtAddress('uintptr_t *', $patchedAddress + $handlerOffset), $donorHandler);
+    }
+
+    /**
+     * Stores one raw handler value into the pointer-sized slot of an opline
+     *
+     * The write mutates engine-visible memory behind the FFI pointer, which static
+     * analysis cannot see - hence the explicit impurity marker.
+     *
+     * @phpstan-impure
+     * @param \FFI\CData $handlerSlot
+     */
+    private static function storeHandlerSlot(object $handlerSlot, int $handlerValue): void
+    {
+        $handlerSlot[0] = $handlerValue;
+    }
+
+    /**
+     * Donor of the engine's generic, mask-checking ZEND_RECV handler
+     *
+     * Never called - it exists to be COMPILED. An `int` parameter caches MAY_BE_LONG, a mask
+     * the optimizer's RECV_NOTYPE specialization rule (`op2.num == MAY_BE_ANY`) can never
+     * match, so the first opline of this method carries the generic RECV handler in every
+     * compile mode - plain pass_two() and opcache-optimized alike. restoreGenericReceiveHandler()
+     * reads it from here instead of hardcoding VM internals.
+     */
+    // @phpstan-ignore method.unused (looked up by name through ReflectionMethod, never called)
+    private static function receiveHandlerDonor(int $probe): void {}
+
+    /**
+     * Copies a method's opcode array - literals included - into request memory so the copy
+     * can be written to
+     *
+     * The copy reproduces the engine's own pass_two() layout in one request-memory block:
+     * opcodes at the start, the literal zvals at the same 16-aligned offset right behind them
+     * (`ZEND_MM_ALIGNED_SIZE_EX(sizeof(zend_op) * last, 16)`). Copying the literals WITH the
+     * opcodes is what makes the relocation universally valid: an IS_CONST operand is a *signed
+     * 32-bit* byte offset from the opline itself, and while the source pair always sat together,
+     * the source literals can be arbitrarily far from the relocated opcodes - an opcache-shared
+     * body lives in an mmap'd region well over 2GB from the request heap. With both halves in
+     * one block every rebased offset is bounded by the block size and always fits.
+     *
+     * Two of the three operand encodings survive the memcpy untouched and one is rebased:
      *
      *  - jump targets are *signed* byte offsets from the opline itself, so they survive because
-     *    the whole array moves as a unit and every target keeps the same relative distance;
+     *    the opcode array moves as a unit and every target keeps the same relative distance;
      *  - `live_range` and `try_catch_array` address oplines by index, so they are unaffected;
      *  - **IS_CONST operands are byte offsets from the opline itself** (the engine resolves them
-     *    as `(char *) opline + node.constant`, and literals sit immediately after the opcodes in
-     *    one compiler-arena block), so every one of them has to be rebased by the distance the
-     *    array moved.
+     *    as `(char *) opline + node.constant`), so every one of them is rebased to address the
+     *    copied literal at the very index its source addressed.
      *
-     * Ownership mirrors the duplicated arg_info blocks: `destroy_op_array()` frees whichever
-     * `opcodes` pointer its holder carries once the shared body refcount reaches zero, so one
-     * sibling block is released through the engine and the other is reclaimed by the request
-     * allocator at request end. Bounded at one block per patched method. An opcache-shared
-     * source is safe because it is only ever read - the copy is what gets written.
+     * The literal zvals are copied SHALLOWLY - the copy references the same payloads (strings,
+     * arrays, ASTs) as the source, exactly like the engine treats the two blocks as one shared
+     * body: releases happen only when the shared body refcount reaches zero, so exactly one
+     * dtor pass ever runs over exactly one of the sibling zval arrays. An opcache-shared source
+     * never even reaches that pass - its body refcount pointer is NULL, destroy_op_array()
+     * returns before touching literals, and the immortal shared-memory payloads (interned
+     * strings, immutable arrays) are never refcounted at all.
+     *
+     * Ownership mirrors the duplicated arg_info blocks: with relative IS_CONST addressing the
+     * engine frees literals and opcodes as ONE allocation through the `opcodes` pointer (it
+     * never efree()s `literals` separately once ZEND_ACC_DONE_PASS_TWO is set, which this block
+     * layout is built for), so one sibling block is released through the engine when the shared
+     * refcount hits zero and the other is reclaimed by the request allocator at request end.
+     * Bounded at one block per patched method. An opcache-shared source is safe because it is
+     * only ever read - the copy is what gets written.
      *
      * @return CData The copied zend_op[] block
      * @param \FFI\CData $opArrayCopy
@@ -1335,72 +1427,95 @@ class ClassSpecializer
     private function duplicateOpcodes(object $opArrayCopy, object $sourceOpArray, int $total): object
     {
         $sourceOpcodes = $sourceOpArray->opcodes;
-        assert($sourceOpcodes instanceof CData);
+        $totalLiterals = $sourceOpArray->last_literal;
+        assert($sourceOpcodes instanceof CData && is_int($totalLiterals));
         $opcodeSize = Core::sizeOfType(zend_op::class);
-        $memory     = Core::new("zend_op[{$total}]", false);
-        Core::memcpy($memory, $sourceOpcodes, $total * $opcodeSize);
+        $zvalSize   = Core::sizeOfType(zval::class);
 
-        $sourceBase = Core::addressOf($sourceOpcodes);
-        $copyBase   = Core::addressOf(Core::cast('zend_op *', Core::addr($memory)));
-        $shift      = $sourceBase - $copyBase;
+        // ZEND_MM_ALIGNED_SIZE_EX(sizeof(zend_op) * last, 16): the engine's own literal offset
+        $literalsOffset = ($total * $opcodeSize + 15) & ~15;
+        $blockSize      = $literalsOffset + $totalLiterals * $zvalSize;
+        $memory         = Core::new("char[{$blockSize}]", false);
+        $copiedOpcodes  = Core::cast('zend_op *', $memory);
+        Core::memcpy($copiedOpcodes, $sourceOpcodes, $total * $opcodeSize);
+
+        $copyBase    = Core::addressOf($copiedOpcodes);
+        $opcodeShift = Core::addressOf($sourceOpcodes) - $copyBase;
+
+        $literalShift = null;
+        if ($totalLiterals > 0) {
+            $sourceLiterals = $sourceOpArray->literals;
+            assert($sourceLiterals instanceof CData);
+            $copiedLiterals = Core::pointerAtAddress('zval *', $copyBase + $literalsOffset);
+            Core::memcpy($copiedLiterals, $sourceLiterals, $totalLiterals * $zvalSize);
+            $literalShift          = Core::addressOf($sourceLiterals) - ($copyBase + $literalsOffset);
+            $opArrayCopy->literals = $copiedLiterals;
+        }
 
         for ($index = 0; $index < $total; $index++) {
-            $opline = $memory[$index];
+            $opline = $copiedOpcodes[$index];
             assert($opline instanceof CData);
             foreach (self::CONSTANT_OPERAND_FIELDS as $typeField => $operandField) {
                 if ($opline->{$typeField} !== OpLine::IS_CONST) {
                     continue;
                 }
+                // An IS_CONST operand always addresses a literal, so a method carrying one
+                // always carries a literal table
+                assert($literalShift !== null);
                 $operand = $opline->{$operandField};
                 assert($operand instanceof CData);
                 $current = $operand->constant;
                 assert(is_int($current));
-                // znode_op.constant is a uint32_t holding a SIGNED opline-relative offset, so the
-                // literal has to stay within 2GB of the relocated opline. Request memory and the
-                // compiler arena are neighbours, but an opcache-shared body lives in an mmap'd
-                // region that can be arbitrarily far away - and a silently truncated offset would
-                // read whatever happens to sit at the wrapped address.
-                $relocated = self::asSignedOffset($current) + $shift;
-                if ($relocated < -0x80000000 || $relocated > 0x7FFFFFFF) {
-                    throw new ClassSpecializationException(
-                        'Cannot un-share the opcodes of this method: its literals are '
-                        . abs($relocated) . ' bytes from the relocated opcode array, which does not '
-                        . 'fit the signed 32-bit offset an IS_CONST operand stores. This happens when '
-                        . 'the body is opcache-shared, because shared memory is too far from the '
-                        . 'request heap; substituting a builtin parameter type needs a body that is '
-                        . 'not in shared memory.',
-                    );
-                }
-                $operand->constant = $relocated & 0xFFFFFFFF;
+                // znode_op.constant is a uint32_t holding a SIGNED opline-relative offset: the
+                // opcodes moved by $opcodeShift and the literal it addressed moved by
+                // $literalShift, so their relative distance changed by the difference. The
+                // result is bounded by the combined block size, so it always fits 32 bits.
+                $operand->constant = (self::asSignedOffset($current) + $opcodeShift - $literalShift) & 0xFFFFFFFF;
             }
         }
 
-        $opArrayCopy->opcodes = Core::cast('zend_op *', Core::addr($memory));
-        assert(self::opcodeCopyResolvesIdentically($sourceOpcodes, $memory, $total, $opcodeSize));
+        $opArrayCopy->opcodes = $copiedOpcodes;
+        assert(self::opcodeCopyResolvesIdentically($sourceOpArray, $opArrayCopy, $total, $opcodeSize));
 
-        return $memory;
+        return $copiedOpcodes;
     }
 
     /**
      * Verifies that a relocated opcode block still means exactly what the source meant
      *
-     * Every IS_CONST operand must resolve to the same zval address it resolved to before the
-     * move, and every jump offset must still land inside the array. This runs under
-     * zend.assertions=1 and compiles out in production: a wrong relocation rule is the one
-     * mistake here that would otherwise surface as memory corruption at some later call rather
-     * than as a failure at specialization time.
+     * Every IS_CONST operand must resolve to the copied literal at the very index its source
+     * operand resolved to (and land zval-aligned inside the copied literal table), and every
+     * jump offset must still land inside the array. This runs under zend.assertions=1 and
+     * compiles out in production: a wrong relocation rule is the one mistake here that would
+     * otherwise surface as memory corruption at some later call rather than as a failure at
+     * specialization time.
      *
-     * @param \FFI\CData $sourceOpcodes
-     * @param \FFI\CData $copiedOpcodes
+     * @param \FFI\CData $sourceOpArray
+     * @param \FFI\CData $opArrayCopy
      */
     private static function opcodeCopyResolvesIdentically(
-        object $sourceOpcodes,
-        object $copiedOpcodes,
+        object $sourceOpArray,
+        object $opArrayCopy,
         int $total,
         int $opcodeSize,
     ): bool {
+        $sourceOpcodes = $sourceOpArray->opcodes;
+        $copiedOpcodes = $opArrayCopy->opcodes;
+        $totalLiterals = $sourceOpArray->last_literal;
+        assert($sourceOpcodes instanceof CData && $copiedOpcodes instanceof CData && is_int($totalLiterals));
         $sourceBase = Core::addressOf($sourceOpcodes);
-        $copyBase   = Core::addressOf(Core::cast('zend_op *', Core::addr($copiedOpcodes)));
+        $copyBase   = Core::addressOf($copiedOpcodes);
+        $zvalSize   = Core::sizeOfType(zval::class);
+
+        $sourceLiteralsBase = null;
+        $copyLiteralsBase   = null;
+        if ($totalLiterals > 0) {
+            $sourceLiterals = $sourceOpArray->literals;
+            $copiedLiterals = $opArrayCopy->literals;
+            assert($sourceLiterals instanceof CData && $copiedLiterals instanceof CData);
+            $sourceLiteralsBase = Core::addressOf($sourceLiterals);
+            $copyLiteralsBase   = Core::addressOf($copiedLiterals);
+        }
 
         for ($index = 0; $index < $total; $index++) {
             $sourceOpline = $sourceOpcodes[$index];
@@ -1420,10 +1535,19 @@ class ClassSpecializer
                 $sourceConstant = $sourceOperand->constant;
                 $copiedConstant = $copiedOperand->constant;
                 assert(is_int($sourceConstant) && is_int($copiedConstant));
-                // Both are unsigned views of a signed offset, so compare the resolved addresses
-                $sourceTarget = $sourceBase + $index * $opcodeSize + self::asSignedOffset($sourceConstant);
-                $copiedTarget = $copyBase   + $index * $opcodeSize + self::asSignedOffset($copiedConstant);
-                if ($sourceTarget !== $copiedTarget) {
+                // An IS_CONST operand with no literal table to land in cannot be right
+                if ($sourceLiteralsBase === null || $copyLiteralsBase === null) {
+                    return false;
+                }
+                // Both are unsigned views of a signed offset; the literals moved with the
+                // opcodes, so the resolved targets must sit at the SAME DELTA within their
+                // respective literal tables - and inside them, on a zval boundary
+                $sourceDelta = $sourceBase + $index * $opcodeSize + self::asSignedOffset($sourceConstant) - $sourceLiteralsBase;
+                $copiedDelta = $copyBase   + $index * $opcodeSize + self::asSignedOffset($copiedConstant) - $copyLiteralsBase;
+                if ($sourceDelta !== $copiedDelta) {
+                    return false;
+                }
+                if ($copiedDelta < 0 || $copiedDelta >= $totalLiterals * $zvalSize || $copiedDelta % $zvalSize !== 0) {
                     return false;
                 }
             }

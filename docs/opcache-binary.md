@@ -84,13 +84,36 @@ script, so the next include picks up the patched binary.
 ## Refresh and shared memory
 
 Under `opcache.file_cache_only=1` there is no shared-memory copy, so writing the
-binary is enough for the next worker to load it. When opcache also uses shared
-memory, a script already resident in SHM is **not** re-read until it is
-invalidated — which is exactly what `refresh()` does. Loading a patched binary
-directly into shared memory remains future work
-([#121](https://github.com/lisachenko/z-engine/issues/121)); applying a patched
-image to code **already loaded in the current process** is what
-`CacheImageSync` does — see the next section and [hot-swap.md](hot-swap.md).
+binary is enough for the next worker to load it (`opcache_invalidate()` is a
+no-op in that mode). When opcache also uses shared memory, a script already
+resident in SHM is **not** re-read until it is invalidated — which is exactly
+what `refresh()` does.
+
+Two shared-memory subtleties `refresh()` accounts for:
+
+- **Invalidate before write.** In a process running SHM *with*
+  `opcache.file_cache`, `opcache_invalidate()` also unlinks the script's cache
+  binary (`zend_file_cache_invalidate`). `refresh()` therefore invalidates
+  first and writes second, so the unlink hits the stale binary — the worst
+  case if the write then fails is a cache miss and a recompile of the original
+  source, never a silently lost patch.
+- **Same-process pickup needs `opcache.revalidate_path=1`.** After an
+  in-process invalidation, opcache's default key lookup finds the invalidated
+  hash entry without resolving the script path and never consults the file
+  cache again, so a re-include in the *same* process recompiles the source.
+  With `opcache.revalidate_path=1` the path is resolved, the patched binary is
+  loaded from the file cache back into shared memory, and the re-include
+  executes the patched body. A **fresh** worker (an empty SHM — e.g. a pool
+  worker after restart) picks the patched binary up with default settings.
+
+Publishing a patched binary directly into shared memory (bypassing the file
+cache) is **not planned** — the write-path opcache symbols are hidden from FFI
+and the segment is protected against out-of-band writes
+([#121](https://github.com/lisachenko/z-engine/issues/121), closed with the
+feasibility analysis). `refresh()`'s file-cache→SHM reload is the supported SHM
+publication mechanism. Applying a patched image to code **already loaded in the
+current process** is a different loop, closed by `CacheImageSync` — see the next
+section and [hot-swap.md](hot-swap.md).
 
 ## Applying a patched image to the live process (`CacheImageSync`)
 
@@ -151,11 +174,13 @@ $report->appliedMethods;                   // what actually happened, per entry
   buffer), all are request-lifetime allocations the engine provably never
   frees through table teardown (the bodies carry no refcount, exactly like
   shared-memory bodies). Apply per request, like every other runtime mutation.
-- **Seam for [#121](https://github.com/lisachenko/z-engine/issues/121).**
-  `prepare()` is application-agnostic: a future SHM publisher consumes the
-  same prepared diff (`getChangedFunctions()`/`getChangedMethods()` plus the
-  image handle) and replaces only the apply() target — per-process tables
-  today, ZCSG then.
+- **Apply-target seam.** `prepare()` is application-agnostic: the prepared
+  diff (`getChangedFunctions()`/`getChangedMethods()` plus the image handle) is
+  independent of where the swapped bodies land. Today `apply()` writes the
+  per-process tables; a different consumer could reuse the same diff against
+  another target. Direct SHM publication is not one of those targets
+  ([#121](https://github.com/lisachenko/z-engine/issues/121) — infeasible vs
+  stock opcache); the file-cache→SHM reload of `refresh()` covers that need.
 
 ## Scope and limits (v1)
 

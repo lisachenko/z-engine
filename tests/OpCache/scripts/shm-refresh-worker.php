@@ -14,8 +14,13 @@
  *  - save:    save() only (no invalidation). A re-include must STILL execute
  *             the original body - the SHM-resident copy is served and the
  *             patched binary on disk is not re-read.
- *  - refresh: refresh() (save + opcache_invalidate). The SHM-resident copy
- *             must be evicted: opcache_is_script_cached() flips to false.
+ *  - refresh: refresh() (opcache_invalidate + save, in that order - issue
+ *             #252). The SHM-resident copy must be evicted, the patched
+ *             binary must SURVIVE the invalidation (the unlink hits the stale
+ *             binary, not the fresh one), and a re-include must execute the
+ *             PATCHED body, loaded from the file cache back into shared
+ *             memory. Same-process pickup only happens under
+ *             opcache.revalidate_path=1, so this mode requires that ini.
  *
  * argv: [1] = mode ("save" | "refresh")
  *       [2] = fixture script (must `return` a patchable long literal 41)
@@ -53,6 +58,16 @@ $assertResidency = static function (string $path, bool $resident, string $messag
     }
 };
 
+// Binary presence also changes over the script's lifetime (the ordering bug of
+// issue #252 was refresh() unlinking its own fresh binary), and PHP's stat
+// cache would otherwise keep reporting the pre-refresh() state
+$assertBinaryOnDisk = static function (string $path, string $message) use ($fail): void {
+    clearstatcache(true, $path);
+    if (!is_file($path)) {
+        $fail($message);
+    }
+};
+
 $mode     = $argv[1] ?? '';
 $fixture  = realpath($argv[2] ?? '');
 $cacheDir = $argv[3] ?? '';
@@ -71,9 +86,7 @@ if ($first !== 41) {
 }
 $assertResidency($fixture, true, 'the fixture is not resident in shared memory after the include');
 $binPath = BinaryCacheFile::locate($cacheDir, $fixture);
-if (!is_file($binPath)) {
-    $fail("the include did not populate the file cache: {$binPath} is missing");
-}
+$assertBinaryOnDisk($binPath, "the include did not populate the file cache: {$binPath} is missing");
 echo "shm-populated: ok\n";
 
 // 2. Patch the compiled body in the .bin through the framework wrappers
@@ -107,12 +120,26 @@ if ($mode === 'save') {
     echo "stale-shm-after-save: ok\n";
     echo "SHM SAVE OK\n";
 } else {
-    // 3b. refresh(): the invalidation half of the contract - the SHM-resident
-    //     copy is evicted, so this process no longer serves the stale body.
-    //     The reload half (a re-include picking the patched binary back up
-    //     in THIS process) is deliberately NOT asserted: see the test class.
+    // 3b. refresh(): both halves of the contract inside one process. The
+    //     invalidation half evicts the SHM-resident copy; the reload half
+    //     re-includes the script, which must execute the PATCHED body loaded
+    //     from the surviving binary back into shared memory. Same-process
+    //     pickup requires opcache.revalidate_path=1 (with the default key
+    //     lookup the invalidated hash entry short-circuits path resolution
+    //     and the file cache is never consulted again)
+    if (ini_get('opcache.revalidate_path') !== '1') {
+        $fail('the refresh mode must run with opcache.revalidate_path=1 - fix the parent test command');
+    }
     $file->refresh();
     $assertResidency($fixture, false, 'refresh() must evict the shared-memory copy of the fixture');
     echo "refresh-evicts-shm: ok\n";
+    $assertBinaryOnDisk($binPath, 'refresh() must leave the patched binary in place, not unlink it (issue #252)');
+    echo "bin-survives-refresh: ok\n";
+    $second = include $fixture;
+    if ($second !== 42) {
+        $fail('the re-include after refresh() must execute the patched body, got ' . var_export($second, true));
+    }
+    $assertResidency($fixture, true, 'the re-include must load the patched binary back into shared memory');
+    echo "patched-body-on-reinclude: ok\n";
     echo "SHM REFRESH OK\n";
 }

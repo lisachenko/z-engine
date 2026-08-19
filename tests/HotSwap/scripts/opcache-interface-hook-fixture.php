@@ -12,8 +12,15 @@
 declare(strict_types=1);
 
 // Loaded by opcache-interface-hook.php in a child process with opcache enabled.
-// Deliberately declares ONLY the interface: the implementor lives in its own
-// cached file, so linking it against this interface goes through the opcache
-// inheritance cache (the lazy-linking path of issue #238).
+// Deliberately declares ONLY interfaces: the implementors live in their own
+// cached files, so linking them against these interfaces goes through the
+// opcache inheritance cache (the lazy-linking path of issue #238).
 
+// The hooked interface: an interface_gets_implemented handler is installed on it,
+// so its implementor receives handlers mid-linking and must be kept process-local
+// by declining its inheritance-cache publication (issue #241)
 interface ZEngineShmHookInterface {}
+
+// The untouched control: no hook, no handlers - its implementor must still be
+// published into the inheritance cache (the interception delegates to opcache)
+interface ZEngineShmHookUntouchedInterface {}

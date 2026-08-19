@@ -198,6 +198,13 @@ return [
         'zend_error_cb',
         'zend_throw_exception_hook',
         'zend_interrupt_function',
+        // Opcache inheritance-cache hook points (Zend/zend_inheritance.h): opcache
+        // installs its SHM lookup/publication callbacks here. z-engine intercepts
+        // the *_add pointer to DECLINE publication of classes that received
+        // address-keyed handlers while linking on a lazy temporary (issue #241),
+        // which keeps those classes process-local and mutable (issue #238)
+        'zend_inheritance_cache_get',
+        'zend_inheritance_cache_add',
         // 32 hex chars identifying the exact engine build (Zend/zend_system_id.h);
         // opcache stamps it into every file-cache binary header
         'zend_system_id',
