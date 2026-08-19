@@ -25,6 +25,8 @@ use ZEngine\Generated\zend_attribute_arg;
 use ZEngine\Generated\zend_class_name;
 use ZEngine\Generated\zend_early_binding;
 use ZEngine\Generated\zend_string;
+use ZEngine\Generated\zend_type;
+use ZEngine\Generated\zend_type_list;
 use ZEngine\Generated\zval;
 
 /**
@@ -582,13 +584,7 @@ final class PayloadRelocator
 
     private function unserializeType(object $owner, string $field): void
     {
-        $typeMask = $owner->$field->type_mask;
-        if (($typeMask & self::TYPE_LIST_BIT) !== 0) {
-            throw OpCacheException::unsupportedPayload('intersection/union type-list relocation');
-        }
-        if (($typeMask & self::TYPE_NAME_BIT) !== 0) {
-            $this->unStr($owner->$field, 'ptr');
-        }
+        $this->unserializeTypeStruct($owner->$field);
     }
     /**
      * @param \FFI\CData $owner
@@ -596,12 +592,59 @@ final class PayloadRelocator
 
     private function serializeType(object $owner, string $field): void
     {
-        $typeMask = $owner->$field->type_mask;
+        $this->serializeTypeStruct($owner->$field);
+    }
+
+    /**
+     * One zend_type in place - the ZEND_TYPE_HAS_LIST branch of
+     * zend_file_cache_unserialize_type relocates the zend_type_list pointer and
+     * recurses into every entry, so DNF sub-lists like (A&B)|C unfold naturally.
+     *
+     * @param \FFI\CData $type a zend_type view (embedded field or list entry)
+     */
+    private function unserializeTypeStruct(object $type): void
+    {
+        $typeMask = $type->type_mask;
         if (($typeMask & self::TYPE_LIST_BIT) !== 0) {
-            throw OpCacheException::unsupportedPayload('intersection/union type-list relocation');
+            $listAddress = $this->unPtr($type, 'ptr');
+            $list        = Core::pointerAtAddress('zend_type_list *', $listAddress);
+            $typeSize    = Core::sizeOfType(zend_type::class);
+            // ZEND_TYPE_LIST_FOREACH: entries start at list->types (the flexible member)
+            $entryBase = $listAddress + Core::sizeOfType(zend_type_list::class) - $typeSize;
+            for ($i = 0; $i < $list->num_types; $i++) {
+                $this->unserializeTypeStruct(Core::pointerAtAddress('zend_type *', $entryBase + $i * $typeSize));
+            }
+
+            return;
         }
         if (($typeMask & self::TYPE_NAME_BIT) !== 0) {
-            $this->serStr($owner->$field, 'ptr');
+            $this->unStr($type, 'ptr');
+        }
+    }
+
+    /**
+     * Mirror of {@see unserializeTypeStruct} - zend_file_cache_serialize_type
+     * stores the list pointer as an offset but keeps walking the entries through
+     * the still-real address (its SERIALIZE_PTR/UNSERIALIZE_PTR pair).
+     *
+     * @param \FFI\CData $type a zend_type view (embedded field or list entry)
+     */
+    private function serializeTypeStruct(object $type): void
+    {
+        $typeMask = $type->type_mask;
+        if (($typeMask & self::TYPE_LIST_BIT) !== 0) {
+            $listAddress = $this->serPtr($type, 'ptr');
+            $list        = Core::pointerAtAddress('zend_type_list *', $listAddress);
+            $typeSize    = Core::sizeOfType(zend_type::class);
+            $entryBase   = $listAddress + Core::sizeOfType(zend_type_list::class) - $typeSize;
+            for ($i = 0; $i < $list->num_types; $i++) {
+                $this->serializeTypeStruct(Core::pointerAtAddress('zend_type *', $entryBase + $i * $typeSize));
+            }
+
+            return;
+        }
+        if (($typeMask & self::TYPE_NAME_BIT) !== 0) {
+            $this->serStr($type, 'ptr');
         }
     }
 
