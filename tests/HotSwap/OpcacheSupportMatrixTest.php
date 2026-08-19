@@ -51,13 +51,14 @@ class OpcacheSupportMatrixTest extends TestCase
     }
 
     /**
-     * The loud guard of issue #238: handlers installed from an interface_gets_implemented
-     * hook target the temporary class entry opcache links classes on, and the temporary is
-     * discarded once the inheritance cache persists the linked result - so the installation
-     * must throw instead of being silently lost (issue #241 tracks making it stick by
-     * declining the inheritance cache for hooked classes)
+     * The fix of issue #238 (via issue #241): handlers installed from an
+     * interface_gets_implemented hook target the temporary class entry opcache links
+     * classes on. z-engine records that entry and declines its publication into the
+     * inheritance cache (the intercepted zend_inheritance_cache_add answers NULL), so
+     * the temporary stays process-local, the handlers survive linking and actually fire
+     * - while an untouched sibling class is still published into the cache unchanged
      */
-    public function testHandlerInstallationDuringLazyLinkingIsRejected(): void
+    public function testHandlersInstalledDuringLazyLinkingSurviveViaCacheDecline(): void
     {
         [$exitCode, $stdout, $report] = $this->runOpcacheChild(
             __DIR__ . '/scripts/opcache-interface-hook.php',
@@ -68,7 +69,8 @@ class OpcacheSupportMatrixTest extends TestCase
         );
 
         self::assertSame(0, $exitCode, "Interface-hook child exited with code {$exitCode}\n{$report}");
-        self::assertStringContainsString('lazy-linking-guard: ok', $stdout, $report);
+        self::assertStringContainsString('lazy-linking-handlers: ok', $stdout, $report);
+        self::assertStringContainsString('sibling-cache-reuse: ok', $stdout, $report);
         self::assertStringContainsString('INTERFACE HOOK OK', $stdout, $report);
     }
 
