@@ -72,7 +72,12 @@ try {
 $module = ExtensionManager::register(new ZEngineModule());
 $expect(ExtensionManager::has(ZEngineModule::class), 'module-registered');
 $expect(ExtensionManager::get(ZEngineModule::class) === $module, 'module-is-singleton');
-$expect(extension_loaded('zengine'), 'engine-entry-visible');
+// The name is read back from the module ON PURPOSE: with opcache active the optimizer
+// pre-evaluates extension_loaded('<literal>') while this script is being compiled -
+// before the module registers - and bakes constant false into the op array
+// (zend_optimizer_eval_special_func_info(), issue #243). A runtime-built name defeats
+// the fold, so this checkpoint asserts the engine's registry lookup itself.
+$expect(extension_loaded($module->getName()), 'engine-entry-visible');
 
 $heap = PersistentHeap::global();
 $expect($heap === $module->heap(), 'global-is-module-heap');
