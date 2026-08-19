@@ -765,9 +765,15 @@ final class PayloadRelocator
                 $this->unserializeZval(Core::pointerAtAddress('zval *', $address + $i * $zvalSize));
             }
         }
-        // opcodes: only the array pointer is relocated; per-opline operands and
-        // handlers are literal indexes/relative jumps on this platform and are
-        // preserved verbatim (see class docblock)
+        // opcodes: only the array pointer is relocated. Per-opline operands are
+        // preserved verbatim because every 64-bit build uses relative addressing:
+        // ZEND_USE_ABS_CONST_ADDR / ZEND_USE_ABS_JMP_ADDR are 1 only when
+        // SIZEOF_SIZE_T == 4 (zend_compile.h), so in these payloads IS_CONST
+        // operands are literal-table indexes and jump operands are opline-relative
+        // byte offsets - position-independent on linux and darwin alike. The
+        // absolute-address per-opline walk of zend_file_cache.c is a 32-bit-only
+        // shape, excluded with the 32-bit refusal (issue #119;
+        // OpcodeAddressingModelTest is the tripwire should a build ever diverge).
         $this->unPtr($opArray, 'opcodes');
         $this->unPtr($opArray, 'scope');
         $this->unserializeArgInfo($opArray);
