@@ -24,6 +24,7 @@ use ZEngine\Generated\zend_ast_ref;
 use ZEngine\Generated\zend_attribute_arg;
 use ZEngine\Generated\zend_class_name;
 use ZEngine\Generated\zend_early_binding;
+use ZEngine\Generated\zend_persistent_script;
 use ZEngine\Generated\zend_string;
 use ZEngine\Generated\zend_type;
 use ZEngine\Generated\zend_type_list;
@@ -85,6 +86,13 @@ final class PayloadRelocator
 
     private readonly int $base;
     private readonly int $size;
+    /**
+     * Upper bound for tagged interned-string offsets. Starts at the header's
+     * str_size and is re-pinned to the rebuilt string-section length whenever
+     * serialize() re-emits it, so the relocate() inside derelocate() validates
+     * against the section it just produced, not the stale original size.
+     */
+    private int $strSize;
     private readonly int $strSectionBase;
 
     /** Interned-string re-emission state (write path) */
@@ -119,6 +127,7 @@ final class PayloadRelocator
         }
         $this->base           = Core::addressOf(Core::addr($buffer));
         $this->size           = $metaInfo->memSize();
+        $this->strSize        = $metaInfo->strSize();
         $this->strSectionBase = $this->base + $this->size;
         // _ZSTR_HEADER_SIZE = XtOffsetOf(zend_string, val): the flexible val[1]
         // member starts at the last 8-byte slot of the (padded) struct, so the
@@ -136,7 +145,14 @@ final class PayloadRelocator
     public function relocate(): object
     {
         $this->sharedOpcodes = [];
-        $script              = Core::pointerAtAddress('zend_persistent_script *', $this->base + $this->metaInfo->scriptOffset());
+        // The script struct itself must fit inside the mem region before we
+        // dereference a single field of it (issue #123)
+        $this->requireSpan(
+            $this->metaInfo->scriptOffset(),
+            Core::sizeOfType(zend_persistent_script::class),
+            'zend_persistent_script at scriptOffset',
+        );
+        $script = Core::pointerAtAddress('zend_persistent_script *', $this->base + $this->metaInfo->scriptOffset());
 
         $this->unStr($script->script, 'filename');
         $this->unserializeHash($script->script->class_table, $this->unserializeClass(...));
@@ -183,6 +199,9 @@ final class PayloadRelocator
         $this->serializeEarlyBindings($script);
 
         $memRegion = FFI::string($this->buffer, $this->size);
+        // Re-pin the tagged-offset bound to the section just emitted, so the
+        // relocate() in derelocate() validates against it (issue #123)
+        $this->strSize = strlen($this->strSection);
 
         return $memRegion . $this->strSection;
     }
@@ -226,6 +245,79 @@ final class PayloadRelocator
         return $pointer >= $this->base && $pointer <= $this->base + $this->size;
     }
 
+    // --- bounds validation (issue #123) -------------------------------------
+    // Every stored offset in the file is attacker-controllable in an untrusted
+    // binary (system_id is a build fingerprint, adler32 is forgeable), so each
+    // one is range-checked before it becomes a real address the engine walks.
+    // The checks live in the UNSERIALIZE (relocate) primitives and the
+    // count-driven relocate loops - the derelocate/serialize path and the graph
+    // serializer both operate on an already-relocated, in-process image and
+    // inherit that image's validation.
+
+    /**
+     * Validates a stored mem-region offset lies in [0, size]. The upper bound is
+     * inclusive because a return-type-only &arg_info[1] legitimately points at
+     * the region end. Returns the offset for fluent use.
+     */
+    private function requireOffset(int $stored, string $what): int
+    {
+        if ($stored < 0 || $stored > $this->size) {
+            throw OpCacheException::malformedPayload(
+                sprintf('%s: stored offset %d is outside [0, %d]', $what, $stored, $this->size),
+            );
+        }
+
+        return $stored;
+    }
+
+    /**
+     * Validates a stored zend_string reference: a tagged interned reference must
+     * land in the appended string section [0, strSize), a plain one in the mem
+     * region [0, size].
+     */
+    private function requireStringOffset(int $stored, string $what): void
+    {
+        if (($stored & 1) !== 0) {
+            $offset = $stored & ~1;
+            if ($offset < 0 || $offset >= $this->strSize) {
+                throw OpCacheException::malformedPayload(
+                    sprintf('%s: interned-string offset %d is outside [0, %d)', $what, $offset, $this->strSize),
+                );
+            }
+
+            return;
+        }
+        $this->requireOffset($stored, $what);
+    }
+
+    /**
+     * Validates that [resolvedAddress, resolvedAddress + count * elementSize)
+     * lies fully within the mem region, before a loop dereferences the span.
+     * A negative or overflowing count is rejected too.
+     */
+    private function requireSpan(int $offsetOrAddress, int $bytes, string $what): void
+    {
+        // Accept either a stored offset or a resolved (base+offset) address
+        $offset = $offsetOrAddress >= $this->base ? $offsetOrAddress - $this->base : $offsetOrAddress;
+        if ($bytes < 0 || $offset < 0 || $offset > $this->size || $offset + $bytes > $this->size) {
+            throw OpCacheException::malformedPayload(
+                sprintf('%s: span [%d, %d) escapes the %d-byte mem region', $what, $offset, $offset + $bytes, $this->size),
+            );
+        }
+    }
+
+    /** Validates a count field before it drives an element-span walk */
+    private function requireCount(int $count, string $what): int
+    {
+        if ($count < 0 || $count > $this->size) {
+            throw OpCacheException::malformedPayload(
+                sprintf('%s: implausible count %d for a %d-byte region', $what, $count, $this->size),
+            );
+        }
+
+        return $count;
+    }
+
     /** UNSERIALIZE_PTR on a struct field, returning the resolved address (0 if null) */
     /**
      * @param \FFI\CData $owner
@@ -236,6 +328,7 @@ final class PayloadRelocator
         if ($stored === 0) {
             return 0;
         }
+        $this->requireOffset($stored, "pointer field {$field}");
         $address = $this->base + $stored;
         $this->writePtrField($owner, $field, $address);
 
@@ -265,6 +358,7 @@ final class PayloadRelocator
         if ($stored === 0) {
             return 0;
         }
+        $this->requireOffset($stored, 'raw pointer slot');
         $slot[0] = $this->base + $stored;
 
         return $this->base + $stored;
@@ -294,6 +388,7 @@ final class PayloadRelocator
         if ($stored === 0) {
             return;
         }
+        $this->requireStringOffset($stored, "string field {$field}");
         if (($stored & 1) !== 0) {
             // Tagged interned reference into the string section
             $address = $this->strSectionBase + ($stored & ~1);
@@ -330,6 +425,7 @@ final class PayloadRelocator
         if ($stored === 0) {
             return;
         }
+        $this->requireStringOffset($stored, 'raw string slot');
         if (($stored & 1) !== 0) {
             $slot[0] = $this->strSectionBase + ($stored & ~1);
         } else {
@@ -386,9 +482,10 @@ final class PayloadRelocator
             return;
         }
         $dataAddress = $this->unPtr($ht, 'arData');
-        $used        = $ht->nNumUsed;
+        $used        = $this->requireCount((int) $ht->nNumUsed, 'hashtable nNumUsed');
         if (($ht->u->flags & self::HASH_FLAG_PACKED) !== 0) {
             $zvalSize = Core::sizeOfType(zval::class);
+            $this->requireSpan($dataAddress, $used * $zvalSize, 'packed hashtable data');
             for ($i = 0; $i < $used; $i++) {
                 $zval = Core::pointerAtAddress('zval *', $dataAddress + $i * $zvalSize);
                 if ($zval->u1->v->type !== 0) {
@@ -399,6 +496,7 @@ final class PayloadRelocator
             return;
         }
         $bucketSize = Core::sizeOfType(Bucket::class);
+        $this->requireSpan($dataAddress, $used * $bucketSize, 'hashtable bucket data');
         for ($i = 0; $i < $used; $i++) {
             $bucket = Core::pointerAtAddress('Bucket *', $dataAddress + $i * $bucketSize);
             if ($bucket->val->u1->v->type !== 0) {
@@ -516,6 +614,8 @@ final class PayloadRelocator
     /** @param int $astAddress address of the zend_ast (already resolved) */
     private function unserializeAst(int $astAddress): void
     {
+        // The node header (kind + attr) must fit before it is read
+        $this->requireSpan($astAddress, Core::sizeOfType(zend_ast::class), 'zend_ast node');
         $ast  = Core::pointerAtAddress('zend_ast *', $astAddress);
         $kind = $ast->kind;
         if ($kind === self::ZEND_AST_ZVAL || $kind === self::ZEND_AST_CONSTANT) {
@@ -526,15 +626,17 @@ final class PayloadRelocator
         if (($kind >> self::ZEND_AST_IS_LIST_SHIFT & 1) !== 0) {
             $list      = Core::pointerAtAddress('zend_ast_list *', $astAddress);
             $childBase = $astAddress + Core::sizeOfType(zend_ast_list::class) - PHP_INT_SIZE;
-            $count     = $list->children;
+            $count     = $this->requireCount((int) $list->children, 'ast list children');
         } else {
             $childBase = $astAddress + Core::sizeOfType(zend_ast::class) - PHP_INT_SIZE;
             $count     = $kind >> self::ZEND_AST_CHILDREN_SHIFT;
         }
+        $this->requireSpan($childBase, $count * PHP_INT_SIZE, 'ast children slots');
         for ($i = 0; $i < $count; $i++) {
             $slot  = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $childBase + $i * PHP_INT_SIZE));
             $child = (int) $slot[0];
             if ($child !== 0 && !$this->isUnserialized($child)) {
+                $this->requireOffset($child, 'ast child');
                 $slot[0] = $this->base + $child;
                 $this->unserializeAst($this->base + $child);
             }
@@ -612,7 +714,9 @@ final class PayloadRelocator
         $this->unStr($attr, 'lcname');
         $argSize = Core::sizeOfType(zend_attribute_arg::class);
         $argBase = Core::addressOf($attr->args);
-        for ($i = 0; $i < $attr->argc; $i++) {
+        $argc    = $this->requireCount((int) $attr->argc, 'attribute argc');
+        $this->requireSpan($argBase, $argc * $argSize, 'attribute args');
+        for ($i = 0; $i < $argc; $i++) {
             $arg = Core::pointerAtAddress('zend_attribute_arg *', $argBase + $i * $argSize);
             $this->unStr($arg, 'name');
             $this->unserializeZval($arg->value);
@@ -667,11 +771,14 @@ final class PayloadRelocator
         $typeMask = $type->type_mask;
         if (($typeMask & self::TYPE_LIST_BIT) !== 0) {
             $listAddress = $this->unPtr($type, 'ptr');
-            $list        = Core::pointerAtAddress('zend_type_list *', $listAddress);
-            $typeSize    = Core::sizeOfType(zend_type::class);
+            $this->requireSpan($listAddress, Core::sizeOfType(zend_type_list::class), 'zend_type_list header');
+            $list     = Core::pointerAtAddress('zend_type_list *', $listAddress);
+            $typeSize = Core::sizeOfType(zend_type::class);
             // ZEND_TYPE_LIST_FOREACH: entries start at list->types (the flexible member)
             $entryBase = $listAddress + Core::sizeOfType(zend_type_list::class) - $typeSize;
-            for ($i = 0; $i < $list->num_types; $i++) {
+            $numTypes  = $this->requireCount((int) $list->num_types, 'type list num_types');
+            $this->requireSpan($entryBase, $numTypes * $typeSize, 'type list entries');
+            for ($i = 0; $i < $numTypes; $i++) {
                 $this->unserializeTypeStruct(Core::pointerAtAddress('zend_type *', $entryBase + $i * $typeSize));
             }
 
@@ -764,7 +871,9 @@ final class PayloadRelocator
         if ($this->ptrValue($opArray, 'literals') !== 0) {
             $address  = $this->unPtr($opArray, 'literals');
             $zvalSize = Core::sizeOfType(zval::class);
-            for ($i = 0; $i < $opArray->last_literal; $i++) {
+            $count    = $this->requireCount((int) $opArray->last_literal, 'op_array last_literal');
+            $this->requireSpan($address, $count * $zvalSize, 'op_array literals');
+            for ($i = 0; $i < $count; $i++) {
                 $this->unserializeZval(Core::pointerAtAddress('zval *', $address + $i * $zvalSize));
             }
         }
@@ -784,7 +893,9 @@ final class PayloadRelocator
         if ($opArray->num_dynamic_func_defs !== 0) {
             // zend_op_array* array: relocate it, then recurse into each nested body
             $defsAddress = $this->unPtr($opArray, 'dynamic_func_defs');
-            for ($i = 0; $i < $opArray->num_dynamic_func_defs; $i++) {
+            $count       = $this->requireCount((int) $opArray->num_dynamic_func_defs, 'num_dynamic_func_defs');
+            $this->requireSpan($defsAddress, $count * PHP_INT_SIZE, 'dynamic_func_defs table');
+            for ($i = 0; $i < $count; $i++) {
                 $defAddress = $this->unPtrAt($defsAddress + $i * PHP_INT_SIZE);
                 $this->unserializeOpArray(Core::pointerAtAddress('zend_op_array *', $defAddress));
             }
@@ -871,7 +982,7 @@ final class PayloadRelocator
      */
     private function argInfoBounds(object $opArray): array
     {
-        $count = (int) $opArray->num_args;
+        $count = $this->requireCount((int) $opArray->num_args, 'op_array num_args');
         $start = 0;
         if (($opArray->fn_flags & self::ZEND_ACC_HAS_RETURN_TYPE) !== 0) {
             $start = -1;
@@ -894,6 +1005,8 @@ final class PayloadRelocator
         $address       = $this->unPtr($opArray, 'arg_info');
         $argInfoSize   = Core::sizeOfType(zend_arg_info::class);
         [$start, $end] = $this->argInfoBounds($opArray);
+        // The array starts at arg_info[start] (start is -1 for a return type)
+        $this->requireSpan($address + $start * $argInfoSize, ($end - $start) * $argInfoSize, 'op_array arg_info');
         for ($i = $start; $i < $end; $i++) {
             $arg = Core::pointerAtAddress('zend_arg_info *', $address + $i * $argInfoSize);
             if (!$this->isUnserialized($this->ptrValue($arg, 'name'))) {
@@ -932,10 +1045,13 @@ final class PayloadRelocator
             return;
         }
         $address = $this->unPtr($opArray, 'vars');
-        for ($i = 0; $i < $opArray->last_var; $i++) {
+        $count   = $this->requireCount((int) $opArray->last_var, 'op_array last_var');
+        $this->requireSpan($address, $count * PHP_INT_SIZE, 'op_array vars table');
+        for ($i = 0; $i < $count; $i++) {
             $slot = Core::pointerAtAddress('zend_string **', $address + $i * PHP_INT_SIZE);
             $view = Core::cast('uintptr_t *', $slot);
             if (!$this->isUnserialized((int) $view[0]) && (int) $view[0] !== 0) {
+                $this->requireStringOffset((int) $view[0], 'op_array var name');
                 if (((int) $view[0] & 1) !== 0) {
                     $view[0] = $this->strSectionBase + ((int) $view[0] & ~1);
                 } else {
@@ -1062,6 +1178,8 @@ final class PayloadRelocator
         }
         $address  = $this->unPtr($ce, $field);
         $zvalSize = Core::sizeOfType(zval::class);
+        $count    = $this->requireCount($count, "class {$field} count");
+        $this->requireSpan($address, $count * $zvalSize, "class {$field}");
         for ($i = 0; $i < $count; $i++) {
             $this->unserializeZval(Core::pointerAtAddress('zval *', $address + $i * $zvalSize));
         }
@@ -1091,9 +1209,12 @@ final class PayloadRelocator
             return;
         }
         $address = $this->unPtr($ce, 'properties_info_table');
-        for ($i = 0; $i < $ce->default_properties_count; $i++) {
+        $count   = $this->requireCount((int) $ce->default_properties_count, 'default_properties_count');
+        $this->requireSpan($address, $count * PHP_INT_SIZE, 'properties_info_table');
+        for ($i = 0; $i < $count; $i++) {
             $slot = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $address + $i * PHP_INT_SIZE));
             if ((int) $slot[0] !== 0) {
+                $this->requireOffset((int) $slot[0], 'properties_info_table entry');
                 $slot[0] = $this->base + (int) $slot[0];
             }
         }
@@ -1124,6 +1245,8 @@ final class PayloadRelocator
     {
         $address  = $this->unPtr($ce, $field);
         $nameSize = Core::sizeOfType(zend_class_name::class);
+        $count    = $this->requireCount($count, "class {$field} count");
+        $this->requireSpan($address, $count * $nameSize, "class {$field}");
         for ($i = 0; $i < $count; $i++) {
             $name = Core::pointerAtAddress('zend_class_name *', $address + $i * $nameSize);
             $this->unStr($name, 'name');
@@ -1157,12 +1280,15 @@ final class PayloadRelocator
         }
         // A NULL-terminated zend_trait_alias* array; each entry's strings follow
         $slotAddress = $this->unPtr($ce, 'trait_aliases');
+        // Bound the terminator scan: each slot read must stay inside the region
+        $this->requireSpan($slotAddress, PHP_INT_SIZE, 'trait_aliases array');
         while (($aliasAddress = $this->unPtrAt($slotAddress)) !== 0) {
             $alias = Core::pointerAtAddress('zend_trait_alias *', $aliasAddress);
             $this->unStr($alias->trait_method, 'method_name');
             $this->unStr($alias->trait_method, 'class_name');
             $this->unStr($alias, 'alias');
             $slotAddress += PHP_INT_SIZE;
+            $this->requireSpan($slotAddress, PHP_INT_SIZE, 'trait_aliases array');
         }
     }
     /**
@@ -1194,15 +1320,19 @@ final class PayloadRelocator
         }
         // A NULL-terminated zend_trait_precedence* array with inline exclude names
         $slotAddress = $this->unPtr($ce, 'trait_precedences');
+        $this->requireSpan($slotAddress, PHP_INT_SIZE, 'trait_precedences array');
         while (($precedenceAddress = $this->unPtrAt($slotAddress)) !== 0) {
             $precedence = Core::pointerAtAddress('zend_trait_precedence *', $precedenceAddress);
             $this->unStr($precedence->trait_method, 'method_name');
             $this->unStr($precedence->trait_method, 'class_name');
             $excludeBase = Core::addressOf($precedence->exclude_class_names);
-            for ($j = 0; $j < $precedence->num_excludes; $j++) {
+            $excludes    = $this->requireCount((int) $precedence->num_excludes, 'trait precedence num_excludes');
+            $this->requireSpan($excludeBase, $excludes * PHP_INT_SIZE, 'trait precedence excludes');
+            for ($j = 0; $j < $excludes; $j++) {
                 $this->unStrAt($excludeBase + $j * PHP_INT_SIZE);
             }
             $slotAddress += PHP_INT_SIZE;
+            $this->requireSpan($slotAddress, PHP_INT_SIZE, 'trait_precedences array');
         }
     }
     /**
@@ -1250,6 +1380,7 @@ final class PayloadRelocator
             // zend_function*[ZEND_PROPERTY_HOOK_COUNT]: relocate the array, then
             // each non-NULL hook and its op_array (a shared body returns early)
             $hooksAddress = $this->unPtr($prop, 'hooks');
+            $this->requireSpan($hooksAddress, self::PROPERTY_HOOK_COUNT * PHP_INT_SIZE, 'property hooks array');
             for ($i = 0; $i < self::PROPERTY_HOOK_COUNT; $i++) {
                 $hookAddress = $this->unPtrAt($hooksAddress + $i * PHP_INT_SIZE);
                 if ($hookAddress !== 0) {
@@ -1409,8 +1540,11 @@ final class PayloadRelocator
             return;
         }
         $address = $this->unPtr($script, 'warnings');
-        for ($i = 0; $i < $script->num_warnings; $i++) {
-            $slot    = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $address + $i * PHP_INT_SIZE));
+        $count   = $this->requireCount((int) $script->num_warnings, 'num_warnings');
+        $this->requireSpan($address, $count * PHP_INT_SIZE, 'warnings table');
+        for ($i = 0; $i < $count; $i++) {
+            $slot = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $address + $i * PHP_INT_SIZE));
+            $this->requireOffset((int) $slot[0], 'warning entry');
             $slot[0] = $this->base + (int) $slot[0];
             $warning = Core::pointerAtAddress('zend_error_info *', (int) $slot[0]);
             $this->unStr($warning, 'filename');
@@ -1447,7 +1581,9 @@ final class PayloadRelocator
         }
         $address     = $this->unPtr($script, 'early_bindings');
         $bindingSize = Core::sizeOfType(zend_early_binding::class);
-        for ($i = 0; $i < $script->num_early_bindings; $i++) {
+        $count       = $this->requireCount((int) $script->num_early_bindings, 'num_early_bindings');
+        $this->requireSpan($address, $count * $bindingSize, 'early_bindings table');
+        for ($i = 0; $i < $count; $i++) {
             $binding = Core::pointerAtAddress('zend_early_binding *', $address + $i * $bindingSize);
             $this->unStr($binding, 'lcname');
             $this->unStr($binding, 'rtd_key');

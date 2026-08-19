@@ -266,9 +266,53 @@ $report->appliedMethods;                   // what actually happened, per entry
   patched image to already-loaded functions and classes landed as
   `CacheImageSync` (see above).
 
+## Trust model — the `.bin` input must be trusted
+
+Loading a cache binary is loading **code**. The relocator turns stored byte
+offsets into real engine addresses that the interpreter then executes, so a
+`.bin` file is exactly as trusted as the PHP source it was compiled from. Treat
+it that way: read binaries only from a location your own deployment controls.
+
+Two header fields look like integrity checks but are **not** authentication:
+
+- **`system_id`** is a *build fingerprint* — a hash of the PHP version,
+  extension set and build flags. It exists so a binary compiled by one build is
+  refused by an incompatible one (`systemIdMismatch`), preventing accidental
+  ABI mismatch. It says nothing about *who* produced the binary; anyone can
+  compute the current build's `system_id` and stamp it on a crafted file.
+- **`checksum`** is an **adler32** of the payload. It catches accidental
+  corruption (a truncated write, a bad disk block). adler32 is trivially
+  forgeable — an attacker who alters the payload simply recomputes it — so it
+  is not tamper protection against a motivated adversary.
+
+Because neither field authenticates the producer, the relocator does **not**
+rely on them for safety. Instead, **every stored offset, count and element span
+is bounds-validated against the declared buffer before it is dereferenced**
+(issue #123): interior-pointer offsets against `[0, memSize]`, tagged
+interned-string offsets against `[0, strSize)`, `scriptOffset` and every
+count-driven element array (hashtable buckets, literals, arg_info, vars, type
+lists, class/trait names, property hooks, `dynamic_func_defs`, warnings, early
+bindings, …) against the region bounds. A violation raises
+`OpCacheException::malformedPayload` — a loud refusal, never an out-of-bounds
+engine read/write. The validation lives in the `relocate()` (read) path, the
+untrusted-input surface; `derelocate()`/`serialize()` and the graph
+`ScriptSerializer` operate on an already-relocated, in-process image and
+inherit that validation. This is defense in depth, **not** a licence to load
+untrusted binaries: it converts a memory-safety catastrophe into a clean
+exception, but a validated binary can still contain hostile *compiled code*.
+
+**Distributing protected binaries.** If you need to ship binaries across a trust
+boundary (a build server to production hosts, say), authenticate them yourself
+with a keyed MAC or a signature over the file before loading — e.g. an
+HMAC-SHA256 with a deployment secret, verified before `BinaryCacheFile::read()`.
+A built-in keyed-MAC mode is a possible future option (a follow-up to issue
+#123); it is deliberately not part of this version, because the right key
+management belongs to the deploying application, not the library.
+
 ## Failure modes
 
 Everything the API rejects is a static factory on `OpCacheException`
 (`invalidMagic`, `truncatedFile`, `systemIdMismatch`, `checksumMismatch`,
-`binFileNotFound`, `compilationFailed`, `unsupportedPayload`, …), so call sites
-read as intent and the wording lives in one place.
+`binFileNotFound`, `compilationFailed`, `unsupportedPayload`,
+`malformedPayload`, …), so call sites read as intent and the wording lives in
+one place.
