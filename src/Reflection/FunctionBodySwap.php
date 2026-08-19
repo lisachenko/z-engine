@@ -41,8 +41,11 @@ use ZEngine\Type\StringEntry;
  *    defaults; the live per-entry table materializes lazily on the first
  *    ZEND_BIND_STATIC, exactly like a plain compiled function.
  *  - The previous body is destroyed with engine semantics (destroy_op_array) when
- *    the swap is committed - unless it lives in opcache shared memory, which is
- *    never freed. The entry keeps its owned reference on the function name;
+ *    the swap is committed. A previous body living in opcache shared memory keeps
+ *    its compiled arrays (SHM is never freed), but the per-entry resources the
+ *    swap minted for it (heap run-time cache, statics defaults duplicate) are
+ *    still released, so swaps stay memory-flat with shared-memory donors too.
+ *    The entry keeps its owned reference on the function name;
  *    everything exclusively owned by the old body (opcodes, literals, vars,
  *    arg_info, static variables, heap run-time cache) is released, and bodies still
  *    shared with someone else (a template op_array, a fake closure) survive through
@@ -436,37 +439,45 @@ final class FunctionBodySwap
     {
         $previousFunction = ReflectionFunction::fromCData(Core::cast('zend_function *', Core::addr($previousBody)));
         $previousOpArray  = $previousFunction->getOpArrayPointer();
-        $refCountPointer  = $previousOpArray->refcount;
-        if ($refCountPointer === null) {
-            // No refcount means an opcache-shared body: never destroyed (and the swap
-            // paths never destroy SHM bodies in the first place)
-            return;
-        }
 
         if (self::hasLiveFrame($entryAddress)) {
             // A frame of this very entry is still executing the previous opcodes (the
-            // function redefined itself, directly or through a callee): freeing them
-            // would pull memory out from under the running VM frame. The previous body
-            // stays allocated instead - bounded to one body per such in-flight
+            // function redefined itself, directly or through a callee): freeing them -
+            // or the run-time cache the frame reads its inline caches from - would pull
+            // memory out from under the running VM frame. The previous body stays
+            // allocated instead - bounded to one body per such in-flight
             // redefinition, see docs/hot-swap.md.
             return;
         }
 
-        // All bucket shares move to the new body: drop every previous share except the
-        // one that destroy_op_array below releases itself
-        $referenceCount = self::counterValue($refCountPointer);
-        if ($releasedShares > 1) {
-            assert($referenceCount >= $releasedShares);
-            $referenceCount     = $referenceCount - ($releasedShares - 1);
-            $refCountPointer[0] = $referenceCount;
+        // A body without a refcount is opcache-shared: its compiled arrays live in
+        // shared memory and are never freed (destroy_op_array below returns before
+        // touching them), so it can never be the "last holder". The per-entry
+        // resources the swap minted for it - the HEAP_RT_CACHE run-time cache and a
+        // statics defaults duplicate - are ordinary request memory though, and are
+        // released below exactly like for a refcounted body, or repeated swaps whose
+        // donors were declared in a cached file leak one cache per swap (the
+        // fixed-donor plateau of issue #242 under opcache).
+        $refCountPointer = $previousOpArray->refcount;
+        $isLastHolder    = false;
+        if ($refCountPointer !== null) {
+            // All bucket shares move to the new body: drop every previous share except
+            // the one that destroy_op_array below releases itself
+            $referenceCount = self::counterValue($refCountPointer);
+            if ($releasedShares > 1) {
+                assert($referenceCount >= $releasedShares);
+                $referenceCount     = $referenceCount - ($releasedShares - 1);
+                $refCountPointer[0] = $referenceCount;
+            }
+            $isLastHolder = $referenceCount <= 1;
         }
-        $isLastHolder = $referenceCount <= 1;
 
         $rawOpArray = Core::cast('zend_op_array *', Core::addr($previousBody));
         if ($isLastHolder) {
             // Frees the materialized live static-variables table (if any) and clears
-            // the map slot; with other holders alive the table must survive - fake
-            // closures over the old body still reference it through their map slots
+            // the map slot; with other holders alive (or unaccountable, as for a
+            // refcount-less body) the table must survive - fake closures over the old
+            // body still reference it through their map slots
             Core::call('zend_destroy_static_vars', $rawOpArray);
         }
 
@@ -485,7 +496,11 @@ final class FunctionBodySwap
         }
 
         // The entry keeps the single owned reference on the name - the snapshot must
-        // not release it
+        // not release it. destroy_op_array releases the HEAP_RT_CACHE run-time cache
+        // (and would release the name) BEFORE its refcount check, then frees the body
+        // arrays for the last holder of a refcounted body and returns without touching
+        // the arrays of a refcount-less (opcache-shared) one - engine-exact semantics
+        // for both lifetime classes.
         $previousOpArray->function_name = null;
         Core::call('destroy_op_array', $rawOpArray);
     }

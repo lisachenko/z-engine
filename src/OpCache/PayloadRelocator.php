@@ -25,6 +25,8 @@ use ZEngine\Generated\zend_attribute_arg;
 use ZEngine\Generated\zend_class_name;
 use ZEngine\Generated\zend_early_binding;
 use ZEngine\Generated\zend_string;
+use ZEngine\Generated\zend_type;
+use ZEngine\Generated\zend_type_list;
 use ZEngine\Generated\zval;
 
 /**
@@ -74,6 +76,9 @@ final class PayloadRelocator
     /** zend_type bit layout (zend_types.h) - list/name discriminators */
     private const int TYPE_LIST_BIT = 4194304;  // _ZEND_TYPE_LIST_BIT
     private const int TYPE_NAME_BIT = 16777216; // _ZEND_TYPE_NAME_BIT
+
+    /** ZEND_PROPERTY_HOOK_COUNT (zend_property_hooks.h) - get + set slots */
+    private const int PROPERTY_HOOK_COUNT = 2;
 
     private readonly int $base;
     private readonly int $size;
@@ -251,6 +256,32 @@ final class PayloadRelocator
         return $address;
     }
 
+    /** UNSERIALIZE_PTR on a raw pointer slot, returning the resolved address (0 for a NULL slot) */
+    private function unPtrAt(int $slotAddress): int
+    {
+        $slot   = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $slotAddress));
+        $stored = (int) $slot[0];
+        if ($stored === 0) {
+            return 0;
+        }
+        $slot[0] = $this->base + $stored;
+
+        return $this->base + $stored;
+    }
+
+    /** SERIALIZE_PTR on a raw pointer slot, returning the pre-serialization address (0 for a NULL slot) */
+    private function serPtrAt(int $slotAddress): int
+    {
+        $slot    = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $slotAddress));
+        $address = (int) $slot[0];
+        if ($address === 0) {
+            return 0;
+        }
+        $slot[0] = $address - $this->base;
+
+        return $address;
+    }
+
     // --- interned-string primitives (UNSERIALIZE_STR / SERIALIZE_STR) ------
     /**
      * @param \FFI\CData $owner
@@ -288,6 +319,36 @@ final class PayloadRelocator
             return;
         }
         $this->writePtrField($owner, $field, $this->emitInterned($address));
+    }
+
+    /** UNSERIALIZE_STR on a raw zend_string* slot (no owning struct field) */
+    private function unStrAt(int $slotAddress): void
+    {
+        $slot   = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $slotAddress));
+        $stored = (int) $slot[0];
+        if ($stored === 0) {
+            return;
+        }
+        if (($stored & 1) !== 0) {
+            $slot[0] = $this->strSectionBase + ($stored & ~1);
+        } else {
+            $slot[0] = $this->base + $stored;
+        }
+    }
+
+    /** SERIALIZE_STR on a raw zend_string* slot (no owning struct field) */
+    private function serStrAt(int $slotAddress): void
+    {
+        $slot    = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $slotAddress));
+        $address = (int) $slot[0];
+        if ($address === 0) {
+            return;
+        }
+        if ($address >= $this->base && $address < $this->base + $this->size) {
+            $slot[0] = $address - $this->base;
+        } else {
+            $slot[0] = $this->emitInterned($address);
+        }
     }
 
     /**
@@ -582,13 +643,7 @@ final class PayloadRelocator
 
     private function unserializeType(object $owner, string $field): void
     {
-        $typeMask = $owner->$field->type_mask;
-        if (($typeMask & self::TYPE_LIST_BIT) !== 0) {
-            throw OpCacheException::unsupportedPayload('intersection/union type-list relocation');
-        }
-        if (($typeMask & self::TYPE_NAME_BIT) !== 0) {
-            $this->unStr($owner->$field, 'ptr');
-        }
+        $this->unserializeTypeStruct($owner->$field);
     }
     /**
      * @param \FFI\CData $owner
@@ -596,12 +651,59 @@ final class PayloadRelocator
 
     private function serializeType(object $owner, string $field): void
     {
-        $typeMask = $owner->$field->type_mask;
+        $this->serializeTypeStruct($owner->$field);
+    }
+
+    /**
+     * One zend_type in place - the ZEND_TYPE_HAS_LIST branch of
+     * zend_file_cache_unserialize_type relocates the zend_type_list pointer and
+     * recurses into every entry, so DNF sub-lists like (A&B)|C unfold naturally.
+     *
+     * @param \FFI\CData $type a zend_type view (embedded field or list entry)
+     */
+    private function unserializeTypeStruct(object $type): void
+    {
+        $typeMask = $type->type_mask;
         if (($typeMask & self::TYPE_LIST_BIT) !== 0) {
-            throw OpCacheException::unsupportedPayload('intersection/union type-list relocation');
+            $listAddress = $this->unPtr($type, 'ptr');
+            $list        = Core::pointerAtAddress('zend_type_list *', $listAddress);
+            $typeSize    = Core::sizeOfType(zend_type::class);
+            // ZEND_TYPE_LIST_FOREACH: entries start at list->types (the flexible member)
+            $entryBase = $listAddress + Core::sizeOfType(zend_type_list::class) - $typeSize;
+            for ($i = 0; $i < $list->num_types; $i++) {
+                $this->unserializeTypeStruct(Core::pointerAtAddress('zend_type *', $entryBase + $i * $typeSize));
+            }
+
+            return;
         }
         if (($typeMask & self::TYPE_NAME_BIT) !== 0) {
-            $this->serStr($owner->$field, 'ptr');
+            $this->unStr($type, 'ptr');
+        }
+    }
+
+    /**
+     * Mirror of {@see unserializeTypeStruct} - zend_file_cache_serialize_type
+     * stores the list pointer as an offset but keeps walking the entries through
+     * the still-real address (its SERIALIZE_PTR/UNSERIALIZE_PTR pair).
+     *
+     * @param \FFI\CData $type a zend_type view (embedded field or list entry)
+     */
+    private function serializeTypeStruct(object $type): void
+    {
+        $typeMask = $type->type_mask;
+        if (($typeMask & self::TYPE_LIST_BIT) !== 0) {
+            $listAddress = $this->serPtr($type, 'ptr');
+            $list        = Core::pointerAtAddress('zend_type_list *', $listAddress);
+            $typeSize    = Core::sizeOfType(zend_type::class);
+            $entryBase   = $listAddress + Core::sizeOfType(zend_type_list::class) - $typeSize;
+            for ($i = 0; $i < $list->num_types; $i++) {
+                $this->serializeTypeStruct(Core::pointerAtAddress('zend_type *', $entryBase + $i * $typeSize));
+            }
+
+            return;
+        }
+        if (($typeMask & self::TYPE_NAME_BIT) !== 0) {
+            $this->serStr($type, 'ptr');
         }
     }
 
@@ -673,7 +775,12 @@ final class PayloadRelocator
         $this->unserializeArgInfo($opArray);
         $this->unserializeVars($opArray);
         if ($opArray->num_dynamic_func_defs !== 0) {
-            throw OpCacheException::unsupportedPayload('dynamic function definitions (closures/arrow fns) relocation');
+            // zend_op_array* array: relocate it, then recurse into each nested body
+            $defsAddress = $this->unPtr($opArray, 'dynamic_func_defs');
+            for ($i = 0; $i < $opArray->num_dynamic_func_defs; $i++) {
+                $defAddress = $this->unPtrAt($defsAddress + $i * PHP_INT_SIZE);
+                $this->unserializeOpArray(Core::pointerAtAddress('zend_op_array *', $defAddress));
+            }
         }
         $this->unStr($opArray, 'function_name');
         $this->unStr($opArray, 'filename');
@@ -732,7 +839,13 @@ final class PayloadRelocator
         $this->serializeArgInfo($opArray);
         $this->serializeVars($opArray);
         if ($opArray->num_dynamic_func_defs !== 0) {
-            throw OpCacheException::unsupportedPayload('dynamic function definitions (closures/arrow fns) relocation');
+            // Store offsets but keep walking through the still-real addresses,
+            // exactly like the C SERIALIZE_PTR/UNSERIALIZE_PTR pairs
+            $defsAddress = $this->serPtr($opArray, 'dynamic_func_defs');
+            for ($i = 0; $i < $opArray->num_dynamic_func_defs; $i++) {
+                $defAddress = $this->serPtrAt($defsAddress + $i * PHP_INT_SIZE);
+                $this->serializeOpArray(Core::pointerAtAddress('zend_op_array *', $defAddress));
+            }
         }
         $this->serStr($opArray, 'function_name');
         $this->serStr($opArray, 'filename');
@@ -878,7 +991,9 @@ final class PayloadRelocator
             $this->unserializeClassNames($ce, 'interface_names', $ce->num_interfaces);
         }
         if ($ce->num_traits !== 0) {
-            throw OpCacheException::unsupportedPayload('trait-using class relocation');
+            $this->unserializeClassNames($ce, 'trait_names', $ce->num_traits);
+            $this->unserializeTraitAliases($ce);
+            $this->unserializeTraitPrecedences($ce);
         }
         foreach (self::MAGIC_METHOD_FIELDS as $field) {
             $this->unPtr($ce, $field);
@@ -914,7 +1029,9 @@ final class PayloadRelocator
             $this->serializeClassNames($ce, 'interface_names', $ce->num_interfaces);
         }
         if ($ce->num_traits !== 0) {
-            throw OpCacheException::unsupportedPayload('trait-using class relocation');
+            $this->serializeClassNames($ce, 'trait_names', $ce->num_traits);
+            $this->serializeTraitAliases($ce);
+            $this->serializeTraitPrecedences($ce);
         }
         foreach (self::MAGIC_METHOD_FIELDS as $field) {
             $this->serPtr($ce, $field);
@@ -1020,6 +1137,88 @@ final class PayloadRelocator
             $this->serStr($name, 'lc_name');
         }
     }
+
+    // --- traits (the num_traits branch of zend_file_cache_(un)serialize_class)
+    /**
+     * @param \FFI\CData $ce
+     */
+
+    private function unserializeTraitAliases(object $ce): void
+    {
+        if ($this->ptrValue($ce, 'trait_aliases') === 0) {
+            return;
+        }
+        // A NULL-terminated zend_trait_alias* array; each entry's strings follow
+        $slotAddress = $this->unPtr($ce, 'trait_aliases');
+        while (($aliasAddress = $this->unPtrAt($slotAddress)) !== 0) {
+            $alias = Core::pointerAtAddress('zend_trait_alias *', $aliasAddress);
+            $this->unStr($alias->trait_method, 'method_name');
+            $this->unStr($alias->trait_method, 'class_name');
+            $this->unStr($alias, 'alias');
+            $slotAddress += PHP_INT_SIZE;
+        }
+    }
+    /**
+     * @param \FFI\CData $ce
+     */
+
+    private function serializeTraitAliases(object $ce): void
+    {
+        if ($this->ptrValue($ce, 'trait_aliases') === 0) {
+            return;
+        }
+        $slotAddress = $this->serPtr($ce, 'trait_aliases');
+        while (($aliasAddress = $this->serPtrAt($slotAddress)) !== 0) {
+            $alias = Core::pointerAtAddress('zend_trait_alias *', $aliasAddress);
+            $this->serStr($alias->trait_method, 'method_name');
+            $this->serStr($alias->trait_method, 'class_name');
+            $this->serStr($alias, 'alias');
+            $slotAddress += PHP_INT_SIZE;
+        }
+    }
+    /**
+     * @param \FFI\CData $ce
+     */
+
+    private function unserializeTraitPrecedences(object $ce): void
+    {
+        if ($this->ptrValue($ce, 'trait_precedences') === 0) {
+            return;
+        }
+        // A NULL-terminated zend_trait_precedence* array with inline exclude names
+        $slotAddress = $this->unPtr($ce, 'trait_precedences');
+        while (($precedenceAddress = $this->unPtrAt($slotAddress)) !== 0) {
+            $precedence = Core::pointerAtAddress('zend_trait_precedence *', $precedenceAddress);
+            $this->unStr($precedence->trait_method, 'method_name');
+            $this->unStr($precedence->trait_method, 'class_name');
+            $excludeBase = Core::addressOf($precedence->exclude_class_names);
+            for ($j = 0; $j < $precedence->num_excludes; $j++) {
+                $this->unStrAt($excludeBase + $j * PHP_INT_SIZE);
+            }
+            $slotAddress += PHP_INT_SIZE;
+        }
+    }
+    /**
+     * @param \FFI\CData $ce
+     */
+
+    private function serializeTraitPrecedences(object $ce): void
+    {
+        if ($this->ptrValue($ce, 'trait_precedences') === 0) {
+            return;
+        }
+        $slotAddress = $this->serPtr($ce, 'trait_precedences');
+        while (($precedenceAddress = $this->serPtrAt($slotAddress)) !== 0) {
+            $precedence = Core::pointerAtAddress('zend_trait_precedence *', $precedenceAddress);
+            $this->serStr($precedence->trait_method, 'method_name');
+            $this->serStr($precedence->trait_method, 'class_name');
+            $excludeBase = Core::addressOf($precedence->exclude_class_names);
+            for ($j = 0; $j < $precedence->num_excludes; $j++) {
+                $this->serStrAt($excludeBase + $j * PHP_INT_SIZE);
+            }
+            $slotAddress += PHP_INT_SIZE;
+        }
+    }
     /**
      * @param \FFI\CData $zval
      */
@@ -1041,7 +1240,15 @@ final class PayloadRelocator
         $this->unserializeAttributes($prop, 'attributes');
         $this->unPtr($prop, 'prototype');
         if ($this->ptrValue($prop, 'hooks') !== 0) {
-            throw OpCacheException::unsupportedPayload('property-hook relocation');
+            // zend_function*[ZEND_PROPERTY_HOOK_COUNT]: relocate the array, then
+            // each non-NULL hook and its op_array (a shared body returns early)
+            $hooksAddress = $this->unPtr($prop, 'hooks');
+            for ($i = 0; $i < self::PROPERTY_HOOK_COUNT; $i++) {
+                $hookAddress = $this->unPtrAt($hooksAddress + $i * PHP_INT_SIZE);
+                if ($hookAddress !== 0) {
+                    $this->unserializeOpArray(Core::pointerAtAddress('zend_function *', $hookAddress)->op_array);
+                }
+            }
         }
         $this->unserializeType($prop, 'type');
     }
@@ -1066,7 +1273,15 @@ final class PayloadRelocator
         $this->serializeAttributes($prop, 'attributes');
         $this->serPtr($prop, 'prototype');
         if ($this->ptrValue($prop, 'hooks') !== 0) {
-            throw OpCacheException::unsupportedPayload('property-hook relocation');
+            // Offsets are stored while the walk continues through the still-real
+            // addresses, mirroring the C SERIALIZE_PTR/UNSERIALIZE_PTR pairs
+            $hooksAddress = $this->serPtr($prop, 'hooks');
+            for ($i = 0; $i < self::PROPERTY_HOOK_COUNT; $i++) {
+                $hookAddress = $this->serPtrAt($hooksAddress + $i * PHP_INT_SIZE);
+                if ($hookAddress !== 0) {
+                    $this->serializeOpArray(Core::pointerAtAddress('zend_function *', $hookAddress)->op_array);
+                }
+            }
         }
         $this->serializeType($prop, 'type');
     }
@@ -1116,13 +1331,38 @@ final class PayloadRelocator
      * @param \FFI\CData $ce
      */
 
+    /**
+     * zf_* field order matches the C walk (zend_file_cache.c), not the struct layout.
+     * Only linked classes carry these structs - a plain compile stores classes
+     * unlinked with both pointers NULL - but payloads from other producers (e.g.
+     * preload-era images) may hold them, and the walk must be faithful when they do.
+     */
+    private const ITERATOR_FUNC_FIELDS    = ['zf_new_iterator', 'zf_rewind', 'zf_valid', 'zf_key', 'zf_current', 'zf_next'];
+    private const ARRAYACCESS_FUNC_FIELDS = ['zf_offsetget', 'zf_offsetexists', 'zf_offsetset', 'zf_offsetunset'];
+
+    /**
+     * The get_iterator <-> HOOKED_ITERATOR_PLACEHOLDER swap the C load path performs
+     * is deliberately NOT mirrored: the image is never executed in this process, so
+     * the placeholder is preserved verbatim like every other execution-only field
+     * and the written file keeps the exact bytes the engine expects.
+     *
+     * @param \FFI\CData $ce
+     */
     private function unserializeIteratorFuncs(object $ce): void
     {
         if ($this->ptrValue($ce, 'iterator_funcs_ptr') !== 0) {
-            throw OpCacheException::unsupportedPayload('iterator-aware class relocation');
+            $address = $this->unPtr($ce, 'iterator_funcs_ptr');
+            $funcs   = Core::pointerAtAddress('zend_class_iterator_funcs *', $address);
+            foreach (self::ITERATOR_FUNC_FIELDS as $field) {
+                $this->unPtr($funcs, $field);
+            }
         }
         if ($this->ptrValue($ce, 'arrayaccess_funcs_ptr') !== 0) {
-            throw OpCacheException::unsupportedPayload('ArrayAccess class relocation');
+            $address = $this->unPtr($ce, 'arrayaccess_funcs_ptr');
+            $funcs   = Core::pointerAtAddress('zend_class_arrayaccess_funcs *', $address);
+            foreach (self::ARRAYACCESS_FUNC_FIELDS as $field) {
+                $this->unPtr($funcs, $field);
+            }
         }
     }
     /**
@@ -1131,11 +1371,23 @@ final class PayloadRelocator
 
     private function serializeIteratorFuncs(object $ce): void
     {
-        if ($this->ptrValue($ce, 'iterator_funcs_ptr') !== 0) {
-            throw OpCacheException::unsupportedPayload('iterator-aware class relocation');
+        // The C serialize converts the zf_* members through the still-real struct
+        // pointer first and the struct pointer itself last; mirrored exactly
+        $iteratorAddress = $this->ptrValue($ce, 'iterator_funcs_ptr');
+        if ($iteratorAddress !== 0) {
+            $funcs = Core::pointerAtAddress('zend_class_iterator_funcs *', $iteratorAddress);
+            foreach (self::ITERATOR_FUNC_FIELDS as $field) {
+                $this->serPtr($funcs, $field);
+            }
+            $this->serPtr($ce, 'iterator_funcs_ptr');
         }
-        if ($this->ptrValue($ce, 'arrayaccess_funcs_ptr') !== 0) {
-            throw OpCacheException::unsupportedPayload('ArrayAccess class relocation');
+        $arrayAccessAddress = $this->ptrValue($ce, 'arrayaccess_funcs_ptr');
+        if ($arrayAccessAddress !== 0) {
+            $funcs = Core::pointerAtAddress('zend_class_arrayaccess_funcs *', $arrayAccessAddress);
+            foreach (self::ARRAYACCESS_FUNC_FIELDS as $field) {
+                $this->serPtr($funcs, $field);
+            }
+            $this->serPtr($ce, 'arrayaccess_funcs_ptr');
         }
     }
 

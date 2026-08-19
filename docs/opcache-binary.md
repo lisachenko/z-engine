@@ -193,12 +193,18 @@ $report->appliedMethods;                   // what actually happened, per entry
   [#119](https://github.com/lisachenko/z-engine/issues/119) was rescoped to
   macOS/arm64. ZTS payloads stay tracked in
   [#118](https://github.com/lisachenko/z-engine/issues/118).
-- **Strict, never silent.** Structures the port does not yet handle
-  (intersection/union type lists, property hooks, iterator/ArrayAccess funcs,
-  trait-using classes, compile warnings) raise `unsupportedPayload` rather than
-  writing a subtly corrupt binary. Global functions, classes with constants,
-  typed properties, attributes (including constant-expression arguments), static
-  variables, try/catch and enums are supported and round-trip byte-for-byte.
+- **Strict, never silent.** Anything the port cannot handle raises
+  `unsupportedPayload` rather than writing a subtly corrupt binary; with every
+  payload shape of the 8.4 walker now ported, that guard covers the platform
+  predicates above (Windows/32-bit, and ZTS until #118). Global functions,
+  classes with constants, typed properties (union/intersection/DNF type lists
+  included), trait-using classes (aliases and insteadof precedences included),
+  closures and arrow functions (nested dynamic_func_defs included),
+  Iterator/IteratorAggregate/ArrayAccess classes (including the linked-class
+  iterator_funcs_ptr / arrayaccess_funcs_ptr structs), property hooks,
+  attributes (including constant-expression arguments), static variables,
+  compile warnings, try/catch and enums are supported and round-trip
+  byte-for-byte.
 - **Deferred.** Loading patched binaries into shared memory (ZCSG,
   [#121](https://github.com/lisachenko/z-engine/issues/121)). Applying a
   patched image to already-loaded functions and classes landed as
