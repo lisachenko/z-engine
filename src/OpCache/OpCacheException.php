@@ -136,4 +136,29 @@ class OpCacheException extends \RuntimeException
     {
         return new self('The payload is not relocated: call script() before accessing structures');
     }
+
+    /**
+     * The graph serializer met a pointer whose target no persisted unit covers -
+     * the graph references memory the serialization pass never absorbed
+     */
+    public static function unresolvedGraphReference(string $what): self
+    {
+        return new self("Graph serialization failed, {$what}: the referenced structure was not persisted");
+    }
+
+    /**
+     * A graft donor does not contain the requested function/class/method
+     */
+    public static function graftEntryNotFound(string $kind, string $name): self
+    {
+        return new self("Cannot graft {$kind} '{$name}': the donor cache image does not contain it");
+    }
+
+    /**
+     * The graft target hashtable already holds an entry under this key
+     */
+    public static function duplicateHashTableKey(string $key): self
+    {
+        return new self("Cannot graft '{$key}': the target table already holds an entry under that key");
+    }
 }

@@ -81,6 +81,43 @@ string literal, a new constant value — are written correctly, not just in-plac
 byte pokes. `refresh()` is `save()` plus `opcache_invalidate()` on the source
 script, so the next include picks up the patched binary.
 
+## Growing the graph: added functions and methods
+
+In-place edits go out through `PayloadRelocator::derelocate()` — the exact
+inverse of the read-time relocation. Mutations that outgrow the original
+buffer take a different writer
+([#117](https://github.com/lisachenko/z-engine/issues/117)):
+`ScriptSerializer`, a two-pass port of `zend_persist_calc` → `zend_persist`
+(pass 1 walks the graph, deduplicating every reachable allocation unit
+through an xlat table and summing aligned sizes; pass 2 emits a fresh
+contiguous region and rewrites every pointer), which then delegates the
+on-disk offset encoding to the same `PayloadRelocator` serialize stage — one
+implementation for the offset format. `save()` picks the writer
+automatically: it re-emits from scratch once the reflection view reports the
+graph as grown, and keeps the byte-exact derelocate path otherwise.
+
+New code enters the image as **grafts from donor binaries**:
+
+```php
+$file  = BinaryCacheFile::read($binPath, $scriptPath);
+$donor = BinaryCacheFile::compile($donorScript, $donorCacheDir);
+
+$view = $file->getReflection();
+$view->addFunctionFrom($donor->getReflection(), 'my_new_function');
+$view->addMethodFrom($donor->getReflection(), 'DonorClass', 'newMethod', 'CachedClass');
+$file->save();   // a fresh worker now executes the added function and method
+```
+
+Donors are compiled by a real opcache child, so their op_arrays are already
+in file form (opline handlers are handler-table indexes, IS_CONST operands
+are literal-table indexes — neither is derivable in-process without engine
+helpers that are not exported); the serializer copies those units verbatim.
+Grafting regrows the target hashtable outside the buffer — persisted tables
+must never be touched by `zend_hash_add`, their data block is not an
+emalloc'd allocation — and the donor image stays referenced (and, for
+methods, mutated: the op_array's scope is re-pointed at the adopting class)
+until `save()` re-emits everything into one fresh region.
+
 ## Refresh and shared memory
 
 Under `opcache.file_cache_only=1` there is no shared-memory copy, so writing the
@@ -220,6 +257,10 @@ $report->appliedMethods;                   // what actually happened, per entry
   attributes (including constant-expression arguments), static variables,
   compile warnings, try/catch and enums are supported and round-trip
   byte-for-byte.
+- **Graph growth.** Added functions and methods are supported through donor
+  grafts and the from-scratch `ScriptSerializer` (see "Growing the graph"
+  above, issue #117); whole added classes and freshly in-process compiled
+  op_arrays (no file-form oplines) remain out of scope and are refused loudly.
 - **Deferred.** Loading patched binaries into shared memory (ZCSG,
   [#121](https://github.com/lisachenko/z-engine/issues/121)). Applying a
   patched image to already-loaded functions and classes landed as
