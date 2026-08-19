@@ -77,6 +77,9 @@ final class PayloadRelocator
     private const int TYPE_LIST_BIT = 4194304;  // _ZEND_TYPE_LIST_BIT
     private const int TYPE_NAME_BIT = 16777216; // _ZEND_TYPE_NAME_BIT
 
+    /** ZEND_PROPERTY_HOOK_COUNT (zend_property_hooks.h) - get + set slots */
+    private const int PROPERTY_HOOK_COUNT = 2;
+
     private readonly int $base;
     private readonly int $size;
     private readonly int $strSectionBase;
@@ -1237,7 +1240,15 @@ final class PayloadRelocator
         $this->unserializeAttributes($prop, 'attributes');
         $this->unPtr($prop, 'prototype');
         if ($this->ptrValue($prop, 'hooks') !== 0) {
-            throw OpCacheException::unsupportedPayload('property-hook relocation');
+            // zend_function*[ZEND_PROPERTY_HOOK_COUNT]: relocate the array, then
+            // each non-NULL hook and its op_array (a shared body returns early)
+            $hooksAddress = $this->unPtr($prop, 'hooks');
+            for ($i = 0; $i < self::PROPERTY_HOOK_COUNT; $i++) {
+                $hookAddress = $this->unPtrAt($hooksAddress + $i * PHP_INT_SIZE);
+                if ($hookAddress !== 0) {
+                    $this->unserializeOpArray(Core::pointerAtAddress('zend_function *', $hookAddress)->op_array);
+                }
+            }
         }
         $this->unserializeType($prop, 'type');
     }
@@ -1262,7 +1273,15 @@ final class PayloadRelocator
         $this->serializeAttributes($prop, 'attributes');
         $this->serPtr($prop, 'prototype');
         if ($this->ptrValue($prop, 'hooks') !== 0) {
-            throw OpCacheException::unsupportedPayload('property-hook relocation');
+            // Offsets are stored while the walk continues through the still-real
+            // addresses, mirroring the C SERIALIZE_PTR/UNSERIALIZE_PTR pairs
+            $hooksAddress = $this->serPtr($prop, 'hooks');
+            for ($i = 0; $i < self::PROPERTY_HOOK_COUNT; $i++) {
+                $hookAddress = $this->serPtrAt($hooksAddress + $i * PHP_INT_SIZE);
+                if ($hookAddress !== 0) {
+                    $this->serializeOpArray(Core::pointerAtAddress('zend_function *', $hookAddress)->op_array);
+                }
+            }
         }
         $this->serializeType($prop, 'type');
     }
