@@ -32,6 +32,7 @@ use ZEngine\Generated\zend_class_name;
 use ZEngine\Generated\zend_early_binding;
 use ZEngine\Generated\zend_error_info;
 use ZEngine\Generated\zend_live_range;
+use ZEngine\Generated\zend_op;
 use ZEngine\Generated\zend_op_array;
 use ZEngine\Generated\zend_persistent_script;
 use ZEngine\Generated\zend_property_info;
@@ -91,10 +92,23 @@ final class ScriptSerializer
     private const int IS_CONSTANT_AST = 11;
     private const int IS_INDIRECT     = 12;
 
-    private const int ZEND_AST_ZVAL           = 64;
-    private const int ZEND_AST_CONSTANT       = 65;
-    private const int ZEND_AST_IS_LIST_SHIFT  = 7;
-    private const int ZEND_AST_CHILDREN_SHIFT = 8;
+    /**
+     * AST node kinds the walk special-cases. PHP 8.5 added two node shapes that can
+     * appear in a constant expression: ZEND_AST_OP_ARRAY (a static closure compiled
+     * into the expression, carrying a zend_op_array pointer) and ZEND_AST_CALLABLE_CONVERT
+     * (first-class callable syntax, whose zend_ast_fcc holds only a ZEND_MAP_PTR slot).
+     */
+    private const int ZEND_AST_ZVAL             = 64;
+    private const int ZEND_AST_CONSTANT         = 65;
+    private const int ZEND_AST_OP_ARRAY         = 66;
+    private const int ZEND_AST_CALLABLE_CONVERT = 3;
+    private const int ZEND_AST_IS_LIST_SHIFT    = 7;
+    private const int ZEND_AST_CHILDREN_SHIFT   = 8;
+
+    /** Opcodes whose operands carry file-cache state the persist walk must follow (PHP 8.5) */
+    private const int ZEND_DECLARE_ATTRIBUTED_CONST = 210;
+    private const int ZEND_OP_DATA                  = 137;
+    private const int IS_CONST                      = 1;
 
     /** zend_type bit layout (zend_types.h) - list/name discriminators */
     private const int TYPE_LIST_BIT = 4194304;  // _ZEND_TYPE_LIST_BIT
@@ -523,6 +537,22 @@ final class ScriptSerializer
 
             return;
         }
+        if ($kind === self::ZEND_AST_OP_ARRAY) {
+            // PHP 8.5: a static closure compiled into a constant expression; the
+            // embedded body is persisted the same way a function-table entry is
+            $node = Core::pointerAtAddress('zend_ast_op_array *', $source);
+            $new  = $this->persistFunction($this->ptrValue($node, 'op_array'));
+            if ($this->phase === 2) {
+                $this->put(Core::pointerAtAddress('zend_ast_op_array *', $copy), 'op_array', $new);
+            }
+
+            return;
+        }
+        if ($kind === self::ZEND_AST_CALLABLE_CONVERT) {
+            // zend_ast_fcc holds only a ZEND_MAP_PTR slot, which is execution-only
+            // state copied verbatim with the node bytes
+            return;
+        }
         [$childBase, $count] = $this->astChildren($source, $kind);
         for ($i = 0; $i < $count; $i++) {
             $childSource = $this->slotValue($childBase + $i * PHP_INT_SIZE);
@@ -552,6 +582,12 @@ final class ScriptSerializer
         $kind = $ast->kind;
         if ($kind === self::ZEND_AST_ZVAL || $kind === self::ZEND_AST_CONSTANT) {
             return Core::sizeOfType('zend_ast_zval');
+        }
+        if ($kind === self::ZEND_AST_OP_ARRAY || $kind === self::ZEND_AST_CALLABLE_CONVERT) {
+            // zend_ast_op_array and zend_ast_fcc share one 16-byte layout
+            // (kind, attr, lineno, one pointer-sized slot); zend_ast_fcc is not
+            // in the generated header, so the op_array view sizes both
+            return Core::sizeOfType('zend_ast_op_array');
         }
         if (($kind >> self::ZEND_AST_IS_LIST_SHIFT & 1) !== 0) {
             $list = Core::pointerAtAddress(zend_ast_list::class, $source);
@@ -667,10 +703,12 @@ final class ScriptSerializer
             $this->put($opCopy, 'static_variables', $new);
         }
 
-        $literals = $this->ptrValue($op, 'literals');
+        $literals    = $this->ptrValue($op, 'literals');
+        $literalsNew = 0;
         if ($literals !== 0) {
             $zvalSize      = Core::sizeOfType(zval::class);
             [$new, $first] = $this->unit($literals, $op->last_literal * $zvalSize);
+            $literalsNew   = $new;
             $this->put($opCopy, 'literals', $new);
             if ($first) {
                 for ($i = 0; $i < $op->last_literal; $i++) {
@@ -686,6 +724,7 @@ final class ScriptSerializer
             [$new, ] = $this->unit($opcodes, $op->last * Core::sizeOfType('zend_op'));
             $this->put($opCopy, 'opcodes', $new);
         }
+        $this->persistAttributedConstOplines($op, $opcodes, $literals, $literalsNew);
 
         $argInfo = $this->ptrValue($op, 'arg_info');
         if ($argInfo !== 0) {
@@ -772,6 +811,50 @@ final class ScriptSerializer
         // refcount / run_time_cache / static_variables_ptr map slots are copied
         // verbatim: sources are persisted images where they already hold the
         // file-form values (NULL, or the shared-body -1 refcount marker)
+    }
+
+    /**
+     * Persists the attribute tables reachable only from ZEND_DECLARE_ATTRIBUTED_CONST oplines.
+     *
+     * PHP 8.5 compiles a global `const` carrying attributes to ZEND_DECLARE_ATTRIBUTED_CONST
+     * followed by a ZEND_OP_DATA whose op1 literal is an IS_PTR zval holding the compiled
+     * attribute HashTable. The literal walk skips IS_PTR zvals, so - exactly like
+     * {@see PayloadRelocator::walkAttributedConstOplines()} on the offset-encoding side -
+     * the table is persisted from the opline pair, otherwise the rebuilt image would keep
+     * a pointer into the source graph. The operand is read as a literal INDEX because
+     * payload oplines are file-form (see the opcodes copy above).
+     *
+     * @param object $op          source zend_op_array view
+     * @param int    $opcodes     source opcodes address, 0 when null
+     * @param int    $literals    source literals address, 0 when null
+     * @param int    $literalsNew literals copy address (0 in the measure pass)
+     */
+    private function persistAttributedConstOplines(object $op, int $opcodes, int $literals, int $literalsNew): void
+    {
+        /** @var zend_op_array $op Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
+        $count = (int) $op->last;
+        if ($opcodes === 0 || $literals === 0 || $count < 2) {
+            return;
+        }
+        $oplineSize = Core::sizeOfType('zend_op');
+        $zvalSize   = Core::sizeOfType(zval::class);
+        // The pair is (DECLARE_ATTRIBUTED_CONST, OP_DATA), so the scan starts at index 1
+        for ($i = 1; $i < $count; $i++) {
+            $opline = Core::pointerAtAddress(zend_op::class, $opcodes + $i * $oplineSize);
+            if ($opline->opcode !== self::ZEND_OP_DATA || $opline->op1_type !== self::IS_CONST) {
+                continue;
+            }
+            $previous = Core::pointerAtAddress(zend_op::class, $opcodes + ($i - 1) * $oplineSize);
+            if ($previous->opcode !== self::ZEND_DECLARE_ATTRIBUTED_CONST) {
+                continue;
+            }
+            $index       = $opline->op1->constant;
+            $literal     = Core::pointerAtAddress(zval::class, $literals + $index * $zvalSize);
+            $literalCopy = $this->phase === 2
+                ? Core::pointerAtAddress(zval::class, $literalsNew + $index * $zvalSize)
+                : $literal;
+            $this->persistAttributes($literal->value, $literalCopy->value, 'ptr');
+        }
     }
 
     // --- classes (zend_persist_class_entry, the non-LINKED branch) ---------------------------
