@@ -17,15 +17,28 @@ use FFI;
 use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Generated\Bucket;
+use ZEngine\Generated\HashTable as HashTableStruct;
 use ZEngine\Generated\zend_arg_info;
 use ZEngine\Generated\zend_ast;
 use ZEngine\Generated\zend_ast_list;
 use ZEngine\Generated\zend_ast_ref;
+use ZEngine\Generated\zend_ast_zval;
+use ZEngine\Generated\zend_attribute;
 use ZEngine\Generated\zend_attribute_arg;
+use ZEngine\Generated\zend_class_arrayaccess_funcs;
+use ZEngine\Generated\zend_class_constant;
+use ZEngine\Generated\zend_class_entry;
+use ZEngine\Generated\zend_class_iterator_funcs;
 use ZEngine\Generated\zend_class_name;
 use ZEngine\Generated\zend_early_binding;
+use ZEngine\Generated\zend_error_info;
+use ZEngine\Generated\zend_function;
+use ZEngine\Generated\zend_op_array;
 use ZEngine\Generated\zend_persistent_script;
+use ZEngine\Generated\zend_property_info;
 use ZEngine\Generated\zend_string;
+use ZEngine\Generated\zend_trait_alias;
+use ZEngine\Generated\zend_trait_precedence;
 use ZEngine\Generated\zend_type;
 use ZEngine\Generated\zend_type_list;
 use ZEngine\Generated\zval;
@@ -140,7 +153,7 @@ final class PayloadRelocator
      * Rewrites the buffer in place, converting every stored offset to a real
      * address, and returns a typed pointer to the embedded zend_persistent_script.
      *
-     * @return \FFI\CData
+     * @return zend_persistent_script
      */
     public function relocate(): object
     {
@@ -152,7 +165,7 @@ final class PayloadRelocator
             Core::sizeOfType(zend_persistent_script::class),
             'zend_persistent_script at scriptOffset',
         );
-        $script = Core::pointerAtAddress('zend_persistent_script *', $this->base + $this->metaInfo->scriptOffset());
+        $script = Core::pointerAtAddress(zend_persistent_script::class, $this->base + $this->metaInfo->scriptOffset());
 
         $this->unStr($script->script, 'filename');
         $this->unserializeHash($script->script->class_table, $this->unserializeClass(...));
@@ -189,7 +202,7 @@ final class PayloadRelocator
         $this->strSection    = '';
         $this->internedXlat  = [];
         $this->sharedOpcodes = [];
-        $script              = Core::pointerAtAddress('zend_persistent_script *', $this->base + $this->metaInfo->scriptOffset());
+        $script              = Core::pointerAtAddress(zend_persistent_script::class, $this->base + $this->metaInfo->scriptOffset());
 
         $this->serStr($script->script, 'filename');
         $this->serializeHash($script->script->class_table, $this->serializeClass(...));
@@ -198,7 +211,8 @@ final class PayloadRelocator
         $this->serializeWarnings($script);
         $this->serializeEarlyBindings($script);
 
-        $memRegion = FFI::string($this->buffer, $this->size);
+        // max(...,0) only states the non-negative mem-region size to the analyser
+        $memRegion = FFI::string($this->buffer, max($this->size, 0));
         // Re-pin the tagged-offset bound to the section just emitted, so the
         // relocate() in derelocate() validates against it (issue #123)
         $this->strSize = strlen($this->strSection);
@@ -209,11 +223,24 @@ final class PayloadRelocator
     // --- pointer/offset primitives (SERIALIZE_PTR / UNSERIALIZE_PTR) --------
 
     /**
+     * Reads a uintptr_t pointer slot as a PHP int - the raw-pointer read
+     * primitive. The dereferenced CData element is always an integer at runtime;
+     * the guard states that to the analyser without widening any real value.
+     *
+     * @param \FFI\CData $slot a uintptr_t* view over the slot to read
+     */
+    private function readSlot(object $slot): int
+    {
+        $value = $slot[0];
+        \assert(\is_int($value));
+
+        return $value;
+    }
+
+    /**
      * Reads a pointer field's stored value through a raw integer view of its
      * storage, so it works for every pointee type including void* (which
      * Core::addressOf cannot cast). 0 when the C NULL surfaces as PHP null.
-     *
-     * @param \FFI\CData $owner
      */
     private function ptrValue(object $owner, string $field): int
     {
@@ -221,15 +248,16 @@ final class PayloadRelocator
             return 0;
         }
 
-        return (int) Core::cast('uintptr_t *', FFI::addr($owner->$field))[0];
+        // A dynamically-named pointer field cannot be statically resolved, so
+        // FFI::addr() on the mixed field read is the one irreducible CData hop.
+        // @phpstan-ignore argument.type (FFI::addr of a dynamic FFI\CData pointer field)
+        return $this->readSlot(Core::cast('uintptr_t *', FFI::addr($owner->$field)));
     }
-    /**
-     * @param \FFI\CData $owner
-     */
 
     private function writePtrField(object $owner, string $field, int $address): void
     {
-        // Only ever called for a currently non-null field, so FFI::addr is safe
+        // Only ever called for a currently non-null field, so FFI::addr is safe.
+        // @phpstan-ignore argument.type (FFI::addr of a dynamic FFI\CData pointer field)
         $slot    = Core::cast('uintptr_t *', FFI::addr($owner->$field));
         $slot[0] = $address;
     }
@@ -319,9 +347,6 @@ final class PayloadRelocator
     }
 
     /** UNSERIALIZE_PTR on a struct field, returning the resolved address (0 if null) */
-    /**
-     * @param \FFI\CData $owner
-     */
     private function unPtr(object $owner, string $field): int
     {
         $stored = $this->ptrValue($owner, $field);
@@ -336,9 +361,6 @@ final class PayloadRelocator
     }
 
     /** SERIALIZE_PTR on a struct field, returning the pre-serialization address (0 if null) */
-    /**
-     * @param \FFI\CData $owner
-     */
     private function serPtr(object $owner, string $field): int
     {
         $address = $this->ptrValue($owner, $field);
@@ -354,7 +376,7 @@ final class PayloadRelocator
     private function unPtrAt(int $slotAddress): int
     {
         $slot   = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $slotAddress));
-        $stored = (int) $slot[0];
+        $stored = $this->readSlot($slot);
         if ($stored === 0) {
             return 0;
         }
@@ -368,7 +390,7 @@ final class PayloadRelocator
     private function serPtrAt(int $slotAddress): int
     {
         $slot    = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $slotAddress));
-        $address = (int) $slot[0];
+        $address = $this->readSlot($slot);
         if ($address === 0) {
             return 0;
         }
@@ -378,9 +400,6 @@ final class PayloadRelocator
     }
 
     // --- interned-string primitives (UNSERIALIZE_STR / SERIALIZE_STR) ------
-    /**
-     * @param \FFI\CData $owner
-     */
 
     private function unStr(object $owner, string $field): void
     {
@@ -398,9 +417,6 @@ final class PayloadRelocator
         // GC flag normalization is deliberately skipped (see class docblock)
         $this->writePtrField($owner, $field, $address);
     }
-    /**
-     * @param \FFI\CData $owner
-     */
 
     private function serStr(object $owner, string $field): void
     {
@@ -421,7 +437,7 @@ final class PayloadRelocator
     private function unStrAt(int $slotAddress): void
     {
         $slot   = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $slotAddress));
-        $stored = (int) $slot[0];
+        $stored = $this->readSlot($slot);
         if ($stored === 0) {
             return;
         }
@@ -437,7 +453,7 @@ final class PayloadRelocator
     private function serStrAt(int $slotAddress): void
     {
         $slot    = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $slotAddress));
-        $address = (int) $slot[0];
+        $address = $this->readSlot($slot);
         if ($address === 0) {
             return;
         }
@@ -457,24 +473,23 @@ final class PayloadRelocator
         if (isset($this->internedXlat[$address])) {
             return $this->internedXlat[$address];
         }
-        $stringPointer = Core::pointerAtAddress('zend_string *', $address);
+        $stringPointer = Core::pointerAtAddress(zend_string::class, $address);
         $length        = $stringPointer->len;
         $structSize    = Core::getAlignedSize($this->zendStringHeaderSize + $length + 1);
 
         $tagged                       = strlen($this->strSection) | 1;
         $this->internedXlat[$address] = $tagged;
-        $this->strSection .= FFI::string(Core::cast('char *', $stringPointer), $structSize);
+        // max(...,0) only states the non-negative aligned size to the analyser
+        $this->strSection .= FFI::string(Core::cast('char *', $stringPointer), max($structSize, 0));
 
         return $tagged;
     }
 
     // --- hashes (zend_file_cache_(un)serialize_hash) -----------------------
-    /**
-     * @param \FFI\CData $ht
-     */
 
     private function unserializeHash(object $ht, callable $each): void
     {
+        /** @var HashTableStruct $ht Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if (($ht->u->flags & self::HASH_FLAG_UNINITIALIZED) !== 0) {
             return;
         }
@@ -487,7 +502,7 @@ final class PayloadRelocator
             $zvalSize = Core::sizeOfType(zval::class);
             $this->requireSpan($dataAddress, $used * $zvalSize, 'packed hashtable data');
             for ($i = 0; $i < $used; $i++) {
-                $zval = Core::pointerAtAddress('zval *', $dataAddress + $i * $zvalSize);
+                $zval = Core::pointerAtAddress(zval::class, $dataAddress + $i * $zvalSize);
                 if ($zval->u1->v->type !== 0) {
                     $each($zval);
                 }
@@ -498,19 +513,17 @@ final class PayloadRelocator
         $bucketSize = Core::sizeOfType(Bucket::class);
         $this->requireSpan($dataAddress, $used * $bucketSize, 'hashtable bucket data');
         for ($i = 0; $i < $used; $i++) {
-            $bucket = Core::pointerAtAddress('Bucket *', $dataAddress + $i * $bucketSize);
+            $bucket = Core::pointerAtAddress(Bucket::class, $dataAddress + $i * $bucketSize);
             if ($bucket->val->u1->v->type !== 0) {
                 $this->unStr($bucket, 'key');
                 $each($bucket->val);
             }
         }
     }
-    /**
-     * @param \FFI\CData $ht
-     */
 
     private function serializeHash(object $ht, callable $each): void
     {
+        /** @var HashTableStruct $ht Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if (($ht->u->flags & self::HASH_FLAG_UNINITIALIZED) !== 0) {
             $this->writePtrField($ht, 'arData', 0);
 
@@ -524,7 +537,7 @@ final class PayloadRelocator
         if (($ht->u->flags & self::HASH_FLAG_PACKED) !== 0) {
             $zvalSize = Core::sizeOfType(zval::class);
             for ($i = 0; $i < $used; $i++) {
-                $zval = Core::pointerAtAddress('zval *', $dataAddress + $i * $zvalSize);
+                $zval = Core::pointerAtAddress(zval::class, $dataAddress + $i * $zvalSize);
                 if ($zval->u1->v->type !== 0) {
                     $each($zval);
                 }
@@ -534,7 +547,7 @@ final class PayloadRelocator
         }
         $bucketSize = Core::sizeOfType(Bucket::class);
         for ($i = 0; $i < $used; $i++) {
-            $bucket = Core::pointerAtAddress('Bucket *', $dataAddress + $i * $bucketSize);
+            $bucket = Core::pointerAtAddress(Bucket::class, $dataAddress + $i * $bucketSize);
             if ($bucket->val->u1->v->type !== 0) {
                 $this->serStr($bucket, 'key');
                 $each($bucket->val);
@@ -543,12 +556,10 @@ final class PayloadRelocator
     }
 
     // --- zvals -------------------------------------------------------------
-    /**
-     * @param \FFI\CData $zval
-     */
 
     private function unserializeZval(object $zval): void
     {
+        /** @var zval $zval Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         switch ($zval->u1->v->type) {
             case self::IS_STRING:
                 $stored = $this->ptrValue($zval->value, 'str');
@@ -560,7 +571,7 @@ final class PayloadRelocator
                 if (!$this->isUnserialized($this->ptrValue($zval->value, 'arr'))) {
                     $arrAddress = $this->unPtr($zval->value, 'arr');
                     $this->unserializeHash(
-                        Core::pointerAtAddress('zend_array *', $arrAddress),
+                        Core::pointerAtAddress(HashTableStruct::class, $arrAddress),
                         $this->unserializeZval(...),
                     );
                 }
@@ -576,12 +587,10 @@ final class PayloadRelocator
                 break;
         }
     }
-    /**
-     * @param \FFI\CData $zval
-     */
 
     private function serializeZval(object $zval): void
     {
+        /** @var zval $zval Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         switch ($zval->u1->v->type) {
             case self::IS_STRING:
                 if (!$this->isSerialized($this->ptrValue($zval->value, 'str'))) {
@@ -592,7 +601,7 @@ final class PayloadRelocator
                 if (!$this->isSerialized($this->ptrValue($zval->value, 'arr'))) {
                     $arrAddress = $this->serPtr($zval->value, 'arr');
                     $this->serializeHash(
-                        Core::pointerAtAddress('zend_array *', $arrAddress),
+                        Core::pointerAtAddress(HashTableStruct::class, $arrAddress),
                         $this->serializeZval(...),
                     );
                 }
@@ -616,15 +625,15 @@ final class PayloadRelocator
     {
         // The node header (kind + attr) must fit before it is read
         $this->requireSpan($astAddress, Core::sizeOfType(zend_ast::class), 'zend_ast node');
-        $ast  = Core::pointerAtAddress('zend_ast *', $astAddress);
+        $ast  = Core::pointerAtAddress(zend_ast::class, $astAddress);
         $kind = $ast->kind;
         if ($kind === self::ZEND_AST_ZVAL || $kind === self::ZEND_AST_CONSTANT) {
-            $this->unserializeZval(Core::pointerAtAddress('zend_ast_zval *', $astAddress)->val);
+            $this->unserializeZval(Core::pointerAtAddress(zend_ast_zval::class, $astAddress)->val);
 
             return;
         }
         if (($kind >> self::ZEND_AST_IS_LIST_SHIFT & 1) !== 0) {
-            $list      = Core::pointerAtAddress('zend_ast_list *', $astAddress);
+            $list      = Core::pointerAtAddress(zend_ast_list::class, $astAddress);
             $childBase = $astAddress + Core::sizeOfType(zend_ast_list::class) - PHP_INT_SIZE;
             $count     = $this->requireCount((int) $list->children, 'ast list children');
         } else {
@@ -634,7 +643,7 @@ final class PayloadRelocator
         $this->requireSpan($childBase, $count * PHP_INT_SIZE, 'ast children slots');
         for ($i = 0; $i < $count; $i++) {
             $slot  = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $childBase + $i * PHP_INT_SIZE));
-            $child = (int) $slot[0];
+            $child = $this->readSlot($slot);
             if ($child !== 0 && !$this->isUnserialized($child)) {
                 $this->requireOffset($child, 'ast child');
                 $slot[0] = $this->base + $child;
@@ -645,15 +654,15 @@ final class PayloadRelocator
 
     private function serializeAst(int $astAddress): void
     {
-        $ast  = Core::pointerAtAddress('zend_ast *', $astAddress);
+        $ast  = Core::pointerAtAddress(zend_ast::class, $astAddress);
         $kind = $ast->kind;
         if ($kind === self::ZEND_AST_ZVAL || $kind === self::ZEND_AST_CONSTANT) {
-            $this->serializeZval(Core::pointerAtAddress('zend_ast_zval *', $astAddress)->val);
+            $this->serializeZval(Core::pointerAtAddress(zend_ast_zval::class, $astAddress)->val);
 
             return;
         }
         if (($kind >> self::ZEND_AST_IS_LIST_SHIFT & 1) !== 0) {
-            $list      = Core::pointerAtAddress('zend_ast_list *', $astAddress);
+            $list      = Core::pointerAtAddress(zend_ast_list::class, $astAddress);
             $childBase = $astAddress + Core::sizeOfType(zend_ast_list::class) - PHP_INT_SIZE;
             $count     = $list->children;
         } else {
@@ -662,7 +671,7 @@ final class PayloadRelocator
         }
         for ($i = 0; $i < $count; $i++) {
             $slot  = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $childBase + $i * PHP_INT_SIZE));
-            $child = (int) $slot[0];
+            $child = $this->readSlot($slot);
             if ($child !== 0 && !$this->isSerialized($child)) {
                 $slot[0] = $child - $this->base;
                 $this->serializeAst($child);
@@ -671,9 +680,6 @@ final class PayloadRelocator
     }
 
     // --- attributes --------------------------------------------------------
-    /**
-     * @param \FFI\CData $owner
-     */
 
     private function unserializeAttributes(object $owner, string $field): void
     {
@@ -683,13 +689,10 @@ final class PayloadRelocator
         }
         $htAddress = $this->unPtr($owner, $field);
         $this->unserializeHash(
-            Core::pointerAtAddress('HashTable *', $htAddress),
+            Core::pointerAtAddress(HashTableStruct::class, $htAddress),
             $this->unserializeAttribute(...),
         );
     }
-    /**
-     * @param \FFI\CData $owner
-     */
 
     private function serializeAttributes(object $owner, string $field): void
     {
@@ -699,17 +702,15 @@ final class PayloadRelocator
         }
         $htAddress = $this->serPtr($owner, $field);
         $this->serializeHash(
-            Core::pointerAtAddress('HashTable *', $htAddress),
+            Core::pointerAtAddress(HashTableStruct::class, $htAddress),
             $this->serializeAttribute(...),
         );
     }
-    /**
-     * @param \FFI\CData $zval
-     */
 
     private function unserializeAttribute(object $zval): void
     {
-        $attr = Core::pointerAtAddress('zend_attribute *', $this->unPtr($zval->value, 'ptr'));
+        /** @var zval $zval Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
+        $attr = Core::pointerAtAddress(zend_attribute::class, $this->unPtr($zval->value, 'ptr'));
         $this->unStr($attr, 'name');
         $this->unStr($attr, 'lcname');
         $argSize = Core::sizeOfType(zend_attribute_arg::class);
@@ -717,69 +718,52 @@ final class PayloadRelocator
         $argc    = $this->requireCount((int) $attr->argc, 'attribute argc');
         $this->requireSpan($argBase, $argc * $argSize, 'attribute args');
         for ($i = 0; $i < $argc; $i++) {
-            $arg = Core::pointerAtAddress('zend_attribute_arg *', $argBase + $i * $argSize);
+            $arg = Core::pointerAtAddress(zend_attribute_arg::class, $argBase + $i * $argSize);
             $this->unStr($arg, 'name');
             $this->unserializeZval($arg->value);
         }
     }
-    /**
-     * @param \FFI\CData $zval
-     */
 
     private function serializeAttribute(object $zval): void
     {
+        /** @var zval $zval Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         $address = $this->serPtr($zval->value, 'ptr');
-        $attr    = Core::pointerAtAddress('zend_attribute *', $address);
+        $attr    = Core::pointerAtAddress(zend_attribute::class, $address);
         $this->serStr($attr, 'name');
         $this->serStr($attr, 'lcname');
         $argSize = Core::sizeOfType(zend_attribute_arg::class);
         $argBase = Core::addressOf($attr->args);
         for ($i = 0; $i < $attr->argc; $i++) {
-            $arg = Core::pointerAtAddress('zend_attribute_arg *', $argBase + $i * $argSize);
+            $arg = Core::pointerAtAddress(zend_attribute_arg::class, $argBase + $i * $argSize);
             $this->serStr($arg, 'name');
             $this->serializeZval($arg->value);
         }
     }
 
     // --- types (zend_type name/list) ---------------------------------------
-    /**
-     * @param \FFI\CData $owner
-     */
-
-    private function unserializeType(object $owner, string $field): void
-    {
-        $this->unserializeTypeStruct($owner->$field);
-    }
-    /**
-     * @param \FFI\CData $owner
-     */
-
-    private function serializeType(object $owner, string $field): void
-    {
-        $this->serializeTypeStruct($owner->$field);
-    }
 
     /**
      * One zend_type in place - the ZEND_TYPE_HAS_LIST branch of
      * zend_file_cache_unserialize_type relocates the zend_type_list pointer and
      * recurses into every entry, so DNF sub-lists like (A&B)|C unfold naturally.
      *
-     * @param \FFI\CData $type a zend_type view (embedded field or list entry)
+     * @param zend_type $type a zend_type view (embedded field or list entry)
      */
     private function unserializeTypeStruct(object $type): void
     {
+        /** @var zend_type $type Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         $typeMask = $type->type_mask;
         if (($typeMask & self::TYPE_LIST_BIT) !== 0) {
             $listAddress = $this->unPtr($type, 'ptr');
             $this->requireSpan($listAddress, Core::sizeOfType(zend_type_list::class), 'zend_type_list header');
-            $list     = Core::pointerAtAddress('zend_type_list *', $listAddress);
+            $list     = Core::pointerAtAddress(zend_type_list::class, $listAddress);
             $typeSize = Core::sizeOfType(zend_type::class);
             // ZEND_TYPE_LIST_FOREACH: entries start at list->types (the flexible member)
             $entryBase = $listAddress + Core::sizeOfType(zend_type_list::class) - $typeSize;
             $numTypes  = $this->requireCount((int) $list->num_types, 'type list num_types');
             $this->requireSpan($entryBase, $numTypes * $typeSize, 'type list entries');
             for ($i = 0; $i < $numTypes; $i++) {
-                $this->unserializeTypeStruct(Core::pointerAtAddress('zend_type *', $entryBase + $i * $typeSize));
+                $this->unserializeTypeStruct(Core::pointerAtAddress(zend_type::class, $entryBase + $i * $typeSize));
             }
 
             return;
@@ -794,18 +778,19 @@ final class PayloadRelocator
      * stores the list pointer as an offset but keeps walking the entries through
      * the still-real address (its SERIALIZE_PTR/UNSERIALIZE_PTR pair).
      *
-     * @param \FFI\CData $type a zend_type view (embedded field or list entry)
+     * @param zend_type $type a zend_type view (embedded field or list entry)
      */
     private function serializeTypeStruct(object $type): void
     {
+        /** @var zend_type $type Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         $typeMask = $type->type_mask;
         if (($typeMask & self::TYPE_LIST_BIT) !== 0) {
             $listAddress = $this->serPtr($type, 'ptr');
-            $list        = Core::pointerAtAddress('zend_type_list *', $listAddress);
+            $list        = Core::pointerAtAddress(zend_type_list::class, $listAddress);
             $typeSize    = Core::sizeOfType(zend_type::class);
             $entryBase   = $listAddress + Core::sizeOfType(zend_type_list::class) - $typeSize;
             for ($i = 0; $i < $list->num_types; $i++) {
-                $this->serializeTypeStruct(Core::pointerAtAddress('zend_type *', $entryBase + $i * $typeSize));
+                $this->serializeTypeStruct(Core::pointerAtAddress(zend_type::class, $entryBase + $i * $typeSize));
             }
 
             return;
@@ -816,30 +801,24 @@ final class PayloadRelocator
     }
 
     // --- op_array (the executable body) ------------------------------------
-    /**
-     * @param \FFI\CData $zval
-     */
 
     private function unserializeFunc(object $zval): void
     {
-        $func = Core::pointerAtAddress('zend_function *', $this->unPtr($zval->value, 'func'));
+        /** @var zval $zval Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
+        $func = Core::pointerAtAddress(zend_function::class, $this->unPtr($zval->value, 'func'));
         $this->unserializeOpArray($func->op_array);
     }
-    /**
-     * @param \FFI\CData $zval
-     */
 
     private function serializeFunc(object $zval): void
     {
-        $func = Core::pointerAtAddress('zend_function *', $this->serPtr($zval->value, 'func'));
+        /** @var zval $zval Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
+        $func = Core::pointerAtAddress(zend_function::class, $this->serPtr($zval->value, 'func'));
         $this->serializeOpArray($func->op_array);
     }
-    /**
-     * @param \FFI\CData $opArray
-     */
 
     private function unserializeOpArray(object $opArray): void
     {
+        /** @var zend_op_array $opArray Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         // ZEND_MAP_PTR / run-time cache normalization is skipped (never executed here)
         if ($this->isUnserialized($this->ptrValue($opArray, 'opcodes'))) {
             return; // shared method body already relocated
@@ -866,7 +845,7 @@ final class PayloadRelocator
 
         if ($this->ptrValue($opArray, 'static_variables') !== 0) {
             $address = $this->unPtr($opArray, 'static_variables');
-            $this->unserializeHash(Core::pointerAtAddress('zend_array *', $address), $this->unserializeZval(...));
+            $this->unserializeHash(Core::pointerAtAddress(HashTableStruct::class, $address), $this->unserializeZval(...));
         }
         if ($this->ptrValue($opArray, 'literals') !== 0) {
             $address  = $this->unPtr($opArray, 'literals');
@@ -874,7 +853,7 @@ final class PayloadRelocator
             $count    = $this->requireCount((int) $opArray->last_literal, 'op_array last_literal');
             $this->requireSpan($address, $count * $zvalSize, 'op_array literals');
             for ($i = 0; $i < $count; $i++) {
-                $this->unserializeZval(Core::pointerAtAddress('zval *', $address + $i * $zvalSize));
+                $this->unserializeZval(Core::pointerAtAddress(zval::class, $address + $i * $zvalSize));
             }
         }
         // opcodes: only the array pointer is relocated. Per-opline operands are
@@ -897,7 +876,7 @@ final class PayloadRelocator
             $this->requireSpan($defsAddress, $count * PHP_INT_SIZE, 'dynamic_func_defs table');
             for ($i = 0; $i < $count; $i++) {
                 $defAddress = $this->unPtrAt($defsAddress + $i * PHP_INT_SIZE);
-                $this->unserializeOpArray(Core::pointerAtAddress('zend_op_array *', $defAddress));
+                $this->unserializeOpArray(Core::pointerAtAddress(zend_op_array::class, $defAddress));
             }
         }
         $this->unStr($opArray, 'function_name');
@@ -909,12 +888,10 @@ final class PayloadRelocator
         $this->unPtr($opArray, 'prototype');
         $this->unPtr($opArray, 'prop_info');
     }
-    /**
-     * @param \FFI\CData $opArray
-     */
 
     private function serializeOpArray(object $opArray): void
     {
+        /** @var zend_op_array $opArray Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->isSerialized($this->ptrValue($opArray, 'opcodes'))) {
             return;
         }
@@ -944,13 +921,13 @@ final class PayloadRelocator
 
         if ($this->ptrValue($opArray, 'static_variables') !== 0) {
             $address = $this->serPtr($opArray, 'static_variables');
-            $this->serializeHash(Core::pointerAtAddress('zend_array *', $address), $this->serializeZval(...));
+            $this->serializeHash(Core::pointerAtAddress(HashTableStruct::class, $address), $this->serializeZval(...));
         }
         if ($this->ptrValue($opArray, 'literals') !== 0) {
             $address  = $this->serPtr($opArray, 'literals');
             $zvalSize = Core::sizeOfType(zval::class);
             for ($i = 0; $i < $opArray->last_literal; $i++) {
-                $this->serializeZval(Core::pointerAtAddress('zval *', $address + $i * $zvalSize));
+                $this->serializeZval(Core::pointerAtAddress(zval::class, $address + $i * $zvalSize));
             }
         }
         $this->serPtr($opArray, 'opcodes');
@@ -962,7 +939,7 @@ final class PayloadRelocator
             $defsAddress = $this->serPtr($opArray, 'dynamic_func_defs');
             for ($i = 0; $i < $opArray->num_dynamic_func_defs; $i++) {
                 $defAddress = $this->serPtrAt($defsAddress + $i * PHP_INT_SIZE);
-                $this->serializeOpArray(Core::pointerAtAddress('zend_op_array *', $defAddress));
+                $this->serializeOpArray(Core::pointerAtAddress(zend_op_array::class, $defAddress));
             }
         }
         $this->serStr($opArray, 'function_name');
@@ -978,10 +955,10 @@ final class PayloadRelocator
 
     /**
      * @return array{int, int} [start index, end index) for the arg_info walk
-     * @param \FFI\CData $opArray
      */
     private function argInfoBounds(object $opArray): array
     {
+        /** @var zend_op_array $opArray Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         $count = $this->requireCount((int) $opArray->num_args, 'op_array num_args');
         $start = 0;
         if (($opArray->fn_flags & self::ZEND_ACC_HAS_RETURN_TYPE) !== 0) {
@@ -993,12 +970,10 @@ final class PayloadRelocator
 
         return [$start, $count];
     }
-    /**
-     * @param \FFI\CData $opArray
-     */
 
     private function unserializeArgInfo(object $opArray): void
     {
+        /** @var zend_op_array $opArray Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->ptrValue($opArray, 'arg_info') === 0) {
             return;
         }
@@ -1008,19 +983,17 @@ final class PayloadRelocator
         // The array starts at arg_info[start] (start is -1 for a return type)
         $this->requireSpan($address + $start * $argInfoSize, ($end - $start) * $argInfoSize, 'op_array arg_info');
         for ($i = $start; $i < $end; $i++) {
-            $arg = Core::pointerAtAddress('zend_arg_info *', $address + $i * $argInfoSize);
+            $arg = Core::pointerAtAddress(zend_arg_info::class, $address + $i * $argInfoSize);
             if (!$this->isUnserialized($this->ptrValue($arg, 'name'))) {
                 $this->unStr($arg, 'name');
             }
-            $this->unserializeType($arg, 'type');
+            $this->unserializeTypeStruct($arg->type);
         }
     }
-    /**
-     * @param \FFI\CData $opArray
-     */
 
     private function serializeArgInfo(object $opArray): void
     {
+        /** @var zend_op_array $opArray Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->ptrValue($opArray, 'arg_info') === 0) {
             return;
         }
@@ -1028,19 +1001,17 @@ final class PayloadRelocator
         $argInfoSize   = Core::sizeOfType(zend_arg_info::class);
         [$start, $end] = $this->argInfoBounds($opArray);
         for ($i = $start; $i < $end; $i++) {
-            $arg = Core::pointerAtAddress('zend_arg_info *', $address + $i * $argInfoSize);
+            $arg = Core::pointerAtAddress(zend_arg_info::class, $address + $i * $argInfoSize);
             if (!$this->isSerialized($this->ptrValue($arg, 'name'))) {
                 $this->serStr($arg, 'name');
             }
-            $this->serializeType($arg, 'type');
+            $this->serializeTypeStruct($arg->type);
         }
     }
-    /**
-     * @param \FFI\CData $opArray
-     */
 
     private function unserializeVars(object $opArray): void
     {
+        /** @var zend_op_array $opArray Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->ptrValue($opArray, 'vars') === 0) {
             return;
         }
@@ -1050,22 +1021,20 @@ final class PayloadRelocator
         for ($i = 0; $i < $count; $i++) {
             $slot = Core::pointerAtAddress('zend_string **', $address + $i * PHP_INT_SIZE);
             $view = Core::cast('uintptr_t *', $slot);
-            if (!$this->isUnserialized((int) $view[0]) && (int) $view[0] !== 0) {
-                $this->requireStringOffset((int) $view[0], 'op_array var name');
-                if (((int) $view[0] & 1) !== 0) {
-                    $view[0] = $this->strSectionBase + ((int) $view[0] & ~1);
+            if (!$this->isUnserialized($this->readSlot($view)) && $this->readSlot($view) !== 0) {
+                $this->requireStringOffset($this->readSlot($view), 'op_array var name');
+                if (($this->readSlot($view) & 1) !== 0) {
+                    $view[0] = $this->strSectionBase + ($this->readSlot($view) & ~1);
                 } else {
-                    $view[0] = $this->base + (int) $view[0];
+                    $view[0] = $this->base + $this->readSlot($view);
                 }
             }
         }
     }
-    /**
-     * @param \FFI\CData $opArray
-     */
 
     private function serializeVars(object $opArray): void
     {
+        /** @var zend_op_array $opArray Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->ptrValue($opArray, 'vars') === 0) {
             return;
         }
@@ -1073,7 +1042,7 @@ final class PayloadRelocator
         for ($i = 0; $i < $opArray->last_var; $i++) {
             $slot   = Core::pointerAtAddress('zend_string **', $address + $i * PHP_INT_SIZE);
             $view   = Core::cast('uintptr_t *', $slot);
-            $stored = (int) $view[0];
+            $stored = $this->readSlot($view);
             if ($stored === 0 || $this->isSerialized($stored)) {
                 continue;
             }
@@ -1086,13 +1055,11 @@ final class PayloadRelocator
     }
 
     // --- classes -----------------------------------------------------------
-    /**
-     * @param \FFI\CData $zval
-     */
 
     private function unserializeClass(object $zval): void
     {
-        $ce = Core::pointerAtAddress('zend_class_entry *', $this->unPtr($zval->value, 'ce'));
+        /** @var zval $zval Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
+        $ce = Core::pointerAtAddress(zend_class_entry::class, $this->unPtr($zval->value, 'ce'));
         $this->unStr($ce, 'name');
         if ($this->ptrValue($ce, 'parent') !== 0) {
             if (($ce->ce_flags & self::ZEND_ACC_LINKED) === 0) {
@@ -1124,13 +1091,11 @@ final class PayloadRelocator
         $this->unserializeIteratorFuncs($ce);
         // MAP_PTR / default_object_handlers / get_iterator are execution-only (skipped)
     }
-    /**
-     * @param \FFI\CData $zval
-     */
 
     private function serializeClass(object $zval): void
     {
-        $ce = Core::pointerAtAddress('zend_class_entry *', $this->serPtr($zval->value, 'ce'));
+        /** @var zval $zval Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
+        $ce = Core::pointerAtAddress(zend_class_entry::class, $this->serPtr($zval->value, 'ce'));
         $this->serStr($ce, 'name');
         if ($this->ptrValue($ce, 'parent') !== 0) {
             if (($ce->ce_flags & self::ZEND_ACC_LINKED) === 0) {
@@ -1167,12 +1132,10 @@ final class PayloadRelocator
         '__serialize', '__unserialize', '__isset', '__unset', '__tostring',
         '__callstatic', '__debugInfo',
     ];
-    /**
-     * @param \FFI\CData $ce
-     */
 
     private function unserializePropertyTable(object $ce, string $field, int $count): void
     {
+        /** @var zend_class_entry $ce Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->ptrValue($ce, $field) === 0) {
             return;
         }
@@ -1181,30 +1144,26 @@ final class PayloadRelocator
         $count    = $this->requireCount($count, "class {$field} count");
         $this->requireSpan($address, $count * $zvalSize, "class {$field}");
         for ($i = 0; $i < $count; $i++) {
-            $this->unserializeZval(Core::pointerAtAddress('zval *', $address + $i * $zvalSize));
+            $this->unserializeZval(Core::pointerAtAddress(zval::class, $address + $i * $zvalSize));
         }
     }
-    /**
-     * @param \FFI\CData $ce
-     */
 
     private function serializePropertyTable(object $ce, string $field, int $count): void
     {
+        /** @var zend_class_entry $ce Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->ptrValue($ce, $field) === 0) {
             return;
         }
         $address  = $this->serPtr($ce, $field);
         $zvalSize = Core::sizeOfType(zval::class);
         for ($i = 0; $i < $count; $i++) {
-            $this->serializeZval(Core::pointerAtAddress('zval *', $address + $i * $zvalSize));
+            $this->serializeZval(Core::pointerAtAddress(zval::class, $address + $i * $zvalSize));
         }
     }
-    /**
-     * @param \FFI\CData $ce
-     */
 
     private function unserializePropInfoTable(object $ce): void
     {
+        /** @var zend_class_entry $ce Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->ptrValue($ce, 'properties_info_table') === 0) {
             return;
         }
@@ -1213,68 +1172,60 @@ final class PayloadRelocator
         $this->requireSpan($address, $count * PHP_INT_SIZE, 'properties_info_table');
         for ($i = 0; $i < $count; $i++) {
             $slot = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $address + $i * PHP_INT_SIZE));
-            if ((int) $slot[0] !== 0) {
-                $this->requireOffset((int) $slot[0], 'properties_info_table entry');
-                $slot[0] = $this->base + (int) $slot[0];
+            if ($this->readSlot($slot) !== 0) {
+                $this->requireOffset($this->readSlot($slot), 'properties_info_table entry');
+                $slot[0] = $this->base + $this->readSlot($slot);
             }
         }
     }
-    /**
-     * @param \FFI\CData $ce
-     */
 
     private function serializePropInfoTable(object $ce): void
     {
+        /** @var zend_class_entry $ce Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->ptrValue($ce, 'properties_info_table') === 0) {
             return;
         }
         $address = $this->serPtr($ce, 'properties_info_table');
         for ($i = 0; $i < $ce->default_properties_count; $i++) {
             $slot   = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $address + $i * PHP_INT_SIZE));
-            $stored = (int) $slot[0];
+            $stored = $this->readSlot($slot);
             if ($stored !== 0) {
                 $slot[0] = $stored - $this->base;
             }
         }
     }
-    /**
-     * @param \FFI\CData $ce
-     */
 
     private function unserializeClassNames(object $ce, string $field, int $count): void
     {
+        /** @var zend_class_entry $ce Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         $address  = $this->unPtr($ce, $field);
         $nameSize = Core::sizeOfType(zend_class_name::class);
         $count    = $this->requireCount($count, "class {$field} count");
         $this->requireSpan($address, $count * $nameSize, "class {$field}");
         for ($i = 0; $i < $count; $i++) {
-            $name = Core::pointerAtAddress('zend_class_name *', $address + $i * $nameSize);
+            $name = Core::pointerAtAddress(zend_class_name::class, $address + $i * $nameSize);
             $this->unStr($name, 'name');
             $this->unStr($name, 'lc_name');
         }
     }
-    /**
-     * @param \FFI\CData $ce
-     */
 
     private function serializeClassNames(object $ce, string $field, int $count): void
     {
+        /** @var zend_class_entry $ce Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         $address  = $this->serPtr($ce, $field);
         $nameSize = Core::sizeOfType(zend_class_name::class);
         for ($i = 0; $i < $count; $i++) {
-            $name = Core::pointerAtAddress('zend_class_name *', $address + $i * $nameSize);
+            $name = Core::pointerAtAddress(zend_class_name::class, $address + $i * $nameSize);
             $this->serStr($name, 'name');
             $this->serStr($name, 'lc_name');
         }
     }
 
     // --- traits (the num_traits branch of zend_file_cache_(un)serialize_class)
-    /**
-     * @param \FFI\CData $ce
-     */
 
     private function unserializeTraitAliases(object $ce): void
     {
+        /** @var zend_class_entry $ce Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->ptrValue($ce, 'trait_aliases') === 0) {
             return;
         }
@@ -1283,7 +1234,7 @@ final class PayloadRelocator
         // Bound the terminator scan: each slot read must stay inside the region
         $this->requireSpan($slotAddress, PHP_INT_SIZE, 'trait_aliases array');
         while (($aliasAddress = $this->unPtrAt($slotAddress)) !== 0) {
-            $alias = Core::pointerAtAddress('zend_trait_alias *', $aliasAddress);
+            $alias = Core::pointerAtAddress(zend_trait_alias::class, $aliasAddress);
             $this->unStr($alias->trait_method, 'method_name');
             $this->unStr($alias->trait_method, 'class_name');
             $this->unStr($alias, 'alias');
@@ -1291,30 +1242,26 @@ final class PayloadRelocator
             $this->requireSpan($slotAddress, PHP_INT_SIZE, 'trait_aliases array');
         }
     }
-    /**
-     * @param \FFI\CData $ce
-     */
 
     private function serializeTraitAliases(object $ce): void
     {
+        /** @var zend_class_entry $ce Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->ptrValue($ce, 'trait_aliases') === 0) {
             return;
         }
         $slotAddress = $this->serPtr($ce, 'trait_aliases');
         while (($aliasAddress = $this->serPtrAt($slotAddress)) !== 0) {
-            $alias = Core::pointerAtAddress('zend_trait_alias *', $aliasAddress);
+            $alias = Core::pointerAtAddress(zend_trait_alias::class, $aliasAddress);
             $this->serStr($alias->trait_method, 'method_name');
             $this->serStr($alias->trait_method, 'class_name');
             $this->serStr($alias, 'alias');
             $slotAddress += PHP_INT_SIZE;
         }
     }
-    /**
-     * @param \FFI\CData $ce
-     */
 
     private function unserializeTraitPrecedences(object $ce): void
     {
+        /** @var zend_class_entry $ce Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->ptrValue($ce, 'trait_precedences') === 0) {
             return;
         }
@@ -1322,7 +1269,7 @@ final class PayloadRelocator
         $slotAddress = $this->unPtr($ce, 'trait_precedences');
         $this->requireSpan($slotAddress, PHP_INT_SIZE, 'trait_precedences array');
         while (($precedenceAddress = $this->unPtrAt($slotAddress)) !== 0) {
-            $precedence = Core::pointerAtAddress('zend_trait_precedence *', $precedenceAddress);
+            $precedence = Core::pointerAtAddress(zend_trait_precedence::class, $precedenceAddress);
             $this->unStr($precedence->trait_method, 'method_name');
             $this->unStr($precedence->trait_method, 'class_name');
             $excludeBase = Core::addressOf($precedence->exclude_class_names);
@@ -1335,18 +1282,16 @@ final class PayloadRelocator
             $this->requireSpan($slotAddress, PHP_INT_SIZE, 'trait_precedences array');
         }
     }
-    /**
-     * @param \FFI\CData $ce
-     */
 
     private function serializeTraitPrecedences(object $ce): void
     {
+        /** @var zend_class_entry $ce Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->ptrValue($ce, 'trait_precedences') === 0) {
             return;
         }
         $slotAddress = $this->serPtr($ce, 'trait_precedences');
         while (($precedenceAddress = $this->serPtrAt($slotAddress)) !== 0) {
-            $precedence = Core::pointerAtAddress('zend_trait_precedence *', $precedenceAddress);
+            $precedence = Core::pointerAtAddress(zend_trait_precedence::class, $precedenceAddress);
             $this->serStr($precedence->trait_method, 'method_name');
             $this->serStr($precedence->trait_method, 'class_name');
             $excludeBase = Core::addressOf($precedence->exclude_class_names);
@@ -1356,16 +1301,14 @@ final class PayloadRelocator
             $slotAddress += PHP_INT_SIZE;
         }
     }
-    /**
-     * @param \FFI\CData $zval
-     */
 
     private function unserializePropInfo(object $zval): void
     {
+        /** @var zval $zval Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->isUnserialized($this->ptrValue($zval->value, 'ptr'))) {
             return;
         }
-        $prop = Core::pointerAtAddress('zend_property_info *', $this->unPtr($zval->value, 'ptr'));
+        $prop = Core::pointerAtAddress(zend_property_info::class, $this->unPtr($zval->value, 'ptr'));
         if ($this->isUnserialized($this->ptrValue($prop, 'ce'))) {
             return;
         }
@@ -1384,22 +1327,20 @@ final class PayloadRelocator
             for ($i = 0; $i < self::PROPERTY_HOOK_COUNT; $i++) {
                 $hookAddress = $this->unPtrAt($hooksAddress + $i * PHP_INT_SIZE);
                 if ($hookAddress !== 0) {
-                    $this->unserializeOpArray(Core::pointerAtAddress('zend_function *', $hookAddress)->op_array);
+                    $this->unserializeOpArray(Core::pointerAtAddress(zend_function::class, $hookAddress)->op_array);
                 }
             }
         }
-        $this->unserializeType($prop, 'type');
+        $this->unserializeTypeStruct($prop->type);
     }
-    /**
-     * @param \FFI\CData $zval
-     */
 
     private function serializePropInfo(object $zval): void
     {
+        /** @var zval $zval Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->isSerialized($this->ptrValue($zval->value, 'ptr'))) {
             return;
         }
-        $prop = Core::pointerAtAddress('zend_property_info *', $this->serPtr($zval->value, 'ptr'));
+        $prop = Core::pointerAtAddress(zend_property_info::class, $this->serPtr($zval->value, 'ptr'));
         if ($this->isSerialized($this->ptrValue($prop, 'ce'))) {
             return;
         }
@@ -1417,22 +1358,20 @@ final class PayloadRelocator
             for ($i = 0; $i < self::PROPERTY_HOOK_COUNT; $i++) {
                 $hookAddress = $this->serPtrAt($hooksAddress + $i * PHP_INT_SIZE);
                 if ($hookAddress !== 0) {
-                    $this->serializeOpArray(Core::pointerAtAddress('zend_function *', $hookAddress)->op_array);
+                    $this->serializeOpArray(Core::pointerAtAddress(zend_function::class, $hookAddress)->op_array);
                 }
             }
         }
-        $this->serializeType($prop, 'type');
+        $this->serializeTypeStruct($prop->type);
     }
-    /**
-     * @param \FFI\CData $zval
-     */
 
     private function unserializeClassConstant(object $zval): void
     {
+        /** @var zval $zval Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->isUnserialized($this->ptrValue($zval->value, 'ptr'))) {
             return;
         }
-        $constant = Core::pointerAtAddress('zend_class_constant *', $this->unPtr($zval->value, 'ptr'));
+        $constant = Core::pointerAtAddress(zend_class_constant::class, $this->unPtr($zval->value, 'ptr'));
         if ($this->isUnserialized($this->ptrValue($constant, 'ce'))) {
             return;
         }
@@ -1442,18 +1381,16 @@ final class PayloadRelocator
             $this->unStr($constant, 'doc_comment');
         }
         $this->unserializeAttributes($constant, 'attributes');
-        $this->unserializeType($constant, 'type');
+        $this->unserializeTypeStruct($constant->type);
     }
-    /**
-     * @param \FFI\CData $zval
-     */
 
     private function serializeClassConstant(object $zval): void
     {
+        /** @var zval $zval Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->isSerialized($this->ptrValue($zval->value, 'ptr'))) {
             return;
         }
-        $constant = Core::pointerAtAddress('zend_class_constant *', $this->serPtr($zval->value, 'ptr'));
+        $constant = Core::pointerAtAddress(zend_class_constant::class, $this->serPtr($zval->value, 'ptr'));
         if ($this->isSerialized($this->ptrValue($constant, 'ce'))) {
             return;
         }
@@ -1463,11 +1400,8 @@ final class PayloadRelocator
             $this->serStr($constant, 'doc_comment');
         }
         $this->serializeAttributes($constant, 'attributes');
-        $this->serializeType($constant, 'type');
+        $this->serializeTypeStruct($constant->type);
     }
-    /**
-     * @param \FFI\CData $ce
-     */
 
     /**
      * zf_* field order matches the C walk (zend_file_cache.c), not the struct layout.
@@ -1484,36 +1418,34 @@ final class PayloadRelocator
      * the placeholder is preserved verbatim like every other execution-only field
      * and the written file keeps the exact bytes the engine expects.
      *
-     * @param \FFI\CData $ce
      */
     private function unserializeIteratorFuncs(object $ce): void
     {
+        /** @var zend_class_entry $ce Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->ptrValue($ce, 'iterator_funcs_ptr') !== 0) {
             $address = $this->unPtr($ce, 'iterator_funcs_ptr');
-            $funcs   = Core::pointerAtAddress('zend_class_iterator_funcs *', $address);
+            $funcs   = Core::pointerAtAddress(zend_class_iterator_funcs::class, $address);
             foreach (self::ITERATOR_FUNC_FIELDS as $field) {
                 $this->unPtr($funcs, $field);
             }
         }
         if ($this->ptrValue($ce, 'arrayaccess_funcs_ptr') !== 0) {
             $address = $this->unPtr($ce, 'arrayaccess_funcs_ptr');
-            $funcs   = Core::pointerAtAddress('zend_class_arrayaccess_funcs *', $address);
+            $funcs   = Core::pointerAtAddress(zend_class_arrayaccess_funcs::class, $address);
             foreach (self::ARRAYACCESS_FUNC_FIELDS as $field) {
                 $this->unPtr($funcs, $field);
             }
         }
     }
-    /**
-     * @param \FFI\CData $ce
-     */
 
     private function serializeIteratorFuncs(object $ce): void
     {
+        /** @var zend_class_entry $ce Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         // The C serialize converts the zf_* members through the still-real struct
         // pointer first and the struct pointer itself last; mirrored exactly
         $iteratorAddress = $this->ptrValue($ce, 'iterator_funcs_ptr');
         if ($iteratorAddress !== 0) {
-            $funcs = Core::pointerAtAddress('zend_class_iterator_funcs *', $iteratorAddress);
+            $funcs = Core::pointerAtAddress(zend_class_iterator_funcs::class, $iteratorAddress);
             foreach (self::ITERATOR_FUNC_FIELDS as $field) {
                 $this->serPtr($funcs, $field);
             }
@@ -1521,7 +1453,7 @@ final class PayloadRelocator
         }
         $arrayAccessAddress = $this->ptrValue($ce, 'arrayaccess_funcs_ptr');
         if ($arrayAccessAddress !== 0) {
-            $funcs = Core::pointerAtAddress('zend_class_arrayaccess_funcs *', $arrayAccessAddress);
+            $funcs = Core::pointerAtAddress(zend_class_arrayaccess_funcs::class, $arrayAccessAddress);
             foreach (self::ARRAYACCESS_FUNC_FIELDS as $field) {
                 $this->serPtr($funcs, $field);
             }
@@ -1530,12 +1462,10 @@ final class PayloadRelocator
     }
 
     // --- warnings / early bindings -----------------------------------------
-    /**
-     * @param \FFI\CData $script
-     */
 
     private function unserializeWarnings(object $script): void
     {
+        /** @var zend_persistent_script $script Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->ptrValue($script, 'warnings') === 0) {
             return;
         }
@@ -1543,39 +1473,37 @@ final class PayloadRelocator
         $count   = $this->requireCount((int) $script->num_warnings, 'num_warnings');
         $this->requireSpan($address, $count * PHP_INT_SIZE, 'warnings table');
         for ($i = 0; $i < $count; $i++) {
-            $slot = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $address + $i * PHP_INT_SIZE));
-            $this->requireOffset((int) $slot[0], 'warning entry');
-            $slot[0] = $this->base + (int) $slot[0];
-            $warning = Core::pointerAtAddress('zend_error_info *', (int) $slot[0]);
+            $slot   = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $address + $i * PHP_INT_SIZE));
+            $stored = $this->readSlot($slot);
+            $this->requireOffset($stored, 'warning entry');
+            $resolved = $this->base + $stored;
+            $slot[0]  = $resolved;
+            $warning  = Core::pointerAtAddress(zend_error_info::class, $resolved);
             $this->unStr($warning, 'filename');
             $this->unStr($warning, 'message');
         }
     }
-    /**
-     * @param \FFI\CData $script
-     */
 
     private function serializeWarnings(object $script): void
     {
+        /** @var zend_persistent_script $script Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->ptrValue($script, 'warnings') === 0) {
             return;
         }
         $address = $this->serPtr($script, 'warnings');
         for ($i = 0; $i < $script->num_warnings; $i++) {
             $slot     = Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $address + $i * PHP_INT_SIZE));
-            $warnAddr = (int) $slot[0];
+            $warnAddr = $this->readSlot($slot);
             $slot[0]  = $warnAddr - $this->base;
-            $warning  = Core::pointerAtAddress('zend_error_info *', $warnAddr);
+            $warning  = Core::pointerAtAddress(zend_error_info::class, $warnAddr);
             $this->serStr($warning, 'filename');
             $this->serStr($warning, 'message');
         }
     }
-    /**
-     * @param \FFI\CData $script
-     */
 
     private function unserializeEarlyBindings(object $script): void
     {
+        /** @var zend_persistent_script $script Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->ptrValue($script, 'early_bindings') === 0) {
             return;
         }
@@ -1584,25 +1512,23 @@ final class PayloadRelocator
         $count       = $this->requireCount((int) $script->num_early_bindings, 'num_early_bindings');
         $this->requireSpan($address, $count * $bindingSize, 'early_bindings table');
         for ($i = 0; $i < $count; $i++) {
-            $binding = Core::pointerAtAddress('zend_early_binding *', $address + $i * $bindingSize);
+            $binding = Core::pointerAtAddress(zend_early_binding::class, $address + $i * $bindingSize);
             $this->unStr($binding, 'lcname');
             $this->unStr($binding, 'rtd_key');
             $this->unStr($binding, 'lc_parent_name');
         }
     }
-    /**
-     * @param \FFI\CData $script
-     */
 
     private function serializeEarlyBindings(object $script): void
     {
+        /** @var zend_persistent_script $script Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if ($this->ptrValue($script, 'early_bindings') === 0) {
             return;
         }
         $address     = $this->serPtr($script, 'early_bindings');
         $bindingSize = Core::sizeOfType(zend_early_binding::class);
         for ($i = 0; $i < $script->num_early_bindings; $i++) {
-            $binding = Core::pointerAtAddress('zend_early_binding *', $address + $i * $bindingSize);
+            $binding = Core::pointerAtAddress(zend_early_binding::class, $address + $i * $bindingSize);
             $this->serStr($binding, 'lcname');
             $this->serStr($binding, 'rtd_key');
             $this->serStr($binding, 'lc_parent_name');

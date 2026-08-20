@@ -17,6 +17,7 @@ use FFI;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ZEngine\Core;
+use ZEngine\Generated\zend_script;
 
 /**
  * Bounds-validation coverage (issue #123): a crafted or truncated binary whose
@@ -99,7 +100,11 @@ final class BoundsValidationTest extends TestCase
         // Corrupt the script's filename offset to a wild value past the region.
         // zend_script is the first member of zend_persistent_script, so the
         // script offset is a zend_script* - single-hop to keep the field typed.
-        $script                                                                     = Core::pointerAtAddress('zend_script *', $base + $meta->scriptOffset());
+        $script = Core::pointerAtAddress(zend_script::class, $base + $meta->scriptOffset());
+        // The compiled fixture always carries a filename block
+        \assert($script->filename !== null);
+        // FFI::addr must stay inline on the pointer-field access to yield the filename SLOT address
+        // @phpstan-ignore argument.type (FFI::addr of a zend_string* pointer field)
         $filenameAt                                                                 = Core::addressOf(FFI::addr($script->filename));
         Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $filenameAt))[0] = $meta->memSize() + 0x4000;
 
@@ -115,8 +120,8 @@ final class BoundsValidationTest extends TestCase
         $base             = Core::addressOf(Core::addr($buffer));
 
         // Blow up the function table's nNumUsed so the bucket walk would spill
-        $script                  = Core::pointerAtAddress('zend_script *', $base + $meta->scriptOffset());
-        $functionTableAt         = Core::addressOf(FFI::addr($script->function_table));
+        $script                  = Core::pointerAtAddress(zend_script::class, $base + $meta->scriptOffset());
+        $functionTableAt         = Core::addressOf(Core::addr($script->function_table));
         $functionTable           = Core::pointerAtAddress('HashTable *', $functionTableAt);
         $functionTable->nNumUsed = 0x7fffffff;
 
@@ -133,7 +138,11 @@ final class BoundsValidationTest extends TestCase
 
         // Tag the script filename as an interned reference far past the (empty)
         // string section - a plausible-looking but out-of-range interned offset
-        $script                                                                     = Core::pointerAtAddress('zend_script *', $base + $meta->scriptOffset());
+        $script = Core::pointerAtAddress(zend_script::class, $base + $meta->scriptOffset());
+        // The compiled fixture always carries a filename block
+        \assert($script->filename !== null);
+        // FFI::addr must stay inline on the pointer-field access to yield the filename SLOT address
+        // @phpstan-ignore argument.type (FFI::addr of a zend_string* pointer field)
         $filenameAt                                                                 = Core::addressOf(FFI::addr($script->filename));
         Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $filenameAt))[0] = 0x100001; // odd => tagged, offset 0x100000
 

@@ -17,6 +17,7 @@ use FFI;
 use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Generated\Bucket;
+use ZEngine\Generated\HashTable as HashTableStruct;
 use ZEngine\Generated\zend_arg_info;
 use ZEngine\Generated\zend_ast;
 use ZEngine\Generated\zend_ast_list;
@@ -139,7 +140,7 @@ final class ScriptSerializer
     private readonly int $zendStringHeaderSize;
 
     /**
-     * @param CData $script the relocated zend_persistent_script* of the live image
+     * @param CData|zend_persistent_script $script the relocated zend_persistent_script* of the live image
      */
     public function __construct(private readonly object $script)
     {
@@ -177,6 +178,8 @@ final class ScriptSerializer
         $this->persistScript($scriptAddress);
         $this->resolveDeferred();
 
+        // The emit buffer was just allocated above and is never cleared here
+        \assert($this->out !== null);
         // The emitted region is a valid relocated image; the on-disk offset
         // encoding is the relocator's serialize - byte-tested machinery
         $meta = CacheMetaInfo::forPayload(
@@ -234,7 +237,8 @@ final class ScriptSerializer
         FFI::memcpy(
             Core::cast('char *', Core::pointerAtAddress('void *', $new)),
             Core::cast('char *', Core::pointerAtAddress('void *', $source)),
-            $size,
+            // max(...,0) only states the non-negative unit size to the analyser
+            max($size, 0),
         );
 
         return [$new, true];
@@ -266,9 +270,22 @@ final class ScriptSerializer
     }
 
     /**
-     * Reads a pointer field's stored value as an integer (0 for C NULL).
+     * Reads a uintptr_t pointer slot as a PHP int - the raw-pointer read
+     * primitive. The dereferenced CData element is always an integer at runtime;
+     * the guard states that to the analyser without widening any real value.
      *
-     * @param \FFI\CData $owner
+     * @param \FFI\CData $slot a uintptr_t* view over the slot to read
+     */
+    private function readSlot(object $slot): int
+    {
+        $value = $slot[0];
+        \assert(\is_int($value));
+
+        return $value;
+    }
+
+    /**
+     * Reads a pointer field's stored value as an integer (0 for C NULL).
      */
     private function ptrValue(object $owner, string $field): int
     {
@@ -276,20 +293,24 @@ final class ScriptSerializer
             return 0;
         }
 
-        return (int) Core::cast('uintptr_t *', FFI::addr($owner->$field))[0];
+        // A dynamically-named pointer field cannot be statically resolved, so
+        // FFI::addr() on the mixed field read is the one irreducible CData hop.
+        // @phpstan-ignore argument.type (FFI::addr of a dynamic FFI\CData pointer field)
+        return $this->readSlot(Core::cast('uintptr_t *', FFI::addr($owner->$field)));
     }
 
     /**
      * Writes a pointer field in the emit pass (no-op while measuring). The
      * field always holds its non-null source value at this point.
      *
-     * @param \FFI\CData $owner a view into the COPY
+     * @param object $owner a view into the COPY
      */
     private function put(object $owner, string $field, int $address): void
     {
         if ($this->phase !== 2) {
             return;
         }
+        // @phpstan-ignore argument.type (FFI::addr of a dynamic FFI\CData pointer field)
         $slot    = Core::cast('uintptr_t *', FFI::addr($owner->$field));
         $slot[0] = $address;
     }
@@ -306,7 +327,7 @@ final class ScriptSerializer
     /** Reads a raw pointer slot */
     private function slotValue(int $slotAddress): int
     {
-        return (int) Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $slotAddress))[0];
+        return $this->readSlot(Core::cast('uintptr_t *', Core::pointerAtAddress('void *', $slotAddress)));
     }
 
     /** Defers a copy-slot rewrite until the xlat table is complete */
@@ -319,13 +340,14 @@ final class ScriptSerializer
     }
 
     /**
-     * @param \FFI\CData $owner a view into the COPY, field currently non-null
+     * @param object $owner a view into the COPY, field currently non-null
      */
     private function defer(object $owner, string $field, int $sourceTarget, string $what): void
     {
         if ($this->phase !== 2) {
             return;
         }
+        // @phpstan-ignore argument.type (FFI::addr of a dynamic FFI\CData pointer field)
         $this->deferred[] = [Core::addressOf(FFI::addr($owner->$field)), $sourceTarget, $what];
     }
 
@@ -346,11 +368,11 @@ final class ScriptSerializer
      */
     private function persistString(int $source): int
     {
-        $string        = Core::pointerAtAddress('zend_string *', $source);
+        $string        = Core::pointerAtAddress(zend_string::class, $source);
         $size          = $this->zendStringHeaderSize + $string->len + 1;
         [$new, $first] = $this->unit($source, $size);
         if ($first && $this->phase === 2) {
-            $copy     = Core::pointerAtAddress('zend_string *', $new);
+            $copy     = Core::pointerAtAddress(zend_string::class, $new);
             $typeInfo = $copy->gc->u->type_info;
             if (($typeInfo & Core::engineConstant('IS_STR_INTERNED')) === 0) {
                 // zend_set_str_gc_flags, file_cache_only branch
@@ -371,11 +393,12 @@ final class ScriptSerializer
      * HashTable struct itself lives in its owner (embedded) or in its own unit
      * (zend_array). $entry receives [source zval address, copy zval address].
      *
-     * @param \FFI\CData $ht     source HashTable view
-     * @param \FFI\CData $htCopy copy HashTable view (same as $ht while measuring)
+     * @param HashTableStruct $ht     source HashTable view
+     * @param object $htCopy copy HashTable view (same as $ht while measuring)
      */
     private function persistHashData(object $ht, object $htCopy, callable $entry): void
     {
+        /** @var HashTableStruct $ht Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         if (($ht->u->flags & Core::engineConstant('HASH_FLAG_UNINITIALIZED')) !== 0) {
             return; // arData is written as 0 by the relocator's serialize stage
         }
@@ -403,20 +426,20 @@ final class ScriptSerializer
             $sourceEntry = $dataAddress                  + $i * $entrySize;
             $copyEntry   = $this->phase === 2 ? $newData + $i * $entrySize : $sourceEntry;
             if ($packed) {
-                $zv = Core::pointerAtAddress('zval *', $sourceEntry);
+                $zv = Core::pointerAtAddress(zval::class, $sourceEntry);
                 if ($zv->u1->v->type !== 0) {
                     $entry($sourceEntry, $copyEntry);
                 }
                 continue;
             }
-            $bucket = Core::pointerAtAddress('Bucket *', $sourceEntry);
+            $bucket = Core::pointerAtAddress(Bucket::class, $sourceEntry);
             if ($bucket->val->u1->v->type === 0) {
                 continue; // hole: bytes copied verbatim, nothing to walk
             }
             $keyAddress = $this->ptrValue($bucket, 'key');
             if ($keyAddress !== 0) {
                 $newKey     = $this->persistString($keyAddress);
-                $bucketCopy = Core::pointerAtAddress('Bucket *', $copyEntry);
+                $bucketCopy = Core::pointerAtAddress(Bucket::class, $copyEntry);
                 if ($this->phase === 2) {
                     $this->put($bucketCopy, 'key', $newKey);
                 }
@@ -430,8 +453,8 @@ final class ScriptSerializer
     {
         [$new, $first] = $this->unit($source, Core::sizeOfType('HashTable'));
         if ($first) {
-            $ht     = Core::pointerAtAddress('HashTable *', $source);
-            $htCopy = $this->phase === 2 ? Core::pointerAtAddress('HashTable *', $new) : $ht;
+            $ht     = Core::pointerAtAddress(HashTableStruct::class, $source);
+            $htCopy = $this->phase === 2 ? Core::pointerAtAddress(HashTableStruct::class, $new) : $ht;
             $this->persistHashData($ht, $htCopy, $entry);
         }
 
@@ -442,8 +465,8 @@ final class ScriptSerializer
 
     private function persistZval(int $source, int $copy): void
     {
-        $zv     = Core::pointerAtAddress('zval *', $source);
-        $zvCopy = $this->phase === 2 ? Core::pointerAtAddress('zval *', $copy) : $zv;
+        $zv     = Core::pointerAtAddress(zval::class, $source);
+        $zvCopy = $this->phase === 2 ? Core::pointerAtAddress(zval::class, $copy) : $zv;
         switch ($zv->u1->v->type) {
             case self::IS_STRING:
                 $this->put($zvCopy->value, 'str', $this->persistString($this->ptrValue($zv->value, 'str')));
@@ -492,7 +515,7 @@ final class ScriptSerializer
 
     private function persistAstNodeBody(int $source, int $copy): void
     {
-        $ast  = Core::pointerAtAddress('zend_ast *', $source);
+        $ast  = Core::pointerAtAddress(zend_ast::class, $source);
         $kind = $ast->kind;
         if ($kind === self::ZEND_AST_ZVAL || $kind === self::ZEND_AST_CONSTANT) {
             $valueOffset = Core::sizeOfType('zend_ast_zval') - Core::sizeOfType(zval::class);
@@ -525,7 +548,7 @@ final class ScriptSerializer
 
     private function astNodeSize(int $source): int
     {
-        $ast  = Core::pointerAtAddress('zend_ast *', $source);
+        $ast  = Core::pointerAtAddress(zend_ast::class, $source);
         $kind = $ast->kind;
         if ($kind === self::ZEND_AST_ZVAL || $kind === self::ZEND_AST_CONSTANT) {
             return Core::sizeOfType('zend_ast_zval');
@@ -548,30 +571,30 @@ final class ScriptSerializer
             return;
         }
         $new = $this->persistArray($source, function (int $zvalSource, int $zvalCopy): void {
-            $zv         = Core::pointerAtAddress('zval *', $zvalSource);
+            $zv         = Core::pointerAtAddress(zval::class, $zvalSource);
             $attrSource = $this->ptrValue($zv->value, 'ptr');
-            $attr       = Core::pointerAtAddress('zend_attribute *', $attrSource);
+            $attr       = Core::pointerAtAddress(zend_attribute::class, $attrSource);
             $argSize    = Core::sizeOfType(zend_attribute_arg::class);
             // ZEND_ATTRIBUTE_SIZE(argc)
             $size          = Core::sizeOfType(zend_attribute::class) + $argSize * $attr->argc - $argSize;
             [$new, $first] = $this->unit($attrSource, $size);
             if ($this->phase === 2) {
-                $this->put(Core::pointerAtAddress('zval *', $zvalCopy)->value, 'ptr', $new);
+                $this->put(Core::pointerAtAddress(zval::class, $zvalCopy)->value, 'ptr', $new);
             }
             if (!$first) {
                 return;
             }
-            $attrCopy = $this->phase === 2 ? Core::pointerAtAddress('zend_attribute *', $new) : $attr;
+            $attrCopy = $this->phase === 2 ? Core::pointerAtAddress(zend_attribute::class, $new) : $attr;
             $this->put($attrCopy, 'name', $this->persistString($this->ptrValue($attr, 'name')));
             $this->put($attrCopy, 'lcname', $this->persistString($this->ptrValue($attr, 'lcname')));
             $argBase = Core::addressOf($attr->args);
             for ($i = 0; $i < $attr->argc; $i++) {
                 $argSource = $argBase                                              + $i * $argSize;
                 $argCopy   = $this->phase === 2 ? Core::addressOf($attrCopy->args) + $i * $argSize : $argSource;
-                $arg       = Core::pointerAtAddress('zend_attribute_arg *', $argSource);
+                $arg       = Core::pointerAtAddress(zend_attribute_arg::class, $argSource);
                 $nameAddr  = $this->ptrValue($arg, 'name');
                 if ($nameAddr !== 0) {
-                    $this->put(Core::pointerAtAddress('zend_attribute_arg *', $argCopy), 'name', $this->persistString($nameAddr));
+                    $this->put(Core::pointerAtAddress(zend_attribute_arg::class, $argCopy), 'name', $this->persistString($nameAddr));
                 }
                 $valueOffset = $argSize - Core::sizeOfType(zval::class);
                 $this->persistZval($argSource + $valueOffset, $argCopy + $valueOffset);
@@ -583,15 +606,16 @@ final class ScriptSerializer
     // --- types ------------------------------------------------------------------------
 
     /**
-     * @param \FFI\CData $type     source zend_type view (embedded)
-     * @param \FFI\CData $typeCopy copy zend_type view
+     * @param zend_type $type     source zend_type view (embedded)
+     * @param object $typeCopy copy zend_type view
      */
     private function persistType(object $type, object $typeCopy): void
     {
+        /** @var zend_type $type Narrowed to the stub view at the boundary; the runtime value is FFI\CData */
         $typeMask = $type->type_mask;
         if (($typeMask & self::TYPE_LIST_BIT) !== 0) {
             $listSource    = $this->ptrValue($type, 'ptr');
-            $list          = Core::pointerAtAddress('zend_type_list *', $listSource);
+            $list          = Core::pointerAtAddress(zend_type_list::class, $listSource);
             $typeSize      = Core::sizeOfType(zend_type::class);
             $entryBase     = Core::sizeOfType(zend_type_list::class) - $typeSize;
             $size          = $entryBase + $typeSize * $list->num_types;
@@ -599,9 +623,9 @@ final class ScriptSerializer
             $this->put($typeCopy, 'ptr', $new);
             if ($first) {
                 for ($i = 0; $i < $list->num_types; $i++) {
-                    $entrySource = Core::pointerAtAddress('zend_type *', $listSource + $entryBase + $i * $typeSize);
+                    $entrySource = Core::pointerAtAddress(zend_type::class, $listSource + $entryBase + $i * $typeSize);
                     $entryCopy   = $this->phase === 2
-                        ? Core::pointerAtAddress('zend_type *', $new + $entryBase + $i * $typeSize)
+                        ? Core::pointerAtAddress(zend_type::class, $new + $entryBase + $i * $typeSize)
                         : $entrySource;
                     $this->persistType($entrySource, $entryCopy);
                 }
@@ -619,7 +643,7 @@ final class ScriptSerializer
     /** Persists a pointed-to zend_function unit (function table entries, hooks, closures) */
     private function persistFunction(int $source): int
     {
-        $opArray = Core::pointerAtAddress('zend_op_array *', $source);
+        $opArray = Core::pointerAtAddress(zend_op_array::class, $source);
         if ($opArray->type !== Core::engineConstant('ZEND_USER_FUNCTION')) {
             throw OpCacheException::unsupportedPayload('only user functions can be persisted into a file-cache image');
         }
@@ -634,8 +658,8 @@ final class ScriptSerializer
     /** The shared field walk for pointed-to op_arrays and the embedded main_op_array */
     private function persistOpArrayBody(int $source, int $copy): void
     {
-        $op     = Core::pointerAtAddress('zend_op_array *', $source);
-        $opCopy = $this->phase === 2 ? Core::pointerAtAddress('zend_op_array *', $copy) : $op;
+        $op     = Core::pointerAtAddress(zend_op_array::class, $source);
+        $opCopy = $this->phase === 2 ? Core::pointerAtAddress(zend_op_array::class, $copy) : $op;
 
         $staticVariables = $this->ptrValue($op, 'static_variables');
         if ($staticVariables !== 0) {
@@ -675,9 +699,9 @@ final class ScriptSerializer
             $this->put($opCopy, 'arg_info', $new + $hasRet * $argSize);
             if ($first) {
                 for ($i = 0; $i < $entries; $i++) {
-                    $entrySource = Core::pointerAtAddress('zend_arg_info *', $allocStart + $i * $argSize);
+                    $entrySource = Core::pointerAtAddress(zend_arg_info::class, $allocStart + $i * $argSize);
                     $entryCopy   = $this->phase === 2
-                        ? Core::pointerAtAddress('zend_arg_info *', $new + $i * $argSize)
+                        ? Core::pointerAtAddress(zend_arg_info::class, $new + $i * $argSize)
                         : $entrySource;
                     $nameAddress = $this->ptrValue($entrySource, 'name');
                     if ($nameAddress !== 0) {
@@ -758,8 +782,8 @@ final class ScriptSerializer
         if (!$first) {
             return $ceNew;
         }
-        $ce     = Core::pointerAtAddress('zend_class_entry *', $source);
-        $ceCopy = $this->phase === 2 ? Core::pointerAtAddress('zend_class_entry *', $ceNew) : $ce;
+        $ce     = Core::pointerAtAddress(zend_class_entry::class, $source);
+        $ceCopy = $this->phase === 2 ? Core::pointerAtAddress(zend_class_entry::class, $ceNew) : $ce;
 
         $this->put($ceCopy, 'name', $this->persistString($this->ptrValue($ce, 'name')));
         if ($this->ptrValue($ce, 'parent') !== 0) {
@@ -771,10 +795,10 @@ final class ScriptSerializer
         }
 
         $this->persistHashData($ce->function_table, $ceCopy->function_table, function (int $zvalSource, int $zvalCopy): void {
-            $zv  = Core::pointerAtAddress('zval *', $zvalSource);
+            $zv  = Core::pointerAtAddress(zval::class, $zvalSource);
             $new = $this->persistFunction($this->ptrValue($zv->value, 'func'));
             if ($this->phase === 2) {
-                $this->put(Core::pointerAtAddress('zval *', $zvalCopy)->value, 'func', $new);
+                $this->put(Core::pointerAtAddress(zval::class, $zvalCopy)->value, 'func', $new);
             }
         });
 
@@ -797,17 +821,17 @@ final class ScriptSerializer
         }
 
         $this->persistHashData($ce->constants_table, $ceCopy->constants_table, function (int $zvalSource, int $zvalCopy): void {
-            $zv            = Core::pointerAtAddress('zval *', $zvalSource);
+            $zv            = Core::pointerAtAddress(zval::class, $zvalSource);
             $constSource   = $this->ptrValue($zv->value, 'ptr');
             [$new, $first] = $this->unit($constSource, Core::sizeOfType(zend_class_constant::class));
             if ($this->phase === 2) {
-                $this->put(Core::pointerAtAddress('zval *', $zvalCopy)->value, 'ptr', $new);
+                $this->put(Core::pointerAtAddress(zval::class, $zvalCopy)->value, 'ptr', $new);
             }
             if (!$first) {
                 return;
             }
-            $constant     = Core::pointerAtAddress('zend_class_constant *', $constSource);
-            $constantCopy = $this->phase === 2 ? Core::pointerAtAddress('zend_class_constant *', $new) : $constant;
+            $constant     = Core::pointerAtAddress(zend_class_constant::class, $constSource);
+            $constantCopy = $this->phase === 2 ? Core::pointerAtAddress(zend_class_constant::class, $new) : $constant;
             $this->persistZval($constSource, $this->phase === 2 ? $new : $constSource); // value zval is the first member
             $docComment = $this->ptrValue($constant, 'doc_comment');
             if ($docComment !== 0) {
@@ -829,17 +853,17 @@ final class ScriptSerializer
         $this->persistAttributes($ce, $ceCopy, 'attributes');
 
         $this->persistHashData($ce->properties_info, $ceCopy->properties_info, function (int $zvalSource, int $zvalCopy): void {
-            $zv            = Core::pointerAtAddress('zval *', $zvalSource);
+            $zv            = Core::pointerAtAddress(zval::class, $zvalSource);
             $propSource    = $this->ptrValue($zv->value, 'ptr');
             [$new, $first] = $this->unit($propSource, Core::sizeOfType(zend_property_info::class));
             if ($this->phase === 2) {
-                $this->put(Core::pointerAtAddress('zval *', $zvalCopy)->value, 'ptr', $new);
+                $this->put(Core::pointerAtAddress(zval::class, $zvalCopy)->value, 'ptr', $new);
             }
             if (!$first) {
                 return;
             }
-            $prop     = Core::pointerAtAddress('zend_property_info *', $propSource);
-            $propCopy = $this->phase === 2 ? Core::pointerAtAddress('zend_property_info *', $new) : $prop;
+            $prop     = Core::pointerAtAddress(zend_property_info::class, $propSource);
+            $propCopy = $this->phase === 2 ? Core::pointerAtAddress(zend_property_info::class, $new) : $prop;
             $this->defer($propCopy, 'ce', $this->ptrValue($prop, 'ce'), 'property scope');
             $this->put($propCopy, 'name', $this->persistString($this->ptrValue($prop, 'name')));
             $docComment = $this->ptrValue($prop, 'doc_comment');
@@ -906,8 +930,8 @@ final class ScriptSerializer
             [$new, $first] = $this->unit($iteratorFuncs, Core::sizeOfType(zend_class_iterator_funcs::class));
             $this->put($ceCopy, 'iterator_funcs_ptr', $new);
             if ($first) {
-                $funcs     = Core::pointerAtAddress('zend_class_iterator_funcs *', $iteratorFuncs);
-                $funcsCopy = $this->phase === 2 ? Core::pointerAtAddress('zend_class_iterator_funcs *', $new) : $funcs;
+                $funcs     = Core::pointerAtAddress(zend_class_iterator_funcs::class, $iteratorFuncs);
+                $funcsCopy = $this->phase === 2 ? Core::pointerAtAddress(zend_class_iterator_funcs::class, $new) : $funcs;
                 foreach (self::ITERATOR_FUNC_FIELDS as $field) {
                     $target = $this->ptrValue($funcs, $field);
                     if ($target !== 0) {
@@ -921,8 +945,8 @@ final class ScriptSerializer
             [$new, $first] = $this->unit($arrayAccessFuncs, Core::sizeOfType(zend_class_arrayaccess_funcs::class));
             $this->put($ceCopy, 'arrayaccess_funcs_ptr', $new);
             if ($first) {
-                $funcs     = Core::pointerAtAddress('zend_class_arrayaccess_funcs *', $arrayAccessFuncs);
-                $funcsCopy = $this->phase === 2 ? Core::pointerAtAddress('zend_class_arrayaccess_funcs *', $new) : $funcs;
+                $funcs     = Core::pointerAtAddress(zend_class_arrayaccess_funcs::class, $arrayAccessFuncs);
+                $funcsCopy = $this->phase === 2 ? Core::pointerAtAddress(zend_class_arrayaccess_funcs::class, $new) : $funcs;
                 foreach (self::ARRAYACCESS_FUNC_FIELDS as $field) {
                     $target = $this->ptrValue($funcs, $field);
                     if ($target !== 0) {
@@ -940,10 +964,6 @@ final class ScriptSerializer
         return $ceNew;
     }
 
-    /**
-     * @param \FFI\CData $ce
-     * @param \FFI\CData $ceCopy
-     */
     private function persistClassNames(object $ce, object $ceCopy, string $field, int $count): void
     {
         $source = $this->ptrValue($ce, $field);
@@ -957,19 +977,15 @@ final class ScriptSerializer
             return;
         }
         for ($i = 0; $i < $count; $i++) {
-            $entrySource = Core::pointerAtAddress('zend_class_name *', $source + $i * $nameSize);
+            $entrySource = Core::pointerAtAddress(zend_class_name::class, $source + $i * $nameSize);
             $entryCopy   = $this->phase === 2
-                ? Core::pointerAtAddress('zend_class_name *', $new + $i * $nameSize)
+                ? Core::pointerAtAddress(zend_class_name::class, $new + $i * $nameSize)
                 : $entrySource;
             $this->put($entryCopy, 'name', $this->persistString($this->ptrValue($entrySource, 'name')));
             $this->put($entryCopy, 'lc_name', $this->persistString($this->ptrValue($entrySource, 'lc_name')));
         }
     }
 
-    /**
-     * @param \FFI\CData $ce
-     * @param \FFI\CData $ceCopy
-     */
     private function persistTraitAliases(object $ce, object $ceCopy): void
     {
         $source = $this->ptrValue($ce, 'trait_aliases');
@@ -992,8 +1008,8 @@ final class ScriptSerializer
             if (!$firstAlias) {
                 continue;
             }
-            $alias     = Core::pointerAtAddress('zend_trait_alias *', $aliasSource);
-            $aliasCopy = $this->phase === 2 ? Core::pointerAtAddress('zend_trait_alias *', $newAlias) : $alias;
+            $alias     = Core::pointerAtAddress(zend_trait_alias::class, $aliasSource);
+            $aliasCopy = $this->phase === 2 ? Core::pointerAtAddress(zend_trait_alias::class, $newAlias) : $alias;
             foreach (['method_name', 'class_name'] as $nameField) {
                 $address = $this->ptrValue($alias->trait_method, $nameField);
                 if ($address !== 0) {
@@ -1007,10 +1023,6 @@ final class ScriptSerializer
         }
     }
 
-    /**
-     * @param \FFI\CData $ce
-     * @param \FFI\CData $ceCopy
-     */
     private function persistTraitPrecedences(object $ce, object $ceCopy): void
     {
         $source = $this->ptrValue($ce, 'trait_precedences');
@@ -1028,7 +1040,7 @@ final class ScriptSerializer
         }
         for ($i = 0; $i < $count; $i++) {
             $precedenceSource = $this->slotValue($source + $i * PHP_INT_SIZE);
-            $precedence       = Core::pointerAtAddress('zend_trait_precedence *', $precedenceSource);
+            $precedence       = Core::pointerAtAddress(zend_trait_precedence::class, $precedenceSource);
             $size             = Core::sizeOfType(zend_trait_precedence::class)
                 + PHP_INT_SIZE * ($precedence->num_excludes - 1);
             [$newPrecedence, $firstPrecedence] = $this->unit($precedenceSource, $size);
@@ -1037,7 +1049,7 @@ final class ScriptSerializer
                 continue;
             }
             $precedenceCopy = $this->phase === 2
-                ? Core::pointerAtAddress('zend_trait_precedence *', $newPrecedence)
+                ? Core::pointerAtAddress(zend_trait_precedence::class, $newPrecedence)
                 : $precedence;
             foreach (['method_name', 'class_name'] as $nameField) {
                 $address = $this->ptrValue($precedence->trait_method, $nameField);
@@ -1061,23 +1073,23 @@ final class ScriptSerializer
     private function persistScript(int $source): void
     {
         [$new, ]    = $this->unit($source, Core::sizeOfType(zend_persistent_script::class));
-        $script     = Core::pointerAtAddress('zend_persistent_script *', $source);
-        $scriptCopy = $this->phase === 2 ? Core::pointerAtAddress('zend_persistent_script *', $new) : $script;
+        $script     = Core::pointerAtAddress(zend_persistent_script::class, $source);
+        $scriptCopy = $this->phase === 2 ? Core::pointerAtAddress(zend_persistent_script::class, $new) : $script;
 
         $this->put($scriptCopy->script, 'filename', $this->persistString($this->ptrValue($script->script, 'filename')));
 
         $this->persistHashData($script->script->class_table, $scriptCopy->script->class_table, function (int $zvalSource, int $zvalCopy): void {
-            $zv  = Core::pointerAtAddress('zval *', $zvalSource);
+            $zv  = Core::pointerAtAddress(zval::class, $zvalSource);
             $new = $this->persistClassEntry($this->ptrValue($zv->value, 'ce'));
             if ($this->phase === 2) {
-                $this->put(Core::pointerAtAddress('zval *', $zvalCopy)->value, 'ce', $new);
+                $this->put(Core::pointerAtAddress(zval::class, $zvalCopy)->value, 'ce', $new);
             }
         });
         $this->persistHashData($script->script->function_table, $scriptCopy->script->function_table, function (int $zvalSource, int $zvalCopy): void {
-            $zv  = Core::pointerAtAddress('zval *', $zvalSource);
+            $zv  = Core::pointerAtAddress(zval::class, $zvalSource);
             $new = $this->persistFunction($this->ptrValue($zv->value, 'func'));
             if ($this->phase === 2) {
-                $this->put(Core::pointerAtAddress('zval *', $zvalCopy)->value, 'func', $new);
+                $this->put(Core::pointerAtAddress(zval::class, $zvalCopy)->value, 'func', $new);
             }
         });
 
@@ -1097,8 +1109,8 @@ final class ScriptSerializer
                     if (!$firstWarning) {
                         continue;
                     }
-                    $warning     = Core::pointerAtAddress('zend_error_info *', $warningSource);
-                    $warningCopy = $this->phase === 2 ? Core::pointerAtAddress('zend_error_info *', $newWarning) : $warning;
+                    $warning     = Core::pointerAtAddress(zend_error_info::class, $warningSource);
+                    $warningCopy = $this->phase === 2 ? Core::pointerAtAddress(zend_error_info::class, $newWarning) : $warning;
                     foreach (['filename', 'message'] as $stringField) {
                         $address = $this->ptrValue($warning, $stringField);
                         if ($address !== 0) {
@@ -1116,9 +1128,9 @@ final class ScriptSerializer
             $this->put($scriptCopy, 'early_bindings', $new);
             if ($first) {
                 for ($i = 0; $i < $script->num_early_bindings; $i++) {
-                    $bindingSource = Core::pointerAtAddress('zend_early_binding *', $earlyBindings + $i * $bindingSize);
+                    $bindingSource = Core::pointerAtAddress(zend_early_binding::class, $earlyBindings + $i * $bindingSize);
                     $bindingCopy   = $this->phase === 2
-                        ? Core::pointerAtAddress('zend_early_binding *', $new + $i * $bindingSize)
+                        ? Core::pointerAtAddress(zend_early_binding::class, $new + $i * $bindingSize)
                         : $bindingSource;
                     foreach (['lcname', 'rtd_key', 'lc_parent_name'] as $stringField) {
                         $address = $this->ptrValue($bindingSource, $stringField);

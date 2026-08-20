@@ -14,9 +14,13 @@ declare(strict_types=1);
 namespace ZEngine\OpCache;
 
 use FFI;
-use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Generated\Bucket;
+use ZEngine\Generated\HashTable as HashTableStruct;
+use ZEngine\Generated\zend_class_entry;
+use ZEngine\Generated\zend_op_array;
+use ZEngine\Generated\zend_persistent_script;
+use ZEngine\Generated\zend_string;
 use ZEngine\Reflection\ReflectionClass;
 use ZEngine\Reflection\ReflectionFunction;
 use ZEngine\Type\HashTable;
@@ -44,14 +48,15 @@ final class ReflectionOpcacheFile
     private array $donors = [];
 
     /**
-     * @param \FFI\CData  $script     Relocated zend_persistent_script inside the image buffer
-     * @param object|null $imageOwner Owner of the relocated buffer (the PayloadRelocator):
-     *                                retained so that holding this view alone provably keeps
-     *                                the buffer - which every wrapper this view hands out
-     *                                points into - alive (see CacheImageSync, whose swapped-in
-     *                                bodies keep executing out of that buffer)
+     * @param \FFI\CData|zend_persistent_script $script     Relocated zend_persistent_script inside the image buffer
+     * @param object|null                       $imageOwner Owner of the relocated buffer (the PayloadRelocator):
+     *                                                      retained so that holding this view alone provably keeps
+     *                                                      the buffer - which every wrapper this view hands out
+     *                                                      points into - alive (see CacheImageSync, whose swapped-in
+     *                                                      bodies keep executing out of that buffer)
      */
     public function __construct(
+        /** @var zend_persistent_script Typed view of the relocated persistent script this handle wraps */
         private readonly object $script,
         // @phpstan-ignore property.onlyWritten (lifetime pin: held, never read)
         private readonly ?object $imageOwner = null,
@@ -61,7 +66,7 @@ final class ReflectionOpcacheFile
      * The relocated zend_persistent_script this handle wraps
      *
      * @internal core-layer escape hatch for BinaryCacheFile/ScriptSerializer
-     * @return \FFI\CData
+     * @return zend_persistent_script
      */
     public function getRawScript(): object
     {
@@ -90,7 +95,11 @@ final class ReflectionOpcacheFile
      */
     public function getFileName(): string
     {
-        return StringEntry::fromCData($this->script->script->filename)->getStringValue();
+        // A persistent script always carries a filename block
+        $filename = $this->script->script->filename;
+        \assert($filename !== null);
+
+        return StringEntry::fromCData($filename)->getStringValue();
     }
 
     /**
@@ -98,7 +107,7 @@ final class ReflectionOpcacheFile
      */
     public function getScriptFunction(): ReflectionFunction
     {
-        $function = Core::cast('zend_function *', FFI::addr($this->script->script->main_op_array));
+        $function = Core::cast('zend_function *', Core::addr($this->script->script->main_op_array));
 
         return ReflectionFunction::fromCData($function);
     }
@@ -108,7 +117,7 @@ final class ReflectionOpcacheFile
      */
     public function functionTable(): HashTable
     {
-        return HashTable::fromCData(FFI::addr($this->script->script->function_table));
+        return HashTable::fromCData(Core::addr($this->script->script->function_table));
     }
 
     /**
@@ -116,7 +125,7 @@ final class ReflectionOpcacheFile
      */
     public function classTable(): HashTable
     {
-        return HashTable::fromCData(FFI::addr($this->script->script->class_table));
+        return HashTable::fromCData(Core::addr($this->script->script->class_table));
     }
 
     /**
@@ -165,7 +174,12 @@ final class ReflectionOpcacheFile
         [$keyAddress, $methodAddress] = $entry;
 
         // Re-point the method's scope at the adopting class
-        $method                                                 = Core::pointerAtAddress('zend_op_array *', $methodAddress);
+        $method = Core::pointerAtAddress(zend_op_array::class, $methodAddress);
+        // A grafted method op_array always carries its donor-class scope slot
+        \assert($method->scope !== null);
+        // FFI::addr must stay inline on the pointer-field access to yield the
+        // scope SLOT address (a by-value hop would address a pointer copy).
+        // @phpstan-ignore argument.type (FFI::addr of a zend_class_entry* pointer field)
         Core::cast('uintptr_t *', FFI::addr($method->scope))[0] = Core::addressOf($targetClass);
 
         $this->insertPtrEntry($targetClass->function_table, $keyAddress, $methodAddress);
@@ -217,22 +231,27 @@ final class ReflectionOpcacheFile
      * Finds a class entry by its own name, case-insensitively; class-table
      * bucket keys can be opcache rtd keys, so match on ce->name instead.
      *
-     * @return \FFI\CData|null a zend_class_entry* into the image
+     * @return zend_class_entry|null a zend_class_entry* into the image
      */
     private function findClassByName(string $className): ?object
     {
-        $ht          = $this->script->script->class_table;
-        $bucketSize  = Core::sizeOfType(Bucket::class);
+        $ht         = $this->script->script->class_table;
+        $bucketSize = Core::sizeOfType(Bucket::class);
+        // A populated class table always carries a bucket data block
+        \assert($ht->arData !== null);
         $dataAddress = Core::addressOf($ht->arData);
         for ($i = 0; $i < $ht->nNumUsed; $i++) {
-            $bucket = Core::pointerAtAddress('Bucket *', $dataAddress + $i * $bucketSize);
+            $bucket = Core::pointerAtAddress(Bucket::class, $dataAddress + $i * $bucketSize);
             if ($bucket->val->u1->v->type === 0) {
                 continue;
             }
             $classEntry = Core::pointerAtAddress(
-                'zend_class_entry *',
-                (int) Core::cast('uintptr_t *', FFI::addr($bucket->val->value))[0],
+                zend_class_entry::class,
+                // IS_PTR bucket: the stored class-entry pointer lives in the value union's long slot
+                $bucket->val->value->lval,
             );
+            // Every compiled class entry carries its own name block
+            \assert($classEntry->name !== null);
             $name = StringEntry::fromCData($classEntry->name)->getStringValue();
             if (strcasecmp($name, $className) === 0) {
                 return $classEntry;
@@ -245,7 +264,7 @@ final class ReflectionOpcacheFile
     /**
      * Finds a bucket by exact key in a keyed image table.
      *
-     * @param \FFI\CData $ht HashTable view
+     * @param HashTableStruct $ht HashTable view
      * @return array{int, int}|null [key zend_string address, value pointer address]
      */
     private static function findKeyedEntry(object $ht, string $key): ?array
@@ -253,17 +272,20 @@ final class ReflectionOpcacheFile
         if (($ht->u->flags & Core::engineConstant('HASH_FLAG_UNINITIALIZED')) !== 0) {
             return null;
         }
-        $bucketSize  = Core::sizeOfType(Bucket::class);
+        $bucketSize = Core::sizeOfType(Bucket::class);
+        // An initialized (non-uninitialized) table always carries a bucket data block
+        \assert($ht->arData !== null);
         $dataAddress = Core::addressOf($ht->arData);
         for ($i = 0; $i < $ht->nNumUsed; $i++) {
-            $bucket = Core::pointerAtAddress('Bucket *', $dataAddress + $i * $bucketSize);
+            $bucket = Core::pointerAtAddress(Bucket::class, $dataAddress + $i * $bucketSize);
             if ($bucket->val->u1->v->type === 0 || $bucket->key === null) {
                 continue;
             }
             if (StringEntry::fromCData($bucket->key)->getStringValue() === $key) {
                 return [
                     Core::addressOf($bucket->key),
-                    (int) Core::cast('uintptr_t *', FFI::addr($bucket->val->value))[0],
+                    // IS_PTR bucket: the stored pointer lives in the value union's long slot
+                    $bucket->val->value->lval,
                 ];
             }
         }
@@ -279,7 +301,7 @@ final class ReflectionOpcacheFile
      * the persisted format expects it (hash slots ahead of arData, bucket-index
      * chains via Z_NEXT, HT_SIZE_TO_MASK = -(2 * nTableSize)).
      *
-     * @param \FFI\CData $ht HashTable view (embedded in the image)
+     * @param HashTableStruct $ht HashTable view (embedded in the image)
      */
     private function insertPtrEntry(object $ht, int $keyAddress, int $valueAddress): void
     {
@@ -287,7 +309,7 @@ final class ReflectionOpcacheFile
         if (($flags & Core::engineConstant('HASH_FLAG_PACKED')) !== 0) {
             throw OpCacheException::unsupportedPayload('grafting into a packed hashtable');
         }
-        $key  = Core::pointerAtAddress('zend_string *', $keyAddress);
+        $key  = Core::pointerAtAddress(zend_string::class, $keyAddress);
         $hash = $key->h;
         if ($hash === 0) {
             throw OpCacheException::unsupportedPayload('graft key string carries no precomputed hash');
@@ -295,9 +317,11 @@ final class ReflectionOpcacheFile
 
         $bucketSize    = Core::sizeOfType(Bucket::class);
         $uninitialized = ($flags & Core::engineConstant('HASH_FLAG_UNINITIALIZED')) !== 0;
-        $used          = $uninitialized ? 0 : $ht->nNumUsed;
-        $tableSize     = $uninitialized ? 8 : $ht->nTableSize;
-        $oldData       = $uninitialized ? 0 : Core::addressOf($ht->arData);
+        // An initialized image table always points its data block at real buckets
+        \assert($uninitialized || $ht->arData !== null);
+        $used      = $uninitialized ? 0 : $ht->nNumUsed;
+        $tableSize = $uninitialized ? 8 : $ht->nTableSize;
+        $oldData   = $uninitialized ? 0 : Core::addressOf($ht->arData);
 
         if (!$uninitialized && self::findKeyedEntry($ht, StringEntry::fromCData($key)->getStringValue()) !== null) {
             throw OpCacheException::duplicateHashTableKey(StringEntry::fromCData($key)->getStringValue());
@@ -316,7 +340,7 @@ final class ReflectionOpcacheFile
         $newData   = $blockBase + $hashBytes;
 
         if ($used > 0) {
-            FFI::memcpy(
+            Core::memcpy(
                 Core::cast('char *', Core::pointerAtAddress('void *', $newData)),
                 Core::cast('char *', Core::pointerAtAddress('void *', $oldData)),
                 $used * $bucketSize,
@@ -324,29 +348,32 @@ final class ReflectionOpcacheFile
         }
 
         // The appended bucket: an IS_PTR zval, hash and key
-        $bucket                                                      = Core::pointerAtAddress('Bucket *', $newData + $used * $bucketSize);
-        $bucket->val->u1->type_info                                  = Core::engineConstant('IS_PTR');
-        Core::cast('uintptr_t *', FFI::addr($bucket->val->value))[0] = $valueAddress;
-        $bucket->h                                                   = $hash;
-        $bucket->key                                                 = $key;
+        $bucket                                                       = Core::pointerAtAddress(Bucket::class, $newData + $used * $bucketSize);
+        $bucket->val->u1->type_info                                   = Core::engineConstant('IS_PTR');
+        Core::cast('uintptr_t *', Core::addr($bucket->val->value))[0] = $valueAddress;
+        $bucket->h                                                    = $hash;
+        $bucket->key                                                  = $key;
 
         // HT_HASH_RESET + full rehash (bucket-index chains, like zend_hash_persist)
         for ($i = 0; $i < 2 * $tableSize; $i++) {
             Core::cast('uint32_t *', Core::pointerAtAddress('void *', $blockBase + $i * 4))[0] = 0xFFFFFFFF; // HT_INVALID_IDX
         }
         for ($idx = 0; $idx < $newUsed; $idx++) {
-            $entry = Core::pointerAtAddress('Bucket *', $newData + $idx * $bucketSize);
+            $entry = Core::pointerAtAddress(Bucket::class, $newData + $idx * $bucketSize);
             if ($entry->val->u1->v->type === 0) {
                 continue;
             }
-            $nIndex                                                                  = ($entry->h | $newMask) & 0xFFFFFFFF;
-            $slot                                                                    = $nIndex - 0x100000000; // (int32_t)nIndex, always negative
-            $slotAddr                                                                = $newData + $slot * 4;
-            $entry->val->u2->next                                                    = (int) Core::cast('uint32_t *', Core::pointerAtAddress('void *', $slotAddr))[0];
+            $nIndex   = ($entry->h | $newMask) & 0xFFFFFFFF;
+            $slot     = $nIndex - 0x100000000; // (int32_t)nIndex, always negative
+            $slotAddr = $newData + $slot * 4;
+            // HT_HASH slots are uint32_t; the deref reads as a PHP int (Z_NEXT chain head)
+            $chainHead = Core::cast('uint32_t *', Core::pointerAtAddress('void *', $slotAddr))[0];
+            \assert(\is_int($chainHead));
+            $entry->val->u2->next                                                    = $chainHead;
             Core::cast('uint32_t *', Core::pointerAtAddress('void *', $slotAddr))[0] = $idx;
         }
 
-        $ht->arData           = Core::pointerAtAddress('Bucket *', $newData);
+        $ht->arData           = Core::pointerAtAddress(Bucket::class, $newData);
         $ht->nNumUsed         = $newUsed;
         $ht->nNumOfElements   = ($uninitialized ? 0 : $ht->nNumOfElements) + 1;
         $ht->nTableSize       = $tableSize;
