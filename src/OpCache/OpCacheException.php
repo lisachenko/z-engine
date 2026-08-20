@@ -147,6 +147,18 @@ class OpCacheException extends \RuntimeException
     }
 
     /**
+     * A stored offset, count or element span in the payload points outside the
+     * declared buffer bounds - the binary is truncated or crafted. Relocating it
+     * would be an out-of-bounds engine read/write, so the load is refused
+     * (issue #123). The bin must come from a trusted producer; system_id is a
+     * build fingerprint, not an authenticator, and adler32 is not tamper-proof.
+     */
+    public static function malformedPayload(string $what): self
+    {
+        return new self("Malformed opcache payload: {$what}");
+    }
+
+    /**
      * A graft donor does not contain the requested function/class/method
      */
     public static function graftEntryNotFound(string $kind, string $name): self
