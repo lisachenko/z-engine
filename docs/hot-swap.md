@@ -32,12 +32,16 @@ dispatch the new body. The implementation is centralized in
 - **The run-time cache is reset per swap.** Inline caches are scope-dependent
   and sized for one specific body, so every swap installs a fresh zeroed
   `ZEND_ACC_HEAP_RT_CACHE` cache that the engine (or the next swap) releases.
-- **Static variables are unshared.** A closure destroys its own static table
-  when it dies, so the entry duplicates the defaults (`zend_array_dup`) and
-  lets the live per-entry table materialize lazily on the first
-  `ZEND_BIND_STATIC`, exactly like a plain compiled function. The class entry
-  is flagged with `ZEND_HAS_STATIC_IN_METHODS` so the engine's shutdown walk
-  releases the live table.
+- **Static variables are unshared - the live table only.** The entry's
+  `ZEND_MAP_PTR` slot is dropped so the live per-entry table materializes
+  lazily on the first `ZEND_BIND_STATIC`, exactly like a plain compiled
+  function. The defaults table behind it stays shared and is guarded by the
+  body refcount alone: on PHP 8.5 no donor kind owns it
+  (`zend_create_closure_ex` duplicates the prototype defaults into the map
+  slot only), so the last body holder frees it exactly once - see
+  `FunctionBodySwap::unshareStaticVariables()` for the ownership rules. The
+  class entry is flagged with `ZEND_HAS_STATIC_IN_METHODS` so the engine's
+  shutdown walk releases the live table.
 - **Declaration identity is preserved.** The entry keeps its name, scope,
   prototype and declaration-level flags (visibility, static, final);
   body-level flags (variadic, generator, return type, strict types) follow the
