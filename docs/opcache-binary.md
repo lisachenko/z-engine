@@ -184,9 +184,20 @@ $report->appliedMethods;                   // what actually happened, per entry
 
 ## Scope and limits (v1)
 
-- **Platform.** The relocator targets the bundled 64-bit non-Windows build; it
-  asserts `PHP_INT_SIZE === 8` and a `/` path separator and throws
-  `OpCacheException::unsupportedPayload` otherwise. **Windows opcache support
+- **Platform.** The relocator targets 64-bit POSIX builds - linux and macOS
+  (x64 and arm64) alike; it asserts `PHP_INT_SIZE === 8` and a `/` path
+  separator and throws `OpCacheException::unsupportedPayload` otherwise.
+  Darwin needs no per-opline walking of its own
+  ([#119](https://github.com/lisachenko/z-engine/issues/119)): the
+  absolute-address opline branches of zend_file_cache.c
+  (`ZEND_USE_ABS_CONST_ADDR`/`ZEND_USE_ABS_JMP_ADDR`) are compiled in only
+  when `SIZEOF_SIZE_T == 4` (zend_compile.h), so every 64-bit build - darwin
+  included - stores IS_CONST operands as literal-table indexes and jumps as
+  opline-relative byte offsets, both position-independent and preserved
+  verbatim. `OpcodeAddressingModelTest` proves that on a real payload and
+  fails loudly if a build ever diverges; the 32-bit builds that do use
+  absolute addressing are refused by the `PHP_INT_SIZE` predicate.
+  **Windows opcache support
   is an intentional non-goal**, not pending work: the relocator (and
   `opcache.preload`-based features) keep rejecting Windows loudly, and the
   Windows half of the original platform ticket was retired when
