@@ -247,7 +247,9 @@ $report->appliedMethods;                   // what actually happened, per entry
   a payload).
 - **Strict, never silent.** Anything the port cannot handle raises
   `unsupportedPayload` rather than writing a subtly corrupt binary; with every
-  payload shape of the 8.4 walker now ported, that guard covers the platform
+  payload shape of the engine's walker now ported (the PHP 8.5-only shapes -
+  attributed constants, closures in constant expressions - included), that
+  guard covers the platform
   predicates above (Windows/32-bit). Global functions,
   classes with constants, typed properties (union/intersection/DNF type lists
   included), trait-using classes (aliases and insteadof precedences included),
