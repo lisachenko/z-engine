@@ -40,6 +40,12 @@ env:
 jobs:
   generate:
     name: Generate darwin-${{ matrix.runner-arch.arch }}-${{ matrix.ts }}
+    # setup-php installs PHP through Homebrew on macOS; brew's default
+    # pre-install update and post-install cleanup are tens of seconds of
+    # unrelated churn this generate step does not need. Switch them off.
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
     strategy:
       fail-fast: false
       matrix:

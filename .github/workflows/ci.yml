@@ -127,6 +127,14 @@ jobs:
   tests-macos:
     name: Tests (macOS ${{ matrix.runner-arch.arch }}, ${{ matrix.ts }})
     runs-on: ${{ matrix.runner-arch.runner }}
+    # setup-php installs PHP through Homebrew on macOS, and by default brew runs
+    # a full `brew update` before every install and a cleanup after it - tens of
+    # seconds of unrelated formula churn on top of the PHP install this job
+    # needs. Both are pure overhead here (the runner image already ships a recent
+    # brew and nothing else is installed), so switch them off for the whole job.
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
     strategy:
       fail-fast: false
       matrix:
@@ -603,6 +611,11 @@ jobs:
   header-drift-darwin:
     name: Generated darwin headers up to date (${{ matrix.runner-arch.arch }}, ${{ matrix.ts }})
     runs-on: ${{ matrix.runner-arch.runner }}
+    # See tests-macos: skip brew's auto-update/cleanup so setup-php only pays for
+    # the PHP install it actually needs.
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
     strategy:
       fail-fast: false
       matrix:
