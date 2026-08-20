@@ -187,8 +187,20 @@ parameters:
 			path: src/Core.php
 
 		-
+			message: '#^Access to an undefined property FFI\:\:\$zend_inheritance_cache_add\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Core.php
+
+		-
 			message: '#^Access to an undefined property FFI\:\:\$zend_system_id\.$#'
 			identifier: property.notFound
+			count: 1
+			path: src/Core.php
+
+		-
+			message: '#^Dead catch \- FFI\\Exception is never thrown in the try block\.$#'
+			identifier: catch.neverThrown
 			count: 1
 			path: src/Core.php
 

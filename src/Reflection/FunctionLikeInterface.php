@@ -51,4 +51,11 @@ interface FunctionLikeInterface
     public function getEntryPointer(): object;
 
     public function isUserDefined(): bool;
+
+    /**
+     * Compiled-variable names by CV slot (see FunctionLikeTrait::getVariableNames())
+     *
+     * @return array<int, string>
+     */
+    public function getVariableNames(): array;
 }

@@ -83,13 +83,15 @@ class SharedMemoryException extends \ReflectionException
     }
 
     /**
-     * Handler installation targeted a temporary lazy-linking class copy (issue #238)
+     * Handler installation targeted a temporary lazy-linking class copy while declining
+     * the inheritance cache is unavailable (issues #238/#241)
      *
      * Handlers are tracked per class-entry address; the lazy-linking temporary is
      * discarded as soon as opcache's inheritance cache persists the linked class, so
-     * anything installed on it would be silently lost. Throwing here is the loud
-     * failure until declining the inheritance cache for hooked classes (issue #241)
-     * makes the installation actually stick.
+     * anything installed on it would be silently lost. Normally z-engine keeps such a
+     * class process-local by declining its inheritance-cache publication (issue #241);
+     * this loud fallback fires only when the interception cannot be installed - engine
+     * definitions generated before the zend_inheritance_cache_add symbol was exported.
      */
     public static function handlerInstallationDuringLazyLinking(string $className, string $handlerName): self
     {
@@ -97,8 +99,10 @@ class SharedMemoryException extends \ReflectionException
             "Cannot install the {$handlerName} handler on {$className}: the class entry is the "
             . 'temporary copy opcache links classes on (lazy loading for the inheritance cache) '
             . 'and discards when linking completes, so the installed handlers would be silently '
-            . 'lost (issue #238). Install handlers after the class is fully linked, or run this '
-            . 'code path with opcache disabled',
+            . 'lost (issue #238), and the generated engine definitions of this platform predate '
+            . 'the zend_inheritance_cache_add interception that would keep the class process-local '
+            . '(issue #241). Regenerate the engine definitions with `composer gen-headers`, install '
+            . 'handlers after the class is fully linked, or run this code path with opcache disabled',
         );
     }
 }

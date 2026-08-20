@@ -120,6 +120,40 @@ class HotSwapException extends \ReflectionException
         );
     }
 
+    public static function internalFunctionCollision(string $functionName): self
+    {
+        return new self(
+            "Cannot apply the cache image body of {$functionName}(): the live process publishes "
+            . 'an internal function under that name',
+        );
+    }
+
+    public static function internalMethodCollision(string $className, string $methodName): self
+    {
+        return new self(
+            "Cannot apply the cache image body of {$className}::{$methodName}(): the live class "
+            . 'publishes an internal function under that method name',
+        );
+    }
+
+    public static function imageAlreadyApplied(string $scriptFile): self
+    {
+        return new self(
+            "The cache image of {$scriptFile} has already been applied by this sync - "
+            . 'prepare a fresh CacheImageSync to re-diff the image against the live process',
+        );
+    }
+
+    public static function imageApplyFailedAndRolledBack(string $scriptFile, \Throwable $cause): self
+    {
+        return new self(
+            "Applying the cache image of {$scriptFile} failed and every staged body swap "
+            . "was rolled back: {$cause->getMessage()}",
+            0,
+            $cause,
+        );
+    }
+
     public static function shutdown(): self
     {
         return new self('Cannot apply a class delta after Core::shutdown()');

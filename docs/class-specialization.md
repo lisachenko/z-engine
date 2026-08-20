@@ -115,34 +115,50 @@ two cases, and both are rejected rather than silently unenforced:
 
 ### Un-sharing the opcode array
 
-When a plain `ZEND_RECV` has to be patched, the method's opcodes are copied into request memory
-first, because they are shared with the template by design. Three operand encodings matter:
+When a plain `ZEND_RECV` has to be patched, the method's opcodes **and literals** are copied
+into request memory first, because they are shared with the template by design. The copy
+reproduces the engine's own `pass_two()` layout in one block - opcodes at the start, the
+literal zvals at the same 16-aligned offset right behind them. Three operand encodings matter:
 
 | Operand | Encoding | Survives the copy? |
 |---|---|---|
 | jump targets | *signed* byte offset from the opline itself | yes - the whole array moves as a unit, so relative distances are unchanged |
-| `IS_CONST` operands | byte offset **from the opline itself** | no - every one is rebased by the distance the array moved |
+| `IS_CONST` operands | byte offset **from the opline itself** | no - every one is rebased onto the copied literal at the same index |
 | `live_range`, `try_catch_array` | opline indices | yes |
 
-Literals sit immediately after the opcodes in one compiler-arena block, which is why a constant
-operand is opline-relative and why moving the array alone would silently make every literal
-reference point at the wrong zval. Under `zend.assertions=1` the copy is verified: every
-`IS_CONST` operand must resolve to the same address it resolved to before the move, and every
-jump offset must still land inside the array.
+A constant operand is opline-relative because opcodes and literals normally share one
+compiler-arena block, and it stores a **signed 32-bit** offset - which is exactly why the
+literals travel with the opcodes. The source literals can be arbitrarily far from the
+relocated opcodes (an **opcache-shared body** lives in an mmap'd region well over 2GB from
+the request heap, where a truncated offset would read whatever sat at the wrapped address),
+but with both halves copied into one block every rebased offset is bounded by the block size
+and always fits. Opcache-shared bodies are therefore fully supported. Under
+`zend.assertions=1` the copy is verified: every `IS_CONST` operand must resolve to the copied
+literal at the very index its source operand resolved to (landing zval-aligned inside the
+copied table), and every jump offset must still land inside the array.
 
-An `IS_CONST` operand stores a **signed 32-bit** offset, so the relocated opcodes have to stay
-within 2GB of the literals they point at. Request memory and the compiler arena are neighbours,
-so this holds for an ordinary class - but an **opcache-shared body** lives in an mmap'd region
-that can be arbitrarily far from the request heap, and a truncated offset would read whatever sat
-at the wrapped address. That case is detected and rejected: substituting a *builtin parameter*
-type needs a body that is not in shared memory. Class-like parameters, all return types and all
-properties are unaffected, because none of them un-shares the opcodes.
+The literal zvals are copied **shallowly**: both blocks reference the same payloads (strings,
+arrays, ASTs), matching how the engine treats the two of them as one shared body - releases
+happen only when the shared body refcount reaches zero, so exactly one dtor pass ever runs
+over exactly one of the sibling zval arrays. An opcache-shared source never reaches that pass
+at all: its body refcount pointer is NULL, `destroy_op_array()` returns before touching
+literals, and the immortal shared-memory payloads (interned strings, immutable arrays) are
+never refcounted.
 
-Ownership mirrors the duplicated `arg_info` blocks - `destroy_op_array()` frees whichever
-`opcodes` pointer its holder carries once the shared body refcount reaches zero, so one sibling
-block is released through the engine and the other is reclaimed by the request allocator at
-request end. Bounded at one block per patched method, and only methods that actually need a
-patch pay it. An opcache-shared source is safe because it is only ever read.
+One more thing rides on the un-shared copy: opline **handlers**. Opcache's optimizer assigns
+a `mixed` parameter's RECV (cached mask exactly `MAY_BE_ANY`) the `RECV_NOTYPE` handler
+variant, which never reads the cached mask - so after writing the new mask, the specializer
+also rebinds the patched opline to the engine's generic, mask-checking handler (taken from a
+donor opline that can never be NOTYPE-specialized), exactly what the compiler assigns when a
+builtin parameter type is written in source.
+
+Ownership mirrors the duplicated `arg_info` blocks - with relative `IS_CONST` addressing the
+engine frees literals and opcodes as ONE allocation through the `opcodes` pointer (it never
+`efree()`s `literals` separately once `ZEND_ACC_DONE_PASS_TWO` is set, which this block layout
+is built for), so one sibling block is released through the engine once the shared body
+refcount reaches zero and the other is reclaimed by the request allocator at request end.
+Bounded at one block per patched method, and only methods that actually need a patch pay it.
+An opcache-shared source is safe because it is only ever read.
 
 ### Rejections
 
