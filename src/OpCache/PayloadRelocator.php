@@ -120,8 +120,11 @@ final class PayloadRelocator
         $this->base           = Core::addressOf(Core::addr($buffer));
         $this->size           = $metaInfo->memSize();
         $this->strSectionBase = $this->base + $this->size;
-        // _ZSTR_HEADER_SIZE = sizeof(zend_string) - sizeof(char) (the flexible val[1] member)
-        $this->zendStringHeaderSize = Core::sizeOfType(zend_string::class) - 1;
+        // _ZSTR_HEADER_SIZE = XtOffsetOf(zend_string, val): the flexible val[1]
+        // member starts at the last 8-byte slot of the (padded) struct, so the
+        // header is sizeof - 8, NOT sizeof - 1 (which over-copied 7 bytes per
+        // interned emission and diverged from _ZSTR_STRUCT_SIZE)
+        $this->zendStringHeaderSize = Core::sizeOfType(zend_string::class) - PHP_INT_SIZE;
     }
 
     /**

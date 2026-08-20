@@ -252,7 +252,22 @@ final class BinaryCacheFile
     public function save(?string $binPath = null, ?int $timestamp = null, ?int $directoryPermissions = 0o755): void
     {
         $target = $binPath ?? $this->binPath;
-        if ($this->relocator !== null) {
+        if ($this->view !== null && $this->view->isGraphGrown()) {
+            // A mutation outgrew the original buffer (added function/method,
+            // regrown hashtable): re-emit the whole graph from scratch through
+            // the two-pass persist serializer (issue #117). In-place edits keep
+            // taking the exact-inverse derelocate() path below.
+            $serializer     = new ScriptSerializer($this->view->getRawScript());
+            $this->payload  = $serializer->serialize();
+            $this->metaInfo = CacheMetaInfo::forPayload(
+                systemId: $this->metaInfo->systemId(),
+                memSize: $serializer->memSize(),
+                strSize: strlen($this->payload) - $serializer->memSize(),
+                scriptOffset: $serializer->scriptOffset(),
+                timestamp: $this->metaInfo->timestamp(),
+                checksum: 0, // recomputed below
+            );
+        } elseif ($this->relocator !== null) {
             // Re-serialize the (possibly mutated) live image, updating the
             // interned-string section size in the header
             $this->payload  = $this->relocator->derelocate();

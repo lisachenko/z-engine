@@ -86,14 +86,41 @@ parameters:
         -
             identifier: argument.type
             path: src/OpCache/PayloadRelocator.php
+        # ScriptSerializer is the second audited pointer-surgery file (the
+        # persist-from-graph writer, issue #117): the same CData field walking
+        # as PayloadRelocator, covered by the rebuild/graft execute-from-cache
+        # tests and the relocator round-trip identity checks.
+        -
+            identifier: property.nonObject
+            path: src/OpCache/ScriptSerializer.php
+        -
+            identifier: binaryOp.invalid
+            path: src/OpCache/ScriptSerializer.php
+        -
+            identifier: cast.int
+            path: src/OpCache/ScriptSerializer.php
+        -
+            identifier: argument.type
+            path: src/OpCache/ScriptSerializer.php
         # ReflectionOpcacheFile is the CData facade over the relocated script:
         # it reads embedded engine structs (script.filename, function/class
-        # tables) that resolve to `mixed` after the first CData hop.
+        # tables) that resolve to `mixed` after the first CData hop; since
+        # issue #117 it also carries the graft plumbing (image hashtable
+        # regrowth), which does the same CData arithmetic.
         -
             identifier: property.nonObject
             path: src/OpCache/ReflectionOpcacheFile.php
         -
             identifier: argument.type
+            path: src/OpCache/ReflectionOpcacheFile.php
+        -
+            identifier: binaryOp.invalid
+            path: src/OpCache/ReflectionOpcacheFile.php
+        -
+            identifier: cast.int
+            path: src/OpCache/ReflectionOpcacheFile.php
+        -
+            identifier: assignOp.invalid
             path: src/OpCache/ReflectionOpcacheFile.php
         # The dimension tests exist to prove that a plain `count($object)` reaches the engine's
         # count_elements handler on a class that never declared the count itself. Rewriting them
