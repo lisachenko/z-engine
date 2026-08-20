@@ -32,9 +32,12 @@ use ZEngine\Generated\zval;
 /**
  * Turns the position-independent file-cache payload into a live in-memory
  * image and back, a faithful port of ext/opcache/zend_file_cache.c
- * (unserialize = {@see relocate}, serialize = {@see derelocate}) for the
- * linux-x64 non-thread-safe build. Thread-safe (ZTS) payloads use a different
- * binary layout and are rejected until issue #118 lands ZTS-specific walking.
+ * (unserialize = {@see relocate}, serialize = {@see derelocate}) for 64-bit
+ * POSIX builds, NTS and ZTS alike: zend_file_cache.c has no thread-safety
+ * conditionals, and every struct the walker dereferences is layout-identical
+ * across the two modes (only EG/CG/module_entry differ on ZTS, none of which
+ * appear in a payload) - verified against the generated layouts.json of both
+ * targets (issue #118).
  *
  * In the file every interior pointer is stored as a byte offset from the
  * buffer start (SERIALIZE_PTR) and every interned string as a tagged offset
@@ -97,12 +100,12 @@ final class PayloadRelocator
      * Whether the relocator can handle payloads of the running build at all
      *
      * The exact predicate the constructor enforces, exposed so callers (and the tests
-     * covering them) can skip cleanly instead of provoking the throw. Windows payloads
-     * are tracked in issue #119, ZTS ones in issue #118.
+     * covering them) can skip cleanly instead of provoking the throw. Windows opcache
+     * support is an intentional non-goal (issue #119 was rescoped to macOS/arm64).
      */
     public static function isSupported(): bool
     {
-        return PHP_INT_SIZE === 8 && \DIRECTORY_SEPARATOR === '/' && !\ZEND_THREAD_SAFE;
+        return PHP_INT_SIZE === 8 && \DIRECTORY_SEPARATOR === '/';
     }
 
     /**
@@ -113,11 +116,6 @@ final class PayloadRelocator
     {
         if (PHP_INT_SIZE !== 8 || \DIRECTORY_SEPARATOR !== '/') {
             throw OpCacheException::unsupportedPayload('the relocator supports 64-bit non-Windows builds only');
-        }
-        if (\ZEND_THREAD_SAFE) {
-            throw OpCacheException::unsupportedPayload(
-                'ZTS file-cache payloads use a different binary layout - tracked in issue #118',
-            );
         }
         $this->base           = Core::addressOf(Core::addr($buffer));
         $this->size           = $metaInfo->memSize();

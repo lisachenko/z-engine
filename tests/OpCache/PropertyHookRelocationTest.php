@@ -34,8 +34,8 @@ final class PropertyHookRelocationTest extends TestCase
     {
         if (!PayloadRelocator::isSupported()) {
             self::markTestSkipped(
-                'The file-cache relocator supports 64-bit POSIX NTS payloads only'
-                . ' (ZTS is issue #118, Windows is issue #119)',
+                'The file-cache relocator supports 64-bit POSIX payloads only'
+                . ' (Windows opcache support is an intentional non-goal, issue #119)',
             );
         }
     }
