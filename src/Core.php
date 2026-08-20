@@ -25,6 +25,7 @@ use ZEngine\System\Compiler;
 use ZEngine\System\Executor;
 use ZEngine\System\Hook\AstProcessHook;
 use ZEngine\System\Hook\ErrorCallbackHook;
+use ZEngine\System\Hook\InheritanceCacheAddHook;
 use ZEngine\System\Hook\InterruptHook;
 use ZEngine\Type\HashTable;
 
@@ -251,6 +252,27 @@ class Core
     private static array $generatedFunctions = [];
 
     /**
+     * Interceptor installed over opcache's zend_inheritance_cache_add callback (issue #241)
+     *
+     * Present and installed only when the engine binding exports the symbol AND opcache
+     * published a callback into it; null otherwise, in which case handler installation on
+     * a lazy-linking temporary keeps the throw-guard fallback of issue #238.
+     */
+    private static ?InheritanceCacheAddHook $inheritanceCacheAddHook = null;
+
+    /**
+     * Addresses of temporary lazy-linking class entries whose publication into opcache's
+     * inheritance cache must be declined, so they stay process-local and their
+     * address-keyed handlers stay valid (issues #238/#241)
+     *
+     * Entries are consumed by the interceptor when linking completes and the whole set is
+     * dropped on shutdown(), so it never outlives the request that recorded it.
+     *
+     * @var array<int, true>
+     */
+    private static array $declinedInheritanceCachePublications = [];
+
+    /**
      * Whether Core::shutdown() has run: no engine pointers may be written anymore
      */
     private static bool $isShutdown = false;
@@ -333,8 +355,104 @@ class Core
 
         self::preloadFrameworkClasses();
         self::loadEngineConstants();
+        self::installInheritanceCacheInterception();
 
         self::$initialized = true;
+    }
+
+    /**
+     * Installs the interceptor over opcache's zend_inheritance_cache_add callback (idempotent)
+     *
+     * The interceptor is what lets handler installation on a lazy-linking temporary stick
+     * (issue #241): a class recorded via declineInheritanceCachePublication() is answered
+     * with NULL - the engine's ordinary "not cached" outcome - so the temporary stays in
+     * the class table as a process-local class instead of being replaced by the published
+     * shared-memory entry. Everything else delegates to the saved opcache callback.
+     *
+     * Not installed when the engine binding predates the exported symbol (stale platform
+     * artifacts - canDeclineInheritanceCachePublication() then reports false and the
+     * ReflectionClass throw-guard of issue #238 stays in charge) or when the pointer is
+     * NULL (no opcache in this process - no lazy-linking temporaries can exist either,
+     * and installing a trampoline while zend_inheritance_cache_get stays NULL would only
+     * disable the engine's is_cacheable fast path bookkeeping for no benefit).
+     */
+    private static function installInheritanceCacheInterception(): void
+    {
+        if (self::$inheritanceCacheAddHook !== null && self::$inheritanceCacheAddHook->isInstalled()) {
+            return;
+        }
+        self::$inheritanceCacheAddHook = null;
+        try {
+            /** @var CData|null $originalAdd Untyped read off the FFI binding boundary */
+            $originalAdd = self::$engine->zend_inheritance_cache_add;
+        } catch (FFI\Exception) {
+            // Engine definitions without the symbol (regenerate with `composer gen-headers`)
+            return;
+        }
+        if ($originalAdd === null) {
+            return;
+        }
+
+        $hook = new InheritanceCacheAddHook(
+            static fn(int $classEntryAddress): bool => self::takeInheritanceCacheDecline($classEntryAddress),
+            self::$engine,
+        );
+        $hook->install();
+        self::$inheritanceCacheAddHook = $hook;
+    }
+
+    /**
+     * Checks whether inheritance-cache publication can be declined in this process
+     *
+     * True when the zend_inheritance_cache_add interceptor is installed (engine binding
+     * exports the symbol and opcache published a callback). When false under opcache,
+     * handler installation on a lazy-linking temporary falls back to the loud
+     * SharedMemoryException guard of issue #238.
+     */
+    public static function canDeclineInheritanceCachePublication(): bool
+    {
+        return self::$inheritanceCacheAddHook !== null && self::$inheritanceCacheAddHook->isInstalled();
+    }
+
+    /**
+     * Records a class entry whose publication into opcache's inheritance cache must be
+     * declined when its linking completes (issue #241)
+     *
+     * Called with the address of the temporary lazy-linking copy - the entry an
+     * interface_gets_implemented hook observes and installs handlers on. Declined, the
+     * class stays process-local and mutable (re-linked per request instead of reused
+     * from the cache), so handlers keyed to its address survive linking and no
+     * process-local trampoline address ever reaches shared memory.
+     *
+     * @param int $classEntryAddress Address of the temporary zend_class_entry (Core::addressOf())
+     */
+    public static function declineInheritanceCachePublication(int $classEntryAddress): void
+    {
+        if (!self::canDeclineInheritanceCachePublication()) {
+            throw new \LogicException(
+                'Inheritance-cache publication cannot be declined: the zend_inheritance_cache_add '
+                . 'interceptor is not installed (probe with Core::canDeclineInheritanceCachePublication())',
+            );
+        }
+        self::$declinedInheritanceCachePublications[$classEntryAddress] = true;
+    }
+
+    /**
+     * Consumes one recorded decline for the given class entry address
+     *
+     * The entry is removed when found, so the set stays bounded: a hit means the class
+     * just finished linking and its cache publication is being declined right now.
+     *
+     * @internal called by InheritanceCacheAddHook::handle() from inside the engine callback
+     */
+    public static function takeInheritanceCacheDecline(int $classEntryAddress): bool
+    {
+        if (!isset(self::$declinedInheritanceCachePublications[$classEntryAddress])) {
+            return false;
+        }
+        unset(self::$declinedInheritanceCachePublications[$classEntryAddress]);
+
+        return true;
     }
 
     /**
@@ -727,6 +845,29 @@ class Core
     }
 
     /**
+     * Returns the numeric address of a POINTER CData without any internal throw
+     *
+     * Exactly addressOf() for values that are already pointers, minus cast()'s
+     * array-decay probe, which throws and catches an FFI\Exception per call. Engine
+     * callbacks that can fire while CG(in_compilation) is set (the intercepted
+     * zend_inheritance_cache_add runs during compile-time early binding) must not
+     * throw AT ALL - the engine promotes every thrown exception to an immediate
+     * fatal error there, before any catch block runs.
+     *
+     * @param CData|object $pointer Pointer CData (never a C array); statically
+     *                              stub-typed views are accepted
+     *
+     * @internal for engine-callback hot paths (InheritanceCacheAddHook)
+     */
+    public static function pointerAddressOf(object $pointer): int
+    {
+        assert($pointer instanceof CData);
+        $address = self::$engine->cast('uintptr_t', $pointer)->cdata;
+
+        return \is_int($address) ? $address : 0;
+    }
+
+    /**
      * Materializes a typed pointer from a numeric address (the inverse of addressOf())
      *
      * FFI::cast() reinterprets a plain integer as a pointer value, which yields the
@@ -993,6 +1134,12 @@ class Core
         // request-lifetime ones when their owning structures die, persistent ones are process
         // lifetime by design. Dropping the registry only releases the bookkeeping.
         self::$trackedBlocks = [];
+
+        // The interceptor itself was uninstalled by the chain unwind above; pending decline
+        // records (classes whose linking never completed, e.g. after a bailout) die with
+        // the request that recorded them
+        self::$inheritanceCacheAddHook              = null;
+        self::$declinedInheritanceCachePublications = [];
 
         self::$isShutdown = true;
     }

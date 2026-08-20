@@ -131,8 +131,8 @@ PRs), or manually via `workflow_dispatch` against any branch.
 Darwin covers **NTS and ZTS**: the workflow's matrix crosses both
 architectures with both thread-safety modes (setup-php builds the ZTS PHP via
 `phpts: ts`). As on Linux, the ZTS artifacts reach EG/CG through the TSRM
-offsets, and the opcache file-cache relocator stays unsupported on ZTS
-(issue #118). The 8.4 artifacts are maintained on the `8.4` branch;
+offsets; the opcache file-cache relocator runs on ZTS since issue #118.
+The 8.4 artifacts are maintained on the `8.4` branch;
 `include/8.5/darwin-*` is maintained here - after changing the generator,
 refresh it with one `workflow_dispatch` run of the workflow on `master`.
 A leg whose thread-safety mode setup-php cannot provide (currently ZTS
@@ -197,10 +197,12 @@ composer test:internal   # destructive/segfault-prone group, process-isolated
 - `ZENGINE_STRICT_LAYOUT_CHECK=1` (set in the test bootstrap) makes
   `Core::init()` verify every struct layout against `layouts.json` before
   touching engine memory — the anti-segfault airbag. Keep it on in development.
-- On **ZTS** builds the file-cache relocator tests (`opcache-relocator` group)
-  self-skip — ZTS payloads are not supported yet (issue #118). The non-skip
-  gate for the remaining opcache/SHM coverage is `composer test:opcache-zts`;
-  CI runs both release and debug test legs on NTS **and** ZTS.
+- The file-cache relocator supports **ZTS** payloads since issue #118 (the
+  binary layout is thread-safety-agnostic: zend_file_cache.c has no ZTS
+  conditionals and every walked struct is layout-identical across the modes).
+  `composer test:opcache-zts` stays as the named alias CI's ZTS legs call; it
+  now runs the full opcache group, relocator tests included. CI runs both
+  release and debug test legs on NTS **and** ZTS.
 - `composer test:opcache-runner` runs the suite the way an opcache-enabled
   consumer does — `opcache.enable_cli=1` in the **runner process itself**, so
   every test file is compiled into shared memory (CI has a dedicated Linux job

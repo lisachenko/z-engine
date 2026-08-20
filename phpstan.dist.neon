@@ -68,33 +68,6 @@ parameters:
         -
             identifier: offsetAccess.nonOffsetAccessible
             path: src/Type/StructArray.php
-        # PayloadRelocator is the file-cache pointer-surgery machinery: it walks
-        # engine structs field by field through FFI\CData, so a chained access
-        # (`$zval->u1->v->type`) resolves to `mixed` after the first hop and the
-        # arithmetic/casts on those reads cannot be statically typed. The FFI
-        # blast radius is confined to this one audited file (AGENTS.md); every
-        # path is covered by the byte-identity and execute-from-cache tests.
-        -
-            identifier: property.nonObject
-            path: src/OpCache/PayloadRelocator.php
-        -
-            identifier: binaryOp.invalid
-            path: src/OpCache/PayloadRelocator.php
-        -
-            identifier: cast.int
-            path: src/OpCache/PayloadRelocator.php
-        -
-            identifier: argument.type
-            path: src/OpCache/PayloadRelocator.php
-        # ReflectionOpcacheFile is the CData facade over the relocated script:
-        # it reads embedded engine structs (script.filename, function/class
-        # tables) that resolve to `mixed` after the first CData hop.
-        -
-            identifier: property.nonObject
-            path: src/OpCache/ReflectionOpcacheFile.php
-        -
-            identifier: argument.type
-            path: src/OpCache/ReflectionOpcacheFile.php
         # The dimension tests exist to prove that a plain `count($object)` reaches the engine's
         # count_elements handler on a class that never declared the count itself. Rewriting them
         # as assertCount() would measure PHPUnit's Count constraint instead of the language

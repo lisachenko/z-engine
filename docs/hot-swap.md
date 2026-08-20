@@ -124,11 +124,11 @@ covered in [opcache-binary.md](opcache-binary.md).
 
 | Target | Behaviour |
 |--------|-----------|
-| Immutable **global function** + `redefine()` | Supported via copy-out: the per-process function-table bucket is repointed at a writable `zend_function` copy; the SHM original stays untouched and allocated. The first swap does not destroy the previous (SHM) body; later swaps behave normally. |
+| Immutable **global function** + `redefine()` | Supported via copy-out: the per-process function-table bucket is repointed at a writable `zend_function` copy; the SHM original stays untouched and allocated. The first swap does not destroy the previous (SHM) body; later swaps behave normally. Only *name resolution* is redirected - call sites that already resolved the function, and call sites the optimizer inlined at cache time, keep the original body (see the copy-out caveats). |
 | Immutable **class**: method `redefine()`, `addMethod()`, `removeMethods()`, trait configuration, `HotSwap::prepare()` | Supported via class copy-out: the class entry is deep-copied into request memory with the [class-specialization](class-specialization.md) copy model (own tables and property/constant blocks, method entries duplicated at the `zend_op_array` level with the compiled bodies still shared with SHM), the class-table bucket and the engine's fast class-name cache are repointed at the copy, and the mutation is applied to it. The copy is an ordinary userland class the engine dismantles at request end. |
 | Immutable **preloaded** class (`ZEND_ACC_PRELOADED`) | Rejected with `SharedMemoryException`: a preloaded class keeps its class-table bucket across the requests of a worker, while the copy lives in request memory - repointing the bucket would leave it dangling for the next request. |
 | Immutable class the copy machinery does not support (enum/interface/trait, property hooks, internal ancestor or internal methods) | Rejected with `SharedMemoryException` carrying the refusal reason. |
-| Class observed **mid-linking** on an opcache lazy-linking temporary (`ZEND_ACC_CACHED` set, `ZEND_ACC_LINKED` clear - the only state an `interface_gets_implemented` hook ever sees for a cached implementor) | Handler installation (`setXxxHandler()`, `installExtensionHandlers()`) rejected with `SharedMemoryException`: handlers are keyed by class-entry address and the temporary is discarded when opcache's inheritance cache persists the linked class, so they would be silently lost ([#238](https://github.com/lisachenko/z-engine/issues/238)). Probe with `ReflectionClass::isLazyLinkingCopy()`; install after linking completes, or run the bootstrap with opcache off. [#241](https://github.com/lisachenko/z-engine/issues/241) tracks making the installation stick by declining the inheritance cache for hooked classes. |
+| Class observed **mid-linking** on an opcache lazy-linking temporary (`ZEND_ACC_CACHED` set, `ZEND_ACC_LINKED` clear - the only state an `interface_gets_implemented` hook ever sees for a cached implementor) | Supported via **inheritance-cache decline** ([#241](https://github.com/lisachenko/z-engine/issues/241)): handlers are keyed by class-entry address, and without intervention the temporary would be discarded as soon as opcache's inheritance cache persists the linked class, silently losing them ([#238](https://github.com/lisachenko/z-engine/issues/238)). So handler installation (`setXxxHandler()`, `installExtensionHandlers()`) records the entry, and z-engine's interceptor over `zend_inheritance_cache_add` answers NULL for it when linking completes - the engine's ordinary "not cached" outcome (opcache itself returns it when SHM is full). The temporary then stays in the class table as a process-local, request-lifetime class: the handlers keep firing, and the class simply pays re-linking per process/request instead of being reused from the cache. Unhooked classes delegate to opcache unchanged and keep full cache reuse. FPM-safety: because the hooked class is never published, no per-process trampoline or handlers-block address ever reaches shared memory (publishing the handlers through the class entry instead was rejected for exactly that hazard). Probe with `ReflectionClass::isLazyLinkingCopy()`. Fallback: on a platform whose generated engine definitions predate the `zend_inheritance_cache_add` export, the installation still throws `SharedMemoryException` instead of being silently lost - regenerate with `composer gen-headers`. |
 | Runtime-declared functions/classes (never in SHM, even with opcache enabled) | Full mutation surface. |
 | Static variables of an immutable function | Readable: `getStaticVariables()` follows the map-ptr offset slot opcache stores into shared op_arrays and returns the live per-process table once the first call materialized it (the declaration defaults before that). |
 
@@ -136,11 +136,19 @@ covered in [opcache-binary.md](opcache-binary.md).
 `ReflectionException`, so existing catch blocks keep working while the failure
 modes stay distinguishable.
 
+The file-cache bridge `CacheImageSync` (see
+[opcache-binary.md](opcache-binary.md)) drives this same machinery from a
+patched cache image instead of a closure/source donor: changed image bodies
+are swapped into the already-loaded entries through `FunctionBodySwap`, with
+opcache-shared targets copied out of SHM by the exact paths above — every
+row of this matrix, including the refusals, applies to it unchanged.
+
 ### Copy-out caveats
 
-A copy-out changes which `zend_class_entry` the class name resolves to, and
-only *resolution* is redirected - structures that captured the shared entry
-earlier keep it. Copy out (or mutate) at bootstrap, before such state exists:
+A copy-out changes which structure (`zend_class_entry`, `zend_function`) the
+*name* resolves to, and only resolution is redirected - structures that
+captured the shared entry earlier keep it. Copy out (or mutate) at bootstrap,
+before such state exists:
 
 - **Instances created before the copy-out** keep the shared class entry in
   `obj->ce`: they dispatch the old method bodies and are not `instanceof` the
@@ -155,6 +163,25 @@ earlier keep it. Copy out (or mutate) at bootstrap, before such state exists:
   call site spelling the class the way it was declared uses; a call site that
   already resolved the class through another spelling (`new foo\bar()` for
   `Foo\Bar`) in this request keeps the shared entry.
+- **Call sites that already resolved the function**: the engine memoizes the
+  resolved `zend_function*` in the caller's run-time cache the first time a
+  call site executes. A caller that already called the function in this
+  request keeps dispatching the shared-memory entry after a function copy-out
+  (the function-side twin of the "instances created before the copy-out"
+  rule). Redefine at bootstrap, before the call sites warm up.
+- **Optimizer-inlined call sites**
+  ([#242](https://github.com/lisachenko/z-engine/issues/242)): when opcache
+  caches a script, its optimizer *inlines* a same-file call to a function
+  whose body merely returns a literal - the call site is replaced by the
+  constant (`zend_try_inline_call`, optimizer pass 4, part of the default
+  `opcache.optimization_level`), and method calls can be folded the same way
+  when the optimizer proves the receiver's class. Such call sites do not exist
+  in the compiled code at all, so no `redefine()` - before or after they run -
+  can ever affect them; only truly dynamic calls (`$name()`, a runtime
+  callable) always resolve at runtime. Give a redefine target a body the
+  optimizer cannot pre-evaluate (for example, return a runtime-defined
+  constant), declare it in a different file than its callers, or mask the pass
+  out (`opcache.optimization_level=0x7FFEBFF7`).
 - **Per-request only**: the copy dies with the request, and the next request of
   the same worker starts from the shared-memory class again - apply the
   mutation on every request (bootstrap), exactly like for a runtime-declared
@@ -164,6 +191,9 @@ earlier keep it. Copy out (or mutate) at bootstrap, before such state exists:
 
 - `redefine()` and `ClassDelta` **body swaps are memory-flat**: each swap
   releases the previous body, its heap run-time cache and its static tables.
+  This holds for donors declared in opcache-cached files too: their compiled
+  arrays live in shared memory and are never freed, but the per-entry heap
+  run-time cache and statics duplicate minted by the swap are released.
 - Each `HotSwap::prepare()` costs one class compilation. The engine allocates
   the op_array/class-entry **containers** from the request arena, which is
   only reclaimed at request end (~1 KiB per prepare for a small class, the
@@ -176,8 +206,11 @@ earlier keep it. Copy out (or mutate) at bootstrap, before such state exists:
 ## Interactions to be aware of
 
 - **Run-time cache invalidation**: swapped entries always get a fresh cache;
-  caches of *other* functions that call the swapped one are untouched but safe,
-  because the entry pointer (what those caches store) is preserved.
+  caches of *other* functions that call the swapped one are untouched but safe
+  for in-place swaps, because the entry pointer (what those caches store) is
+  preserved. The shared-memory copy-out path publishes a *new* pointer instead,
+  so callers that already resolved the old one keep it - see the copy-out
+  caveats above.
 - **`Closure::fromCallable()` over a later-swapped method**: fake closures
   share the old body and keep it alive through its refcount; they continue to
   execute the old body (and its static variables) until released.

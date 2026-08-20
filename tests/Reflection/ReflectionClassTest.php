@@ -292,9 +292,9 @@ class ReflectionClassTest extends TestCase
     {
         if (function_exists('opcache_get_status') && opcache_get_status(false) !== false) {
             self::markTestSkipped(
-                'With opcache active in the runner the implementor links on a lazy-linking copy and '
-                . 'handler installation is rejected (issue #238): that shape is covered by '
-                . 'OpcacheSupportMatrixTest::testHandlerInstallationDuringLazyLinkingIsRejected',
+                'With opcache active in the runner the implementor links on a lazy-linking copy '
+                . '(this test asserts the plain non-opcache shape): that shape is covered by '
+                . 'OpcacheSupportMatrixTest::testHandlersInstalledDuringLazyLinkingSurviveViaCacheDecline',
             );
         }
 
