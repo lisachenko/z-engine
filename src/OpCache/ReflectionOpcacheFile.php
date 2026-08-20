@@ -37,9 +37,18 @@ use ZEngine\Type\StringEntry;
 final class ReflectionOpcacheFile
 {
     /**
-     * @param \FFI\CData $script
+     * @param \FFI\CData  $script     Relocated zend_persistent_script inside the image buffer
+     * @param object|null $imageOwner Owner of the relocated buffer (the PayloadRelocator):
+     *                                retained so that holding this view alone provably keeps
+     *                                the buffer - which every wrapper this view hands out
+     *                                points into - alive (see CacheImageSync, whose swapped-in
+     *                                bodies keep executing out of that buffer)
      */
-    public function __construct(private readonly object $script) {}
+    public function __construct(
+        private readonly object $script,
+        // @phpstan-ignore property.onlyWritten (lifetime pin: held, never read)
+        private readonly ?object $imageOwner = null,
+    ) {}
 
     /**
      * The cached script's source path (parity with ReflectionClass::getFileName())

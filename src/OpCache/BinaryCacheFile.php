@@ -236,7 +236,9 @@ final class BinaryCacheFile
 
         $this->relocator = new PayloadRelocator($buffer, $this->metaInfo);
 
-        return $this->view = new ReflectionOpcacheFile($this->relocator->relocate());
+        // The relocator travels with the view as its owner, so the view alone keeps the
+        // buffer alive even when this BinaryCacheFile is released by the caller
+        return $this->view = new ReflectionOpcacheFile($this->relocator->relocate(), $this->relocator);
     }
 
     /**

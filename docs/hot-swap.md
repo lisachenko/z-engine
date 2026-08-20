@@ -136,6 +136,13 @@ covered in [opcache-binary.md](opcache-binary.md).
 `ReflectionException`, so existing catch blocks keep working while the failure
 modes stay distinguishable.
 
+The file-cache bridge `CacheImageSync` (see
+[opcache-binary.md](opcache-binary.md)) drives this same machinery from a
+patched cache image instead of a closure/source donor: changed image bodies
+are swapped into the already-loaded entries through `FunctionBodySwap`, with
+opcache-shared targets copied out of SHM by the exact paths above — every
+row of this matrix, including the refusals, applies to it unchanged.
+
 ### Copy-out caveats
 
 A copy-out changes which structure (`zend_class_entry`, `zend_function`) the
