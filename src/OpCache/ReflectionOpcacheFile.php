@@ -47,9 +47,6 @@ final class ReflectionOpcacheFile
     /** @var list<self> donor images whose units this image now references */
     private array $donors = [];
 
-    /** @var zend_persistent_script Typed view of the relocated persistent script this handle wraps */
-    private readonly object $script;
-
     /**
      * @param \FFI\CData|zend_persistent_script $script     Relocated zend_persistent_script inside the image buffer
      * @param object|null                       $imageOwner Owner of the relocated buffer (the PayloadRelocator):
@@ -59,6 +56,7 @@ final class ReflectionOpcacheFile
      *                                                      bodies keep executing out of that buffer)
      */
     public function __construct(
+        /** @var zend_persistent_script Typed view of the relocated persistent script this handle wraps */
         private readonly object $script,
         // @phpstan-ignore property.onlyWritten (lifetime pin: held, never read)
         private readonly ?object $imageOwner = null,
