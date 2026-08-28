@@ -8,7 +8,7 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/lisachenko/z-engine/ci.yml?branch=master&label=CI)](https://github.com/lisachenko/z-engine/actions/workflows/ci.yml)
 [![GitHub release](https://img.shields.io/github/release/lisachenko/z-engine.svg)](https://github.com/lisachenko/z-engine/releases/latest)
-[![PHP Version](https://img.shields.io/badge/php-8.4%20%7C%208.5-8892BF.svg)](https://php.net/)
+[![PHP Version](https://img.shields.io/badge/php-8.4%20%7C%208.5%20%7C%208.6-8892BF.svg)](https://php.net/)
 [![License](https://img.shields.io/packagist/l/lisachenko/z-engine.svg)](https://packagist.org/packages/lisachenko/z-engine)
 [![PHPStan](https://img.shields.io/badge/PHPStan-level%20max-brightgreen.svg)](https://phpstan.org/)
 
@@ -43,11 +43,14 @@ Engine memory layouts change between every PHP minor version, so each PHP minor 
 
 | PHP | OS / Arch / TS | Branch | Status |
 |-----|----------------|--------|--------|
-| 8.5 | linux-x64 (nts, zts), darwin-x64 (nts), darwin-arm64 (nts, zts), windows-x64 (nts, zts) | `master` | ✅ supported¹ |
+| 8.6 | linux-x64 (nts, zts) | `master` | 🚧 in progress¹ |
+| 8.5 | linux-x64 (nts, zts), darwin-x64 (nts), darwin-arm64 (nts, zts), windows-x64 (nts, zts) | `8.5` | ✅ supported² |
 | 8.4 | linux-x64 (nts, zts), darwin-x64 (nts, zts), darwin-arm64 (nts, zts), windows-x64 (nts, zts) | `8.4` | ✅ supported |
 | 8.0 | linux-x64-nts | `8.0` | 🧊 frozen (legacy) |
 
-¹ `darwin-x64-zts` on 8.5 lands as soon as a ZTS PHP 8.5 build exists for Intel macOS runners — the generation workflow picks it up automatically.
+¹ PHP 8.6 is pre-release; definitions track the latest beta. darwin-* and windows-* artifacts land through the generation workflows as 8.6 builds become available on those runners.
+
+² `darwin-x64-zts` on 8.5 lands as soon as a ZTS PHP 8.5 build exists for Intel macOS runners — the generation workflow picks it up automatically.
 
 > **Version matching is not optional.** Running Z-Engine against a PHP minor it was not built for corrupts memory. `Core::init()` enforces the match and aborts with a clear message rather than letting you crash.
 

@@ -18,9 +18,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# This branch targets PHP 8.5 only - engine structures are version-specific.
+# This branch targets PHP 8.6 only - engine structures are version-specific.
 env:
-  PHP_MINOR: '8.5'
+  PHP_MINOR: '8.6'
 
 jobs:
   tests:

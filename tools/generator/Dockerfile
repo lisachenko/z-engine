@@ -3,7 +3,7 @@
 # (engine.h, constants.php, layouts.json) via the scratch stage.
 #
 # Driven by tools/generator/generate.php - do not run by hand unless debugging.
-ARG BASE_IMAGE=php:8.5-cli
+ARG BASE_IMAGE=php:8.6-cli
 FROM ${BASE_IMAGE} AS build
 
 WORKDIR /gen

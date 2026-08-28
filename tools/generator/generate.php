@@ -18,7 +18,7 @@ declare(strict_types=1);
  *
  * Usage:
  *   php tools/generator/generate.php               # all targets of this branch
- *   php tools/generator/generate.php --php=8.5 --ts=nts
+ *   php tools/generator/generate.php --php=8.6 --ts=nts
  *   php tools/generator/generate.php --native [--php-src=DIR] [--php-dev=DIR]
  *
  * Requires docker (with buildx). Invoked via `composer gen-headers`.
@@ -41,15 +41,16 @@ error_reporting(E_ALL);
  * Version/TS targets maintained on this branch. Extend when a new platform
  * or thread-safety mode becomes supported (see AGENTS.md).
  *
- * master targets PHP 8.5 only. The committed include/8.4 artifacts are
- * maintained on the `8.4` branch (its own gen-headers run regenerates them)
- * and arrive here through the cascade merge-up.
+ * master targets PHP 8.6 only. The committed include/8.4 and include/8.5
+ * artifacts are maintained on the `8.4` and `8.5` branches (their own
+ * gen-headers runs regenerate them) and arrive here through the cascade
+ * merge-up.
  *
  * @var list<array{php: string, ts: string}> $defaultTargets
  */
 $defaultTargets = [
-    ['php' => '8.5', 'ts' => 'nts'],
-    ['php' => '8.5', 'ts' => 'zts'],
+    ['php' => '8.6', 'ts' => 'nts'],
+    ['php' => '8.6', 'ts' => 'zts'],
 ];
 
 /** @return never */
@@ -299,7 +300,7 @@ function windowsDevelopmentPack(?string $override, string $ts): string
 $options = getopt('', ['php:', 'ts:', 'native', 'php-src:', 'php-dev:']);
 $targets = $defaultTargets;
 if (isset($options['php']) || isset($options['ts'])) {
-    $php     = is_string($options['php'] ?? null) ? $options['php'] : '8.5';
+    $php     = is_string($options['php'] ?? null) ? $options['php'] : '8.6';
     $ts      = is_string($options['ts'] ?? null) ? $options['ts'] : 'nts';
     $targets = [['php' => $php, 'ts' => $ts]];
 }

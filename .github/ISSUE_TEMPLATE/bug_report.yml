@@ -11,7 +11,7 @@ body:
     id: php-version
     attributes:
       label: PHP version (full `php -v` first line)
-      placeholder: 'PHP 8.5.3 (cli) (built: ...) (NTS)'
+      placeholder: 'PHP 8.6.0 (cli) (built: ...) (NTS)'
     validations:
       required: true
   - type: dropdown
@@ -34,7 +34,7 @@ body:
     id: z-engine-version
     attributes:
       label: z-engine version / branch
-      placeholder: 'dev-master (PHP 8.5), or the 8.4 branch'
+      placeholder: 'dev-master (PHP 8.6), or the 8.5 branch'
     validations:
       required: true
   - type: textarea
