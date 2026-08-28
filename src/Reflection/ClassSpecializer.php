@@ -303,9 +303,10 @@ class ClassSpecializer
      */
     private function assertCopyableSource(object $sourceEntry, string $sourceClassName): void
     {
+        // Since PHP 8.6 ce->type is a uint8-typed enum (zend_class_type), not a char
         $sourceKind = $sourceEntry->type;
-        assert(is_string($sourceKind));
-        if (ord($sourceKind) !== Core::ZEND_USER_CLASS) {
+        assert(is_int($sourceKind));
+        if ($sourceKind !== Core::ZEND_USER_CLASS) {
             throw new ClassSpecializationException(
                 "Cannot copy internal class {$sourceClassName}: only userland classes are supported",
             );
@@ -340,8 +341,8 @@ class ClassSpecializer
         for ($parent = $sourceEntry->parent; $parent !== null; $parent = $parent->parent) {
             assert($parent instanceof CData);
             $parentKind = $parent->type;
-            assert(is_string($parentKind));
-            if (ord($parentKind) !== Core::ZEND_USER_CLASS) {
+            assert(is_int($parentKind));
+            if ($parentKind !== Core::ZEND_USER_CLASS) {
                 $rawParentName = $parent->name;
                 assert($rawParentName instanceof CData);
                 $parentName = StringEntry::fromCData($rawParentName)->getStringValue();

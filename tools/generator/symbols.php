@@ -300,6 +300,9 @@ return [
         // C23 enum (ZEND_INTERNAL_FUNCTION/ZEND_USER_FUNCTION/ZEND_EVAL_CODE,
         // same values) since PHP 8.6
         'zend_function_type',
+        // Class kinds (zend.h): a typed C23 enum since PHP 8.6
+        // (ZEND_INTERNAL_CLASS/ZEND_USER_CLASS, mirrored on Core)
+        'zend_class_type',
     ],
 
     // System/libc types that z-engine only ever uses behind a pointer. Their

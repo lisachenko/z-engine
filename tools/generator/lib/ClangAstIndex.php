@@ -311,8 +311,12 @@ final class ClangAstIndex
      */
     private static function enumDeclHasMembers(array $decl): bool
     {
-        foreach ($decl['inner'] ?? [] as $member) {
-            if (($member['kind'] ?? '') === 'EnumConstantDecl') {
+        $inner = $decl['inner'] ?? null;
+        if (!is_array($inner)) {
+            return false;
+        }
+        foreach ($inner as $member) {
+            if (is_array($member) && ($member['kind'] ?? '') === 'EnumConstantDecl') {
                 return true;
             }
         }

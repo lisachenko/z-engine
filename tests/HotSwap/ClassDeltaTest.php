@@ -47,7 +47,10 @@ class ClassDeltaTest extends TestCase
 
     private static function callMethod(object $instance, string $methodName, mixed ...$arguments): mixed
     {
-        return (new \ReflectionMethod($instance, $methodName))->invoke($instance, ...$arguments);
+        $method = new \ReflectionMethod($instance, $methodName);
+
+        // PHP 8.6 deprecates passing an object to invoke() for static methods
+        return $method->invoke($method->isStatic() ? null : $instance, ...$arguments);
     }
 
     private static function readProperty(object $instance, string $propertyName): mixed

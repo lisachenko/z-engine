@@ -312,6 +312,8 @@ return [
     'ZEND_INTERNAL_FUNCTION' => 1,
     'ZEND_USER_FUNCTION' => 2,
     'ZEND_EVAL_CODE' => 4,
+    'ZEND_INTERNAL_CLASS' => 1,
+    'ZEND_USER_CLASS' => 2,
     'ZEND_NOP' => 0,
     'ZEND_ADD' => 1,
     'ZEND_SUB' => 2,

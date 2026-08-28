@@ -577,12 +577,15 @@ class HashTable implements IteratorAggregate, Countable, ReferenceCountedInterfa
      */
     public function addIndex(int $key, ReflectionValue $value): void
     {
+        // HASH_ADD (not HASH_ADD_NEW) for the same duplicate-check reason as add();
+        // since PHP 8.6 the dispatcher also asserts HASH_ADD_NEW only appears
+        // combined with HASH_ADD
         $result = Core::call(
             'zend_hash_index_add_or_update',
             $this->pointer,
             $key,
             $value->getRawValue(),
-            self::HASH_ADD_NEW,
+            self::HASH_ADD,
         );
         if ($result === null) {
             throw TypeOperationException::cannotAddIndex($key);

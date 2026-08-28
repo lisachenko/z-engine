@@ -705,6 +705,8 @@ int main(void) {
     fprintf(constants, "    'ZEND_INTERNAL_FUNCTION' => %lld,\n", (long long)(ZEND_INTERNAL_FUNCTION));
     fprintf(constants, "    'ZEND_USER_FUNCTION' => %lld,\n", (long long)(ZEND_USER_FUNCTION));
     fprintf(constants, "    'ZEND_EVAL_CODE' => %lld,\n", (long long)(ZEND_EVAL_CODE));
+    fprintf(constants, "    'ZEND_INTERNAL_CLASS' => %lld,\n", (long long)(ZEND_INTERNAL_CLASS));
+    fprintf(constants, "    'ZEND_USER_CLASS' => %lld,\n", (long long)(ZEND_USER_CLASS));
     fprintf(constants, "    'ZEND_NOP' => 0,\n");
     fprintf(constants, "    'ZEND_ADD' => 1,\n");
     fprintf(constants, "    'ZEND_SUB' => 2,\n");
