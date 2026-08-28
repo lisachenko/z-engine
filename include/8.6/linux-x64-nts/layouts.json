@@ -1,0 +1,697 @@
+{
+    "meta": {
+        "php": "8.6",
+        "api": 20250926,
+        "zts": 0,
+        "debug": 1
+    },
+    "structs": {
+        "zval": {
+            "size": 16,
+            "fields": {
+                "value": 0,
+                "u1": 8,
+                "u2": 12
+            }
+        },
+        "zend_refcounted": {
+            "size": 8,
+            "fields": {
+                "gc": 0
+            }
+        },
+        "zend_string": {
+            "size": 32,
+            "fields": {
+                "gc": 0,
+                "h": 8,
+                "len": 16,
+                "val": 24
+            }
+        },
+        "zend_array": {
+            "size": 56,
+            "fields": {
+                "gc": 0,
+                "u": 8,
+                "nTableMask": 12,
+                "arHash": 16,
+                "arData": 16,
+                "arPacked": 16,
+                "nNumUsed": 24,
+                "nNumOfElements": 28,
+                "nTableSize": 32,
+                "nInternalPointer": 36,
+                "nNextFreeElement": 40,
+                "pDestructor": 48
+            }
+        },
+        "Bucket": {
+            "size": 32,
+            "fields": {
+                "val": 0,
+                "h": 16,
+                "key": 24
+            }
+        },
+        "zend_object": {
+            "size": 56,
+            "fields": {
+                "gc": 0,
+                "handle": 8,
+                "extra_flags": 12,
+                "ce": 16,
+                "handlers": 24,
+                "properties": 32,
+                "properties_table": 40
+            }
+        },
+        "zend_resource": {
+            "size": 32,
+            "fields": {
+                "gc": 0,
+                "handle": 8,
+                "type": 16,
+                "ptr": 24
+            }
+        },
+        "zend_reference": {
+            "size": 32,
+            "fields": {
+                "gc": 0,
+                "val": 8,
+                "sources": 24
+            }
+        },
+        "zend_class_entry": {
+            "size": 528,
+            "fields": {
+                "type": 0,
+                "name": 8,
+                "parent": 16,
+                "parent_name": 16,
+                "refcount": 24,
+                "ce_flags": 28,
+                "ce_flags2": 32,
+                "default_properties_count": 36,
+                "default_static_members_count": 40,
+                "default_properties_table": 48,
+                "default_static_members_table": 56,
+                "static_members_table__ptr": 64,
+                "function_table": 72,
+                "properties_info": 128,
+                "constants_table": 184,
+                "mutable_data__ptr": 240,
+                "inheritance_cache": 248,
+                "properties_info_table": 256,
+                "constructor": 264,
+                "destructor": 272,
+                "clone": 280,
+                "__get": 288,
+                "__set": 296,
+                "__unset": 304,
+                "__isset": 312,
+                "__call": 320,
+                "__callstatic": 328,
+                "__tostring": 336,
+                "__debugInfo": 344,
+                "__serialize": 352,
+                "__unserialize": 360,
+                "default_object_handlers": 368,
+                "iterator_funcs_ptr": 376,
+                "arrayaccess_funcs_ptr": 384,
+                "create_object": 392,
+                "interface_gets_implemented": 392,
+                "get_iterator": 400,
+                "get_static_method": 408,
+                "serialize": 416,
+                "unserialize": 424,
+                "num_interfaces": 432,
+                "num_traits": 436,
+                "num_hooked_props": 440,
+                "num_hooked_prop_variance_checks": 444,
+                "interfaces": 448,
+                "interface_names": 448,
+                "trait_names": 456,
+                "trait_aliases": 464,
+                "trait_precedences": 472,
+                "attributes": 480,
+                "enum_backing_type": 488,
+                "backed_enum_table": 496,
+                "doc_comment": 504,
+                "info": 512
+            }
+        },
+        "zend_class_constant": {
+            "size": 56,
+            "fields": {
+                "value": 0,
+                "doc_comment": 16,
+                "attributes": 24,
+                "ce": 32,
+                "type": 40
+            }
+        },
+        "zend_class_name": {
+            "size": 16,
+            "fields": {
+                "name": 0,
+                "lc_name": 8
+            }
+        },
+        "zend_property_info": {
+            "size": 72,
+            "fields": {
+                "offset": 0,
+                "flags": 4,
+                "name": 8,
+                "doc_comment": 16,
+                "attributes": 24,
+                "ce": 32,
+                "type": 40,
+                "prototype": 56,
+                "hooks": 64
+            }
+        },
+        "zend_type_list": {
+            "size": 24,
+            "fields": {
+                "num_types": 0,
+                "types": 8
+            }
+        },
+        "zend_constant": {
+            "size": 40,
+            "fields": {
+                "value": 0,
+                "name": 16,
+                "filename": 24,
+                "attributes": 32
+            }
+        },
+        "zend_attribute": {
+            "size": 64,
+            "fields": {
+                "name": 0,
+                "lcname": 8,
+                "validation_error": 16,
+                "flags": 24,
+                "lineno": 28,
+                "offset": 32,
+                "argc": 36,
+                "args": 40
+            }
+        },
+        "zend_attribute_arg": {
+            "size": 24,
+            "fields": {
+                "name": 0,
+                "value": 8
+            }
+        },
+        "zend_op_array": {
+            "size": 256,
+            "fields": {
+                "type": 0,
+                "arg_flags": 1,
+                "fn_flags": 4,
+                "function_name": 8,
+                "scope": 16,
+                "prototype": 24,
+                "num_args": 32,
+                "required_num_args": 36,
+                "arg_info": 40,
+                "attributes": 48,
+                "run_time_cache__ptr": 56,
+                "doc_comment": 64,
+                "T": 72,
+                "fn_flags2": 76,
+                "prop_info": 80,
+                "cache_size": 88,
+                "last_var": 92,
+                "last": 96,
+                "opcodes": 104,
+                "static_variables_ptr__ptr": 112,
+                "static_variables": 120,
+                "vars": 128,
+                "refcount": 136,
+                "last_live_range": 144,
+                "last_try_catch": 148,
+                "live_range": 152,
+                "try_catch_array": 160,
+                "filename": 168,
+                "line_start": 176,
+                "line_end": 180,
+                "last_literal": 184,
+                "num_dynamic_func_defs": 188,
+                "literals": 192,
+                "dynamic_func_defs": 200,
+                "reserved": 208
+            }
+        },
+        "zend_internal_function": {
+            "size": 160,
+            "fields": {
+                "type": 0,
+                "arg_flags": 1,
+                "fn_flags": 4,
+                "function_name": 8,
+                "scope": 16,
+                "prototype": 24,
+                "num_args": 32,
+                "required_num_args": 36,
+                "arg_info": 40,
+                "attributes": 48,
+                "run_time_cache__ptr": 56,
+                "doc_comment": 64,
+                "T": 72,
+                "fn_flags2": 76,
+                "prop_info": 80,
+                "handler": 88,
+                "module": 96,
+                "frameless_function_infos": 104,
+                "reserved": 112
+            }
+        },
+        "zend_op": {
+            "size": 32,
+            "fields": {
+                "handler": 0,
+                "op1": 8,
+                "op2": 12,
+                "result": 16,
+                "extended_value": 20,
+                "lineno": 24,
+                "opcode": 28,
+                "op1_type": 29,
+                "op2_type": 30,
+                "result_type": 31
+            }
+        },
+        "zend_execute_data": {
+            "size": 80,
+            "fields": {
+                "opline": 0,
+                "call": 8,
+                "return_value": 16,
+                "func": 24,
+                "This": 32,
+                "prev_execute_data": 48,
+                "symbol_table": 56,
+                "run_time_cache": 64,
+                "extra_named_params": 72
+            }
+        },
+        "zend_objects_store": {
+            "size": 24,
+            "fields": {
+                "object_buckets": 0,
+                "top": 8,
+                "size": 12,
+                "free_list_head": 16
+            }
+        },
+        "zend_executor_globals": {
+            "size": 2168,
+            "fields": {
+                "uninitialized_zval": 0,
+                "error_zval": 16,
+                "symtable_cache": 32,
+                "symtable_cache_limit": 288,
+                "symtable_cache_ptr": 296,
+                "symbol_table": 304,
+                "included_files": 360,
+                "bailout": 416,
+                "error_reporting": 424,
+                "fatal_error_backtrace_on": 428,
+                "last_fatal_error_backtrace": 432,
+                "exit_status": 448,
+                "function_table": 456,
+                "class_table": 464,
+                "zend_constants": 472,
+                "vm_stack_top": 480,
+                "vm_stack_end": 488,
+                "vm_stack": 496,
+                "vm_stack_page_size": 504,
+                "current_execute_data": 512,
+                "fake_scope": 520,
+                "jit_trace_num": 528,
+                "current_observed_frame": 536,
+                "ticks_count": 544,
+                "precision": 552,
+                "persistent_constants_count": 560,
+                "persistent_functions_count": 564,
+                "persistent_classes_count": 568,
+                "no_extensions": 572,
+                "full_tables_cleanup": 573,
+                "vm_interrupt": 574,
+                "timed_out": 575,
+                "autoload_current_classnames": 576,
+                "hard_timeout": 632,
+                "stack_base": 640,
+                "stack_limit": 648,
+                "regular_list": 656,
+                "persistent_list": 712,
+                "user_error_handler_error_reporting": 768,
+                "exception_ignore_args": 772,
+                "user_error_handler": 776,
+                "user_exception_handler": 792,
+                "user_error_handlers_error_reporting": 808,
+                "user_error_handlers": 832,
+                "user_exception_handlers": 856,
+                "exception_class": 880,
+                "error_handling": 888,
+                "capture_warnings_during_sccp": 892,
+                "timeout_seconds": 896,
+                "ini_directives": 904,
+                "modified_ini_directives": 912,
+                "error_reporting_ini_entry": 920,
+                "objects_store": 928,
+                "lazy_objects_store": 952,
+                "exception": 1008,
+                "opline_before_exception": 1016,
+                "exception_op": 1024,
+                "current_module": 1120,
+                "active": 1128,
+                "flags": 1129,
+                "assertions": 1136,
+                "ht_iterators_count": 1144,
+                "ht_iterators_used": 1148,
+                "ht_iterators": 1152,
+                "ht_iterators_slots": 1160,
+                "saved_fpu_cw_ptr": 1416,
+                "trampoline": 1424,
+                "call_trampoline_op": 1680,
+                "weakrefs": 1712,
+                "exception_string_param_max_len": 1768,
+                "get_gc_buffer": 1776,
+                "main_fiber_context": 1800,
+                "current_fiber_context": 1808,
+                "active_fiber": 1816,
+                "fiber_stack_size": 1824,
+                "record_errors": 1832,
+                "errors": 1840,
+                "filename_override": 1856,
+                "lineno_override": 1864,
+                "call_stack": 1872,
+                "max_allowed_stack_size": 1888,
+                "reserved_stack_size": 1896,
+                "strtod_state": 1904,
+                "callable_convert_cache": 1984,
+                "partial_function_application_cache": 2040,
+                "lambda_cache": 2096,
+                "reserved": 2120
+            }
+        },
+        "zend_compiler_globals": {
+            "size": 616,
+            "fields": {
+                "loop_var_stack": 0,
+                "active_class_entry": 24,
+                "compiled_filename": 32,
+                "zend_lineno": 40,
+                "active_op_array": 48,
+                "function_table": 56,
+                "class_table": 64,
+                "auto_globals": 72,
+                "parse_error": 80,
+                "in_compilation": 81,
+                "short_tags": 82,
+                "unclean_shutdown": 83,
+                "ini_parser_unbuffered_errors": 84,
+                "open_files": 88,
+                "ini_parser_param": 144,
+                "skip_shebang": 152,
+                "increment_lineno": 153,
+                "variable_width_locale": 154,
+                "ascii_compatible_locale": 155,
+                "doc_comment": 160,
+                "extra_fn_flags": 168,
+                "compiler_options": 172,
+                "context": 176,
+                "file_context": 256,
+                "arena": 360,
+                "interned_strings": 368,
+                "script_encoding_list": 424,
+                "script_encoding_list_size": 432,
+                "multibyte": 440,
+                "detect_unicode": 441,
+                "encoding_declared": 442,
+                "ast": 448,
+                "ast_arena": 456,
+                "delayed_oplines_stack": 464,
+                "memoized_exprs": 488,
+                "memoize_mode": 496,
+                "map_ptr_real_base": 504,
+                "map_ptr_base": 512,
+                "map_ptr_size": 520,
+                "map_ptr_last": 528,
+                "delayed_variance_obligations": 536,
+                "delayed_autoloads": 544,
+                "unlinked_uses": 552,
+                "current_linking_class": 560,
+                "rtd_key_counter": 568,
+                "internal_run_time_cache": 576,
+                "internal_run_time_cache_size": 584,
+                "short_circuiting_opnums": 592
+            }
+        },
+        "zend_module_entry": {
+            "size": 168,
+            "fields": {
+                "size": 0,
+                "zend_api": 4,
+                "zend_debug": 8,
+                "zts": 9,
+                "ini_entry": 16,
+                "deps": 24,
+                "name": 32,
+                "functions": 40,
+                "module_startup_func": 48,
+                "module_shutdown_func": 56,
+                "request_startup_func": 64,
+                "request_shutdown_func": 72,
+                "info_func": 80,
+                "version": 88,
+                "globals_size": 96,
+                "globals_ptr": 104,
+                "globals_ctor": 112,
+                "globals_dtor": 120,
+                "post_deactivate_func": 128,
+                "module_started": 136,
+                "type": 140,
+                "handle": 144,
+                "module_number": 152,
+                "build_id": 160
+            }
+        },
+        "zend_module_dep": {
+            "size": 32,
+            "fields": {
+                "name": 0,
+                "rel": 8,
+                "version": 16,
+                "type": 24
+            }
+        },
+        "zend_object_handlers": {
+            "size": 208,
+            "fields": {
+                "offset": 0,
+                "free_obj": 8,
+                "dtor_obj": 16,
+                "clone_obj": 24,
+                "clone_obj_with": 32,
+                "read_property": 40,
+                "write_property": 48,
+                "read_dimension": 56,
+                "write_dimension": 64,
+                "get_property_ptr_ptr": 72,
+                "has_property": 80,
+                "unset_property": 88,
+                "has_dimension": 96,
+                "unset_dimension": 104,
+                "get_properties": 112,
+                "get_method": 120,
+                "get_constructor": 128,
+                "get_class_name": 136,
+                "cast_object": 144,
+                "count_elements": 152,
+                "get_debug_info": 160,
+                "get_closure": 168,
+                "get_gc": 176,
+                "do_operation": 184,
+                "compare": 192,
+                "get_properties_for": 200
+            }
+        },
+        "zend_object_iterator": {
+            "size": 88,
+            "fields": {
+                "std": 0,
+                "data": 56,
+                "funcs": 72,
+                "index": 80
+            }
+        },
+        "zend_object_iterator_funcs": {
+            "size": 64,
+            "fields": {
+                "dtor": 0,
+                "valid": 8,
+                "get_current_data": 16,
+                "get_current_key": 24,
+                "move_forward": 32,
+                "rewind": 40,
+                "invalidate_current": 48,
+                "get_gc": 56
+            }
+        },
+        "zend_ast": {
+            "size": 16,
+            "fields": {
+                "kind": 0,
+                "attr": 2,
+                "lineno": 4,
+                "child": 8
+            }
+        },
+        "zend_ast_decl": {
+            "size": 72,
+            "fields": {
+                "kind": 0,
+                "attr": 2,
+                "start_lineno": 4,
+                "end_lineno": 8,
+                "flags": 12,
+                "doc_comment": 16,
+                "name": 24,
+                "child": 32
+            }
+        },
+        "zend_ast_list": {
+            "size": 24,
+            "fields": {
+                "kind": 0,
+                "attr": 2,
+                "lineno": 4,
+                "children": 8,
+                "child": 16
+            }
+        },
+        "zend_ast_zval": {
+            "size": 24,
+            "fields": {
+                "kind": 0,
+                "attr": 2,
+                "val": 8
+            }
+        },
+        "zend_ast_op_array": {
+            "size": 16,
+            "fields": {
+                "kind": 0,
+                "attr": 2,
+                "lineno": 4,
+                "op_array": 8
+            }
+        },
+        "zend_lex_state": {
+            "size": 248,
+            "fields": {
+                "yy_leng": 0,
+                "yy_start": 8,
+                "yy_text": 16,
+                "yy_cursor": 24,
+                "yy_marker": 32,
+                "yy_limit": 40,
+                "yy_state": 48,
+                "state_stack": 56,
+                "heredoc_label_stack": 80,
+                "nest_location_stack": 112,
+                "in": 136,
+                "lineno": 144,
+                "filename": 152,
+                "script_org": 160,
+                "script_org_size": 168,
+                "script_filtered": 176,
+                "script_filtered_size": 184,
+                "input_filter": 192,
+                "output_filter": 200,
+                "script_encoding": 208,
+                "on_event": 216,
+                "on_event_context": 224,
+                "ast": 232,
+                "ast_arena": 240
+            }
+        },
+        "zend_closure": {
+            "size": 336,
+            "fields": {
+                "std": 0,
+                "func": 56,
+                "this_ptr": 312,
+                "called_scope": 320,
+                "orig_internal_handler": 328
+            }
+        },
+        "zend_script": {
+            "size": 376,
+            "fields": {
+                "filename": 0,
+                "main_op_array": 8,
+                "function_table": 264,
+                "class_table": 320
+            }
+        },
+        "zend_error_info": {
+            "size": 24,
+            "fields": {
+                "type": 0,
+                "lineno": 4,
+                "filename": 8,
+                "message": 16
+            }
+        },
+        "zend_early_binding": {
+            "size": 32,
+            "fields": {
+                "lcname": 0,
+                "rtd_key": 8,
+                "lc_parent_name": 16,
+                "cache_slot": 24
+            }
+        },
+        "zend_persistent_script": {
+            "size": 480,
+            "fields": {
+                "script": 0,
+                "compiler_halt_offset": 376,
+                "ping_auto_globals_mask": 384,
+                "timestamp": 392,
+                "corrupted": 400,
+                "is_phar": 401,
+                "empty": 402,
+                "num_warnings": 404,
+                "num_early_bindings": 408,
+                "warnings": 416,
+                "early_bindings": 424,
+                "mem": 432,
+                "size": 440,
+                "dynamic_members": 448
+            }
+        },
+        "zend_file_cache_metainfo": {
+            "size": 80,
+            "fields": {
+                "magic": 0,
+                "system_id": 8,
+                "mem_size": 40,
+                "str_size": 48,
+                "script_offset": 56,
+                "timestamp": 64,
+                "checksum": 72
+            }
+        }
+    }
+}
