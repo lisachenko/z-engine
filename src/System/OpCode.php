@@ -232,6 +232,9 @@ final class OpCode
     public const int JMP_FRAMELESS                  = 208;
     public const int INIT_PARENT_PROPERTY_HOOK_CALL = 209;
     public const int DECLARE_ATTRIBUTED_CONST       = 210; // PHP 8.5: DECLARE_CONST with attributes
+    public const int TYPE_ASSERT                    = 211; // PHP 8.6
+    public const int CALLABLE_CONVERT_PARTIAL       = 212; // PHP 8.6: partial application (...) with placeholders
+    public const int SEND_PLACEHOLDER               = 213; // PHP 8.6: partial application (...) with placeholders
 
     /**
      * Returns the type name of opcode

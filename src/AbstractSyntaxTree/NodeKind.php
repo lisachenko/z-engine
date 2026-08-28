@@ -26,7 +26,7 @@ class NodeKind
     private const int AST_IS_LIST_SHIFT      = 7;
     private const int AST_NUM_CHILDREN_SHIFT = 8;
 
-    /* Generated for PHP 8.5 from enum _zend_ast_kind; EngineConstantsTest guards these values */
+    /* Generated for PHP 8.6 from enum _zend_ast_kind; EngineConstantsTest guards these values */
     public const int AST_ZVAL                      = 64;
     public const int AST_CONSTANT                  = 65;
     public const int AST_OP_ARRAY                  = 66;
@@ -63,6 +63,7 @@ class NodeKind
     public const int AST_TYPE                      = 1;
     public const int AST_CONSTANT_CLASS            = 2;
     public const int AST_CALLABLE_CONVERT          = 3;
+    public const int AST_PLACEHOLDER_ARG           = 4;
     public const int AST_VAR                       = 256;
     public const int AST_CONST                     = 257;
     public const int AST_UNPACK                    = 258;
@@ -124,7 +125,7 @@ class NodeKind
     public const int AST_DECLARE                   = 538;
     public const int AST_USE_TRAIT                 = 539;
     public const int AST_TRAIT_PRECEDENCE          = 540;
-    public const int AST_METHOD_REFERENCE          = 541;
+    public const int AST_TRAIT_METHOD_REFERENCE    = 541;
     public const int AST_NAMESPACE                 = 542;
     public const int AST_USE_ELEM                  = 543;
     public const int AST_TRAIT_ALIAS               = 544;
@@ -133,8 +134,7 @@ class NodeKind
     public const int AST_MATCH                     = 547;
     public const int AST_MATCH_ARM                 = 548;
     public const int AST_NAMED_ARG                 = 549;
-    public const int AST_PARENT_PROPERTY_HOOK_CALL = 550;
-    public const int AST_PIPE                      = 551;
+    public const int AST_PIPE                      = 550;
     public const int AST_METHOD_CALL               = 768;
     public const int AST_NULLSAFE_METHOD_CALL      = 769;
     public const int AST_STATIC_CALL               = 770;
@@ -144,11 +144,11 @@ class NodeKind
     public const int AST_PROP_GROUP                = 774;
     public const int AST_CONST_ELEM                = 775;
     public const int AST_CLASS_CONST_GROUP         = 776;
-    public const int AST_CONST_ENUM_INIT           = 777;
     public const int AST_FOR                       = 1024;
     public const int AST_FOREACH                   = 1025;
     public const int AST_ENUM_CASE                 = 1026;
     public const int AST_PROP_ELEM                 = 1027;
+    public const int AST_CONST_ENUM_INIT           = 1028;
     public const int AST_PARAM                     = 1536;
 
     /**

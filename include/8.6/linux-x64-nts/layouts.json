@@ -3,7 +3,7 @@
         "php": "8.6",
         "api": 20250926,
         "zts": 0,
-        "debug": 1
+        "debug": 0
     },
     "structs": {
         "zval": {

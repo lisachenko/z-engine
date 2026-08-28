@@ -410,8 +410,11 @@ struct _zend_inheritance_cache_entry {
  zend_error_info **warnings;
  zend_class_entry *traits_and_interfaces[1];
 };
-enum zend_class_type;
 typedef uint8_t zend_class_type;
+enum zend_class_type {
+ ZEND_INTERNAL_CLASS = 1,
+ ZEND_USER_CLASS = 2,
+};
 struct _zend_class_entry {
  zend_class_type type;
  zend_string *name;
@@ -658,8 +661,12 @@ typedef struct _zend_class_constant {
  zend_class_entry *ce;
  zend_type type;
 } zend_class_constant;
-enum zend_function_type;
 typedef uint8_t zend_function_type;
+enum zend_function_type {
+ ZEND_INTERNAL_FUNCTION = 1,
+ ZEND_USER_FUNCTION = 2,
+ ZEND_EVAL_CODE = 4,
+};
 typedef struct _zend_internal_arg_info {
  const char *name;
  zend_type type;

@@ -25,7 +25,7 @@ namespace ZEngine\Type;
  * A live range tells the executor which temporary variables must be destroyed when an
  * exception unwinds through the [start, end) opcode window. The var field packs the
  * variable operand offset together with a kind tag in its low bits; the KIND_* values
- * mirror the ZEND_LIVE_* macros of zend_compile.h for PHP 8.5.
+ * mirror the ZEND_LIVE_* macros of zend_compile.h for PHP 8.6.
  */
 class LiveRange
 {

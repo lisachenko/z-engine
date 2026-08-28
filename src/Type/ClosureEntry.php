@@ -19,7 +19,6 @@ use ZEngine\Core;
 use ZEngine\Generated\zend_class_entry;
 use ZEngine\Generated\zend_closure;
 use ZEngine\Generated\zend_function;
-use ZEngine\Generated\zval;
 
 /**
  * Class ClosureEntry
@@ -30,7 +29,7 @@ use ZEngine\Generated\zval;
  *    the caller must keep the closure object alive while the entry is used. Lifetime
  *    control goes through the closure's object header - getClosureObjectEntry() exposes it
  *    as a (borrowed) ObjectEntry.
- *  - setThis() has full ZVAL_COPY semantics: it releases the previously bound $this and
+ *  - setThis() has full OBJ_ADDREF semantics: it releases the previously bound $this and
  *    takes a closure-owned reference on the new object, so the caller does NOT have to
  *    keep the bound object alive - the engine releases it with the closure.
  *  - setCalledScope() performs no refcounting: class entries are not refcounted values.
@@ -42,7 +41,7 @@ use ZEngine\Generated\zval;
  * typedef struct _zend_closure {
  *   zend_object       std;
  *   zend_function     func;
- *   zval              this_ptr;
+ *   zend_object      *this_ptr;   // a zval until PHP 8.5
  *   zend_class_entry *called_scope;
  *   zif_handler       orig_internal_handler;
  * } zend_closure;
@@ -136,8 +135,9 @@ class ClosureEntry
      * Changes the current $this, bound to the closure
      *
      * The previous bound object (if any) is released and the closure takes its own reference
-     * on the new one, exactly like the engine's ZVAL_COPY - the caller no longer has to keep
-     * the object alive for the closure lifetime.
+     * on the new one, exactly like the engine's GC_ADDREF + OBJ_RELEASE pair (this_ptr is a
+     * plain zend_object pointer since PHP 8.6) - the caller no longer has to keep the object
+     * alive for the closure lifetime.
      *
      * @param object $object New object
      *
@@ -147,14 +147,17 @@ class ClosureEntry
     {
         $selfExecutionState = Core::$executor->getExecutionState();
         $objectArgument     = $selfExecutionState->getArgument(0);
-        $objectZval         = $objectArgument->getRawValue();
+        $newThis            = $objectArgument->getRawObject();
 
-        $thisPtr = Core::addr($this->pointer->this_ptr);
-        // Release the previously bound $this (safe no-op for unbound IS_UNDEF/IS_NULL closures)
-        Core::call('zval_ptr_dtor', $thisPtr);
-        Core::memcpy($this->pointer->this_ptr, StructArray::at($objectZval), Core::sizeOfType(zval::class));
-        // The closure now holds its own reference on the new $this
-        Core::call('zval_add_ref', $thisPtr);
+        // The closure takes its own reference on the new $this first, so rebinding
+        // to the currently bound object cannot drop it to refcount zero in between
+        ObjectEntry::fromCData($newThis)->incrementReferenceCount();
+        // Release the previously bound $this (this_ptr is NULL for unbound closures)
+        $oldThis = $this->pointer->this_ptr;
+        if ($oldThis !== null) {
+            ObjectEntry::fromCData($oldThis)->releaseReference();
+        }
+        $this->pointer->this_ptr = $newThis;
     }
 
     /**

@@ -274,8 +274,6 @@ return [
         'CONST_OWNED', 'CONST_RECURSIVE', 'PHP_USER_CONSTANT',
         // Engine build info
         'ZEND_DEBUG', 'ZEND_MM_ALIGNMENT', 'ZEND_MAX_RESERVED_RESOURCES',
-        // Function kinds (zend_compile.h)
-        'ZEND_INTERNAL_FUNCTION', 'ZEND_USER_FUNCTION', 'ZEND_EVAL_CODE',
         // Compiler options (zend_compile.h)
         'ZEND_COMPILE_EXTENDED_STMT', 'ZEND_COMPILE_EXTENDED_FCALL', 'ZEND_COMPILE_EXTENDED_INFO',
         'ZEND_COMPILE_HANDLE_OP_ARRAY', 'ZEND_COMPILE_IGNORE_INTERNAL_FUNCTIONS',
@@ -298,6 +296,10 @@ return [
         '_zend_ast_kind',
         // Anonymous enum aliased by its typedef name (ZEND_PROPERTY_HOOK_GET/SET)
         'zend_property_hook_kind',
+        // Function kinds (zend_compile.h): #defines until PHP 8.5, a typed
+        // C23 enum (ZEND_INTERNAL_FUNCTION/ZEND_USER_FUNCTION/ZEND_EVAL_CODE,
+        // same values) since PHP 8.6
+        'zend_function_type',
     ],
 
     // System/libc types that z-engine only ever uses behind a pointer. Their

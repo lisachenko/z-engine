@@ -478,15 +478,6 @@ int main(void) {
 #ifdef ZEND_MAX_RESERVED_RESOURCES
     fprintf(constants, "    'ZEND_MAX_RESERVED_RESOURCES' => %lld,\n", (long long)(ZEND_MAX_RESERVED_RESOURCES));
 #endif
-#ifdef ZEND_INTERNAL_FUNCTION
-    fprintf(constants, "    'ZEND_INTERNAL_FUNCTION' => %lld,\n", (long long)(ZEND_INTERNAL_FUNCTION));
-#endif
-#ifdef ZEND_USER_FUNCTION
-    fprintf(constants, "    'ZEND_USER_FUNCTION' => %lld,\n", (long long)(ZEND_USER_FUNCTION));
-#endif
-#ifdef ZEND_EVAL_CODE
-    fprintf(constants, "    'ZEND_EVAL_CODE' => %lld,\n", (long long)(ZEND_EVAL_CODE));
-#endif
 #ifdef ZEND_COMPILE_EXTENDED_STMT
     fprintf(constants, "    'ZEND_COMPILE_EXTENDED_STMT' => %lld,\n", (long long)(ZEND_COMPILE_EXTENDED_STMT));
 #endif
@@ -711,6 +702,9 @@ int main(void) {
     fprintf(constants, "    'ZEND_AST_PARAM' => %lld,\n", (long long)(ZEND_AST_PARAM));
     fprintf(constants, "    'ZEND_PROPERTY_HOOK_GET' => %lld,\n", (long long)(ZEND_PROPERTY_HOOK_GET));
     fprintf(constants, "    'ZEND_PROPERTY_HOOK_SET' => %lld,\n", (long long)(ZEND_PROPERTY_HOOK_SET));
+    fprintf(constants, "    'ZEND_INTERNAL_FUNCTION' => %lld,\n", (long long)(ZEND_INTERNAL_FUNCTION));
+    fprintf(constants, "    'ZEND_USER_FUNCTION' => %lld,\n", (long long)(ZEND_USER_FUNCTION));
+    fprintf(constants, "    'ZEND_EVAL_CODE' => %lld,\n", (long long)(ZEND_EVAL_CODE));
     fprintf(constants, "    'ZEND_NOP' => 0,\n");
     fprintf(constants, "    'ZEND_ADD' => 1,\n");
     fprintf(constants, "    'ZEND_SUB' => 2,\n");
