@@ -53,44 +53,29 @@ jobs:
       - name: Install dependencies
         uses: ramsey/composer-install@v4
 
-      - name: 'Probe: noop (handler touches nothing)'
-        if: always()
-        run: php $PHP_FLAGS tools/diagnostics/issue-280/probe.php noop; echo "exit=$?"
+      - name: Run every probe mode
+        run: |
+          for mode in install-only noop log-const globals use-ref diag add-baseline; do
+            echo "=== MODE ${mode} ==="
+            php $PHP_FLAGS tools/diagnostics/issue-280/probe.php "$mode" || echo "exit=$?"
+          done
 
-      - name: 'Probe: log-const (one internal call per fire)'
-        if: always()
-        run: php $PHP_FLAGS tools/diagnostics/issue-280/probe.php log-const; echo "exit=$?"
-
-      - name: 'Probe: globals (symbol-table counter)'
-        if: always()
-        run: php $PHP_FLAGS tools/diagnostics/issue-280/probe.php globals; echo "exit=$?"
-
-      - name: 'Probe: use-ref (by-ref closure counter, the failing shape)'
-        if: always()
-        run: php $PHP_FLAGS tools/diagnostics/issue-280/probe.php use-ref; echo "exit=$?"
-
-      - name: 'Probe: diag (engine invariants per fire)'
-        if: always()
-        run: php $PHP_FLAGS tools/diagnostics/issue-280/probe.php diag; echo "exit=$?"
-
-      - name: 'Probe: add-baseline (ADD handler, no extended stmt)'
-        if: always()
-        run: php $PHP_FLAGS tools/diagnostics/issue-280/probe.php add-baseline; echo "exit=$?"
-
-      - name: 'use-ref under lldb (backtrace on crash)'
+      - name: noop under lldb (backtrace on crash)
         if: always()
         run: |
           lldb --batch \
             -o 'run' \
-            -k 'thread backtrace all' \
-            -k 'quit' \
-            -- "$(which php)" $PHP_FLAGS tools/diagnostics/issue-280/probe.php use-ref || true
+            -o 'bt' \
+            -o 'register read' \
+            -o 'disassemble --pc --count 12' \
+            -o 'quit' \
+            -- "$(which php)" $PHP_FLAGS tools/diagnostics/issue-280/probe.php noop || true
 
-      - name: macOS crash reports
+      - name: Latest macOS crash report
         if: always()
         run: |
-          for f in ~/Library/Logs/DiagnosticReports/php*; do
-            [ -e "$f" ] || continue
-            echo "===== $f ====="
-            head -c 6000 "$f"
-          done
+          latest=$(ls -t ~/Library/Logs/DiagnosticReports/php* 2>/dev/null | head -1 || true)
+          if [ -n "$latest" ]; then
+            echo "===== $latest ====="
+            head -c 24000 "$latest"
+          fi

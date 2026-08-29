@@ -48,12 +48,21 @@ const PROBE_LOG = '/tmp/probe-280.log';
 $mode = $argv[1] ?? 'noop';
 @unlink(PROBE_LOG);
 
+/** Stage markers: stderr is unbuffered, so the last marker brackets a crash */
+function stage(string $name): void
+{
+    fwrite(STDERR, "STAGE {$name}\n");
+}
+
+stage('autoload');
+
 Core::init();
+stage('init');
 
 $fires = 0;
 
 $handler = match ($mode) {
-    'noop' => static function ($executeData): int {
+    'noop', 'install-only' => static function ($executeData): int {
         return 2;
     },
     'log-const' => static function ($executeData): int {
@@ -114,17 +123,23 @@ $opCode = $mode === 'add-baseline' ? OpCode::ADD : OpCode::EXT_STMT;
 if ($mode !== 'add-baseline') {
     Core::$compiler->setOptions(Core::$compiler->getOptions() | Compiler::COMPILE_EXTENDED_STMT);
 }
+stage('options');
 
 $result = Core::call('zend_set_user_opcode_handler', $opCode, $handler);
 if ($result === Core::FAILURE) {
     fwrite(STDERR, "Failed to install the user opcode handler\n");
     exit(1);
 }
+stage('installed');
 
-require __DIR__ . '/payload.php';
+if ($mode !== 'install-only') {
+    require __DIR__ . '/payload.php';
+    stage('payload-done');
+}
 
 // Restore before engine shutdown: payload op_arrays still carry the opcode
 Core::call('zend_set_user_opcode_handler', $opCode, null);
+stage('uninstalled');
 
 echo "fires={$fires}\n";
 echo 'globals=' . ($GLOBALS['probe280Fires'] ?? 0) . "\n";

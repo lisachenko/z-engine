@@ -14,6 +14,8 @@
  */
 declare(strict_types=1);
 
+fwrite(STDERR, "STAGE payload-first-statement\n");
+
 class Probe280Service
 {
     public function handle(int $value): int
