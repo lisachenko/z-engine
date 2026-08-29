@@ -115,9 +115,23 @@ jobs:
           php -d ffi.enable=1 -r 'FFI::cdef("extern unsigned long long __vectorcall zend_string_hash_func(void *str);", "${{ matrix.dll }}");' \
             || { echo "::error::FFI cannot bind a __vectorcall symbol from ${{ matrix.dll }} - this build lacks vectorcall support"; exit 1; }
 
+      # The generator itself can also skip cleanly (exit 0 with a SKIPPED
+      # notice) when windows.php.net has no build or devel pack for the
+      # running version - snapshot builds of a pre-release minor. Track that in
+      # an output so the artifact checks below do not demand files no run
+      # could have produced; the leg self-heals on the first tagged build.
       - name: Generate windows artifacts
         if: steps.build.outputs.available == 'true'
-        run: php tools/generator/generate.php --native --php=${{ env.PHP_MINOR }} --ts=${{ matrix.ts }}
+        id: gen
+        run: |
+          php tools/generator/generate.php --native --php=${{ env.PHP_MINOR }} --ts=${{ matrix.ts }} | tee gen-output.log
+          if grep -q '^==> SKIPPED:' gen-output.log; then
+            echo "generated=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::windows-x64-${{ matrix.ts }} generation skipped for this pre-release PHP build - see the generator notice above"
+          else
+            echo "generated=true" >> "$GITHUB_OUTPUT"
+          fi
+          rm -f gen-output.log
 
       # On failure, surface the intermediate build dir (emitted engine.h,
       # preprocessed source, probe) so the broken declaration can be diagnosed
@@ -135,7 +149,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Smoke-check the artifacts
-        if: steps.build.outputs.available == 'true'
+        if: steps.build.outputs.available == 'true' && steps.gen.outputs.generated == 'true'
         run: |
           dir="include/${PHP_MINOR}/windows-x64-${{ matrix.ts }}"
           for file in engine.h constants.php layouts.json probe.c; do
@@ -147,7 +161,7 @@ jobs:
             || { echo "::error::${dir}/engine.h does not name ${{ matrix.dll }} as FFI_LIB - symbols would not resolve on Windows"; exit 1; }
 
       - uses: actions/upload-artifact@v7
-        if: steps.build.outputs.available == 'true'
+        if: steps.build.outputs.available == 'true' && steps.gen.outputs.generated == 'true'
         with:
           name: windows-x64-${{ matrix.ts }}
           path: include/${{ env.PHP_MINOR }}/windows-x64-${{ matrix.ts }}
