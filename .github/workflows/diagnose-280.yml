@@ -1,11 +1,12 @@
-# TEMPORARY: diagnostics for issue #280 (user opcode handlers corrupt VM state
-# under PHP 8.6's tail-call VM on macOS arm64). Runs the tools/diagnostics/issue-280
-# probe ladder on the failing runner (macos-latest, arm64) with macos-15-intel as
-# the in-run control. Removed together with the probes once the fix lands.
+# Diagnostics for issue #280 (php-src: user opcode handlers mis-resume under the
+# PHP 8.6 tail-call VM). Manually dispatched: runs the tools/diagnostics/issue-280
+# probe ladder and the pure-FFI php-src repro on macos-latest (arm64, the affected
+# build) with macos-15-intel as the in-run control. Re-run it against a new PHP
+# build to check whether the upstream bug is fixed; drop it (and the probes) once
+# php-src resolves the issue and the OpCodeHook guard is retired.
 name: Diagnose issue 280
 
 on:
-  pull_request:
   workflow_dispatch:
 
 permissions:
