@@ -60,6 +60,10 @@ jobs:
             php $PHP_FLAGS tools/diagnostics/issue-280/probe.php "$mode" || echo "exit=$?"
           done
 
+      - name: Pure-FFI repro (no z-engine, for the php-src report)
+        if: always()
+        run: php $PHP_FLAGS tools/diagnostics/issue-280/pure-ffi-repro.php || echo "exit=$?"
+
       - name: noop under lldb (backtrace on crash)
         if: always()
         run: |
