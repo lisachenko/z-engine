@@ -15,7 +15,8 @@ every minor version (`zend_class_entry` alone changed size in 8.1, 8.3 and
 version and you are reading and writing the wrong memory — the result is a
 crash, or worse, silent corruption.
 
-- `master` targets the newest supported PHP minor (currently **8.5**).
+- `master` targets the newest supported PHP minor (currently **8.6**).
+- Branch `8.5` targets **PHP 8.5**.
 - Branch `8.4` targets **PHP 8.4**.
 - Branch `8.0` is the frozen legacy line for PHP 8.0.
 
@@ -30,12 +31,12 @@ never cherry-picked downward. The succession is declared in
 which opens a merge-up PR when a version branch is pushed.
 
 ```
-8.0 (frozen)      8.4  ──►  master (8.5)
+8.0 (frozen)      8.4  ──►  8.5  ──►  master (8.6)
 ```
 
-So a bug that exists in both 8.4 and 8.5 is fixed on `8.4`, and the cascade
-carries it into `master`. A bug that only exists on 8.5 is fixed on `master`
-directly. When resolving a merge-up conflict inside `include/`, do **not**
+So a bug that exists in 8.4, 8.5 and 8.6 is fixed on `8.4`, and the cascade
+carries it through `8.5` into `master`. A bug that only exists on 8.6 is fixed
+on `master` directly. When resolving a merge-up conflict inside `include/`, do **not**
 merge the generated headers textually — regenerate them on the target branch
 (`composer gen-headers`) instead.
 
@@ -132,12 +133,12 @@ Darwin covers **NTS and ZTS**: the workflow's matrix crosses both
 architectures with both thread-safety modes (setup-php builds the ZTS PHP via
 `phpts: ts`). As on Linux, the ZTS artifacts reach EG/CG through the TSRM
 offsets; the opcache file-cache relocator runs on ZTS since issue #118.
-The 8.4 artifacts are maintained on the `8.4` branch;
-`include/8.5/darwin-*` is maintained here - after changing the generator,
+The 8.4 and 8.5 artifacts are maintained on the `8.4` and `8.5` branches;
+`include/8.6/darwin-*` is maintained here - after changing the generator,
 refresh it with one `workflow_dispatch` run of the workflow on `master`.
-A leg whose thread-safety mode setup-php cannot provide (currently ZTS
-PHP 8.5 on Intel) skips cleanly and self-heals on a later run; the CI
-presence guards keep the gap visible as warnings.
+A leg whose PHP build setup-php cannot provide (a pre-release 8.6, or a
+thread-safety mode with no build) skips cleanly and self-heals on a later
+run; the CI presence guards keep the gap visible as warnings.
 
 ### Windows artifacts
 
@@ -173,8 +174,8 @@ Windows differs from the POSIX platforms in four load-bearing ways:
 
 Not supported on Windows: the opcache file-cache relocator (issue #119, its
 tests self-skip and the CI legs carry no opcache non-skip gate) and
-`opcache.preload` (does not exist on Windows). As with darwin, the 8.4
-artifacts are maintained on the `8.4` branch; `include/8.5/windows-*` is
+`opcache.preload` (does not exist on Windows). As with darwin, the 8.4 and
+8.5 artifacts are maintained on their branches; `include/8.6/windows-*` is
 maintained here - after changing the generator, refresh it with one
 `workflow_dispatch` run of the workflow on `master`.
 

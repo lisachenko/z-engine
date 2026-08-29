@@ -36,6 +36,17 @@ $refFunction = new ReflectionFunction('churn_function');
 $refMethod   = new ReflectionMethod(ChurnClass::class, 'target');
 $instance    = new ChurnClass();
 
+// All swapped functions are called through runtime-opaque names: since PHP 8.6
+// the opcache optimizer constant-folds (and devirtualizes) calls it can resolve
+// at compile time - even through local variables holding constant strings - so a
+// foldable call site would never consult the swapped body again. Deriving the
+// names from $argv keeps them opaque to SCCP.
+$callFunction = $argv[99] ?? 'churn_function';
+$callMethod   = $argv[99] ?? 'target';
+if (!is_callable($callFunction)) {
+    throw new RuntimeException('churn_function is not callable');
+}
+
 // Every cycle compiles a brand-new body, swaps it in and must free the previous
 // one: the debug leak gate fails on any block the swap machinery loses
 for ($index = 0; $index < 500; $index++) {
@@ -43,7 +54,7 @@ for ($index = 0; $index < 500; $index++) {
     assert($body instanceof Closure);
     $refFunction->redefine($body);
     unset($body);
-    if (churn_function() !== "fn{$index}") {
+    if ($callFunction() !== "fn{$index}") {
         throw new RuntimeException('Wrong function body after redefine');
     }
 
@@ -51,7 +62,7 @@ for ($index = 0; $index < 500; $index++) {
     assert($body instanceof Closure);
     $refMethod->redefine($body);
     unset($body);
-    if ($instance->target() !== "method{$index}") {
+    if ($instance->{$callMethod}() !== "method{$index}") {
         throw new RuntimeException('Wrong method body after redefine');
     }
 }
@@ -62,13 +73,17 @@ function churn_counter(): int
 {
     return -1;
 }
-$refCounter = new ReflectionFunction('churn_counter');
+$refCounter  = new ReflectionFunction('churn_counter');
+$callCounter = $argv[99] ?? 'churn_counter';
+if (!is_callable($callCounter)) {
+    throw new RuntimeException('churn_counter is not callable');
+}
 for ($index = 0; $index < 100; $index++) {
     $body = eval("return function (): int { static \$count = {$index}; return ++\$count; };");
     assert($body instanceof Closure);
     $refCounter->redefine($body);
     unset($body);
-    if (churn_counter() !== $index + 1) {
+    if ($callCounter() !== $index + 1) {
         throw new RuntimeException('Wrong static variable state after redefine');
     }
 }

@@ -57,6 +57,11 @@ final class MemoryLeakScenarioTest extends TestCase
             '-d', 'display_errors=on',
             '-d', 'error_reporting=-1',
             '-d', 'memory_limit=-1',
+            // The leak gate measures the swap machinery, not the opcache copy-out
+            // (which trades bounded immortal allocations for SHM safety, see
+            // docs/hot-swap.md): force opcache off even when the host ini enables
+            // it for CLI, exactly like the CI internal leg
+            '-d', 'opcache.enable_cli=0',
             $scenarioFile,
         ];
 

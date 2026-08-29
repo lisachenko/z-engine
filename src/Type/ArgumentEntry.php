@@ -17,17 +17,18 @@ namespace ZEngine\Type;
  * Class ArgumentEntry is a read-only view over one argument info entry of a function
  *
  * It carries the decoded content of a zend_arg_info (user functions) or
- * zend_internal_arg_info (internal functions) structure:
+ * structure (since PHP 8.6 internal functions are converted to it at registration):
  *
  * struct _zend_arg_info {
- *   zend_string *name;        // const char *name for zend_internal_arg_info
+ *   zend_string *name;
  *   zend_type    type;
  *   zend_string *default_value;
+ *   zend_string *doc_comment;
  * };
  *
  * The zend_type.type_mask field packs the allowed-type bits together with several
  * argument-passing flags; the bit layout below mirrors zend_types.h/zend_compile.h
- * for PHP 8.5 (there is no exported engine constant for these internal macros).
+ * for PHP 8.6 (there is no exported engine constant for these internal macros).
  */
 class ArgumentEntry
 {

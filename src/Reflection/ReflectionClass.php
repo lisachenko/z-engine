@@ -519,7 +519,8 @@ class ReflectionClass extends NativeReflectionClass
     #[\Override]
     public function isInternal()
     {
-        return ord($this->pointer->type) === Core::ZEND_INTERNAL_CLASS;
+        // Since PHP 8.6 ce->type is a uint8-typed enum (zend_class_type), not a char
+        return $this->pointer->type === Core::ZEND_INTERNAL_CLASS;
     }
 
     /**
@@ -567,7 +568,8 @@ class ReflectionClass extends NativeReflectionClass
     #[\Override]
     public function isUserDefined()
     {
-        return ord($this->pointer->type) === Core::ZEND_USER_CLASS;
+        // Since PHP 8.6 ce->type is a uint8-typed enum (zend_class_type), not a char
+        return $this->pointer->type === Core::ZEND_USER_CLASS;
     }
 
     /**

@@ -13,7 +13,7 @@
         }
     ],
     "require": {
-        "php": "~8.5.0",
+        "php": "~8.6.0",
         "ext-ffi": "*"
     },
     "require-dev": {
@@ -66,7 +66,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-master": "8.5.x-dev"
+            "dev-master": "8.6.x-dev"
         }
     }
 }

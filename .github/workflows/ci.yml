@@ -18,9 +18,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# This branch targets PHP 8.5 only - engine structures are version-specific.
+# This branch targets PHP 8.6 only - engine structures are version-specific.
 env:
-  PHP_MINOR: '8.5'
+  PHP_MINOR: '8.6'
 
 jobs:
   tests:
@@ -436,8 +436,19 @@ jobs:
             done
             return 1
           }
-          if digest="$(resolve "php:${PHP_MINOR}-cli" | sha256sum | cut -d' ' -f1)" && [ "${#digest}" -eq 64 ]; then
-            echo "php:${PHP_MINOR}-cli is sha256:${digest}"
+          # While the minor is pre-release Docker publishes only the -rc family
+          # (which also covers betas): fall back to it and hand the winning tag
+          # to the build step below, self-healing to the stable tag at GA
+          tag="${PHP_MINOR}"
+          manifest=""
+          if manifest="$(resolve "php:${PHP_MINOR}-cli")"; then
+            :
+          elif manifest="$(resolve "php:${PHP_MINOR}-rc-cli")"; then
+            tag="${PHP_MINOR}-rc"
+            echo "php:${PHP_MINOR}-cli is not published yet - building from php:${tag}-cli"
+          fi
+          if [ -n "$manifest" ] && digest="$(printf '%s' "$manifest" | sha256sum | cut -d' ' -f1)" && [ "${#digest}" -eq 64 ]; then
+            echo "php:${tag}-cli is sha256:${digest}"
           else
             # A registry hiccup must not fail this job over a cache key. A
             # run-unique value guarantees a miss, so the restore-keys still give a
@@ -446,6 +457,7 @@ jobs:
             digest="unresolved-${{ github.run_id }}"
             echo "::warning::Could not resolve the php:${PHP_MINOR}-cli digest - building without an exact cache key"
           fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           # Thread safety and minor come first so the loosest restore-key below
           # still matches entries written before OS/arch joined the key.
           prefix="docker-debug-${{ matrix.ts }}-${PHP_MINOR}-${{ runner.os }}-${{ runner.arch }}-"
@@ -483,7 +495,7 @@ jobs:
           fi
           docker buildx build \
             -f tools/docker/php-debug.Dockerfile \
-            --build-arg "PHP_VERSION=${PHP_MINOR}" \
+            --build-arg "PHP_VERSION=${{ steps.image-cache-key.outputs.tag }}" \
             --build-arg "PHP_TS=${{ matrix.ts }}" \
             --cache-from "type=local,src=/tmp/.buildx-cache" \
             $cache_to \
@@ -556,9 +568,15 @@ jobs:
             done
             return 1
           }
-          if cli="$(resolve "php:${PHP_MINOR}-cli")" && zts="$(resolve "php:${PHP_MINOR}-zts")"; then
+          # While the minor is pre-release Docker publishes only the -rc family
+          # (which also covers betas); generate.php falls back the same way, so
+          # the key hashes whichever manifests the build will actually use
+          resolve_variant() {
+            resolve "php:${PHP_MINOR}-$1" || resolve "php:${PHP_MINOR}-rc-$1"
+          }
+          if cli="$(resolve_variant cli)" && zts="$(resolve_variant zts)"; then
             digest="$(printf '%s%s' "$cli" "$zts" | sha256sum | cut -d' ' -f1)"
-            echo "php:${PHP_MINOR}-cli + php:${PHP_MINOR}-zts hash to ${digest}"
+            echo "php:${PHP_MINOR}[-rc]-cli + php:${PHP_MINOR}[-rc]-zts hash to ${digest}"
           else
             # As above: a registry hiccup costs an exact key, never the job.
             digest="unresolved-${{ github.run_id }}"

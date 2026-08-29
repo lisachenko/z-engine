@@ -18,7 +18,7 @@ declare(strict_types=1);
  *
  * Usage:
  *   php tools/generator/generate.php               # all targets of this branch
- *   php tools/generator/generate.php --php=8.5 --ts=nts
+ *   php tools/generator/generate.php --php=8.6 --ts=nts
  *   php tools/generator/generate.php --native [--php-src=DIR] [--php-dev=DIR]
  *
  * Requires docker (with buildx). Invoked via `composer gen-headers`.
@@ -41,15 +41,16 @@ error_reporting(E_ALL);
  * Version/TS targets maintained on this branch. Extend when a new platform
  * or thread-safety mode becomes supported (see AGENTS.md).
  *
- * master targets PHP 8.5 only. The committed include/8.4 artifacts are
- * maintained on the `8.4` branch (its own gen-headers run regenerates them)
- * and arrive here through the cascade merge-up.
+ * master targets PHP 8.6 only. The committed include/8.4 and include/8.5
+ * artifacts are maintained on the `8.4` and `8.5` branches (their own
+ * gen-headers runs regenerate them) and arrive here through the cascade
+ * merge-up.
  *
  * @var list<array{php: string, ts: string}> $defaultTargets
  */
 $defaultTargets = [
-    ['php' => '8.5', 'ts' => 'nts'],
-    ['php' => '8.5', 'ts' => 'zts'],
+    ['php' => '8.6', 'ts' => 'nts'],
+    ['php' => '8.6', 'ts' => 'zts'],
 ];
 
 /** @return never */
@@ -234,6 +235,15 @@ function windowsDevelopmentPack(?string $override, string $ts): string
         break;
     }
     if ($vsTag === '') {
+        if (str_ends_with(PHP_VERSION, '-dev')) {
+            // Snapshot builds of a pre-release minor are not on windows.php.net
+            // yet: skip cleanly (the CI presence guards keep the gap visible)
+            // instead of failing a leg nobody can make green. Self-heals on the
+            // first tagged pre-release/GA build.
+            echo "==> SKIPPED: windows.php.net lists no {$wantedPrefix} build for snapshot PHP "
+                . PHP_VERSION . " - generation self-heals on the first tagged build\n";
+            exit(0);
+        }
         abortWith("windows.php.net lists no {$wantedPrefix}-vs*-x64 build for PHP {$minor}; "
             . 'pass --php-dev=DIR with an extracted developer pack');
     }
@@ -255,6 +265,15 @@ function windowsDevelopmentPack(?string $override, string $ts): string
     $packFile = $temporary . '/devel-pack.zip';
     echo "==> Downloading {$packUrl}\n";
     if (downloadFile($packUrl, $packFile) !== 0) {
+        if (str_ends_with(PHP_VERSION, '-dev')) {
+            // Snapshot builds of a pre-release minor have no published devel
+            // pack at all: skip cleanly (the CI presence guards keep the gap
+            // visible) instead of failing a leg nobody can make green yet.
+            // Self-heals on the first tagged pre-release/GA build.
+            echo '==> SKIPPED: no windows devel pack is published for snapshot build PHP '
+                . PHP_VERSION . " - generation self-heals on the first tagged build\n";
+            exit(0);
+        }
         abortWith("cannot download {$packUrl}; pass --php-dev=DIR with a developer pack for PHP " . PHP_VERSION);
     }
     if ($expectedHash !== '') {
@@ -299,7 +318,7 @@ function windowsDevelopmentPack(?string $override, string $ts): string
 $options = getopt('', ['php:', 'ts:', 'native', 'php-src:', 'php-dev:']);
 $targets = $defaultTargets;
 if (isset($options['php']) || isset($options['ts'])) {
-    $php     = is_string($options['php'] ?? null) ? $options['php'] : '8.5';
+    $php     = is_string($options['php'] ?? null) ? $options['php'] : '8.6';
     $ts      = is_string($options['ts'] ?? null) ? $options['ts'] : 'nts';
     $targets = [['php' => $php, 'ts' => $ts]];
 }
@@ -381,6 +400,17 @@ if ($isNative) {
     if ($phpSrc === '') {
         $phpSrc = sys_get_temp_dir() . '/z-engine-php-src-' . PHP_VERSION;
         applyCurlCaBundle();
+        // Release builds have an exact php-src tag. Snapshot builds
+        // (PHP_VERSION "X.Y.Z-dev", e.g. setup-php nightlies of a pre-release
+        // minor) have none - fall back to the release branch and then to
+        // master, whichever the snapshot was cut from. A tree slightly ahead
+        // of the running build is caught by the probe/validate stage, never
+        // shipped silently.
+        $sourceRefs = ['php-' . PHP_VERSION];
+        if (str_ends_with(PHP_VERSION, '-dev')) {
+            $sourceRefs = [sprintf('PHP-%d.%d', PHP_MAJOR_VERSION, PHP_MINOR_VERSION), 'master'];
+        }
+        $sourceRef = null;
         foreach (['Zend/zend_closures.c', 'ext/opcache/ZendAccelerator.h', 'ext/opcache/zend_file_cache.c'] as $file) {
             $destination = "{$phpSrc}/{$file}";
             if (is_file($destination)) {
@@ -389,11 +419,23 @@ if ($isNative) {
             if (!is_dir(dirname($destination))) {
                 mkdir(dirname($destination), 0777, true);
             }
-            $url      = 'https://raw.githubusercontent.com/php/php-src/php-' . PHP_VERSION . "/{$file}";
-            $exitCode = downloadFile($url, $destination);
-            if ($exitCode !== 0) {
-                fwrite(STDERR, "==> ERROR: could not fetch {$url} (exit {$exitCode}). If this PHP build "
-                    . "has no matching php-src tag, pass --php-src=DIR with a matching tree.\n");
+            $refsToTry = $sourceRef !== null ? [$sourceRef] : $sourceRefs;
+            $fetched   = false;
+            foreach ($refsToTry as $ref) {
+                $url      = "https://raw.githubusercontent.com/php/php-src/{$ref}/{$file}";
+                $exitCode = downloadFile($url, $destination);
+                if ($exitCode === 0) {
+                    // All three slices must come from one tree
+                    $sourceRef = $ref;
+                    $fetched   = true;
+                    break;
+                }
+            }
+            if (!$fetched) {
+                fwrite(STDERR, '==> ERROR: could not fetch ' . implode(' or ', array_map(
+                    static fn(string $ref): string => "https://raw.githubusercontent.com/php/php-src/{$ref}/{$file}",
+                    $refsToTry,
+                )) . ". If this PHP build has no matching php-src tree, pass --php-src=DIR with one.\n");
                 exit(1);
             }
         }
@@ -475,9 +517,28 @@ $layerCacheDir = is_string($layerCacheDir) && $layerCacheDir !== '' ? rtrim($lay
 $layerCacheReadOnly = getenv('Z_ENGINE_BUILDX_CACHE_READONLY');
 $layerCacheReadOnly = is_string($layerCacheReadOnly) && $layerCacheReadOnly !== '' && $layerCacheReadOnly !== '0';
 
+/**
+ * Resolves the docker base image for a (minor, ts) target: the stable minor tag
+ * once Docker publishes it, the -rc family (which also covers betas) while the
+ * minor is pre-release. Falls back to the stable name when neither manifest can
+ * be inspected (offline builds), so the error stays the canonical one.
+ */
+function resolveBaseImage(string $mirror, string $minor, string $ts): string
+{
+    $variant = $ts === 'zts' ? 'zts' : 'cli';
+    foreach (["php:{$minor}-{$variant}", "php:{$minor}-rc-{$variant}"] as $image) {
+        exec('docker buildx imagetools inspect ' . escapeshellarg($mirror . $image) . ' --raw 2>/dev/null', $unused, $code);
+        if ($code === 0) {
+            return $mirror . $image;
+        }
+    }
+
+    return $mirror . "php:{$minor}-{$variant}";
+}
+
 $failures = 0;
 foreach ($targets as $target) {
-    $baseImage = $mirror . ($target['ts'] === 'zts' ? "php:{$target['php']}-zts" : "php:{$target['php']}-cli");
+    $baseImage = resolveBaseImage($mirror, $target['php'], $target['ts']);
     $outputDir = "{$repositoryRoot}/include/{$target['php']}/linux-{$arch}-{$target['ts']}";
 
     $cacheArguments = '';

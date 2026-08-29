@@ -105,8 +105,14 @@ final class ClangAstIndex
                 }
                 break;
             case 'EnumDecl':
-                if ($name !== '' && !isset($this->enums[$name]) && $this->hasRange($decl)) {
-                    $this->enums[$name] = $decl;
+                if ($name !== '' && $this->hasRange($decl)) {
+                    // A forward declaration may precede the definition (C23_ENUM
+                    // expands to one since PHP 8.6): keep the node that carries
+                    // the members, not whichever came first.
+                    $known = $this->enums[$name] ?? null;
+                    if ($known === null || (!self::enumDeclHasMembers($known) && self::enumDeclHasMembers($decl))) {
+                        $this->enums[$name] = $decl;
+                    }
                 } elseif ($name === '' && $this->hasRange($decl) && is_string($decl['id'] ?? null)) {
                     $this->anonymousTagsById[$decl['id']] = $decl;
                 }
@@ -295,6 +301,27 @@ final class ClangAstIndex
     public function hasEnum(string $tag): bool
     {
         return isset($this->enums[$tag]);
+    }
+
+    /**
+     * Whether an EnumDecl node is a defining declaration (carries members),
+     * as opposed to a forward declaration.
+     *
+     * @param DeclNode $decl
+     */
+    private static function enumDeclHasMembers(array $decl): bool
+    {
+        $inner = $decl['inner'] ?? null;
+        if (!is_array($inner)) {
+            return false;
+        }
+        foreach ($inner as $member) {
+            if (is_array($member) && ($member['kind'] ?? '') === 'EnumConstantDecl') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

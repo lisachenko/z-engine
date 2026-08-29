@@ -487,10 +487,11 @@ trait FunctionLikeTrait
      * entry -1 (present only for functions with a declared return type) holds the
      * return-type information.
      *
-     * Internal functions store zend_internal_arg_info entries whose names are plain
-     * C strings; the return-type entry of an internal function reuses the name field for
-     * the required-argument count, so the name of a return entry is always reported as
-     * null (user functions store no name there either).
+     * Since PHP 8.6 internal functions no longer expose their static
+     * zend_internal_arg_info tables at runtime: zend_register_functions converts them
+     * to regular zend_arg_info entries with interned zend_string names, so user and
+     * internal functions share one entry layout. The return-type entry stores no name
+     * in either case and is always reported as null.
      */
     public function getArgumentInfo(int $index): ArgumentEntry
     {
@@ -506,18 +507,15 @@ trait FunctionLikeTrait
                 "Argument info index {$index} is out of bounds, valid range is {$minIndex}..{$maxIndex}",
             );
         }
-        // For internal functions the same field is typed as zend_internal_arg_info *; both
-        // structures share size and field layout, only the name representation differs
         $argInfoTable = $commonPointer->arg_info;
         if ($argInfoTable === null) {
             throw new \ReflectionException('Function does not provide argument info entries');
         }
-        // Explicit pointer arithmetic also resolves the -1 return entry; the view type
-        // selects the right name representation for the entry
-        $entryType = $this->isUserDefined() ? 'zend_arg_info' : 'zend_internal_arg_info';
-        $entry     = Core::pointerAtAddress(
-            "{$entryType} *",
-            Core::addressOf($argInfoTable) + $index * Core::sizeOfType($entryType),
+        // Explicit pointer arithmetic also resolves the -1 return entry; internal
+        // functions carry converted zend_arg_info entries too since PHP 8.6
+        $entry = Core::pointerAtAddress(
+            'zend_arg_info *',
+            Core::addressOf($argInfoTable) + $index * Core::sizeOfType('zend_arg_info'),
         );
         $entryTypeStruct = $entry->type;
         assert($entryTypeStruct instanceof CData);
@@ -525,20 +523,13 @@ trait FunctionLikeTrait
         assert(is_int($typeMask));
 
         $name = null;
-        // The name of the -1 return entry is never read: user functions store NULL there
-        // and internal functions reuse the field for the required-argument count, so
-        // dereferencing it would interpret a small integer as a C string pointer
+        // The -1 return entry stores no name: user functions keep NULL there and the
+        // internal-function conversion writes NULL as well
         if ($index !== ArgumentEntry::RETURN_ENTRY_INDEX) {
             $rawName = $entry->name;
-            if ($this->isUserDefined()) {
-                if ($rawName !== null) {
-                    assert($rawName instanceof CData);
-                    $name = StringEntry::fromCData($rawName)->getStringValue();
-                }
-            } else {
-                // FFI materializes const char* fields directly as PHP strings
-                assert($rawName === null || is_string($rawName));
-                $name = $rawName;
+            if ($rawName !== null) {
+                assert($rawName instanceof CData);
+                $name = StringEntry::fromCData($rawName)->getStringValue();
             }
         }
 

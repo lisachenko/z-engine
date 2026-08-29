@@ -133,13 +133,10 @@ final class GetClosureHook extends AbstractHook
         // @phpstan-ignore offsetAssign.dimType
         $this->cePtr[0] = $rawClosure->called_scope;
 
+        // Since PHP 8.6 this_ptr is a plain zend_object* (NULL when unbound), not a zval
         $closureThis = $rawClosure->this_ptr;
-        assert($closureThis instanceof CData);
-        $thisValue  = ReflectionValue::fromValueEntry(Core::addr($closureThis));
-        $typeMask   = Core::engineConstant('Z_TYPE_MASK');
-        $isBoundObj = ($thisValue->getType() & $typeMask) === ReflectionValue::IS_OBJECT;
         // @phpstan-ignore offsetAssign.dimType
-        $this->objPtr[0] = $isBoundObj ? $thisValue->getRawObject() : null;
+        $this->objPtr[0] = $closureThis;
 
         return Core::SUCCESS;
     }

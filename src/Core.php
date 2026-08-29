@@ -192,7 +192,7 @@ class Core
      * anything else is memory corruption, not a degraded mode - hence the hard
      * boot guard. See AGENTS.md ("Version matching is non-negotiable").
      */
-    private const SUPPORTED_PHP_VERSION_ID = [80500, 80600];
+    private const SUPPORTED_PHP_VERSION_ID = [80600, 80700];
 
     /**
      * Stores an internal instance of low-level FFI binding
