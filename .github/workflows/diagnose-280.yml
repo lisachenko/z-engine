@@ -1,0 +1,96 @@
+# TEMPORARY: diagnostics for issue #280 (user opcode handlers corrupt VM state
+# under PHP 8.6's tail-call VM on macOS arm64). Runs the tools/diagnostics/issue-280
+# probe ladder on the failing runner (macos-latest, arm64) with macos-15-intel as
+# the in-run control. Removed together with the probes once the fix lands.
+name: Diagnose issue 280
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: diagnose-280-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PHP_MINOR: '8.6'
+
+jobs:
+  probes:
+    name: Probes (${{ matrix.runner-arch.arch }})
+    runs-on: ${{ matrix.runner-arch.runner }}
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      ZENGINE_STRICT_LAYOUT_CHECK: '1'
+      PHP_FLAGS: -d ffi.enable=1 -d zend.assertions=1 -d opcache.enable_cli=0 -d opcache.jit=off
+    strategy:
+      fail-fast: false
+      matrix:
+        runner-arch:
+          - { runner: macos-latest, arch: arm64 }
+          - { runner: macos-15-intel, arch: x64 }
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_MINOR }}
+          extensions: ffi, opcache
+          ini-values: ffi.enable=1, zend.assertions=1, opcache.enable=1, opcache.enable_cli=0, opcache.jit=off, opcache.jit_buffer_size=0
+          coverage: none
+
+      - name: Environment report
+        run: |
+          uname -m
+          php -v
+          php -r 'echo "ZEND_THREAD_SAFE=", var_export(ZEND_THREAD_SAFE, true), " PHP_DEBUG=", PHP_DEBUG, PHP_EOL;'
+
+      - name: Install dependencies
+        uses: ramsey/composer-install@v4
+
+      - name: 'Probe: noop (handler touches nothing)'
+        if: always()
+        run: php $PHP_FLAGS tools/diagnostics/issue-280/probe.php noop; echo "exit=$?"
+
+      - name: 'Probe: log-const (one internal call per fire)'
+        if: always()
+        run: php $PHP_FLAGS tools/diagnostics/issue-280/probe.php log-const; echo "exit=$?"
+
+      - name: 'Probe: globals (symbol-table counter)'
+        if: always()
+        run: php $PHP_FLAGS tools/diagnostics/issue-280/probe.php globals; echo "exit=$?"
+
+      - name: 'Probe: use-ref (by-ref closure counter, the failing shape)'
+        if: always()
+        run: php $PHP_FLAGS tools/diagnostics/issue-280/probe.php use-ref; echo "exit=$?"
+
+      - name: 'Probe: diag (engine invariants per fire)'
+        if: always()
+        run: php $PHP_FLAGS tools/diagnostics/issue-280/probe.php diag; echo "exit=$?"
+
+      - name: 'Probe: add-baseline (ADD handler, no extended stmt)'
+        if: always()
+        run: php $PHP_FLAGS tools/diagnostics/issue-280/probe.php add-baseline; echo "exit=$?"
+
+      - name: 'use-ref under lldb (backtrace on crash)'
+        if: always()
+        run: |
+          lldb --batch \
+            -o 'run' \
+            -k 'thread backtrace all' \
+            -k 'quit' \
+            -- "$(which php)" $PHP_FLAGS tools/diagnostics/issue-280/probe.php use-ref || true
+
+      - name: macOS crash reports
+        if: always()
+        run: |
+          for f in ~/Library/Logs/DiagnosticReports/php*; do
+            [ -e "$f" ] || continue
+            echo "===== $f ====="
+            head -c 6000 "$f"
+          done
