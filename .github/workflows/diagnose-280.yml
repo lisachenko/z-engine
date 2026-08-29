@@ -1,0 +1,86 @@
+# Diagnostics for issue #280 (php-src: user opcode handlers mis-resume under the
+# PHP 8.6 tail-call VM). Manually dispatched: runs the tools/diagnostics/issue-280
+# probe ladder and the pure-FFI php-src repro on macos-latest (arm64, the affected
+# build) with macos-15-intel as the in-run control. Re-run it against a new PHP
+# build to check whether the upstream bug is fixed; drop it (and the probes) once
+# php-src resolves the issue and the OpCodeHook guard is retired.
+name: Diagnose issue 280
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: diagnose-280-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PHP_MINOR: '8.6'
+
+jobs:
+  probes:
+    name: Probes (${{ matrix.runner-arch.arch }})
+    runs-on: ${{ matrix.runner-arch.runner }}
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      ZENGINE_STRICT_LAYOUT_CHECK: '1'
+      PHP_FLAGS: -d ffi.enable=1 -d zend.assertions=1 -d opcache.enable_cli=0 -d opcache.jit=off
+    strategy:
+      fail-fast: false
+      matrix:
+        runner-arch:
+          - { runner: macos-latest, arch: arm64 }
+          - { runner: macos-15-intel, arch: x64 }
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_MINOR }}
+          extensions: ffi, opcache
+          ini-values: ffi.enable=1, zend.assertions=1, opcache.enable=1, opcache.enable_cli=0, opcache.jit=off, opcache.jit_buffer_size=0
+          coverage: none
+
+      - name: Environment report
+        run: |
+          uname -m
+          php -v
+          php -r 'echo "ZEND_THREAD_SAFE=", var_export(ZEND_THREAD_SAFE, true), " PHP_DEBUG=", PHP_DEBUG, PHP_EOL;'
+
+      - name: Install dependencies
+        uses: ramsey/composer-install@v4
+
+      - name: Run every probe mode
+        run: |
+          for mode in install-only noop log-const globals use-ref diag add-baseline; do
+            echo "=== MODE ${mode} ==="
+            php $PHP_FLAGS tools/diagnostics/issue-280/probe.php "$mode" || echo "exit=$?"
+          done
+
+      - name: Pure-FFI repro (no z-engine, for the php-src report)
+        if: always()
+        run: php $PHP_FLAGS tools/diagnostics/issue-280/pure-ffi-repro.php || echo "exit=$?"
+
+      - name: noop under lldb (backtrace on crash)
+        if: always()
+        run: |
+          lldb --batch \
+            -o 'run' \
+            -o 'bt' \
+            -o 'register read' \
+            -o 'disassemble --pc --count 12' \
+            -o 'quit' \
+            -- "$(which php)" $PHP_FLAGS tools/diagnostics/issue-280/probe.php noop || true
+
+      - name: Latest macOS crash report
+        if: always()
+        run: |
+          latest=$(ls -t ~/Library/Logs/DiagnosticReports/php* 2>/dev/null | head -1 || true)
+          if [ -n "$latest" ]; then
+            echo "===== $latest ====="
+            head -c 24000 "$latest"
+          fi
