@@ -70,6 +70,13 @@ parameters:
         -
             identifier: offsetAccess.nonOffsetAccessible
             path: src/Type/StructArray.php
+        # Core::vmKind() binds a dedicated one-symbol cdef (`int zend_vm_kind(void)`):
+        # methods declared by cdef source are not statically resolvable, exactly like the
+        # engine binding behind call() - scoped to this one symbol in this one file.
+        -
+            identifier: method.notFound
+            message: '#Call to an undefined method FFI::zend_vm_kind\(\)#'
+            path: src/Core.php
         # The dimension tests exist to prove that a plain `count($object)` reaches the engine's
         # count_elements handler on a class that never declared the count itself. Rewriting them
         # as assertCount() would measure PHPUnit's Count constraint instead of the language
