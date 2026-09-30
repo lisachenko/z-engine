@@ -23,6 +23,11 @@ jobs:
   probes:
     name: Probes (${{ matrix.runner-arch.arch }})
     runs-on: ${{ matrix.runner-arch.runner }}
+    # The x64 leg is only the hybrid-VM control; setup-php currently has no
+    # PHP 8.6 build for macos-15-intel (it gives up after ~25 minutes), and a
+    # control leg that cannot get PHP must not fail the diagnostic run - the
+    # arm64 leg alone answers "is the php-src bug fixed yet".
+    continue-on-error: ${{ matrix.runner-arch.arch == 'x64' }}
     env:
       HOMEBREW_NO_AUTO_UPDATE: '1'
       HOMEBREW_NO_INSTALL_CLEANUP: '1'
