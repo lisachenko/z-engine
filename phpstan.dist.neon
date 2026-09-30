@@ -9,9 +9,8 @@ includes:
 
 parameters:
     level: max
-    # TODO: bump to 80600 once PHPStan accepts it (2.2.9 still caps phpVersion
-    # at 80599 while PHP 8.6 is in beta); the runtime target of this branch is 8.6
-    phpVersion: 80500
+    # The runtime target of this branch (PHPStan >= 2.2.16 accepts 80600)
+    phpVersion: 80600
     # Deterministic result-cache location (gitignored, /var/) so CI can cache it
     tmpDir: var/phpstan
     paths:
