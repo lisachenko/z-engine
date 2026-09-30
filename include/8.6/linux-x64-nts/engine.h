@@ -868,6 +868,10 @@ struct _zend_executor_globals {
  HashTable callable_convert_cache;
  HashTable partial_function_application_cache;
  zend_stack lambda_cache;
+ zend_vm_stack vm_stack_page_cache;
+ uint32_t vm_stack_page_cache_count;
+ zend_vm_stack fiber_vm_stack_page_cache;
+ uint32_t fiber_vm_stack_page_cache_count;
  void *reserved[6];
 };
 typedef enum {

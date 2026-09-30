@@ -1,7 +1,7 @@
 {
     "meta": {
         "php": "8.6",
-        "api": 20250926,
+        "api": 20260924,
         "zts": 1,
         "debug": 0
     },
@@ -312,7 +312,7 @@
             }
         },
         "zend_executor_globals": {
-            "size": 2336,
+            "size": 2368,
             "fields": {
                 "uninitialized_zval": 0,
                 "error_zval": 16,
@@ -403,7 +403,11 @@
                 "callable_convert_cache": 2152,
                 "partial_function_application_cache": 2208,
                 "lambda_cache": 2264,
-                "reserved": 2288
+                "vm_stack_page_cache": 2288,
+                "vm_stack_page_cache_count": 2296,
+                "fiber_vm_stack_page_cache": 2304,
+                "fiber_vm_stack_page_cache_count": 2312,
+                "reserved": 2320
             }
         },
         "zend_compiler_globals": {
