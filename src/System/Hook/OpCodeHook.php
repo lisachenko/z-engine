@@ -95,6 +95,15 @@ final class OpCodeHook implements HookInterface
         if (Core::isShutdown()) {
             throw new \LogicException('Cannot install an engine hook after Core::shutdown()');
         }
+        // PHP 8.6's tail-call VM mis-resumes execution after a user opcode handler: the
+        // generated ZEND_USER_OPCODE_SPEC_TAILCALL_HANDLER returns the single-step
+        // dispatch result up the musttail chain, and execute_ex() then continues with its
+        // stale frame pointer - any handler firing outside execute_ex's entry frame
+        // executes the following oplines against the WRONG frame (wrong run-time cache,
+        // wrong CVs), corrupting the debuggee. Refuse loudly instead (issue #280).
+        if (Core::vmKind() === Core::VM_KIND_TAILCALL) {
+            throw OpCodeHookException::tailCallVmUnsupported();
+        }
         $previousHandler = Core::call('zend_get_user_opcode_handler', $this->opCode);
         assert($previousHandler === null || $previousHandler instanceof CData);
         $this->originalHandler = $previousHandler;

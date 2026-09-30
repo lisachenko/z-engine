@@ -1277,6 +1277,10 @@ int main(void) {
     fprintf(layouts, ", \"callable_convert_cache\": %zu", offsetof(zend_executor_globals, callable_convert_cache));
     fprintf(layouts, ", \"partial_function_application_cache\": %zu", offsetof(zend_executor_globals, partial_function_application_cache));
     fprintf(layouts, ", \"lambda_cache\": %zu", offsetof(zend_executor_globals, lambda_cache));
+    fprintf(layouts, ", \"vm_stack_page_cache\": %zu", offsetof(zend_executor_globals, vm_stack_page_cache));
+    fprintf(layouts, ", \"vm_stack_page_cache_count\": %zu", offsetof(zend_executor_globals, vm_stack_page_cache_count));
+    fprintf(layouts, ", \"fiber_vm_stack_page_cache\": %zu", offsetof(zend_executor_globals, fiber_vm_stack_page_cache));
+    fprintf(layouts, ", \"fiber_vm_stack_page_cache_count\": %zu", offsetof(zend_executor_globals, fiber_vm_stack_page_cache_count));
     fprintf(layouts, ", \"reserved\": %zu", offsetof(zend_executor_globals, reserved));
     fputs("}},\n", layouts);
     fputs("        \"zend_compiler_globals\": {", layouts);

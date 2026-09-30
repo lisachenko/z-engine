@@ -191,6 +191,12 @@ composer test:internal   # destructive/segfault-prone group, process-isolated
   build** (`tools/docker/php-debug.Dockerfile`, which CI builds inline and runs
   the group in). Process isolation keeps one crash from taking down the whole
   run.
+- On PHP 8.6 builds using the tail-call VM (`Core::vmKind()` =
+  `VM_KIND_TAILCALL`; clang without global-register support, notably Apple
+  Silicon), user opcode handlers are refused by `OpCode::setHandler()` — the
+  engine mis-resumes execution after a user handler there and corrupts the
+  process (issue #280, a php-src bug). The guard test
+  (`OpCodeHookVmKindGuardTest`) covers both branches in every CI leg.
 - FFI must be enabled (`ffi.enable=1`) and the JIT disabled (`opcache.jit=off`)
   — the JIT rewrites the executor internals z-engine hooks into. The PHPUnit
   config sets what it can; `ffi.enable` and `zend.assertions` must come from

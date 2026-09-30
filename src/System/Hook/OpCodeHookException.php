@@ -32,4 +32,15 @@ final class OpCodeHookException extends \RuntimeException
     {
         return new self('Can not restore original opcode handler');
     }
+
+    public static function tailCallVmUnsupported(): self
+    {
+        return new self(
+            'User opcode handlers are unsupported on this PHP build: its tail-call VM '
+            . '(ZEND_VM_KIND_TAILCALL, e.g. clang builds on Apple Silicon since PHP 8.6) '
+            . 'resumes execution against a stale frame after a user opcode handler fires, '
+            . 'corrupting the process. Use a hybrid/call-VM PHP build instead. '
+            . 'See https://github.com/lisachenko/z-engine/issues/280',
+        );
+    }
 }

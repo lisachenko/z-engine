@@ -9,9 +9,8 @@ includes:
 
 parameters:
     level: max
-    # TODO: bump to 80600 once PHPStan accepts it (2.2.9 still caps phpVersion
-    # at 80599 while PHP 8.6 is in beta); the runtime target of this branch is 8.6
-    phpVersion: 80500
+    # The runtime target of this branch (PHPStan >= 2.2.16 accepts 80600)
+    phpVersion: 80600
     # Deterministic result-cache location (gitignored, /var/) so CI can cache it
     tmpDir: var/phpstan
     paths:
@@ -70,6 +69,13 @@ parameters:
         -
             identifier: offsetAccess.nonOffsetAccessible
             path: src/Type/StructArray.php
+        # Core::vmKind() binds a dedicated one-symbol cdef (`int zend_vm_kind(void)`):
+        # methods declared by cdef source are not statically resolvable, exactly like the
+        # engine binding behind call() - scoped to this one symbol in this one file.
+        -
+            identifier: method.notFound
+            message: '#Call to an undefined method FFI::zend_vm_kind\(\)#'
+            path: src/Core.php
         # The dimension tests exist to prove that a plain `count($object)` reaches the engine's
         # count_elements handler on a class that never declared the count itself. Rewriting them
         # as assertCount() would measure PHPUnit's Count constraint instead of the language
