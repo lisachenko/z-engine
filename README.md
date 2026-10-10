@@ -135,6 +135,8 @@ $class->addMethod('count', fn() => 42);  // add a method from a closure
 $method = new ReflectionMethod(Service::class, 'handle');
 $method->setPublic();
 $method->redefine(fn() => 'patched');    // swap the method body
+$method->redefine(fn() => 'wrapped:' . $this->handleOriginal(), preserveAs: 'handleOriginal'); // ...keeping the previous body callable
+$method->redefine($donor->getMethod('handle'));                   // or adopt the body of another class's method
 ```
 
 ### Generated functions — no FFI trampoline

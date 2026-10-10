@@ -237,7 +237,6 @@ final class CacheImageSync
                     preserveDeclaration: true,
                     // A shared-memory previous body is immortal and must not be freed
                     destroyPrevious: !$this->functionWasShared[$functionName],
-                    publishedShares: FunctionBodySwap::countPublishedShares($entryFunction),
                 );
             }
             foreach ($methodDonors as $classKey => $donors) {
@@ -256,7 +255,6 @@ final class CacheImageSync
                         $donor->getDonor(),
                         preserveDeclaration: true,
                         destroyPrevious: !$this->classWasShared[$classKey],
-                        publishedShares: FunctionBodySwap::countPublishedShares($entryMethod),
                     );
                 }
             }

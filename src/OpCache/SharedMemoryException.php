@@ -83,6 +83,25 @@ class SharedMemoryException extends \ReflectionException
     }
 
     /**
+     * A publication into the method table of a shared-memory class would be invisible to
+     * a subclass that was linked against the shared entry before the copy-out
+     *
+     * Copying the class out of shared memory repoints the class-table bucket at a
+     * per-process copy, but a subclass linked earlier keeps the shared entry as its parent
+     * and in its inherited method buckets: nothing published into the copy ever reaches
+     * it (see the copy-out caveats in docs/hot-swap.md). Weave before subclasses link.
+     */
+    public static function sharedEntryHasLinkedSubclasses(string $className, string $methodName, string $subclassName): self
+    {
+        return new self(
+            'Cannot publish into the method table of the immutable (opcache shared-memory) class '
+            . "{$className}: its subclass {$subclassName} was linked against the shared entry and "
+            . "inherits {$methodName}() from it, so the publication would never reach that "
+            . 'subclass - perform the mutation before the subclass is linked',
+        );
+    }
+
+    /**
      * Handler installation targeted a temporary lazy-linking class copy while declining
      * the inheritance cache is unavailable (issues #238/#241)
      *
