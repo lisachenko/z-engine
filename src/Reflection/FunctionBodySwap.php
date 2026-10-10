@@ -860,7 +860,8 @@ final class FunctionBodySwap
      * walk over the object store
      *
      * Only user-function closures are of interest (an internal function's closure carries
-     * no op_array), so the list is narrowed to those. The views point into the closure
+     * no op_array, and no user-function view can be built over it), so the list is narrowed
+     * to those before any view is made. The views point into the closure
      * objects: the list describes the live closures only until user code runs again (a
      * destructor fired by a table release may create or drop closures), so the callers take
      * every decision that reads it BEFORE they destroy anything.
@@ -876,11 +877,14 @@ final class FunctionBodySwap
         }
         $liveClosures = [];
         foreach (Core::$executor->objectStore->instancesOf(self::$closureClassAddress) as $closureObject) {
-            $closure         = Core::cast(zend_closure::class, $closureObject->getRawValue());
-            $closureFunction = ReflectionFunction::fromCData(Core::addr($closure->func));
-            if ($closureFunction->isUserDefined()) {
-                $liveClosures[] = $closureFunction;
+            $closure = Core::cast(zend_closure::class, $closureObject->getRawValue());
+            // The type is read off the union before any view is built over it: a closure
+            // over an internal function (strlen(...), Closure::fromCallable('strlen')) keeps
+            // its name in the internal_function member, where a zend_function view has none
+            if (($closure->func->type & Core::ZEND_USER_FUNCTION) === 0) {
+                continue;
             }
+            $liveClosures[] = ReflectionFunction::fromCData(Core::addr($closure->func));
         }
 
         return $liveClosures;
