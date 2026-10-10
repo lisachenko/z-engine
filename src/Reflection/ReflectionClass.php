@@ -275,7 +275,7 @@ class ReflectionClass extends NativeReflectionClass
     public static function findUserMethodAt(int $classAddress, StringEntry $lowerName): ?ReflectionMethod
     {
         $classEntry = Core::pointerAtAddress(zend_class_entry::class, $classAddress);
-        if (ord($classEntry->type) !== Core::ZEND_USER_CLASS) {
+        if ($classEntry->type !== Core::ZEND_USER_CLASS) {
             return null;
         }
         $bucket = Core::call('zend_hash_find', Core::addr($classEntry->function_table), $lowerName->getRawValue());
@@ -320,7 +320,7 @@ class ReflectionClass extends NativeReflectionClass
     private static function descendsFromAddress(int $classAddress, int $ancestorAddress): bool
     {
         $classEntry = Core::pointerAtAddress(zend_class_entry::class, $classAddress);
-        if (ord($classEntry->type) !== Core::ZEND_USER_CLASS) {
+        if ($classEntry->type !== Core::ZEND_USER_CLASS) {
             return false;
         }
         // Until a class is linked, the parent slot holds the parent NAME (a union); the
