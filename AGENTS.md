@@ -71,7 +71,16 @@ composer gen-headers          # all targets for this branch (needs Docker on Lin
 ```
 
 The generator (`tools/generator/`) runs inside the official `php:<minor>` Docker
-image so the artifacts always match a real build. Regenerate whenever you:
+image so the artifacts always match a real build. CI does not use that path,
+though: its `header-drift` job regenerates the linux artifacts natively on the
+runner's setup-php build (the same one the tests run on), and the
+**"Generate linux headers"** workflow (`.github/workflows/generate-linux-headers.yml`)
+refreshes and commits them the same way the darwin/windows workflows do - run it
+against the branch whose artifacts are stale when you have no Docker at hand.
+While a minor is pre-release the docker path may not even be able to produce
+the nts target: docker-library has shipped the `php:<minor>-rc-cli` image as a
+ZTS build, which `generate.php` detects and refuses (it never writes a ZTS
+layout under an nts name). Regenerate whenever you:
 
 - bump the branch to a new PHP minor,
 - add or remove an engine symbol in `tools/generator/symbols.php`,
@@ -115,8 +124,9 @@ the output must be byte-identical to the Docker pipeline's (verified on
 Ubuntu clang-18 vs the trixie image: the emitter normalizes declarations from
 the clang AST, so compiler version does not leak into the artifacts). Only
 then apply the manifest change and regenerate for real. The `header-drift`
-CI jobs re-run the pipeline (Docker for linux, native for darwin and windows)
-and fail on any divergence, so never skip the pre-check.
+CI jobs re-run the pipeline natively on every platform (linux, darwin and
+windows, each on its runner's setup-php build) and fail on any divergence, so
+never skip the pre-check.
 
 ### macOS (darwin) artifacts
 
@@ -224,9 +234,11 @@ clean at level max — do not add to the baseline without good reason.
 
 ### A docker cache key must name the base image, not only the recipe
 
-Two CI jobs build docker images from a `php:<minor>-*` tag — `tests-internal-debug`
-(a full `--enable-debug` PHP compile) and `header-drift` (the generator toolchain) —
-and both wrap the buildx layer cache in `actions/cache`. Those tags **move**: every
+`tests-internal-debug` builds a docker image from a `php:<minor>-*` tag (a full
+`--enable-debug` PHP compile) and wraps the buildx layer cache in `actions/cache`;
+`header-drift` did the same for the generator toolchain until the linux artifacts
+moved to native generation, and its history is the cautionary tale below. Those
+tags **move**: every
 PHP patch release and every Debian security rebuild republishes them under a new
 digest, and buildx correctly invalidates every layer built on top.
 
