@@ -15,6 +15,8 @@ namespace ZEngine\Reflection;
 
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
+use ZEngine\Core;
+use ZEngine\Type\ClosureEntry;
 
 /**
  * Test function to reflect
@@ -153,5 +155,39 @@ class ReflectionFunctionTest extends TestCase
         // strlen is always registered - addFunction must refuse to clobber it (and bail out
         // before touching any engine memory)
         ReflectionFunction::addFunction('strlen', fn(): int => 0);
+    }
+
+    /**
+     * A debugger (Xdebug, PhpStorm) calls __debugInfo() on every wrapper in scope - and a
+     * closure-backed wrapper has no native reflection state, because fromCData() cannot run
+     * the parent constructor for a function that is not in the function table. The native
+     * getName() throws from such a wrapper, and a throwing __debugInfo() is a fatal error
+     * for the debugged process; the dump has to come from the pointer instead.
+     */
+    public function testDebugInfoOfClosureBackedWrapperComesFromThePointer(): void
+    {
+        $closure      = static fn(): int => 42;
+        $closureEntry = new ClosureEntry($closure);
+        $refFunction  = ReflectionFunction::fromCData(Core::addr($closureEntry->getRawFunction()));
+
+        // The native state is indeed uninitialized for this wrapper - the dump must not touch it
+        try {
+            $this->assertIsString($refFunction->getName());
+            $this->fail('Expected the native getName() to reject the closure-backed wrapper');
+        } catch (\Error $nativeFailure) {
+            $this->assertStringContainsString('reflection object', $nativeFailure->getMessage());
+        }
+
+        $info = $refFunction->__debugInfo();
+        $this->assertSame(['name' => $refFunction->getFunctionName()], $info);
+        $this->assertStringStartsWith('{closure', (string) $info['name']);
+        // print_r() renders through __debugInfo() exactly like a debugger's variable view
+        $this->assertStringContainsString('[name] => {closure', print_r($refFunction, true));
+    }
+
+    public function testDebugInfoOfNamedFunctionReportsItsName(): void
+    {
+        $this->assertSame(['name' => __NAMESPACE__ . '\\testFunction'], $this->refFunction->__debugInfo());
+        $this->assertSame(['name' => 'strlen'], (new ReflectionFunction('strlen'))->__debugInfo());
     }
 }

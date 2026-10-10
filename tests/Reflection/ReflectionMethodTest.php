@@ -224,4 +224,19 @@ class ReflectionMethodTest extends TestCase
             $this->refMethod->setDeclaringClass(TestClass::class);
         }
     }
+
+    public function testDebugInfoComesFromThePointer(): void
+    {
+        // Same contract as ReflectionFunction::__debugInfo(): a debugger dumping a wrapper
+        // without native reflection state (a trampoline) must not fatal the process, so
+        // the dump reads the name and the declaring class from the engine structure
+        $this->assertSame(
+            ['name' => 'reflectedMethod', 'class' => TestClass::class],
+            $this->refMethod->__debugInfo(),
+        );
+        $this->assertSame(
+            ['name' => 'getIterator', 'class' => \ArrayObject::class],
+            (new ReflectionMethod(\ArrayObject::class, 'getIterator'))->__debugInfo(),
+        );
+    }
 }
