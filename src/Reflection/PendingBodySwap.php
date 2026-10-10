@@ -37,7 +37,6 @@ final class PendingBodySwap
     /**
      * @param FunctionLikeInterface $entry             Swapped entry (published function/method)
      * @param CData              $previousBody         zend_function snapshot of the previous body
-     * @param int                $entryAddress         Numeric identity of the entry
      * @param int                $publishedShares      Bucket shares held on both the previous and the new body
      * @param bool               $destroyPrevious      False for shared-memory previous bodies (never freed)
      * @param CData|null         $previousMintedCache  Run-time cache an earlier swap minted for the previous
@@ -46,7 +45,6 @@ final class PendingBodySwap
     public function __construct(
         private FunctionLikeInterface $entry,
         private CData $previousBody,
-        private int $entryAddress,
         private int $publishedShares,
         private bool $destroyPrevious,
         private ?CData $previousMintedCache = null,
@@ -61,14 +59,14 @@ final class PendingBodySwap
         $this->isResolved = true;
         if ($this->destroyPrevious) {
             FunctionBodySwap::destroyPreviousBody(
+                $this->entry,
                 $this->previousBody,
-                $this->entryAddress,
                 $this->publishedShares,
                 $this->previousMintedCache,
             );
         } else {
             // A shared-memory body is never freed, but the cache z-engine minted for it is
-            FunctionBodySwap::releaseMintedRunTimeCache($this->entryAddress, $this->previousMintedCache);
+            FunctionBodySwap::releaseMintedRunTimeCache($this->entry, $this->previousMintedCache);
         }
     }
 

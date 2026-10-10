@@ -18,6 +18,7 @@ use Countable;
 use FFI\CData;
 use ZEngine\Core;
 use ZEngine\Generated\zend_object;
+use ZEngine\Generated\zend_objects_store;
 use ZEngine\Type\ObjectEntry;
 
 final class ObjectStore implements Countable, ArrayAccess
@@ -107,6 +108,82 @@ final class ObjectStore implements Countable, ArrayAccess
     public function offsetUnset($offset): void
     {
         throw new \LogicException('Object store is read-only structure');
+    }
+
+    /**
+     * Enumerates the live objects of one class, as borrowed entries
+     *
+     * Walking the store allocates objects of its own (every FFI handle is one), and those
+     * take free slots of the very store being walked. So the slot values are read through
+     * one integer view of the bucket array that allocates nothing per step, a slot found to
+     * hold the handle of the previous step is skipped before that handle is released, the
+     * view is renewed when the store grows (its bucket array moves then), and the garbage
+     * collector stays off for the walk: no object an entry is created for can die between
+     * the read of its slot and the read of its class. Slots added during the walk (the
+     * handles of the walk and of its consumer) are not visited.
+     *
+     * @param int $classAddress Address of the zend_class_entry whose instances are wanted
+     *
+     * @return iterable<ObjectEntry>
+     *
+     * @internal used by FunctionBodySwap to find the closures made over a swapped entry
+     */
+    public function instancesOf(int $classAddress): iterable
+    {
+        $gcWasEnabled = gc_enabled();
+        gc_disable();
+        try {
+            // EG(objects_store) is an embedded struct: its address, as the stub-typed pointer view
+            $store  = Core::cast(zend_objects_store::class, Core::addr($this->pointer));
+            $top    = $store->top;
+            $size   = $store->size;
+            $slots  = self::slotAddresses($store);
+            $object = null;
+            for ($handle = 1; $handle < $top; $handle++) {
+                if ($store->size !== $size) {
+                    // The store grew during the walk: the bucket array was reallocated
+                    $size  = $store->size;
+                    $slots = self::slotAddresses($store);
+                }
+                $address = $slots[$handle];
+                assert(is_int($address));
+                if (($address & self::OBJ_BUCKET_INVALID) !== 0) {
+                    continue;
+                }
+                if ($object !== null && spl_object_id($object) === $handle) {
+                    // The slot holds the handle of the previous step, which the next assignment releases
+                    continue;
+                }
+                $object = Core::pointerAtAddress('zend_object *', $address);
+                /** @var zend_object $object */
+                $classEntry = $object->ce;
+                if ($classEntry === null || Core::addressOf($classEntry) !== $classAddress) {
+                    continue;
+                }
+
+                yield ObjectEntry::fromCData($object);
+            }
+        } finally {
+            if ($gcWasEnabled) {
+                gc_enable();
+            }
+        }
+    }
+
+    /**
+     * Integer view (`uintptr_t *`) of the store's bucket array: the tagged slot values, readable
+     * without allocating a handle per slot
+     *
+     * @param zend_objects_store $store
+     */
+    private static function slotAddresses(object $store): CData
+    {
+        $buckets = $store->object_buckets;
+        assert($buckets !== null);
+        $slots = Core::pointerAtAddress('uintptr_t *', Core::addressOf($buckets));
+        assert($slots instanceof CData);
+
+        return $slots;
     }
 
     /**

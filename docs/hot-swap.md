@@ -30,8 +30,10 @@ dispatch the new body. The implementation is centralized in
   **memory-flat** - the leak-plateau test drives 1000 cycles and measures zero
   overhead beyond the engine's own per-`eval` compile cost.
 - **The run-time cache is reset per swap.** Inline caches are scope-dependent
-  and sized for one specific body, so every swap installs a fresh zeroed
-  `ZEND_ACC_HEAP_RT_CACHE` cache that the engine (or the next swap) releases.
+  and sized for one specific body, so every swap installs a fresh zeroed cache
+  that the next swap releases - after detaching the engine copies of the entry
+  that still point at it (fake closures, interface clones), see "Run-time
+  caches of swapped and published entries" below.
 - **Static variables are unshared - the live table only.** The entry's
   `ZEND_MAP_PTR` slot is dropped so the live per-entry table materializes
   lazily on the first `ZEND_BIND_STATIC`, exactly like a plain compiled
@@ -41,7 +43,9 @@ dispatch the new body. The implementation is centralized in
   slot only), so the last body holder frees it exactly once - see
   `FunctionBodySwap::unshareStaticVariables()` for the ownership rules. The
   class entry is flagged with `ZEND_HAS_STATIC_IN_METHODS` so the engine's
-  shutdown walk releases the live table.
+  shutdown walk releases the live table. The previous body's materialized live
+  table is destroyed with the swap unless a fake closure or an interface clone
+  still borrows it; a preserved alias takes it over instead (see `preserveAs`).
 - **Declaration identity is preserved.** The entry keeps its name, scope,
   prototype and declaration-level flags (visibility, static, final);
   body-level flags (variadic, generator, return type, strict types) follow the
@@ -103,11 +107,24 @@ What the alias publication does, in engine terms:
   the alias carries `ZEND_ACC_CHANGED` exactly like a redeclared private method,
   so the ancestor's own body still resolves the ancestor's alias on instances
   of the subclass (`zend_get_parent_private_method`).
-- Subclasses that were **linked before** and inherit the entry receive the
-  alias in their method tables too, with the ownership an inherited bucket
-  holds (`zend_duplicate_function` semantics) - private methods are inherited
-  into child tables at link time, and the swapped body propagating through the
-  shared entry pointer would otherwise call an alias the subclass lacks.
+- **The alias takes over the live static variables** of the body it preserves:
+  the `static` state the previous body accumulated keeps counting when the alias
+  is called, while the entry's new body starts afresh (and so does the previous
+  body once it is swapped back in from the alias, as a method donor).
+- **Every subclass linked before** receives the alias in its method table, with
+  the ownership an inherited bucket holds (`zend_duplicate_function` semantics)
+  - private methods are inherited into child tables at link time, and the
+  preserved body runs on instances of every subclass: through the shared entry
+  pointer, through an interface clone (see below) or through `parent::` from an
+  overriding subclass, and it would otherwise call an alias the subclass lacks.
+  A subclass that declares a private method of the alias name itself keeps it
+  and gets `ZEND_ACC_CHANGED`, the engine's marker for a redeclared
+  parent-private method.
+- `removeMethods()` of the alias (the "drop the backup" step) releases what the
+  engine's bucket destructor does not reach: the alias' materialized live
+  statics and its minted run-time cache - unless a fake closure made over the
+  alias still shares them. The container itself stays request memory (the
+  documented baseline per publication).
 - Refused with `RedefinitionException` (nothing modified): an alias name the
   class already declares (a second preserving `redefine()` of the same method
   needs another name, or the first alias restored/removed first), an alias name
@@ -115,9 +132,11 @@ What the alias publication does, in engine terms:
   function name that already exists, and an internal entry (no op_array to
   publish).
 - Under opcache the declaring class is copied out of shared memory first (see
-  below); publishing is refused with `SharedMemoryException` while a subclass
-  linked against the **shared** entry exists, because that subclass keeps the
-  shared parent and could never see the alias. Redefine before subclasses link.
+  below); publishing is refused with `SharedMemoryException` while **any**
+  subclass linked against the shared class exists - whether it inherits the
+  entry pointer, holds a clone of it or overrides the method - because that
+  subclass keeps the shared parent and could never see the alias. Redefine
+  before subclasses link.
 
 ### Overriding an inherited method (`addMethod()` with a donor)
 
@@ -126,11 +145,15 @@ class only **inherits**, the donor body is published as an own entry that
 overrides the inherited one with the engine's inheritance rules: the prototype
 is kept (reflection and `parent::` keep working), a final method cannot be
 overridden, visibility cannot be narrowed, static-ness must agree, and a method
-that is private in the ancestor is merely redeclared (`ZEND_ACC_CHANGED`). The
-class's magic slots that referenced the inherited entry (constructor, `__get`,
-...) follow the override, and so do the method tables and magic slots of
-subclasses linked before that still inherited the ancestor's entry. A name the
-class already declares itself is refused - that is `redefine()`'s job.
+that is private in the ancestor is merely redeclared (`ZEND_ACC_CHANGED`) - a
+bit the override also inherits from an inherited method that carries it, so an
+ancestor's own code keeps resolving its own private method of that name on
+instances of the class, as it does for compiled overrides. The class's magic
+slots that referenced the inherited entry (constructor, `__get`, ...) follow
+the override, and so do the method tables and magic slots of subclasses linked
+before that still dispatch the ancestor's declaration - through the inherited
+entry pointer or through an interface clone of it. A name the class already
+declares itself is refused - that is `redefine()`'s job.
 
 ```php
 // Child inherits handle() from Base; the donor reaches the base body through parent::
@@ -151,6 +174,26 @@ therefore never left to the engine: the next swap of the same entry releases it
 (repeated swaps stay memory-flat) and the request end reclaims the rest. It is
 never left `NULL` either: a call site whose inline cache already resolved the
 entry skips the lazy initialization.
+
+The engine copies the entry structure - cache pointer included - wherever it
+needs a `zend_function` of its own, so before a block is released its copies
+are found and detached (`FunctionBodySwap::releaseRetiredRunTimeCache()`):
+
+- a **fake closure** made over the entry while the block was installed
+  (`Closure::fromCallable()`, a first-class callable `$obj->m(...)`,
+  `ReflectionMethod::getClosure()`) shares a scope-matching non-heap cache by
+  engine rule; it receives a private heap copy of its warmed slots, flagged
+  `ZEND_ACC_HEAP_RT_CACHE`, which `destroy_op_array` frees together with the
+  closure - exactly what the engine gives a closure over a heap-cached function;
+- an **interface clone** of the entry (see "Subclass tables" below) gets a
+  fresh minted cache of its own;
+- a **frame on the current stack** executing on the block (a fake closure of
+  the entry redefining it, or its caller chain) keeps the block allocated,
+  bounded to one block per such in-flight redefinition, like the previous body
+  itself.
+
+Finding those copies walks `EG(objects_store)` (`ObjectStore::instancesOf()`)
+and the class table once per released block.
 
 ## Class hot-swap (`HotSwap` / `ClassDelta`)
 
@@ -296,10 +339,15 @@ before such state exists:
 ## Memory footprint
 
 - `redefine()` and `ClassDelta` **body swaps are memory-flat**: each swap
-  releases the previous body, its heap run-time cache and its static tables.
+  releases the previous body, its minted run-time cache and its static tables.
   This holds for donors declared in opcache-cached files too: their compiled
-  arrays live in shared memory and are never freed, but the per-entry heap
-  run-time cache and statics duplicate minted by the swap are released.
+  arrays live in shared memory and are never freed, but the per-entry
+  run-time cache minted by the swap is released. Two bounded exceptions keep
+  memory of the previous body alive on purpose: a run-time cache a frame on
+  the current stack still executes on (one block per in-flight redefinition),
+  and a live statics table a fake closure still borrows (it would be freed from
+  under the closure otherwise; it leaks when the closure dies without being
+  the body's last holder).
 - Each `HotSwap::prepare()` costs one class compilation. The engine allocates
   the op_array/class-entry **containers** from the request arena, which is
   only reclaimed at request end (~1 KiB per prepare for a small class, the
@@ -318,8 +366,11 @@ before such state exists:
   so callers that already resolved the old one keep it - see the copy-out
   caveats above.
 - **`Closure::fromCallable()` over a later-swapped method**: fake closures
-  share the old body and keep it alive through its refcount; they continue to
-  execute the old body (and its static variables) until released.
+  (also first-class callables and `ReflectionMethod::getClosure()`) share the
+  old body and keep it alive through its refcount; they continue to execute the
+  old body, with its static variables and a private copy of the inline caches
+  they warmed, until released. A fake closure made over a preserved alias keeps
+  the alias' live statics alive past `removeMethods()`.
 - **In-flight frames of the swapped entry**: the swap machinery walks the
   current VM call stack before destroying a previous body. If the redefined
   function is still executing (it redefined itself, directly or through a
@@ -333,4 +384,15 @@ before such state exists:
   it is unshared.
 - **Subclass tables**: body swaps propagate to subclasses (shared structures);
   added methods do not; removed methods stay reachable through subclass
-  buckets that copied the pointer at link time.
+  buckets that copied the pointer at link time. One inheritance shape does not
+  share the structure: a subclass that implements an interface declaring an
+  inherited method gets an **interface clone** - its own `zend_function` copy of
+  the inherited entry (`do_inheritance_check_on_method`), with the ancestor's
+  scope and name, the interface method as prototype and a share on the body of
+  that moment. `FunctionBodySwap::cloneHolders()` finds those clones, and they
+  are kept in step: a `redefine()` of the ancestor's method swaps every clone in
+  place too, an `addMethod()` override replaces them like pointer-sharing
+  buckets, a preserved alias reaches their classes, and the shared-memory
+  guards count them. A clone inside a shared-memory subclass is never written -
+  that subclass keeps the previous body, like every subclass linked against a
+  shared entry.
