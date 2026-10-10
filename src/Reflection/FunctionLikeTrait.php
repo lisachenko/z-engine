@@ -266,6 +266,11 @@ trait FunctionLikeTrait
         /** @var list<PendingBodySwap> $pendingSwaps */
         $pendingSwaps = [];
         try {
+            // One class-table walk serves the whole redefinition: the shares of the entry
+            // (subclass method tables may share this very structure - every such bucket
+            // releases one body reference when the engine destroys it), its clones and
+            // their shares, and the commit of every swap staged below
+            $publications   = EntryPublications::survey($entryFunction);
             $pendingSwaps[] = FunctionBodySwap::swapUserFunctionBody(
                 $entryFunction,
                 $donorFunction,
@@ -277,14 +282,12 @@ trait FunctionLikeTrait
                 duplicateStatics: $newBody instanceof \Closure,
                 // A shared-memory body is immortal by definition and must not be freed
                 destroyPrevious: !$isSharedMemoryEntry,
-                // Subclass method tables may share this very structure - every such
-                // bucket releases one body reference when the engine destroys it
-                publishedShares: FunctionBodySwap::countPublishedShares($entryFunction),
+                publications: $publications,
             );
             // A subclass implementing an interface that declares the method holds an engine
-            // CLONE of the entry instead of the entry pointer (FunctionBodySwap::cloneHolders()):
+            // CLONE of the entry instead of the entry pointer (EntryPublications::clonesOf()):
             // the clone dispatches for that subclass, so it follows the redefinition in place
-            foreach (FunctionBodySwap::cloneHolders($entryFunction) as [$holder, $clone]) {
+            foreach ($publications->clonesOf($entryFunction) as [$holder, $clone]) {
                 if ($holder->isImmutable()) {
                     // A clone inside a shared-memory subclass is never written: that subclass
                     // keeps the previous body, like every subclass linked against a shared entry.
@@ -299,7 +302,7 @@ trait FunctionLikeTrait
                     duplicateStatics: $newBody instanceof \Closure,
                     // The clone was copied from the entry: a shared-memory body (no refcount) is immortal
                     destroyPrevious: $clone->getOpArrayPointer()->refcount !== null,
-                    publishedShares: FunctionBodySwap::countPublishedShares($clone),
+                    publications: $publications,
                 );
             }
         } catch (\Throwable $error) {

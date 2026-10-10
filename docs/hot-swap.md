@@ -194,8 +194,14 @@ are found and detached (`FunctionBodySwap::releaseRetiredRunTimeCache()`):
   bounded to one block per such in-flight redefinition, like the previous body
   itself.
 
-Finding those copies walks `EG(objects_store)` (`ObjectStore::instancesOf()`)
-and the class table once per released block.
+Finding those copies costs one walk over `EG(objects_store)`
+(`ObjectStore::instancesOf()`) per committed swap and one walk over the class
+table per redefinition (`EntryPublications`, the survey that also answers how
+many tables share the entry and which subclasses hold a clone of it). Both
+walks read the engine tables through integer views instead of building a
+wrapper per entry, so a swap in a process holding thousands of classes stays
+in the low milliseconds; a redefinition only pays per class that actually
+publishes the method's name.
 
 ## Class hot-swap (`HotSwap` / `ClassDelta`)
 

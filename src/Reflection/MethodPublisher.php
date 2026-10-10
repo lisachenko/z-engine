@@ -563,42 +563,7 @@ final class MethodPublisher
      */
     private static function subclassesOf(ReflectionClass $class): array
     {
-        $classAddress = $class->getAddress();
-        $subclasses   = [];
-        $seenClasses  = [];
-        foreach (Core::$executor->classTable as $classValue) {
-            try {
-                $rawClass = $classValue->getRawClass();
-            } catch (\UnexpectedValueException $e) {
-                // Class alias buckets (IS_ALIAS_PTR) resolve to an already-visited entry
-                continue;
-            }
-            $candidateAddress = Core::addressOf($rawClass);
-            if ($candidateAddress === $classAddress || isset($seenClasses[$candidateAddress])) {
-                continue;
-            }
-            $seenClasses[$candidateAddress] = true;
-            $candidate                      = ReflectionClass::fromCData($rawClass);
-            if ($candidate->isUserDefined() && self::descendsFrom($candidate, $classAddress)) {
-                $subclasses[] = $candidate;
-            }
-        }
-
-        return $subclasses;
-    }
-
-    /**
-     * Whether the class entry at $ancestorAddress is on the parent chain of $candidate
-     */
-    private static function descendsFrom(ReflectionClass $candidate, int $ancestorAddress): bool
-    {
-        for ($parent = $candidate->getParentClass(); $parent !== null; $parent = $parent->getParentClass()) {
-            if ($parent->getAddress() === $ancestorAddress) {
-                return true;
-            }
-        }
-
-        return false;
+        return $class->getLinkedSubclasses();
     }
 
     /**

@@ -316,7 +316,6 @@ final class ClassDelta
                     // The donor body refcount guards the statics defaults table
                     duplicateStatics: false,
                     destroyPrevious: true,
-                    publishedShares: FunctionBodySwap::countPublishedShares($entry),
                 );
                 $pendingSwaps[] = $pending;
                 $undoStack[]    = static function () use ($pending): void {
