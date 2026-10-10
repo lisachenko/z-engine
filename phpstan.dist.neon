@@ -38,6 +38,11 @@ parameters:
         # Sacrificial child pinning the ext-ffi abort on zend_throw_exception_hook:
         # pokes the raw engine symbol through an ad-hoc FFI::cdef on purpose
         - tests/System/Hook/scenarios/throw-hook-ffi-abort.php
+        # Leak-check child iterating a stub that deliberately does NOT implement
+        # Traversable (engine-level get_iterator handlers are the feature under
+        # test): statically its foreach yields nothing, so PHPStan >= 2.3
+        # constant-folds the whole stress loop into always-true/unreachable noise
+        - tests/Memory/scenarios/get-iterator-hook.php
     # Analysis-only declarations of the runtime-generated specialized classes and the
     # deliberately-undefined placeholder type (see the file header for the rationale),
     # plus the generated engine struct stubs (ZEngine\Generated\*, emitted by
@@ -83,6 +88,18 @@ parameters:
         -
             identifier: phpunit.assertCount
             path: tests/Reflection/ReflectionClassDimensionTest.php
+        # The resolution-handler tests prove the get_properties handler rebuilds the
+        # property table on every (array) cast. PHPStan >= 2.3 constant-folds the cast
+        # from the last statically-visible property write instead, so the stress loop
+        # that overwrites the subject 1000 times reads as a single always-true pass.
+        -
+            identifier: smaller.alwaysTrue
+            message: '#Comparison operation "<" between 0 and 1000 is always true#'
+            path: tests/Reflection/ReflectionClassResolutionHandlersTest.php
+        -
+            identifier: notIdentical.alwaysTrue
+            message: '#between .second. and .value0.#'
+            path: tests/Reflection/ReflectionClassResolutionHandlersTest.php
     reportUnmatchedIgnoredErrors: false
     treatPhpDocTypesAsCertain: false
 
