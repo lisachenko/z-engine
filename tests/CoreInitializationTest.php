@@ -47,4 +47,38 @@ final class CoreInitializationTest extends TestCase
         Core::preload();
         $this->assertTrue(Core::isInitialized());
     }
+
+    public function testEngineHeaderPathIsTheBundledHeaderOfTheRunningBuild(): void
+    {
+        $header = Core::engineHeaderPath();
+
+        $this->assertFileExists($header);
+        $this->assertStringEndsWith(
+            str_replace('/', DIRECTORY_SEPARATOR, 'include/' . Core::platformKey() . '/engine.h'),
+            $header,
+        );
+    }
+
+    public function testPreloadScriptPathIsTheBundledScript(): void
+    {
+        $this->assertSame(realpath(dirname(__DIR__) . '/preload.php'), Core::preloadScriptPath());
+    }
+
+    /**
+     * The hint is what Core::init() throws under ffi.enable=preload in a web SAPI: it has to
+     * carry the resolved paths, so the operator can paste it into php.ini as is
+     */
+    public function testPreloadConfigurationHintCarriesTheResolvedPaths(): void
+    {
+        $hint = Core::preloadConfigurationHint();
+
+        $this->assertStringContainsString('ffi.preload=' . Core::engineHeaderPath(), $hint);
+        if (PHP_OS_FAMILY === 'Windows') {
+            $this->assertStringContainsString('ffi.enable=1', $hint);
+            $this->assertStringNotContainsString('opcache.preload=', $hint);
+        } else {
+            $this->assertStringContainsString('opcache.preload=' . Core::preloadScriptPath(), $hint);
+            $this->assertStringContainsString('opcache.preload_user', $hint);
+        }
+    }
 }
