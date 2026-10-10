@@ -541,7 +541,8 @@ final class ClassDelta
             $containerFunction,
             $containerFunction->getAddress(),
             1,
-            false,
+            // The adoption duplicated the donor's statics defaults when the donor owned them
+            FunctionBodySwap::hasMintedStaticDefaults($containerFunction->getAddress()),
             null,
         );
         Core::untrackAndFree(Core::addr($container));

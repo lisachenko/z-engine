@@ -41,7 +41,8 @@ final class PendingBodySwap
      * @param int                $publishedShares      Bucket shares held on both the previous and the new body
      * @param bool               $destroyPrevious      False for shared-memory previous bodies (never freed)
      * @param bool               $mintedDefaults       True when the swap minted an own statics defaults duplicate
-     * @param ?int               $previousMintedRecord Bookkeeping record of the previous committed swap, if any
+     * @param ?int               $previousMintedRecord Statics defaults duplicate minted for the previous body by an
+     *                                                 earlier swap, if any (released on commit, reinstated on rollback)
      * @param CData|null         $previousMintedCache  Run-time cache an earlier swap minted for the previous
      *                                                 body (released on commit, reinstated on rollback)
      */
@@ -65,14 +66,15 @@ final class PendingBodySwap
         $this->isResolved = true;
         if ($this->destroyPrevious) {
             FunctionBodySwap::destroyPreviousBody(
+                $this->entry,
                 $this->previousBody,
-                $this->entryAddress,
                 $this->publishedShares,
                 $this->previousMintedCache,
+                $this->previousMintedRecord,
             );
         } else {
             // A shared-memory body is never freed, but the cache z-engine minted for it is
-            FunctionBodySwap::releaseMintedRunTimeCache($this->entryAddress, $this->previousMintedCache);
+            FunctionBodySwap::releaseMintedRunTimeCache($this->entry, $this->previousMintedCache);
         }
     }
 

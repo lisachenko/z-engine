@@ -68,14 +68,15 @@ final class MethodPublisher
         if (!$declaringClass->isImmutable()) {
             return;
         }
-        foreach (FunctionBodySwap::publishedShareHolders($entry) as $holder) {
-            if ($holder->getAddress() !== $declaringClass->getAddress()) {
-                throw SharedMemoryException::sharedEntryHasLinkedSubclasses(
-                    $declaringClass->getName(),
-                    self::entryName($entry),
-                    $holder->getName(),
-                );
-            }
+        // Every subclass linked so far keeps dispatching the shared entry after the copy-out,
+        // whether it inherited the pointer, holds an engine clone of it or overrides the
+        // method and reaches the shared body through parent::
+        foreach (self::subclassesOf($declaringClass) as $subclass) {
+            throw SharedMemoryException::sharedEntryHasLinkedSubclasses(
+                $declaringClass->getName(),
+                self::entryName($entry),
+                $subclass->getName(),
+            );
         }
     }
 
@@ -97,7 +98,7 @@ final class MethodPublisher
             return;
         }
         $inheritedMethod = ReflectionMethod::fromRawEntry($inherited->getRawFunction());
-        foreach (self::descendantsHolding($class, $inheritedMethod) as $descendant) {
+        foreach (self::descendantsHolding($class, strtolower($methodName), $inheritedMethod) as $descendant) {
             throw SharedMemoryException::sharedEntryHasLinkedSubclasses(
                 $class->getName(),
                 $methodName,
@@ -115,9 +116,12 @@ final class MethodPublisher
      * a constructor and never final. When the class inherits a private method of that name
      * from an ancestor the alias carries ZEND_ACC_CHANGED, exactly like a redeclared private
      * method, so the ancestor's own code still resolves its own alias on instances of this
-     * class. Subclasses that were linked before and inherit the entry receive the alias in
-     * their method tables too (private methods are inherited into child tables at link time),
-     * with the ownership an inherited bucket holds.
+     * class. Every subclass linked before receives the alias in its method table too, the way
+     * the engine copies a parent's private methods into child tables at link time (the
+     * preserved body runs on instances of overriding subclasses as well, through parent::),
+     * with the ownership an inherited bucket holds; a subclass declaring the alias name itself
+     * keeps its own method, which gets ZEND_ACC_CHANGED like any redeclared parent-private
+     * method. The alias takes over the live static variables of the body it preserves.
      *
      * @return array{ReflectionMethod, \Closure(): void} The published alias and the action
      *                                                    unpublishing it again (rollback of a
@@ -144,15 +148,25 @@ final class MethodPublisher
             );
         }
 
-        // Subclasses whose tables share the entry inherit the alias as well - collected before
-        // anything is published, while the tables are untouched
-        $subclasses = array_values(array_filter(
-            FunctionBodySwap::publishedShareHolders($entry),
-            static fn(ReflectionClass $holder): bool => $holder->getAddress() !== $class->getAddress(),
-        ));
+        // Every subclass linked before inherits the alias as well, or redeclares it - collected
+        // before anything is published, while the tables are untouched
+        $inheritors  = [];
+        $redeclarers = [];
+        foreach (self::subclassesOf($class) as $subclass) {
+            $subclassEntry = self::findInheritedEntry($subclass, $lowerAlias);
+            if ($subclassEntry === false) {
+                $redeclarers[] = $subclass;
+            } elseif ($subclassEntry === null
+                || ($inheritedAlias !== null && $subclassEntry->getAddress() === $inheritedAlias->getAddress())
+            ) {
+                // The name is free in the subclass, or it inherits the very ancestor-private
+                // method the alias shadows: the nearer declaration wins, as at link time
+                $inheritors[] = $subclass;
+            }
+        }
 
         $container   = self::newContainer();
-        $aliasMethod = self::adopt($container, $entry, $class, $alias);
+        $aliasMethod = self::adopt($container, $entry, $class, $alias, inheritLiveStatics: true);
         // A preserved body is a private implementation detail of the class: not a
         // constructor, not final, and an override marker only where an ancestor declared a
         // private method of the same name
@@ -164,16 +178,22 @@ final class MethodPublisher
 
         /** @var list<\Closure(): void> $undoStack */
         $undoStack = [];
+        /** @var list<ReflectionMethod> $retired */
+        $retired = [];
         try {
             $published = self::publishOwnEntry($table, $lowerAlias, $container, $inheritedAlias, $undoStack);
-            foreach ($subclasses as $subclass) {
-                self::shareIntoSubclass($subclass, $lowerAlias, $published, $undoStack);
+            foreach ($inheritors as $subclass) {
+                self::shareIntoSubclass($subclass, $lowerAlias, $published, $undoStack, $retired);
+            }
+            foreach ($redeclarers as $subclass) {
+                self::markRedeclaration($subclass, $lowerAlias, $entry, $undoStack);
             }
         } catch (\Throwable $error) {
             self::unwind($undoStack);
             self::releaseContainer($container);
             throw $error;
         }
+        self::retire($retired);
 
         $undo = static function () use ($undoStack, $container): void {
             self::unwind($undoStack);
@@ -199,7 +219,7 @@ final class MethodPublisher
         }
 
         $container = self::newContainer();
-        self::adopt($container, $entry, null, $alias);
+        self::adopt($container, $entry, null, $alias, inheritLiveStatics: true);
         try {
             $stored = $table->addFunctionEntry($lowerAlias, $container);
         } catch (\Throwable $error) {
@@ -222,11 +242,14 @@ final class MethodPublisher
      * The override follows the engine's inheritance rules: it keeps the inherited method's
      * prototype (so reflection and `parent::` keep working), may not override a final
      * method, may not narrow visibility, must agree on static-ness, and redeclaring a
-     * method that is private in the ancestor only marks the new entry ZEND_ACC_CHANGED.
-     * The replaced inherited bucket returns the ownership it held; the class's magic
+     * method that is private in the ancestor only marks the new entry ZEND_ACC_CHANGED - a
+     * bit that also travels down from an inherited method carrying it, so an ancestor's
+     * own code keeps resolving its own private method of that name on instances of this
+     * class. The replaced inherited bucket returns the ownership it held; the class's magic
      * slots (constructor, __get, ...) that referenced the inherited entry follow the
      * override, and so do the method tables and magic slots of subclasses that were linked
-     * before and still inherited the ancestor's entry.
+     * before and still dispatch the ancestor's declaration (the inherited entry pointer, or
+     * an engine clone of it, see FunctionBodySwap::cloneHolders()).
      */
     public static function publishOverride(ReflectionClass $class, string $methodName, FunctionLikeInterface $donor): ReflectionMethod
     {
@@ -252,30 +275,33 @@ final class MethodPublisher
             if (!$isInheritedPrivate && self::visibilityRank($donor) < self::visibilityRank($inherited)) {
                 throw RedefinitionException::visibilityNarrowed($className, $methodName, $declaringClass);
             }
-            $descendants = self::descendantsHolding($class, $inherited);
+            $descendants = self::descendantsHolding($class, $lowerName, $inherited);
         }
 
         $container = self::newContainer();
         $method    = self::adopt($container, $donor, $class, $methodName);
         if ($inherited !== null) {
-            if (self::hasFlag($inherited, Core::ZEND_ACC_PRIVATE)) {
-                // The engine marks a redeclared parent-private method CHANGED and links no prototype
-                $method->setChangedFlag(true);
-                $method->setPrototype(null);
-            } else {
-                $method->setChangedFlag(false);
-                $method->setPrototype(self::prototypeOf($inherited));
-            }
+            // The engine marks a redeclared parent-private method CHANGED and links no
+            // prototype; a CHANGED inherited method passes the bit on (do_inheritance_check_on_method)
+            $isInheritedPrivate = self::hasFlag($inherited, Core::ZEND_ACC_PRIVATE);
+            $method->setChangedFlag($isInheritedPrivate || self::hasFlag($inherited, Core::ZEND_ACC_CHANGED));
+            $method->setPrototype($isInheritedPrivate ? null : self::prototypeOf($inherited));
+        } else {
+            // A method overriding nothing carries neither the donor's prototype nor its CHANGED bit
+            $method->setChangedFlag(false);
+            $method->setPrototype(null);
         }
 
         /** @var list<\Closure(): void> $undoStack */
         $undoStack = [];
+        /** @var list<ReflectionMethod> $retired */
+        $retired = [];
         try {
             $published = self::publishOwnEntry($table, $lowerName, $container, $inherited, $undoStack);
             if ($inherited !== null) {
                 self::followMagicSlot($class, $inherited, $published, $undoStack);
                 foreach ($descendants as $descendant) {
-                    self::shareIntoSubclass($descendant, $lowerName, $published, $undoStack);
+                    self::shareIntoSubclass($descendant, $lowerName, $published, $undoStack, $retired);
                     self::followMagicSlot($descendant, $inherited, $published, $undoStack);
                 }
             }
@@ -284,6 +310,7 @@ final class MethodPublisher
             self::releaseContainer($container);
             throw $error;
         }
+        self::retire($retired);
 
         return ReflectionMethod::fromCData($published->getEntryPointer());
     }
@@ -307,9 +334,14 @@ final class MethodPublisher
     /**
      * Fills a container with the donor body under the given name and scope
      */
-    private static function adopt(CData $container, FunctionLikeInterface $donor, ?ReflectionClass $scope, string $name): ReflectionMethod
-    {
-        FunctionBodySwap::adoptFunctionForPublishing($container, $donor, $scope);
+    private static function adopt(
+        CData $container,
+        FunctionLikeInterface $donor,
+        ?ReflectionClass $scope,
+        string $name,
+        bool $inheritLiveStatics = false,
+    ): ReflectionMethod {
+        FunctionBodySwap::adoptFunctionForPublishing($container, $donor, $scope, $inheritLiveStatics);
         $method = ReflectionMethod::fromRawEntry(Core::cast(zend_function::class, Core::addr($container)));
         $method->setFunctionName($name);
 
@@ -327,12 +359,13 @@ final class MethodPublisher
         assert($namePointer instanceof CData);
         StringEntry::fromCData($namePointer)->releaseReference();
 
-        // The adoption never duplicated the donor's statics defaults (no minted record to restore)
+        // The adoption duplicated the donor's statics defaults when the donor owned them; the
+        // container never had a previous swap, so there is no earlier record to restore
         FunctionBodySwap::releaseSwappedInBody(
             $containerFunction,
             $containerFunction->getAddress(),
             1,
-            mintedDefaults: false,
+            mintedDefaults: FunctionBodySwap::hasMintedStaticDefaults($containerFunction->getAddress()),
             previousMintedRecord: null,
         );
         Core::free($container);
@@ -373,15 +406,20 @@ final class MethodPublisher
      * Publishes an entry pointer into the method table of a subclass that inherited the
      * replaced entry, with the ownership an inherited bucket holds (zend_duplicate_function)
      *
-     * A subclass declaring its own method of that name keeps it.
+     * A subclass declaring its own method of that name keeps it. A replaced bucket that
+     * published nothing but an engine clone of the inherited entry leaves that clone
+     * unpublished: it is listed in $retired for the release of its resources once the
+     * publication stands (see retire()).
      *
      * @param list<\Closure(): void> $undoStack
+     * @param list<ReflectionMethod>  $retired
      */
     private static function shareIntoSubclass(
         ReflectionClass $subclass,
         string $lowerName,
         ReflectionMethod $published,
         array &$undoStack,
+        array &$retired,
     ): void {
         $subTable = $subclass->getMethodTable();
         $previous = self::findInheritedEntry($subclass, $lowerName);
@@ -395,6 +433,7 @@ final class MethodPublisher
                 FunctionBodySwap::acquireBucketOwnership($previous);
                 $subTable->addFunctionEntry($lowerName, self::entryStruct($previous));
             };
+            $retired[] = $previous;
         }
         FunctionBodySwap::acquireBucketOwnership($published);
         $subTable->addFunctionEntry($lowerName, self::entryStruct($published));
@@ -442,19 +481,124 @@ final class MethodPublisher
     }
 
     /**
-     * Subclasses of $class (linked before) whose tables still hold the inherited entry
+     * Subclasses of $class (linked before) whose tables still dispatch the declaration of the
+     * inherited entry under $lowerName: the entry pointer itself or an engine clone of it
+     * (a subclass implementing an interface that declares the method holds its own struct
+     * copy of the inherited entry, see FunctionBodySwap::cloneHolders())
      *
      * @return list<ReflectionClass>
      */
-    private static function descendantsHolding(ReflectionClass $class, ReflectionMethod $inherited): array
+    private static function descendantsHolding(ReflectionClass $class, string $lowerName, ReflectionMethod $inherited): array
     {
-        $className = $class->getName();
+        $declaringScope = $inherited->getCommonPointer()->scope;
+        assert($declaringScope !== null);
+        $scopeAddress = Core::addressOf($declaringScope);
 
-        return array_values(array_filter(
-            FunctionBodySwap::publishedShareHolders($inherited),
-            static fn(ReflectionClass $holder): bool => $holder->getAddress() !== $class->getAddress()
-                && is_subclass_of($holder->getName(), $className, true),
-        ));
+        $descendants = [];
+        foreach (self::subclassesOf($class) as $subclass) {
+            $bucket = self::findInheritedEntry($subclass, $lowerName);
+            if (!$bucket instanceof ReflectionMethod) {
+                continue;
+            }
+            $bucketScope = $bucket->getCommonPointer()->scope;
+            if ($bucketScope !== null && Core::addressOf($bucketScope) === $scopeAddress) {
+                $descendants[] = $subclass;
+            }
+        }
+
+        return $descendants;
+    }
+
+    /**
+     * Marks the own method of a subclass that declares the alias name itself as redeclaring
+     * a parent-private method (ZEND_ACC_CHANGED), so the preserved body - private in the
+     * declaring class - resolves its alias on instances of that subclass as the engine would
+     *
+     * @param list<\Closure(): void> $undoStack
+     */
+    private static function markRedeclaration(
+        ReflectionClass $subclass,
+        string $lowerName,
+        FunctionLikeInterface $entry,
+        array &$undoStack,
+    ): void {
+        $bucket = $subclass->getMethodTable()->find($lowerName);
+        assert($bucket !== null);
+        $ownMethod = ReflectionMethod::fromRawEntry($bucket->getRawFunction());
+        if (self::hasFlag($ownMethod, Core::ZEND_ACC_CHANGED)) {
+            return;
+        }
+        if ($ownMethod->isImmutable()) {
+            // The flag cannot be written into shared memory, and without it the preserved
+            // body could not reach its alias on instances of that subclass
+            throw SharedMemoryException::sharedEntryHasLinkedSubclasses(
+                self::declaringClassName($entry),
+                self::entryName($entry),
+                $subclass->getName(),
+            );
+        }
+        $ownMethod->setChangedFlag(true);
+        $undoStack[] = static function () use ($ownMethod): void {
+            $ownMethod->setChangedFlag(false);
+        };
+    }
+
+    /**
+     * Releases the resources of entries a publication left unpublished (replaced engine
+     * clones): nothing in any table reaches them anymore, see FunctionBodySwap::retireUnpublishedEntry()
+     *
+     * @param list<ReflectionMethod> $retired
+     */
+    private static function retire(array $retired): void
+    {
+        foreach ($retired as $entry) {
+            FunctionBodySwap::retireUnpublishedEntry($entry);
+        }
+    }
+
+    /**
+     * Every linked user class descending from $class, class aliases deduplicated
+     *
+     * @return list<ReflectionClass>
+     */
+    private static function subclassesOf(ReflectionClass $class): array
+    {
+        $classAddress = $class->getAddress();
+        $subclasses   = [];
+        $seenClasses  = [];
+        foreach (Core::$executor->classTable as $classValue) {
+            try {
+                $rawClass = $classValue->getRawClass();
+            } catch (\UnexpectedValueException $e) {
+                // Class alias buckets (IS_ALIAS_PTR) resolve to an already-visited entry
+                continue;
+            }
+            $candidateAddress = Core::addressOf($rawClass);
+            if ($candidateAddress === $classAddress || isset($seenClasses[$candidateAddress])) {
+                continue;
+            }
+            $seenClasses[$candidateAddress] = true;
+            $candidate                      = ReflectionClass::fromCData($rawClass);
+            if ($candidate->isUserDefined() && self::descendsFrom($candidate, $classAddress)) {
+                $subclasses[] = $candidate;
+            }
+        }
+
+        return $subclasses;
+    }
+
+    /**
+     * Whether the class entry at $ancestorAddress is on the parent chain of $candidate
+     */
+    private static function descendsFrom(ReflectionClass $candidate, int $ancestorAddress): bool
+    {
+        for ($parent = $candidate->getParentClass(); $parent !== null; $parent = $parent->getParentClass()) {
+            if ($parent->getAddress() === $ancestorAddress) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

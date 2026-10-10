@@ -1036,7 +1036,15 @@ class ReflectionClass extends NativeReflectionClass
     {
         $this->ensureWritableEntry('remove methods');
         foreach ($methodNames as $methodName) {
-            $this->methodTable->delete(strtolower($methodName));
+            $lowerName = strtolower($methodName);
+            $bucket    = $this->methodTable->find($lowerName);
+            if ($bucket !== null) {
+                // The bucket destructor frees the body for its last holder only: the materialized
+                // statics of the entry and whatever z-engine minted for it (a published alias
+                // carries a run-time cache and may carry a statics duplicate) are released here
+                FunctionBodySwap::retireUnpublishedEntry(ReflectionMethod::fromRawEntry($bucket->getRawFunction()));
+            }
+            $this->methodTable->delete($lowerName);
         }
     }
 

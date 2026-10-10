@@ -15,6 +15,7 @@ namespace ZEngine\Reflection;
 
 use FFI\CData;
 use ZEngine\Core;
+use ZEngine\Generated\HashTable as HashTableStruct;
 use ZEngine\Generated\zend_class_entry;
 use ZEngine\Generated\zend_function;
 use ZEngine\Generated\zend_function_common;
@@ -262,14 +263,17 @@ trait FunctionLikeTrait
                 ? MethodPublisher::publishMethodAlias($entryFunction, $preserveAs)
                 : MethodPublisher::publishFunctionAlias($entryFunction, $preserveAs);
         }
+        /** @var list<PendingBodySwap> $pendingSwaps */
+        $pendingSwaps = [];
         try {
-            $pendingSwap = FunctionBodySwap::swapUserFunctionBody(
+            $pendingSwaps[] = FunctionBodySwap::swapUserFunctionBody(
                 $entryFunction,
                 $donorFunction,
                 preserveDeclaration: true,
                 // A donor closure owns (and destroys) its static-variables table, so the
                 // entry needs a duplicate of the defaults; a method donor's table lives as
                 // long as the body it belongs to, which the entry now holds a reference on
+                // (a method donor whose body is a closure's is detected and duplicated too)
                 duplicateStatics: $newBody instanceof \Closure,
                 // A shared-memory body is immortal by definition and must not be freed
                 destroyPrevious: !$isSharedMemoryEntry,
@@ -277,13 +281,37 @@ trait FunctionLikeTrait
                 // bucket releases one body reference when the engine destroys it
                 publishedShares: FunctionBodySwap::countPublishedShares($entryFunction),
             );
+            // A subclass implementing an interface that declares the method holds an engine
+            // CLONE of the entry instead of the entry pointer (FunctionBodySwap::cloneHolders()):
+            // the clone dispatches for that subclass, so it follows the redefinition in place
+            foreach (FunctionBodySwap::cloneHolders($entryFunction) as [, $clone]) {
+                if ($clone->isImmutable()) {
+                    // A clone inside a shared-memory subclass is never written: that subclass
+                    // keeps the previous body, like every subclass linked against a shared entry
+                    continue;
+                }
+                $pendingSwaps[] = FunctionBodySwap::swapUserFunctionBody(
+                    $clone,
+                    $donorFunction,
+                    preserveDeclaration: true,
+                    duplicateStatics: $newBody instanceof \Closure,
+                    // The clone was copied from the entry: a shared-memory body (no refcount) is immortal
+                    destroyPrevious: $clone->getOpArrayPointer()->refcount !== null,
+                    publishedShares: FunctionBodySwap::countPublishedShares($clone),
+                );
+            }
         } catch (\Throwable $error) {
+            foreach (array_reverse($pendingSwaps) as $pendingSwap) {
+                $pendingSwap->rollback();
+            }
             if ($unpublishAlias !== null) {
                 $unpublishAlias();
             }
             throw $error;
         }
-        $pendingSwap->commit();
+        foreach ($pendingSwaps as $pendingSwap) {
+            $pendingSwap->commit();
+        }
     }
 
     /**
@@ -737,6 +765,34 @@ trait FunctionLikeTrait
      * @return CData|null HashTable* stored in the slot, or null while the slot is not yet
      *                    materialized (or the map-ptr area cannot vouch for it)
      */
+    /**
+     * Returns the materialized live static-variables table of this user function as the raw
+     * `HashTable *`, or null while no call has bound the statics yet (both slot forms, see
+     * getStaticVariables())
+     *
+     * @return HashTableStruct|null
+     *
+     * @internal used by FunctionBodySwap, which moves the table to the alias preserving the body
+     */
+    public function getLiveStaticsPointer(): ?object
+    {
+        $liveTable = $this->getOpArrayPointer()->static_variables_ptr__ptr;
+        if ($liveTable === null) {
+            return null;
+        }
+        $rawFieldValue = Core::addressOf($liveTable);
+        if (($rawFieldValue & 1) === 0) {
+            return $liveTable;
+        }
+        $materialized = $this->dereferenceMapPointerSlot($rawFieldValue);
+        if ($materialized === null) {
+            return null;
+        }
+
+        // The map-ptr slot holds the materialized `HashTable *`: same pointer, stub-typed view
+        return Core::cast(HashTableStruct::class, $materialized);
+    }
+
     private function dereferenceMapPointerSlot(int $slotOffset): ?CData
     {
         $mapPointerBase = Core::$compiler->getMapPointerBaseAddress();
