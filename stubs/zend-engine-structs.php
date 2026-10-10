@@ -845,6 +845,10 @@ final class zend_executor_globals
     public HashTable $callable_convert_cache;
     public HashTable $partial_function_application_cache;
     public zend_stack $lambda_cache;
+    public ?_zend_vm_stack $vm_stack_page_cache;
+    public int $vm_stack_page_cache_count;
+    public ?_zend_vm_stack $fiber_vm_stack_page_cache;
+    public int $fiber_vm_stack_page_cache_count;
     public \FFI\CData $reserved;
 
     private function __construct() {}
