@@ -84,6 +84,42 @@ definitions for the life of the server rather than for the preload request alone
 `opcache.preload` at a script that only requires the autoloader is enough to get the
 per-request cost down.
 
+### Web SAPIs and `ffi.enable=preload`
+
+PHP's default `ffi.enable=preload` allows the FFI API on the CLI, but at request time in FPM,
+Apache or the built-in server only from code that `opcache.preload` compiled at server start.
+So a web SAPI needs z-engine to be *part of the preload stage* — nothing else can bind the
+engine there, not even a header published through `ffi.preload`, because the restriction is on
+the code that calls FFI, not on the definitions. The whole configuration is (php.ini or an FPM
+`php_admin_value`, never `.user.ini` or `ini_set()`; restart the server afterwards):
+
+```ini
+opcache.enable=1
+opcache.preload=/path/to/vendor/lisachenko/z-engine/preload.php
+opcache.preload_user=www-data   ; FPM only, when the master process runs as root
+```
+
+Any preload script that requires your Composer autoloader does the same job as the bundled one.
+When the bridge cannot bind under preload mode, `Core::init()` throws a `RuntimeException`
+whose message is this recipe with the paths resolved for the failing build, plus a diagnosis
+of the settings already in place; `Core::preloadConfigurationHint()` returns the same text on
+demand. Two more directives are worth knowing:
+
+- **`ffi.preload`** publishes the C definitions once at module startup, so no request parses
+  the header. Its value is the generated header for the exact build — minor, OS, architecture
+  and thread-safety mode — which `Core::engineHeaderPath()` resolves; run it under the PHP the
+  server uses, since a CLI binary can be a different build than php-fpm:
+
+  ```bash
+  php -r 'require "vendor/autoload.php"; echo ZEngine\Core::engineHeaderPath();'
+  ```
+
+  It is optional next to `opcache.preload` (z-engine takes a scope that is already published
+  instead of loading the header again), and it is the way to bind once under `ffi.enable=1`.
+- **`ffi.enable=1`** allows FFI for every caller; z-engine then binds the definitions per
+  request, or once at startup with `ffi.preload`. On Windows, where `opcache.preload` does not
+  exist, this is the only way to run a web SAPI.
+
 `Core::init()` remains public, idempotent and re-invocable, for the cases that want it: booting
 explicitly at a chosen point, re-booting after `Core::shutdown()` inside a live worker, and
 turning "the engine is not available here" into its explanation. On a host that cannot run the
