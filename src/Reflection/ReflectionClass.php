@@ -260,6 +260,85 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
+     * Looks a method up in the table of the class entry at the given address without building
+     * the class wrapper
+     *
+     * The class-table surveys of the swap machinery (EntryPublications) visit every linked
+     * class and keep the few that publish a given name: the wrapper, with its table views, is
+     * built for those alone. An internal class holds no user method and answers null.
+     *
+     * @param int         $classAddress Address of the zend_class_entry, as the class table stores it
+     * @param StringEntry $lowerName    Lower-cased method name, as the method table keys it
+     *
+     * @internal used by EntryPublications::survey()
+     */
+    public static function findUserMethodAt(int $classAddress, StringEntry $lowerName): ?ReflectionMethod
+    {
+        $classEntry = Core::pointerAtAddress(zend_class_entry::class, $classAddress);
+        if (ord($classEntry->type) !== Core::ZEND_USER_CLASS) {
+            return null;
+        }
+        $bucket = Core::call('zend_hash_find', Core::addr($classEntry->function_table), $lowerName->getRawValue());
+        if ($bucket === null) {
+            return null;
+        }
+        assert($bucket instanceof CData);
+
+        return ReflectionMethod::fromRawEntry(ReflectionValue::fromValueEntry($bucket)->getRawFunction());
+    }
+
+    /**
+     * Returns every linked user class descending from this one, found in one walk over the
+     * class table that builds a wrapper for the descendants only
+     *
+     * A class alias (class_alias()) resolves to the entry it aliases and is not listed twice;
+     * a class the engine has not linked yet (an opcache lazy-linking temporary) descends
+     * from nothing yet and is left out.
+     *
+     * @return list<ReflectionClass>
+     *
+     * @internal used by MethodPublisher to reach the subclasses linked before a publication
+     */
+    public function getLinkedSubclasses(): array
+    {
+        $ownAddress = $this->getAddress();
+        $subclasses = [];
+        foreach (Core::$executor->classTable->pointerValueAddresses() as $classAddress) {
+            if ($classAddress === $ownAddress || !self::descendsFromAddress($classAddress, $ownAddress)) {
+                continue;
+            }
+            $subclasses[] = static::fromCData(Core::pointerAtAddress(zend_class_entry::class, $classAddress));
+        }
+
+        return $subclasses;
+    }
+
+    /**
+     * Whether the class entry at $classAddress is a linked user class with the entry at
+     * $ancestorAddress on its parent chain
+     */
+    private static function descendsFromAddress(int $classAddress, int $ancestorAddress): bool
+    {
+        $classEntry = Core::pointerAtAddress(zend_class_entry::class, $classAddress);
+        if (ord($classEntry->type) !== Core::ZEND_USER_CLASS) {
+            return false;
+        }
+        // Until a class is linked, the parent slot holds the parent NAME (a union); the
+        // parent of a linked class is always linked itself
+        for ($entry = $classEntry; ($entry->ce_flags & Core::ZEND_ACC_LINKED) !== 0; $entry = $parent) {
+            $parent = $entry->parent;
+            if ($parent === null) {
+                return false;
+            }
+            if (Core::addressOf($parent) === $ancestorAddress) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @inheritDoc
      */
     #[\ReturnTypeWillChange]

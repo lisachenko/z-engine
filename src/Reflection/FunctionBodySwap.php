@@ -130,8 +130,9 @@ final class FunctionBodySwap
      *                                   keeps its own function name and class scope.
      * @param bool  $destroyPrevious     False when the previous body must stay allocated on commit
      *                                   (opcache shared memory is never freed)
-     * @param int   $publishedShares     Number of table buckets pointing at this entry structure,
-     *                                   see countPublishedShares()
+     * @param EntryPublications|null $publications Survey of the tables publishing the entry (its
+     *                                   shares and clones), taken by the caller when one survey
+     *                                   serves several swaps; surveyed here when omitted
      *
      * @internal
      */
@@ -140,12 +141,16 @@ final class FunctionBodySwap
         FunctionLikeInterface $donorFunction,
         bool $preserveDeclaration,
         bool $destroyPrevious = true,
-        int $publishedShares = 1,
+        ?EntryPublications $publications = null,
     ): PendingBodySwap {
-        assert($publishedShares >= 1);
-        $entry        = $entryFunction->getEntryPointer();
-        $donor        = $donorFunction->getEntryPointer();
-        $entryAddress = $entryFunction->getAddress();
+        $publications ??= EntryPublications::survey($entryFunction);
+        // Subclass method tables may share this very structure (inheritance publishes the
+        // parent's pointer): every such bucket releases one body reference when the engine
+        // destroys it, so the swap mirrors that accounting on the new body
+        $publishedShares = $publications->sharesOf($entryFunction);
+        $entry           = $entryFunction->getEntryPointer();
+        $donor           = $donorFunction->getEntryPointer();
+        $entryAddress    = $entryFunction->getAddress();
 
         // Snapshot the previous body byte-exact: rollback restores it wholesale, commit
         // detaches the shared identity fields and destroys the rest
@@ -196,34 +201,13 @@ final class FunctionBodySwap
             $publishedShares,
             $destroyPrevious,
             $previousMintedCache,
+            $publications,
         );
     }
 
     /**
-     * Counts the published table buckets that point at the given method entry structure
-     *
-     * Inheritance publishes the parent's zend_function pointer into every subclass
-     * method table (zend_duplicate_function shares the structure and takes one body
-     * reference per bucket), so an in-place body swap must mirror that accounting.
-     * Class aliases resolve to the same class entry and are deduplicated; a structure
-     * published in no class table (a plain function entry) counts as one share.
-     *
-     * @internal
-     */
-    public static function countPublishedShares(FunctionLikeInterface $entryFunction): int
-    {
-        return max(count(self::publishedShareHolders($entryFunction)), 1);
-    }
-
-    /**
      * Returns the user classes whose method tables publish the given entry structure
-     * under its own name: the declaring class and every subclass that inherited the
-     * entry at link time (see countPublishedShares() for the accounting this implies)
-     *
-     * A structure published in no class table (a plain function entry) has no holders.
-     * Class aliases resolve to the same class entry and are deduplicated. A subclass
-     * holding an engine CLONE of the entry instead of the pointer is not a holder, see
-     * cloneHolders().
+     * under its own name, in a class-table walk of its own (see EntryPublications::holdersOf())
      *
      * @return list<ReflectionClass>
      *
@@ -231,27 +215,13 @@ final class FunctionBodySwap
      */
     public static function publishedShareHolders(FunctionLikeInterface $entryFunction): array
     {
-        $holders = [];
-        foreach (self::bucketsNamedLike($entryFunction) as [$reflectionClass, $bucketFunction]) {
-            if ($bucketFunction->getAddress() === $entryFunction->getAddress()) {
-                $holders[] = $reflectionClass;
-            }
-        }
-
-        return $holders;
+        return EntryPublications::survey($entryFunction)->holdersOf($entryFunction);
     }
 
     /**
      * Returns the engine clones of a method entry published in the tables of its subclasses,
-     * each with the class holding it
-     *
-     * Inheritance shares the parent's zend_function POINTER into a subclass table (see
-     * publishedShareHolders()) - except when the subclass implements an interface that
-     * declares the method: the engine then separates the inherited entry into a struct copy
-     * of its own in the subclass table (do_inheritance_check_on_method), carrying the entry's
-     * scope and name, a prototype of its own and a share on the body the entry had at link
-     * time. Such a clone follows neither an in-place swap of the entry nor its publications
-     * unless it is handled explicitly, which is what the callers of this method do.
+     * each with the class holding it, in a class-table walk of its own (see
+     * EntryPublications::clonesOf())
      *
      * @return list<array{ReflectionClass, ReflectionMethod}>
      *
@@ -259,65 +229,7 @@ final class FunctionBodySwap
      */
     public static function cloneHolders(FunctionLikeInterface $entryFunction): array
     {
-        $entryScope = $entryFunction->getCommonPointer()->scope;
-        if ($entryScope === null) {
-            return [];
-        }
-        $scopeAddress = Core::addressOf($entryScope);
-        $entryAddress = $entryFunction->getAddress();
-
-        $clones = [];
-        foreach (self::bucketsNamedLike($entryFunction) as [$reflectionClass, $bucketFunction]) {
-            if ($bucketFunction->getAddress() === $entryAddress || $reflectionClass->getAddress() === $scopeAddress) {
-                continue;
-            }
-            $bucketScope = $bucketFunction->getCommonPointer()->scope;
-            if ($bucketScope !== null && Core::addressOf($bucketScope) === $scopeAddress) {
-                $clones[] = [$reflectionClass, $bucketFunction];
-            }
-        }
-
-        return $clones;
-    }
-
-    /**
-     * Enumerates the method-table buckets of every user class that carry the entry's name
-     *
-     * @return iterable<array{ReflectionClass, ReflectionMethod}>
-     */
-    private static function bucketsNamedLike(FunctionLikeInterface $entryFunction): iterable
-    {
-        $entryCommon = $entryFunction->getCommonPointer();
-        if ($entryCommon->scope === null) {
-            return;
-        }
-        $namePointer = $entryCommon->function_name;
-        assert($namePointer instanceof CData);
-        $lowerName = strtolower(StringEntry::fromCData($namePointer)->getStringValue());
-
-        $seenClasses = [];
-        foreach (Core::$executor->classTable as $classValue) {
-            try {
-                $rawClass = $classValue->getRawClass();
-            } catch (\UnexpectedValueException $e) {
-                // Class alias buckets (IS_ALIAS_PTR) resolve to an already-counted entry
-                continue;
-            }
-            $classAddress = Core::addressOf($rawClass);
-            if (isset($seenClasses[$classAddress])) {
-                continue;
-            }
-            $seenClasses[$classAddress] = true;
-
-            $reflectionClass = ReflectionClass::fromCData($rawClass);
-            if (!$reflectionClass->isUserDefined()) {
-                continue;
-            }
-            $bucketValue = $reflectionClass->getMethodTable()->find($lowerName);
-            if ($bucketValue !== null) {
-                yield [$reflectionClass, ReflectionMethod::fromRawEntry($bucketValue->getRawFunction())];
-            }
-        }
+        return EntryPublications::survey($entryFunction)->clonesOf($entryFunction);
     }
 
     /**
@@ -495,16 +407,25 @@ final class FunctionBodySwap
      * Kept allocated while a frame of the entry still runs on it (the same rule as for
      * the previous body, see destroyPreviousBody()).
      *
-     * @param CData|null $previousMintedCache `void **` view recorded before the swap
+     * @param CData|null             $previousMintedCache `void **` view recorded before the swap
+     * @param EntryPublications|null $publications        Survey taken for the swap (see swapUserFunctionBody())
      *
      * @internal called by PendingBodySwap::commit()
      */
-    public static function releaseMintedRunTimeCache(FunctionLikeInterface $entryFunction, ?CData $previousMintedCache): void
-    {
+    public static function releaseMintedRunTimeCache(
+        FunctionLikeInterface $entryFunction,
+        ?CData $previousMintedCache,
+        ?EntryPublications $publications = null,
+    ): void {
         if ($previousMintedCache === null || self::hasLiveFrame($entryFunction->getAddress())) {
             return;
         }
-        self::releaseRetiredRunTimeCache($entryFunction, $previousMintedCache);
+        self::releaseRetiredRunTimeCache(
+            $entryFunction,
+            $previousMintedCache,
+            self::liveClosureFunctions(),
+            $publications ?? EntryPublications::survey($entryFunction),
+        );
     }
 
     /**
@@ -524,16 +445,25 @@ final class FunctionBodySwap
      *    private heap copy of its warmed slots, flagged ZEND_ACC_HEAP_RT_CACHE - what the engine
      *    gives a closure over a heap-cached function, and freed with the closure by
      *    destroy_op_array;
-     *  - an engine clone of the entry in a subclass table (see cloneHolders()) gets a fresh
-     *    minted cache of its own.
+     *  - an engine clone of the entry in a subclass table (see EntryPublications::clonesOf())
+     *    gets a fresh minted cache of its own.
+     *
+     * Nothing here runs user code (no destructor can fire), so the closures gathered by the
+     * caller stay exactly the live ones throughout.
+     *
+     * @param list<ReflectionFunction> $liveClosures The functions of the live closures, see liveClosureFunctions()
      */
-    private static function releaseRetiredRunTimeCache(FunctionLikeInterface $entryFunction, CData $cache): void
-    {
+    private static function releaseRetiredRunTimeCache(
+        FunctionLikeInterface $entryFunction,
+        CData $cache,
+        array $liveClosures,
+        EntryPublications $publications,
+    ): void {
         $cacheAddress = Core::addressOf($cache);
         if (self::hasLiveFrameUsingCache($cacheAddress)) {
             return;
         }
-        foreach (self::liveClosureFunctions() as $closureFunction) {
+        foreach ($liveClosures as $closureFunction) {
             $closureOpArray = $closureFunction->getOpArrayPointer();
             $closureCache   = $closureOpArray->run_time_cache__ptr;
             if ($closureCache === null || Core::addressOf($closureCache) !== $cacheAddress) {
@@ -546,7 +476,7 @@ final class FunctionBodySwap
             $closureCommon                       = $closureFunction->getCommonPointer();
             $closureCommon->fn_flags             = $closureCommon->fn_flags | Core::ZEND_ACC_HEAP_RT_CACHE;
         }
-        foreach (self::cloneHolders($entryFunction) as [, $clone]) {
+        foreach ($publications->clonesOf($entryFunction) as [, $clone]) {
             $cloneCache = $clone->getOpArrayPointer()->run_time_cache__ptr;
             if ($cloneCache !== null && Core::addressOf($cloneCache) === $cacheAddress) {
                 self::installFreshRunTimeCache($clone);
@@ -625,6 +555,7 @@ final class FunctionBodySwap
      * @param int        $releasedShares      Total bucket shares the entry held on the previous body
      * @param CData|null $previousMintedCache Run-time cache minted for the previous body by an
      *                                        earlier swap, if any (see installFreshRunTimeCache())
+     * @param EntryPublications|null $publications Survey taken for the swap (see swapUserFunctionBody())
      *
      * @internal called by PendingBodySwap::commit()
      */
@@ -633,6 +564,7 @@ final class FunctionBodySwap
         object $previousBody,
         int $releasedShares,
         ?CData $previousMintedCache = null,
+        ?EntryPublications $publications = null,
     ): void {
         $entryAddress     = $entryFunction->getAddress();
         $previousFunction = ReflectionFunction::fromCData(Core::cast('zend_function *', Core::addr($previousBody)));
@@ -647,20 +579,15 @@ final class FunctionBodySwap
             // redefinition, see docs/hot-swap.md.
             return;
         }
-        if ($previousMintedCache !== null) {
-            // The cache of the previous body was minted by z-engine (no heap flag, so
-            // destroy_op_array below leaves it alone)
-            self::releaseRetiredRunTimeCache($entryFunction, $previousMintedCache);
-        }
+        $publications ??= EntryPublications::survey($entryFunction);
 
         // A body without a refcount is opcache-shared: its compiled arrays live in
         // shared memory and are never freed (destroy_op_array below returns before
         // touching them), so it can never be the "last holder". The per-entry
-        // resource the swap minted for it - the run-time cache (released above) - is
-        // ordinary request memory though, and is released exactly like for a
-        // refcounted body, or repeated swaps whose donors were declared in a cached
-        // file leak one cache per swap (the fixed-donor plateau of issue #242 under
-        // opcache).
+        // resource the swap minted for it - the run-time cache - is ordinary request
+        // memory though, and is released exactly like for a refcounted body, or
+        // repeated swaps whose donors were declared in a cached file leak one cache
+        // per swap (the fixed-donor plateau of issue #242 under opcache).
         $refCountPointer = $previousOpArray->refcount;
         $isLastHolder    = false;
         if ($refCountPointer !== null) {
@@ -675,13 +602,30 @@ final class FunctionBodySwap
             $isLastHolder = $referenceCount <= 1;
         }
 
+        $liveTable = $previousOpArray->static_variables_ptr__ptr;
+
+        // Every decision that depends on the live closures is taken first, on one walk
+        // over the object store: the releases below may run destructors (a value held
+        // in a statics table), and user code may create or drop closures. Nothing a
+        // destructor creates can reach the resources of the PREVIOUS body - the entry
+        // already executes the new one - so the decisions stay valid while they are
+        // carried out.
+        $readsClosures = $previousMintedCache !== null || (!$isLastHolder && $liveTable !== null);
+        $liveClosures  = $readsClosures ? self::liveClosureFunctions() : [];
+        if ($previousMintedCache !== null) {
+            // The cache of the previous body was minted by z-engine (no heap flag, so
+            // destroy_op_array below leaves it alone); nothing in the release runs user code
+            self::releaseRetiredRunTimeCache($entryFunction, $previousMintedCache, $liveClosures, $publications);
+        }
+        // The materialized live static-variables table was reachable through this entry
+        // only - the slot now belongs to the new body - unless a fake closure over the old
+        // body or an engine clone of the entry borrowed it: then it must survive for them
+        $destroysLiveTable = $liveTable !== null
+            && ($isLastHolder || !self::isLiveStaticsBorrowed($entryFunction, $liveTable, $liveClosures, $publications));
+
         $rawOpArray = Core::cast('zend_op_array *', Core::addr($previousBody));
-        $liveTable  = $previousOpArray->static_variables_ptr__ptr;
-        if ($liveTable !== null && ($isLastHolder || !self::isLiveStaticsBorrowed($entryFunction, $liveTable))) {
-            // Frees the materialized live static-variables table and clears the map
-            // slot. The table was reachable through this entry only - the slot now
-            // belongs to the new body - unless a fake closure over the old body or an
-            // engine clone of the entry borrowed it: then it must survive for them
+        if ($destroysLiveTable) {
+            // Frees the materialized live static-variables table and clears the map slot
             Core::call('zend_destroy_static_vars', $rawOpArray);
         }
 
@@ -716,18 +660,32 @@ final class FunctionBodySwap
             return;
         }
         $entryAddress = $entryFunction->getAddress();
-        if (self::hasLiveFrame($entryAddress) || count(self::publishedShareHolders($entryFunction)) > 1) {
+        if (self::hasLiveFrame($entryAddress)) {
             return;
         }
-        $liveTable = $entryFunction->getLiveStaticsPointer();
-        if ($liveTable !== null && !self::isLiveStaticsBorrowed($entryFunction, $liveTable)) {
+        $publications = EntryPublications::survey($entryFunction);
+        if ($publications->sharesOf($entryFunction) > 1) {
+            return;
+        }
+        $liveTable   = $entryFunction->getLiveStaticsPointer();
+        $mintedCache = self::$mintedRunTimeCaches[$entryAddress] ?? null;
+
+        // Unlike a committed swap, the entry still carries the body being retired, so a
+        // destructor fired by the statics release could make a fake closure over it that
+        // shares the remaining resources: the closures are gathered again after that
+        // release, and the run-time cache goes last (such a destructor may still call the
+        // method, which reads its inline caches from the block)
+        $liveClosures      = ($liveTable !== null || $mintedCache !== null) ? self::liveClosureFunctions() : [];
+        $destroysLiveTable = $liveTable !== null
+            && !self::isLiveStaticsBorrowed($entryFunction, $liveTable, $liveClosures, $publications);
+        if ($destroysLiveTable) {
             Core::call('zend_destroy_static_vars', Core::cast('zend_op_array *', $entryFunction->getEntryPointer()));
+            $liveClosures = self::liveClosureFunctions();
         }
 
-        $mintedCache = self::$mintedRunTimeCaches[$entryAddress] ?? null;
         if ($mintedCache !== null) {
             unset(self::$mintedRunTimeCaches[$entryAddress]);
-            self::releaseRetiredRunTimeCache($entryFunction, $mintedCache);
+            self::releaseRetiredRunTimeCache($entryFunction, $mintedCache, $liveClosures, $publications);
             $entryFunction->getOpArrayPointer()->run_time_cache__ptr = null;
         }
     }
@@ -737,18 +695,23 @@ final class FunctionBodySwap
      * fake closure borrows the table of the function it was made over (zend_create_closure_ex
      * initializes its slot to it), an engine clone copied the slot with the structure
      *
-     * @param HashTableStruct $liveTable
+     * @param HashTableStruct          $liveTable
+     * @param list<ReflectionFunction> $liveClosures The functions of the live closures, see liveClosureFunctions()
      */
-    private static function isLiveStaticsBorrowed(FunctionLikeInterface $entryFunction, object $liveTable): bool
-    {
+    private static function isLiveStaticsBorrowed(
+        FunctionLikeInterface $entryFunction,
+        object $liveTable,
+        array $liveClosures,
+        EntryPublications $publications,
+    ): bool {
         $tableAddress = Core::addressOf($liveTable);
-        foreach (self::liveClosureFunctions() as $closureFunction) {
+        foreach ($liveClosures as $closureFunction) {
             $closureSlot = $closureFunction->getOpArrayPointer()->static_variables_ptr__ptr;
             if ($closureSlot !== null && Core::addressOf($closureSlot) === $tableAddress) {
                 return true;
             }
         }
-        foreach (self::cloneHolders($entryFunction) as [, $clone]) {
+        foreach ($publications->clonesOf($entryFunction) as [, $clone]) {
             $cloneSlot = $clone->getOpArrayPointer()->static_variables_ptr__ptr;
             if ($cloneSlot !== null && Core::addressOf($cloneSlot) === $tableAddress) {
                 return true;
@@ -759,27 +722,34 @@ final class FunctionBodySwap
     }
 
     /**
-     * Enumerates the zend_function of every live closure object as a pointer-level view
+     * Gathers the zend_function of every live closure object as a pointer-level view, in one
+     * walk over the object store
      *
      * Only user-function closures are of interest (an internal function's closure carries
-     * no op_array), so the enumeration is narrowed to those.
+     * no op_array), so the list is narrowed to those. The views point into the closure
+     * objects: the list describes the live closures only until user code runs again (a
+     * destructor fired by a table release may create or drop closures), so the callers take
+     * every decision that reads it BEFORE they destroy anything.
      *
-     * @return iterable<ReflectionFunction>
+     * @return list<ReflectionFunction>
      */
-    private static function liveClosureFunctions(): iterable
+    private static function liveClosureFunctions(): array
     {
         if (self::$closureClassAddress === null) {
             $closureClass = Core::$executor->classTable->find('closure');
             assert($closureClass !== null);
             self::$closureClassAddress = Core::addressOf($closureClass->getRawClass());
         }
+        $liveClosures = [];
         foreach (Core::$executor->objectStore->instancesOf(self::$closureClassAddress) as $closureObject) {
             $closure         = Core::cast(zend_closure::class, $closureObject->getRawValue());
             $closureFunction = ReflectionFunction::fromCData(Core::addr($closure->func));
             if ($closureFunction->isUserDefined()) {
-                yield $closureFunction;
+                $liveClosures[] = $closureFunction;
             }
         }
+
+        return $liveClosures;
     }
 
     /**
@@ -828,8 +798,9 @@ final class FunctionBodySwap
     /**
      * Returns the resources taken by an uncommitted swap and forgets its bookkeeping
      *
-     * @param CData|null $previousMintedCache Cache record to reinstate for the entry (the one
-     *                                        the previous body still refers to), if any
+     * @param CData|null             $previousMintedCache Cache record to reinstate for the entry (the one
+     *                                                    the previous body still refers to), if any
+     * @param EntryPublications|null $publications        Survey taken for the swap (see swapUserFunctionBody())
      *
      * @internal called by PendingBodySwap::rollback() while the donor is still alive
      */
@@ -837,12 +808,18 @@ final class FunctionBodySwap
         FunctionLikeInterface $entryFunction,
         int $publishedShares,
         ?CData $previousMintedCache = null,
+        ?EntryPublications $publications = null,
     ): void {
         // The fresh run-time cache was minted by the swap and is not published anywhere
         $entryAddress = $entryFunction->getAddress();
         $mintedCache  = self::$mintedRunTimeCaches[$entryAddress] ?? null;
         if ($mintedCache !== null) {
-            self::releaseRetiredRunTimeCache($entryFunction, $mintedCache);
+            self::releaseRetiredRunTimeCache(
+                $entryFunction,
+                $mintedCache,
+                self::liveClosureFunctions(),
+                $publications ?? EntryPublications::survey($entryFunction),
+            );
         }
         if ($previousMintedCache !== null) {
             self::$mintedRunTimeCaches[$entryAddress] = $previousMintedCache;

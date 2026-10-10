@@ -25,6 +25,7 @@ use ZEngine\Generated\zend_array;
 use ZEngine\Generated\zend_function;
 use ZEngine\Generated\zend_internal_function;
 use ZEngine\Generated\zend_refcounted_h;
+use ZEngine\Generated\zval;
 use ZEngine\Memory\Allocator;
 use ZEngine\Memory\EngineAllocator;
 use ZEngine\Reflection\ReflectionValue;
@@ -306,6 +307,55 @@ class HashTable implements IteratorAggregate, Countable, ReferenceCountedInterfa
         };
 
         return $iterator();
+    }
+
+    /**
+     * Returns the addresses of the pointer values (IS_PTR) the table stores, read through an
+     * integer view of the bucket array without a handle per bucket
+     *
+     * The engine's class and function tables key pointers to class entries and functions;
+     * a walk over the whole table (the class-table surveys of the swap machinery, see
+     * EntryPublications) needs those addresses only, and the value wrapper the iterator
+     * builds per bucket is what makes such a walk cost tens of milliseconds in a process
+     * holding thousands of classes. Alias buckets (IS_ALIAS_PTR, the entry a class_alias()
+     * adds) are left out: they resolve to a pointer the table also stores under the class's
+     * own name. Deleted slots (IS_UNDEF) and indirect ones are left out as well.
+     *
+     * @return list<int>
+     *
+     * @internal used by EntryPublications::survey()
+     */
+    public function pointerValueAddresses(): array
+    {
+        if (($this->pointer->u->flags & self::HASH_FLAG_PACKED) !== 0) {
+            // A packed table holds plain values under integer keys, never engine pointers
+            return [];
+        }
+        $arData = $this->pointer->arData;
+        assert($arData !== null);
+        // Machine-word view of the bucket array: a bucket is a zval (the value word, then
+        // the type-info word) followed by the hash and the key pointer
+        $words          = Core::pointerAtAddress('uintptr_t *', Core::addressOf($arData));
+        $wordsPerBucket = intdiv(Core::sizeOfType(Bucket::class), 8);
+        $typeWord       = intdiv(Core::offsetOfField(zval::class, 'u1'), 8);
+        $numUsed        = $this->pointer->nNumUsed;
+
+        $addresses = [];
+        for ($index = 0; $index < $numUsed; $index++) {
+            $base = $index * $wordsPerBucket;
+            $type = $words[$base + $typeWord];
+            assert(is_int($type));
+            // The zval type is the low byte of u1.type_info (little-endian, like every
+            // platform z-engine runs on)
+            if (($type & 0xFF) !== ReflectionValue::IS_PTR) {
+                continue;
+            }
+            $address = $words[$base];
+            assert(is_int($address));
+            $addresses[] = $address;
+        }
+
+        return $addresses;
     }
 
     /**
