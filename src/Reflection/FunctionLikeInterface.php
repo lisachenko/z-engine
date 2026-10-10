@@ -53,6 +53,11 @@ interface FunctionLikeInterface
     public function isUserDefined(): bool;
 
     /**
+     * Pointer-based name of the entry, null for unnamed entries (see FunctionLikeTrait::getFunctionName())
+     */
+    public function getFunctionName(): ?string;
+
+    /**
      * Compiled-variable names by CV slot (see FunctionLikeTrait::getVariableNames())
      *
      * @return array<int, string>

@@ -81,6 +81,18 @@ final class FunctionBodySwap
         | Core::ZEND_ACC_IMMUTABLE;
 
     /**
+     * Run-time caches minted by swaps and publications, keyed by entry address
+     *
+     * A minted cache is request memory the entry refers to WITHOUT the
+     * ZEND_ACC_HEAP_RT_CACHE flag (see installFreshRunTimeCache()), so the engine never
+     * frees it: the next swap of the same entry, or the rollback of the swap that minted
+     * it, releases it here - which keeps repeated swaps memory-flat.
+     *
+     * @var array<int, CData> Entry address => `void **` view of the cache block
+     */
+    private static array $mintedRunTimeCaches = [];
+
+    /**
      * This is an utility class, no instances needed
      */
     private function __construct() {}
@@ -157,6 +169,9 @@ final class FunctionBodySwap
         for ($share = 0; $share < $publishedShares; $share++) {
             self::addBodyReference($entryFunction);
         }
+        // The cache minted by an earlier swap of this entry is released when this swap
+        // commits (or kept, when this swap is rolled back)
+        $previousMintedCache = self::$mintedRunTimeCaches[$entryAddress] ?? null;
         self::installFreshRunTimeCache($entryFunction);
         self::unshareStaticVariables($entryFunction);
 
@@ -166,6 +181,7 @@ final class FunctionBodySwap
             $entryAddress,
             $publishedShares,
             $destroyPrevious,
+            $previousMintedCache,
         );
     }
 
@@ -182,16 +198,33 @@ final class FunctionBodySwap
      */
     public static function countPublishedShares(FunctionLikeInterface $entryFunction): int
     {
+        return max(count(self::publishedShareHolders($entryFunction)), 1);
+    }
+
+    /**
+     * Returns the user classes whose method tables publish the given entry structure
+     * under its own name: the declaring class and every subclass that inherited the
+     * entry at link time (see countPublishedShares() for the accounting this implies)
+     *
+     * A structure published in no class table (a plain function entry) has no holders.
+     * Class aliases resolve to the same class entry and are deduplicated.
+     *
+     * @return list<ReflectionClass>
+     *
+     * @internal
+     */
+    public static function publishedShareHolders(FunctionLikeInterface $entryFunction): array
+    {
         $entryCommon = $entryFunction->getCommonPointer();
         if ($entryCommon->scope === null) {
-            return 1;
+            return [];
         }
         $namePointer = $entryCommon->function_name;
         assert($namePointer instanceof CData);
         $lowerName    = strtolower(StringEntry::fromCData($namePointer)->getStringValue());
         $entryAddress = $entryFunction->getAddress();
 
-        $shares      = 0;
+        $holders     = [];
         $seenClasses = [];
         foreach (Core::$executor->classTable as $classValue) {
             try {
@@ -212,11 +245,11 @@ final class FunctionBodySwap
             }
             $bucketValue = $reflectionClass->getMethodTable()->find($lowerName);
             if ($bucketValue !== null && Core::addressOf($bucketValue->getRawFunction()) === $entryAddress) {
-                $shares++;
+                $holders[] = $reflectionClass;
             }
         }
 
-        return max($shares, 1);
+        return $holders;
     }
 
     /**
@@ -230,17 +263,20 @@ final class FunctionBodySwap
      *
      * @param CData              $container zend_function container to fill (writable, zeroed or reused)
      * @param FunctionLikeInterface $donor  Donor method whose body is adopted
-     * @param ReflectionClass    $newScope  Class the published method will belong to
+     * @param ReflectionClass|null $newScope Class the published method will belong to, or null
+     *                                       for a global function entry
      *
      * @internal
      */
-    public static function adoptFunctionForPublishing(object $container, FunctionLikeInterface $donor, ReflectionClass $newScope): void
+    public static function adoptFunctionForPublishing(object $container, FunctionLikeInterface $donor, ?ReflectionClass $newScope): void
     {
         Core::memcpy($container, $donor->getEntryPointer(), Core::sizeOfType(zend_function::class));
 
         $containerFunction      = ReflectionFunction::fromCData(Core::cast(zend_function::class, Core::addr($container)));
         $containerCommon        = $containerFunction->getCommonPointer();
-        $containerCommon->scope = Core::cast(zend_class_entry::class, $newScope->getRawValue());
+        $containerCommon->scope = $newScope === null
+            ? null
+            : Core::cast(zend_class_entry::class, $newScope->getRawValue());
 
         // The published bucket owns one reference on the name and one body share
         $namePointer = $containerCommon->function_name;
@@ -338,25 +374,54 @@ final class FunctionBodySwap
      *
      * The donor's cache is scope-dependent (inline caches for self::/parent:: and
      * property slots assume the donor's scope) and owned by the donor, so it must
-     * never be shared. A heap cache (ZEND_ACC_HEAP_RT_CACHE) is released by
-     * destroy_op_array together with the entry - and by the next swap's
-     * previous-body destruction, which keeps repeated swaps memory-flat.
+     * never be shared.
+     *
+     * The fresh cache is a request-memory block the entry refers to WITHOUT the
+     * ZEND_ACC_HEAP_RT_CACHE flag - the shape the engine gives ordinary compiled
+     * functions (an arena block, released with the request). A heap-flagged cache is
+     * efree()d by destroy_op_array BEFORE its refcount check, i.e. once per bucket that
+     * publishes the structure: an entry shared by a parent and a subclass table (every
+     * subclass linked after a swap, every published alias inherited by a subclass) would
+     * have the same block freed once per table at shutdown. So the block is never left
+     * to the engine; the next swap of the same entry releases it (keeping repeated swaps
+     * memory-flat) and the request end reclaims whatever is left. It is never left NULL
+     * either: a call site whose inline cache already resolved the entry skips the lazy
+     * initialization and dereferences the cache unconditionally.
      */
     private static function installFreshRunTimeCache(FunctionLikeInterface $entryFunction): void
     {
-        $opArray     = $entryFunction->getOpArrayPointer();
-        $entryCommon = $entryFunction->getCommonPointer();
-        $cacheSize   = $opArray->cache_size;
+        $opArray      = $entryFunction->getOpArrayPointer();
+        $entryCommon  = $entryFunction->getCommonPointer();
+        $entryAddress = $entryFunction->getAddress();
+        $cacheSize    = $opArray->cache_size;
         if ($cacheSize > 0) {
-            // Request-allocator block handed over to the engine: destroy_op_array
-            // releases it through efree, matching the allocation exactly
-            $cache                        = Core::new("char[{$cacheSize}]", false);
-            $opArray->run_time_cache__ptr = Core::cast('void **', $cache);
-            $entryCommon->fn_flags |= Core::ZEND_ACC_HEAP_RT_CACHE;
+            $cache                                    = Core::cast('void **', Core::new("char[{$cacheSize}]", false));
+            $opArray->run_time_cache__ptr             = $cache;
+            self::$mintedRunTimeCaches[$entryAddress] = $cache;
         } else {
             $opArray->run_time_cache__ptr = null;
-            $entryCommon->fn_flags &= (~Core::ZEND_ACC_HEAP_RT_CACHE);
+            unset(self::$mintedRunTimeCaches[$entryAddress]);
         }
+        $entryCommon->fn_flags &= (~Core::ZEND_ACC_HEAP_RT_CACHE);
+    }
+
+    /**
+     * Releases the run-time cache an earlier swap minted for the entry, once the entry
+     * executes a body with its own fresh cache
+     *
+     * Kept allocated while a frame of the entry still runs on it (the same rule as for
+     * the previous body, see destroyPreviousBody()).
+     *
+     * @param CData|null $previousMintedCache `void **` view recorded before the swap
+     *
+     * @internal called by PendingBodySwap::commit()
+     */
+    public static function releaseMintedRunTimeCache(int $entryAddress, ?CData $previousMintedCache): void
+    {
+        if ($previousMintedCache === null || self::hasLiveFrame($entryAddress)) {
+            return;
+        }
+        Core::free($previousMintedCache);
     }
 
     /**
@@ -407,13 +472,19 @@ final class FunctionBodySwap
      * refcount - shared bodies (a live template op_array, a fake closure over the
      * old body) keep their arrays until the last holder dies.
      *
-     * @param CData $previousBody   zend_function snapshot taken by the swap
-     * @param int   $releasedShares Total bucket shares the entry held on the previous body
+     * @param CData      $previousBody        zend_function snapshot taken by the swap
+     * @param int        $releasedShares      Total bucket shares the entry held on the previous body
+     * @param CData|null $previousMintedCache Run-time cache minted for the previous body by an
+     *                                        earlier swap, if any (see installFreshRunTimeCache())
      *
      * @internal called by PendingBodySwap::commit()
      */
-    public static function destroyPreviousBody(object $previousBody, int $entryAddress, int $releasedShares): void
-    {
+    public static function destroyPreviousBody(
+        object $previousBody,
+        int $entryAddress,
+        int $releasedShares,
+        ?CData $previousMintedCache = null,
+    ): void {
         $previousFunction = ReflectionFunction::fromCData(Core::cast('zend_function *', Core::addr($previousBody)));
         $previousOpArray  = $previousFunction->getOpArrayPointer();
 
@@ -425,6 +496,11 @@ final class FunctionBodySwap
             // allocated instead - bounded to one body per such in-flight
             // redefinition, see docs/hot-swap.md.
             return;
+        }
+        if ($previousMintedCache !== null) {
+            // The cache of the previous body was minted by z-engine (no heap flag, so
+            // destroy_op_array below leaves it alone) and nobody reads it anymore
+            Core::free($previousMintedCache);
         }
 
         // A body without a refcount is opcache-shared: its compiled arrays live in
@@ -498,18 +574,26 @@ final class FunctionBodySwap
     /**
      * Returns the resources taken by an uncommitted swap and forgets its bookkeeping
      *
+     * @param CData|null $previousMintedCache Cache record to reinstate for the entry (the one
+     *                                        the previous body still refers to), if any
+     *
      * @internal called by PendingBodySwap::rollback() while the donor is still alive
      */
     public static function releaseSwappedInBody(
         FunctionLikeInterface $entryFunction,
         int $publishedShares,
+        ?CData $previousMintedCache = null,
     ): void {
-        // The fresh run-time cache was installed by the swap and is not published anywhere
-        $opArray      = $entryFunction->getOpArrayPointer();
-        $entryFlags   = $entryFunction->getCommonPointer()->fn_flags;
-        $cachePointer = $opArray->run_time_cache__ptr;
-        if (($entryFlags & Core::ZEND_ACC_HEAP_RT_CACHE) !== 0 && $cachePointer !== null) {
-            Core::free($cachePointer);
+        // The fresh run-time cache was minted by the swap and is not published anywhere
+        $entryAddress = $entryFunction->getAddress();
+        $mintedCache  = self::$mintedRunTimeCaches[$entryAddress] ?? null;
+        if ($mintedCache !== null) {
+            Core::free($mintedCache);
+        }
+        if ($previousMintedCache !== null) {
+            self::$mintedRunTimeCaches[$entryAddress] = $previousMintedCache;
+        } else {
+            unset(self::$mintedRunTimeCaches[$entryAddress]);
         }
         // The defaults table was never duplicated, so the rollback owes nothing for it:
         // restoring the previous body puts the entry's own pointer back in place

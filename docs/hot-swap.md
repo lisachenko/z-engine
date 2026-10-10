@@ -50,6 +50,108 @@ dispatch the new body. The implementation is centralized in
 The internal-function branch is unchanged: an internal function's `handler` is
 replaced with a trampoline that calls the closure.
 
+### Method donors
+
+`redefine()` also accepts another **user method or function** as the donor
+(`\Closure|FunctionLikeInterface`): the body of a method compiled in a separate
+"donor" class is adopted the same way a closure body is.
+
+```php
+$live  = new ReflectionClass(Service::class);
+$donor = new ReflectionClass(ServiceDonor::class);
+$live->getMethod('handle')->redefine($donor->getMethod('handle'));
+```
+
+- The donor must carry the entry's **exact signature** (compared as the engine
+  resolved it: parameter and return types, by-reference passing, variadics) and
+  its static-ness, and may not be abstract or internal.
+- `self`/`parent` types are resolved to the **donor's** declaring class by the
+  compiler and keep enforcing it after the swap, so a donor spells the entry's
+  class explicitly where the entry says `self`; only `static` is late-bound.
+- `self::`, `parent::`, `static::` and `$this` inside the donor body resolve
+  against the entry's class at run time (the body runs in the entry's scope);
+  `self::class` and `__CLASS__` are compile-time literals of the donor class.
+- The signature (`arg_info`, including parameter defaults), the attributes, the
+  doc comment, the file name and the line numbers all travel with the donor body.
+
+### Preserving the previous body (`preserveAs`)
+
+`redefine($newBody, preserveAs: 'name')` keeps the previous body callable: it is
+published under that name **before** the swap, as a private method of the
+declaring class (or as a second global function for a free function). The alias
+is a regular entry with the previous body, signature and static-ness - a backup
+the new body can call, and that can be swapped back in:
+
+```php
+$method = new ReflectionMethod(Service::class, 'handle');
+$method->redefine($donor->getMethod('handle'), preserveAs: 'handleOriginal'); // swap in
+// ... the new body may call $this->handleOriginal(...) ...
+$method->redefine($live->getMethod('handleOriginal'));                        // swap back
+$live->removeMethods('handleOriginal');                                        // drop the backup
+```
+
+What the alias publication does, in engine terms:
+
+- The alias is a new `zend_function` container allocated from **request
+  memory** (the engine never frees user function containers itself, exactly
+  like its own arena-allocated op_arrays), adopting the previous body with its
+  own body share and name - so the previous body survives the swap that
+  destroys the entry's share. Per-request re-publication (an FPM worker
+  redefining on every request) therefore stays memory-flat across requests.
+- It is **private**, never a constructor (`ZEND_ACC_CTOR` cleared) and never
+  final. When an ancestor already declares a private method of the alias name,
+  the alias carries `ZEND_ACC_CHANGED` exactly like a redeclared private method,
+  so the ancestor's own body still resolves the ancestor's alias on instances
+  of the subclass (`zend_get_parent_private_method`).
+- Subclasses that were **linked before** and inherit the entry receive the
+  alias in their method tables too, with the ownership an inherited bucket
+  holds (`zend_duplicate_function` semantics) - private methods are inherited
+  into child tables at link time, and the swapped body propagating through the
+  shared entry pointer would otherwise call an alias the subclass lacks.
+- Refused with `RedefinitionException` (nothing modified): an alias name the
+  class already declares (a second preserving `redefine()` of the same method
+  needs another name, or the first alias restored/removed first), an alias name
+  colliding with an inherited **non-private** method, an invalid name, a global
+  function name that already exists, and an internal entry (no op_array to
+  publish).
+- Under opcache the declaring class is copied out of shared memory first (see
+  below); publishing is refused with `SharedMemoryException` while a subclass
+  linked against the **shared** entry exists, because that subclass keeps the
+  shared parent and could never see the alias. Redefine before subclasses link.
+
+### Overriding an inherited method (`addMethod()` with a donor)
+
+`ReflectionClass::addMethod()` accepts a donor method as well. For a name the
+class only **inherits**, the donor body is published as an own entry that
+overrides the inherited one with the engine's inheritance rules: the prototype
+is kept (reflection and `parent::` keep working), a final method cannot be
+overridden, visibility cannot be narrowed, static-ness must agree, and a method
+that is private in the ancestor is merely redeclared (`ZEND_ACC_CHANGED`). The
+class's magic slots that referenced the inherited entry (constructor, `__get`,
+...) follow the override, and so do the method tables and magic slots of
+subclasses linked before that still inherited the ancestor's entry. A name the
+class already declares itself is refused - that is `redefine()`'s job.
+
+```php
+// Child inherits handle() from Base; the donor reaches the base body through parent::
+$childDonor = new ReflectionClass(ChildDonor::class); // class ChildDonor extends Base { ... parent::handle() ... }
+(new ReflectionClass(Child::class))->addMethod('handle', $childDonor->getMethod('handle'));
+```
+
+### Run-time caches of swapped and published entries
+
+Every swapped entry and every published container gets a fresh, zeroed run-time
+cache allocated from request memory and referenced **without**
+`ZEND_ACC_HEAP_RT_CACHE`. A heap-flagged cache is `efree()`d by
+`destroy_op_array` before its refcount check - once per method table that
+publishes the structure - so an entry shared by a parent and a subclass table
+(every subclass linked after a swap, every alias inherited by a subclass) would
+have the same block freed twice at a destructor-path shutdown. The cache is
+therefore never left to the engine: the next swap of the same entry releases it
+(repeated swaps stay memory-flat) and the request end reclaims the rest. It is
+never left `NULL` either: a call site whose inline cache already resolved the
+entry skips the lazy initialization.
+
 ## Class hot-swap (`HotSwap` / `ClassDelta`)
 
 ```php
@@ -129,7 +231,7 @@ covered in [opcache-binary.md](opcache-binary.md).
 | Target | Behaviour |
 |--------|-----------|
 | Immutable **global function** + `redefine()` | Supported via copy-out: the per-process function-table bucket is repointed at a writable `zend_function` copy; the SHM original stays untouched and allocated. The first swap does not destroy the previous (SHM) body; later swaps behave normally. Only *name resolution* is redirected - call sites that already resolved the function, and call sites the optimizer inlined at cache time, keep the original body (see the copy-out caveats). |
-| Immutable **class**: method `redefine()`, `addMethod()`, `removeMethods()`, trait configuration, `HotSwap::prepare()` | Supported via class copy-out: the class entry is deep-copied into request memory with the [class-specialization](class-specialization.md) copy model (own tables and property/constant blocks, method entries duplicated at the `zend_op_array` level with the compiled bodies still shared with SHM), the class-table bucket and the engine's fast class-name cache are repointed at the copy, and the mutation is applied to it. The copy is an ordinary userland class the engine dismantles at request end. |
+| Immutable **class**: method `redefine()` (with or without `preserveAs`), `addMethod()` (closure or donor, including inherited-method overrides), `removeMethods()`, trait configuration, `HotSwap::prepare()` | Supported via class copy-out: the class entry is deep-copied into request memory with the [class-specialization](class-specialization.md) copy model (own tables and property/constant blocks, method entries duplicated at the `zend_op_array` level with the compiled bodies still shared with SHM), the class-table bucket and the engine's fast class-name cache are repointed at the copy, and the mutation is applied to it. The copy is an ordinary userland class the engine dismantles at request end. |
 | Immutable **preloaded** class (`ZEND_ACC_PRELOADED`) | Rejected with `SharedMemoryException`: a preloaded class keeps its class-table bucket across the requests of a worker, while the copy lives in request memory - repointing the bucket would leave it dangling for the next request. |
 | Immutable class the copy machinery does not support (enum/interface/trait, property hooks, internal ancestor or internal methods) | Rejected with `SharedMemoryException` carrying the refusal reason. |
 | Class observed **mid-linking** on an opcache lazy-linking temporary (`ZEND_ACC_CACHED` set, `ZEND_ACC_LINKED` clear - the only state an `interface_gets_implemented` hook ever sees for a cached implementor) | Supported via **inheritance-cache decline** ([#241](https://github.com/lisachenko/z-engine/issues/241)): handlers are keyed by class-entry address, and without intervention the temporary would be discarded as soon as opcache's inheritance cache persists the linked class, silently losing them ([#238](https://github.com/lisachenko/z-engine/issues/238)). So handler installation (`setXxxHandler()`, `installExtensionHandlers()`) records the entry, and z-engine's interceptor over `zend_inheritance_cache_add` answers NULL for it when linking completes - the engine's ordinary "not cached" outcome (opcache itself returns it when SHM is full). The temporary then stays in the class table as a process-local, request-lifetime class: the handlers keep firing, and the class simply pays re-linking per process/request instead of being reused from the cache. Unhooked classes delegate to opcache unchanged and keep full cache reuse. FPM-safety: because the hooked class is never published, no per-process trampoline or handlers-block address ever reaches shared memory (publishing the handlers through the class entry instead was rejected for exactly that hazard). Probe with `ReflectionClass::isLazyLinkingCopy()`. Fallback: on a platform whose generated engine definitions predate the `zend_inheritance_cache_add` export, the installation still throws `SharedMemoryException` instead of being silently lost - regenerate with `composer gen-headers`. |

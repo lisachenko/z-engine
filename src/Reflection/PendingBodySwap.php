@@ -40,6 +40,8 @@ final class PendingBodySwap
      * @param int                $entryAddress         Numeric identity of the entry
      * @param int                $publishedShares      Bucket shares held on both the previous and the new body
      * @param bool               $destroyPrevious      False for shared-memory previous bodies (never freed)
+     * @param CData|null         $previousMintedCache  Run-time cache an earlier swap minted for the previous
+     *                                                 body (released on commit, reinstated on rollback)
      */
     public function __construct(
         private FunctionLikeInterface $entry,
@@ -47,6 +49,7 @@ final class PendingBodySwap
         private int $entryAddress,
         private int $publishedShares,
         private bool $destroyPrevious,
+        private ?CData $previousMintedCache = null,
     ) {}
 
     /**
@@ -57,7 +60,15 @@ final class PendingBodySwap
         $this->assertUnresolved();
         $this->isResolved = true;
         if ($this->destroyPrevious) {
-            FunctionBodySwap::destroyPreviousBody($this->previousBody, $this->entryAddress, $this->publishedShares);
+            FunctionBodySwap::destroyPreviousBody(
+                $this->previousBody,
+                $this->entryAddress,
+                $this->publishedShares,
+                $this->previousMintedCache,
+            );
+        } else {
+            // A shared-memory body is never freed, but the cache z-engine minted for it is
+            FunctionBodySwap::releaseMintedRunTimeCache($this->entryAddress, $this->previousMintedCache);
         }
     }
 
@@ -72,7 +83,7 @@ final class PendingBodySwap
     {
         $this->assertUnresolved();
         $this->isResolved = true;
-        FunctionBodySwap::releaseSwappedInBody($this->entry, $this->publishedShares);
+        FunctionBodySwap::releaseSwappedInBody($this->entry, $this->publishedShares, $this->previousMintedCache);
         Core::memcpy($this->entry->getEntryPointer(), Core::addr($this->previousBody), Core::sizeof($this->previousBody));
     }
 
