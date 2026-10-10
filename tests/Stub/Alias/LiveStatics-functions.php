@@ -1,0 +1,25 @@
+<?php
+
+/**
+ * Z-Engine framework
+ *
+ * @copyright Copyright 2026, Lisachenko Alexander <lisachenko.it@gmail.com>
+ *
+ * This source file is subject to the license that is bundled
+ * with this source code in the file LICENSE.
+ *
+ */
+declare(strict_types=1);
+
+/**
+ * Global function with a static variable whose materialized live table moves over to the
+ * preserved alias (required once by
+ * RedefinePreservedStaticsTest::testAliasTakesOverTheLiveStaticsOfTheFunctionBodyItPreserves)
+ */
+function zengine_live_statics_fn(): int
+{
+    /** @var int $n */
+    static $n = 0;
+
+    return ++$n;
+}

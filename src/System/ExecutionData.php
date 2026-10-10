@@ -167,6 +167,25 @@ class ExecutionData
     }
 
     /**
+     * Returns the address of the run-time cache block this frame reads its inline caches
+     * from, or null when the frame has none
+     *
+     * Meaningful for user-function frames only: the engine leaves the field alone for
+     * internal calls, so callers check the frame function first.
+     *
+     * @internal used by FunctionBodySwap to keep a cache block alive while a frame runs on it
+     */
+    public function getRunTimeCacheAddress(): ?int
+    {
+        $cache = $this->pointer->run_time_cache;
+        if ($cache === null) {
+            return null;
+        }
+
+        return Core::addressOf($cache);
+    }
+
+    /**
      * Returns the class scope of the code executing in this frame as a framework
      * wrapper, or null when there is none (plain function, unbound closure, main
      * scope) or the frame carries no function entry at all

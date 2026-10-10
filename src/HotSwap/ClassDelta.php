@@ -316,7 +316,6 @@ final class ClassDelta
                     // The donor body refcount guards the statics defaults table
                     duplicateStatics: false,
                     destroyPrevious: true,
-                    publishedShares: FunctionBodySwap::countPublishedShares($entry),
                 );
                 $pendingSwaps[] = $pending;
                 $undoStack[]    = static function () use ($pending): void {
@@ -541,7 +540,8 @@ final class ClassDelta
             $containerFunction,
             $containerFunction->getAddress(),
             1,
-            false,
+            // The adoption duplicated the donor's statics defaults when the donor owned them
+            FunctionBodySwap::hasMintedStaticDefaults($containerFunction->getAddress()),
             null,
         );
         Core::untrackAndFree(Core::addr($container));
