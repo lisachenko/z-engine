@@ -31,10 +31,12 @@ use ZEngine\Type\StringEntry;
  *    bucket that points at the entry structure (the entry's own bucket plus every
  *    inherited-method bucket of a subclass): each bucket's destructor decrements the
  *    body refcount once, so the accounting must match or the body is freed early.
- *  - The entry gets a fresh HEAP_RT_CACHE run-time cache: the donor's cache is
- *    scope-dependent and owned by the donor; the engine frees a heap cache together
- *    with the entry (destroy_op_array), and every subsequent swap releases the
- *    previous one, so repeated swaps stay memory-flat.
+ *  - The entry gets a fresh run-time cache: the donor's cache is scope-dependent and
+ *    owned by the donor. The fresh cache is request memory WITHOUT the
+ *    ZEND_ACC_HEAP_RT_CACHE flag (a heap-flagged cache shared by the entry's own
+ *    bucket and the inherited-method buckets of subclasses would be freed once per
+ *    bucket at shutdown), so z-engine releases it itself: every subsequent swap of
+ *    the entry releases the previous cache, which keeps repeated swaps memory-flat.
  *  - The entry never shares the donor's LIVE static-variables table: its ZEND_MAP_PTR
  *    slot is dropped so the table materializes lazily on the first ZEND_BIND_STATIC,
  *    exactly like a plain compiled function. The defaults table behind it stays
@@ -43,11 +45,11 @@ use ZEngine\Type\StringEntry;
  *  - The previous body is destroyed with engine semantics (destroy_op_array) when
  *    the swap is committed. A previous body living in opcache shared memory keeps
  *    its compiled arrays (SHM is never freed), but the per-entry resources the
- *    swap minted for it (the heap run-time cache) are
+ *    swap minted for it (the run-time cache) are
  *    still released, so swaps stay memory-flat with shared-memory donors too.
  *    The entry keeps its owned reference on the function name;
  *    everything exclusively owned by the old body (opcodes, literals, vars,
- *    arg_info, static variables, heap run-time cache) is released, and bodies still
+ *    arg_info, static variables, the minted run-time cache) is released, and bodies still
  *    shared with someone else (a template op_array, a fake closure) survive through
  *    their own refcount.
  *
