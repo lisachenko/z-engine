@@ -42,6 +42,8 @@ final class PendingBodySwap
      * @param bool               $destroyPrevious      False for shared-memory previous bodies (never freed)
      * @param bool               $mintedDefaults       True when the swap minted an own statics defaults duplicate
      * @param ?int               $previousMintedRecord Bookkeeping record of the previous committed swap, if any
+     * @param CData|null         $previousMintedCache  Run-time cache an earlier swap minted for the previous
+     *                                                 body (released on commit, reinstated on rollback)
      */
     public function __construct(
         private FunctionLikeInterface $entry,
@@ -51,6 +53,7 @@ final class PendingBodySwap
         private bool $destroyPrevious,
         private bool $mintedDefaults,
         private ?int $previousMintedRecord,
+        private ?CData $previousMintedCache = null,
     ) {}
 
     /**
@@ -61,7 +64,15 @@ final class PendingBodySwap
         $this->assertUnresolved();
         $this->isResolved = true;
         if ($this->destroyPrevious) {
-            FunctionBodySwap::destroyPreviousBody($this->previousBody, $this->entryAddress, $this->publishedShares);
+            FunctionBodySwap::destroyPreviousBody(
+                $this->previousBody,
+                $this->entryAddress,
+                $this->publishedShares,
+                $this->previousMintedCache,
+            );
+        } else {
+            // A shared-memory body is never freed, but the cache z-engine minted for it is
+            FunctionBodySwap::releaseMintedRunTimeCache($this->entryAddress, $this->previousMintedCache);
         }
     }
 
@@ -82,6 +93,7 @@ final class PendingBodySwap
             $this->publishedShares,
             $this->mintedDefaults,
             $this->previousMintedRecord,
+            $this->previousMintedCache,
         );
         Core::memcpy($this->entry->getEntryPointer(), Core::addr($this->previousBody), Core::sizeof($this->previousBody));
     }

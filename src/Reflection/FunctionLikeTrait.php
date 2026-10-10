@@ -171,56 +171,180 @@ trait FunctionLikeTrait
     }
 
     /**
-     * Redefines an existing method in the class with closure
+     * Replaces the body of this function/method with the body of a closure or of another
+     * user function/method (the donor), in place
      *
-     * The previous function body is destroyed with engine semantics (the entry keeps
-     * one owned share of the new closure body instead) - repeated redefinitions of
-     * the same entry are memory-flat, see FunctionBodySwap. An opcache-shared
-     * (ZEND_ACC_IMMUTABLE) global function is first copied out of shared memory into
-     * a writable entry (its SHM body stays allocated, never freed); a method of an
-     * opcache-shared class is redefined on the writable copy of its declaring class,
-     * which is copied out of shared memory the same way - see docs/hot-swap.md for
-     * the matrix and the copy-out caveats.
+     * The entry keeps its identity - name, scope, prototype, visibility, static and final
+     * flags - while the compiled body, the signature (arg_info), the attributes and the doc
+     * comment follow the donor. The published zend_function pointer never changes, so
+     * warmed-up inline caches, subclass method buckets and prototype links stay valid and
+     * dispatch the new body immediately. A donor must carry the entry's exact signature and
+     * its static-ness, and may not be abstract or internal. `self`/`parent` types are
+     * resolved to the DONOR's declaring class by the compiler and would keep enforcing it,
+     * so a donor spells the entry's class explicitly where the entry says `self`.
      *
-     * @internal
+     * With `$preserveAs` the PREVIOUS body is kept callable: it is published under that name
+     * before the swap - as a private method of the declaring class, carrying ZEND_ACC_CHANGED
+     * when an ancestor already declares a private method of that name, and inherited by every
+     * subclass linked earlier; or as a second global function. The alias is a regular entry:
+     * `redefine()` with the alias as the donor swaps the previous body back in, and
+     * `ReflectionClass::removeMethods()` drops the alias again. An alias name the class
+     * already declares is refused, so a second preserving redefine() of the same method needs
+     * a different name (or the first alias restored/removed first).
+     *
+     * The previous body is destroyed with engine semantics (the entry keeps one owned share
+     * of the new body instead, and a preserved alias keeps one of the previous one) -
+     * repeated redefinitions of the same entry are memory-flat, see FunctionBodySwap. An
+     * opcache-shared (ZEND_ACC_IMMUTABLE) global function is first copied out of shared
+     * memory into a writable entry (its SHM body stays allocated, never freed); a method of
+     * an opcache-shared class is redefined on the writable copy of its declaring class,
+     * which is copied out of shared memory the same way - see docs/hot-swap.md for the matrix
+     * and the copy-out caveats. Preserving an alias on a shared-memory class is refused while
+     * a subclass linked against the shared entry exists (it could never see the alias).
+     *
+     * An internal function keeps the handler-trampoline path: only a closure can redefine
+     * it, and its body cannot be preserved under an alias.
+     *
+     * @param \Closure|FunctionLikeInterface $newBody    Closure, or a user method/function whose body is adopted
+     * @param string|null                    $preserveAs Name to publish the previous body under
+     *
+     * @throws RedefinitionException When the donor or the alias cannot be accepted (nothing was modified)
+     * @throws SharedMemoryException When the entry cannot be copied out of shared memory
      */
-    public function redefine(\Closure $newCode): void
+    public function redefine(\Closure|FunctionLikeInterface $newBody, ?string $preserveAs = null): void
     {
-        $this->ensureCompatibleClosure($newCode);
+        if ($this->isInternal()) {
+            if (!$newBody instanceof \Closure) {
+                throw RedefinitionException::internalEntryRequiresClosure($this->getName());
+            }
+            if ($preserveAs !== null) {
+                throw RedefinitionException::aliasUnsupportedForInternalEntry($this->getName());
+            }
+            $this->ensureCompatibleSignature(new \ReflectionFunction($newBody));
 
-        if (!$this->isInternal()) {
+            // For internal function we can simply adjust a handler
+            /** @var zend_internal_function $internalEntry Internal entries hold the internal view */
+            $internalEntry          = $this->pointer;
+            $internalEntry->handler = function (CData $executeData, CData $returnValue) use ($newBody): void {
+                $rawValue   = ReflectionValue::fromValueEntry($returnValue);
+                $stackTrace = debug_backtrace(0, 2);
+                $result     = $newBody(...$stackTrace[1]['args']);
+                $rawValue->setNativeValue($result);
+            };
+
+            return;
+        }
+
+        if ($newBody instanceof \Closure) {
+            $this->ensureCompatibleSignature(new \ReflectionFunction($newBody));
             $selfExecutionState = Core::$executor->getExecutionState();
             $newCodeEntry       = $selfExecutionState->getArgument(0)->getRawObject();
             $closureEntry       = ClosureEntry::fromCData(Core::cast('zend_closure *', $newCodeEntry));
-            $newFunction        = $closureEntry->getRawFunction();
+            $donorFunction      = ReflectionFunction::fromCData(Core::addr($closureEntry->getRawFunction()));
+        } else {
+            $this->ensureAcceptableDonor($newBody);
+            $donorFunction = $newBody;
+        }
 
-            $isSharedMemoryEntry = $this->copyEntryOutOfSharedMemory();
+        if ($preserveAs !== null) {
+            // Checked before the copy-out: a subclass linked against the shared entry could
+            // never see an alias published into the per-process copy
+            MethodPublisher::assertAliasPublishable($this);
+        }
+        $isSharedMemoryEntry = $this->copyEntryOutOfSharedMemory();
+        $entryFunction       = ReflectionFunction::fromCData($this->pointer);
 
-            $entryFunction = ReflectionFunction::fromCData($this->pointer);
-            $donorFunction = ReflectionFunction::fromCData(Core::addr($newFunction));
-            FunctionBodySwap::swapUserFunctionBody(
+        $unpublishAlias = null;
+        if ($preserveAs !== null) {
+            // The alias takes its own share of the previous body BEFORE the swap releases
+            // the entry's share, which is what keeps the body alive through the swap
+            [, $unpublishAlias] = $entryFunction->getCommonPointer()->scope !== null
+                ? MethodPublisher::publishMethodAlias($entryFunction, $preserveAs)
+                : MethodPublisher::publishFunctionAlias($entryFunction, $preserveAs);
+        }
+        try {
+            $pendingSwap = FunctionBodySwap::swapUserFunctionBody(
                 $entryFunction,
                 $donorFunction,
                 preserveDeclaration: true,
-                // The donor closure owns (and destroys) its static-variables table
-                duplicateStatics: true,
+                // A donor closure owns (and destroys) its static-variables table, so the
+                // entry needs a duplicate of the defaults; a method donor's table lives as
+                // long as the body it belongs to, which the entry now holds a reference on
+                duplicateStatics: $newBody instanceof \Closure,
                 // A shared-memory body is immortal by definition and must not be freed
                 destroyPrevious: !$isSharedMemoryEntry,
                 // Subclass method tables may share this very structure - every such
                 // bucket releases one body reference when the engine destroys it
                 publishedShares: FunctionBodySwap::countPublishedShares($entryFunction),
-            )->commit();
-        } else {
-            // For internal function we can simply adjust a handler
-            /** @var zend_internal_function $internalEntry Internal entries hold the internal view */
-            $internalEntry          = $this->pointer;
-            $internalEntry->handler = function (CData $executeData, CData $returnValue) use ($newCode): void {
-                $rawValue   = ReflectionValue::fromValueEntry($returnValue);
-                $stackTrace = debug_backtrace(0, 2);
-                $result     = $newCode(...$stackTrace[1]['args']);
-                $rawValue->setNativeValue($result);
-            };
+            );
+        } catch (\Throwable $error) {
+            if ($unpublishAlias !== null) {
+                $unpublishAlias();
+            }
+            throw $error;
         }
+        $pendingSwap->commit();
+    }
+
+    /**
+     * Marks or unmarks this entry as redeclaring a method that is private in an ancestor
+     * (ZEND_ACC_CHANGED): the engine then resolves the ancestor's own private method for
+     * calls made from the ancestor's scope on instances of this class
+     *
+     * @internal
+     */
+    public function setChangedFlag(bool $isChanged): void
+    {
+        $this->setFunctionFlag(Core::ZEND_ACC_CHANGED, $isChanged);
+    }
+
+    /**
+     * Marks or unmarks this entry as a constructor (ZEND_ACC_CTOR)
+     *
+     * @internal
+     */
+    public function setConstructorFlag(bool $isConstructor): void
+    {
+        $this->setFunctionFlag(Core::ZEND_ACC_CTOR, $isConstructor);
+    }
+
+    /**
+     * Checks that a user method/function can serve as the donor body of this entry
+     *
+     * @throws RedefinitionException
+     */
+    private function ensureAcceptableDonor(FunctionLikeInterface $donor): void
+    {
+        $entryName = $this->getName();
+        $donorName = MethodPublisher::entryName($donor);
+        if (!$donor->isUserDefined()) {
+            throw RedefinitionException::donorIsInternal($donorName);
+        }
+        if ($donor->getAddress() === $this->getAddress()) {
+            throw RedefinitionException::donorIsEntry($entryName);
+        }
+        $donorFlags = $donor->getCommonPointer()->fn_flags;
+        $entryFlags = $this->getCommonPointer()->fn_flags;
+        assert(is_int($donorFlags) && is_int($entryFlags));
+        if (($donorFlags & Core::ZEND_ACC_ABSTRACT) !== 0) {
+            throw RedefinitionException::donorIsAbstract($donorName);
+        }
+        if (($donorFlags & Core::ZEND_ACC_STATIC) !== ($entryFlags & Core::ZEND_ACC_STATIC)) {
+            throw RedefinitionException::staticModifierMismatch($entryName, $donorName);
+        }
+        if (!$donor instanceof \ReflectionFunctionAbstract) {
+            throw RedefinitionException::donorNotIntrospectable($donorName, new \LogicException('not a reflection object'));
+        }
+        // Pointer-level wrappers (fromRawEntry) carry no native reflection state: the native
+        // `name` property is only initialized by the native constructor, and the signature
+        // readers below would fail with an engine error on such a wrapper
+        if (!(new \ReflectionProperty(\ReflectionFunctionAbstract::class, 'name'))->isInitialized($donor)) {
+            throw RedefinitionException::donorNotIntrospectable(
+                $donorName,
+                new \LogicException('the native reflection state of the donor is not initialized'),
+            );
+        }
+        $this->ensureCompatibleSignature($donor);
     }
 
     /**
@@ -691,60 +815,112 @@ trait FunctionLikeTrait
     abstract protected function getHash(): string;
 
     /**
-     * Checks if the given closure signature is compatible to original one (number of arguments, type hints, etc)
+     * Checks that the donor signature matches this entry's (parameters, by-reference passing,
+     * variadics, types and the return type)
      *
-     * @throws \ReflectionException if closure signature is not compatible with current function/method
+     * Types are compared as the engine resolved them at compile time. That is deliberate for
+     * `self`/`parent` types: the compiler resolves them to the declaring class of the DONOR,
+     * and the adopted arg_info keeps enforcing that class at run time - a donor must spell
+     * the entry's class explicitly where the entry says `self` (only `static` is late-bound).
+     *
+     * @throws RedefinitionException if the donor signature is not compatible with this entry
      */
-    private function ensureCompatibleClosure(\Closure $newCode): void
+    private function ensureCompatibleSignature(\ReflectionFunctionAbstract $donor): void
     {
-        /** @var \ReflectionFunction[] $reflectionPair */
-        $reflectionPair = [$this, new \ReflectionFunction($newCode)];
-        $signatures     = [];
-        foreach ($reflectionPair as $index => $reflectionFunction) {
-            $signature = 'function ';
-            if ($reflectionFunction->returnsReference()) {
-                $signature .= '&';
+        $entrySignature = self::renderSignature($this);
+        $donorSignature = self::renderSignature($donor);
+
+        if ($entrySignature !== $donorSignature) {
+            throw RedefinitionException::signatureMismatch($entrySignature, $donorSignature);
+        }
+    }
+
+    /**
+     * Renders a comparable signature string of a function
+     *
+     * The `self` and `parent` keywords are rendered as the classes they name in the function's
+     * own scope (its declaring class, or the bound scope of a closure): PHP 8.5 reflection
+     * resolves them itself, PHP 8.4 reports the keywords verbatim, and a donor compiled in
+     * another class must be compared by what its types actually accept. `static` stays as is,
+     * it binds to the called class on both sides.
+     */
+    private static function renderSignature(\ReflectionFunctionAbstract $function): string
+    {
+        $scope = $function instanceof \ReflectionMethod
+            ? $function->getDeclaringClass()
+            : ($function instanceof \ReflectionFunction ? $function->getClosureScopeClass() : null);
+
+        $signature = 'function ';
+        if ($function->returnsReference()) {
+            $signature .= '&';
+        }
+        $signature .= '(';
+        $parameters = [];
+        foreach ($function->getParameters() as $reflectionParameter) {
+            $parameter = '';
+            $type      = $reflectionParameter->getType();
+            if ($type !== null) {
+                $parameter .= self::renderType($type, $scope) . ' ';
             }
-            $signature .= '(';
-            $parameters = [];
-            foreach ($reflectionFunction->getParameters() as $reflectionParameter) {
-                $parameter = '';
-                if ($reflectionParameter->hasType()) {
-                    $type = $reflectionParameter->getType();
-                    if ($type->allowsNull()) {
-                        $parameter .= '?';
-                    }
-                    $parameter .= $type->getName() . ' ';
-                }
-                if ($reflectionParameter->isPassedByReference()) {
-                    $parameter .= '&';
-                }
-                if ($reflectionParameter->isVariadic()) {
-                    $parameter .= '...';
-                }
-                $parameter .= '$';
-                $parameter .= $reflectionParameter->getName();
-                $parameters[] = $parameter;
+            if ($reflectionParameter->isPassedByReference()) {
+                $parameter .= '&';
             }
-            $signature .= join(', ', $parameters);
-            $signature .= ')';
-            if ($reflectionFunction->hasReturnType()) {
-                $signature .= ': ';
-                $type = $reflectionFunction->getReturnType();
-                if ($type->allowsNull()) {
-                    $signature .= '?';
-                }
-                $signature .= $type->getName();
+            if ($reflectionParameter->isVariadic()) {
+                $parameter .= '...';
             }
-            $signatures[] = $signature;
+            $parameter .= '$';
+            $parameter .= $reflectionParameter->getName();
+            $parameters[] = $parameter;
+        }
+        $signature .= join(', ', $parameters);
+        $signature .= ')';
+        $returnType = $function->getReturnType();
+        if ($returnType !== null) {
+            $signature .= ': ' . self::renderType($returnType, $scope);
         }
 
-        if ($signatures[0] !== $signatures[1]) {
-            throw new \ReflectionException(
-                'Given function signature: "' . $signatures[1] . '"' .
-                ' should be compatible with original "' . $signatures[0] . '"',
-            );
+        return $signature;
+    }
+
+    /**
+     * Renders a type with the class-scope keywords resolved against $scope (see renderSignature())
+     *
+     * @param \ReflectionClass<object>|null $scope
+     */
+    private static function renderType(\ReflectionType $type, ?\ReflectionClass $scope): string
+    {
+        if ($type instanceof \ReflectionNamedType) {
+            $name      = $type->getName();
+            $lowerName = strtolower($name);
+            if ($scope !== null && $lowerName === 'self') {
+                $name = $scope->getName();
+            } elseif ($scope !== null && $lowerName === 'parent') {
+                $parentClass = $scope->getParentClass();
+                $name        = $parentClass !== false ? $parentClass->getName() : $name;
+            }
+            $isNullable = $type->allowsNull() && $lowerName !== 'null' && $lowerName !== 'mixed';
+
+            return ($isNullable ? '?' : '') . $name;
         }
+        if ($type instanceof \ReflectionUnionType) {
+            $members = [];
+            foreach ($type->getTypes() as $member) {
+                $rendered  = self::renderType($member, $scope);
+                $members[] = $member instanceof \ReflectionIntersectionType ? '(' . $rendered . ')' : $rendered;
+            }
+
+            return join('|', $members);
+        }
+        if ($type instanceof \ReflectionIntersectionType) {
+            $members = [];
+            foreach ($type->getTypes() as $member) {
+                $members[] = self::renderType($member, $scope);
+            }
+
+            return join('&', $members);
+        }
+
+        return (string) $type;
     }
 
     /**
