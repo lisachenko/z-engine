@@ -57,7 +57,7 @@ for ($index = 0; $index < 1000; $index++) {
         }
         break; // and break out of the outer loop with the inner one completed
     }
-    if ($count !== 3) {
+    if ($count !== count($iterable->items)) {
         throw new RuntimeException('Unexpected nested iteration count');
     }
 
