@@ -27,6 +27,7 @@ final class ErrorCallbackHookTest extends TestCase
 {
     public function testHandlerObservesDiagnosticAndProceedsToEngineDefault(): void
     {
+        /** @var ArrayObject<int, array{type: int, file: string, line: int, message: string}> $log */
         $log  = new ArrayObject();
         $hook = Core::setErrorCallbackHandler(function (ErrorCallbackHook $hook) use ($log): void {
             $log->append([
@@ -48,8 +49,8 @@ final class ErrorCallbackHookTest extends TestCase
             @trigger_error('observable diagnostic', E_USER_WARNING);
 
             $this->assertCount(1, $log);
-            /** @var array{type: int, file: string, line: int, message: string} $entry */
             $entry = $log[0];
+            $this->assertNotNull($entry);
             $this->assertSame(E_USER_WARNING, $entry['type']);
             $this->assertSame(__FILE__, $entry['file']);
             $this->assertSame($expectedLine, $entry['line']);
