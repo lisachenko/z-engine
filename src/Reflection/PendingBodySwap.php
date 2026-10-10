@@ -37,16 +37,20 @@ final class PendingBodySwap
     /**
      * @param FunctionLikeInterface $entry             Swapped entry (published function/method)
      * @param CData              $previousBody         zend_function snapshot of the previous body
-     * @param int                $entryAddress         Numeric identity of the entry
      * @param int                $publishedShares      Bucket shares held on both the previous and the new body
      * @param bool               $destroyPrevious      False for shared-memory previous bodies (never freed)
+     * @param CData|null         $previousMintedCache  Run-time cache an earlier swap minted for the previous
+     *                                                 body (released on commit, reinstated on rollback)
+     * @param EntryPublications|null $publications     Survey of the tables publishing the entry, taken for
+     *                                                 the swap (its clones are revisited on commit/rollback)
      */
     public function __construct(
         private FunctionLikeInterface $entry,
         private CData $previousBody,
-        private int $entryAddress,
         private int $publishedShares,
         private bool $destroyPrevious,
+        private ?CData $previousMintedCache = null,
+        private ?EntryPublications $publications = null,
     ) {}
 
     /**
@@ -57,7 +61,16 @@ final class PendingBodySwap
         $this->assertUnresolved();
         $this->isResolved = true;
         if ($this->destroyPrevious) {
-            FunctionBodySwap::destroyPreviousBody($this->previousBody, $this->entryAddress, $this->publishedShares);
+            FunctionBodySwap::destroyPreviousBody(
+                $this->entry,
+                $this->previousBody,
+                $this->publishedShares,
+                $this->previousMintedCache,
+                $this->publications,
+            );
+        } else {
+            // A shared-memory body is never freed, but the cache z-engine minted for it is
+            FunctionBodySwap::releaseMintedRunTimeCache($this->entry, $this->previousMintedCache, $this->publications);
         }
     }
 
@@ -72,7 +85,7 @@ final class PendingBodySwap
     {
         $this->assertUnresolved();
         $this->isResolved = true;
-        FunctionBodySwap::releaseSwappedInBody($this->entry, $this->publishedShares);
+        FunctionBodySwap::releaseSwappedInBody($this->entry, $this->publishedShares, $this->previousMintedCache, $this->publications);
         Core::memcpy($this->entry->getEntryPointer(), Core::addr($this->previousBody), Core::sizeof($this->previousBody));
     }
 

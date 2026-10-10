@@ -211,9 +211,7 @@ class ReflectionClassResolutionHandlersTest extends TestCase
         // Stress the rebuild path: every iteration replaces the anchored table
         for ($index = 0; $index < 1000; $index++) {
             $proxy->subject = "value{$index}";
-            if (self::propertySnapshot($proxy)['subject'] !== "value{$index}") {
-                self::fail('Unexpected property table snapshot');
-            }
+            $this->assertSame("value{$index}", self::propertySnapshot($proxy)['subject'], 'Unexpected property table snapshot');
         }
     }
 

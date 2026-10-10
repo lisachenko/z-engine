@@ -314,7 +314,6 @@ final class ClassDelta
                     // The new source is authoritative for the declaration as well
                     preserveDeclaration: false,
                     destroyPrevious: true,
-                    publishedShares: FunctionBodySwap::countPublishedShares($entry),
                 );
                 $pendingSwaps[] = $pending;
                 $undoStack[]    = static function () use ($pending): void {
