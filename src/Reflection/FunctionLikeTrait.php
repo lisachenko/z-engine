@@ -833,10 +833,18 @@ trait FunctionLikeTrait
 
     /**
      * Renders a comparable signature string of a function
+     *
+     * The `self` and `parent` keywords are rendered as the classes they name in the function's
+     * own scope (its declaring class, or the bound scope of a closure): PHP 8.5 reflection
+     * resolves them itself, PHP 8.4 reports the keywords verbatim, and a donor compiled in
+     * another class must be compared by what its types actually accept. `static` stays as is,
+     * it binds to the called class on both sides.
      */
     private static function renderSignature(\ReflectionFunctionAbstract $function): string
     {
-        $renderType = static fn(\ReflectionType $type): string => (string) $type;
+        $scope = $function instanceof \ReflectionMethod
+            ? $function->getDeclaringClass()
+            : ($function instanceof \ReflectionFunction ? $function->getClosureScopeClass() : null);
 
         $signature = 'function ';
         if ($function->returnsReference()) {
@@ -848,7 +856,7 @@ trait FunctionLikeTrait
             $parameter = '';
             $type      = $reflectionParameter->getType();
             if ($type !== null) {
-                $parameter .= $renderType($type) . ' ';
+                $parameter .= self::renderType($type, $scope) . ' ';
             }
             if ($reflectionParameter->isPassedByReference()) {
                 $parameter .= '&';
@@ -864,10 +872,51 @@ trait FunctionLikeTrait
         $signature .= ')';
         $returnType = $function->getReturnType();
         if ($returnType !== null) {
-            $signature .= ': ' . $renderType($returnType);
+            $signature .= ': ' . self::renderType($returnType, $scope);
         }
 
         return $signature;
+    }
+
+    /**
+     * Renders a type with the class-scope keywords resolved against $scope (see renderSignature())
+     *
+     * @param \ReflectionClass<object>|null $scope
+     */
+    private static function renderType(\ReflectionType $type, ?\ReflectionClass $scope): string
+    {
+        if ($type instanceof \ReflectionNamedType) {
+            $name      = $type->getName();
+            $lowerName = strtolower($name);
+            if ($scope !== null && $lowerName === 'self') {
+                $name = $scope->getName();
+            } elseif ($scope !== null && $lowerName === 'parent') {
+                $parentClass = $scope->getParentClass();
+                $name        = $parentClass !== false ? $parentClass->getName() : $name;
+            }
+            $isNullable = $type->allowsNull() && $lowerName !== 'null' && $lowerName !== 'mixed';
+
+            return ($isNullable ? '?' : '') . $name;
+        }
+        if ($type instanceof \ReflectionUnionType) {
+            $members = [];
+            foreach ($type->getTypes() as $member) {
+                $rendered  = self::renderType($member, $scope);
+                $members[] = $member instanceof \ReflectionIntersectionType ? '(' . $rendered . ')' : $rendered;
+            }
+
+            return join('|', $members);
+        }
+        if ($type instanceof \ReflectionIntersectionType) {
+            $members = [];
+            foreach ($type->getTypes() as $member) {
+                $members[] = self::renderType($member, $scope);
+            }
+
+            return join('&', $members);
+        }
+
+        return (string) $type;
     }
 
     /**
