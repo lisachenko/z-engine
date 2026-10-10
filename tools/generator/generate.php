@@ -158,6 +158,20 @@ function publishStubs(string $outputDir, string $repositoryRoot, bool $isCanonic
     }
 }
 
+/**
+ * Whether the artifacts a docker build just exported describe a ZTS engine:
+ * layouts.json carries the probe's own ZEND_THREAD_SAFE verdict in its meta.
+ */
+function dockerBuildIsZts(string $outputDir): bool
+{
+    $layouts = json_decode((string) file_get_contents("{$outputDir}/layouts.json"), true);
+    if (!is_array($layouts) || !is_array($layouts['meta'] ?? null) || !isset($layouts['meta']['zts'])) {
+        abortWith("the generator did not record the thread-safety mode in {$outputDir}/layouts.json");
+    }
+
+    return (bool) $layouts['meta']['zts'];
+}
+
 function removeDirectory(string $directory): void
 {
     if (!is_dir($directory)) {
@@ -553,19 +567,41 @@ foreach ($targets as $target) {
         }
     }
 
+    // The build lands in a staging directory first: the committed artifacts are
+    // replaced only once the image has proven to be the build the target names.
+    $stagingDir = "{$outputDir}.staging";
+    removeDirectory($stagingDir);
     $command = 'docker buildx build --progress=plain'
         . ' --build-arg ' . escapeshellarg("BASE_IMAGE={$baseImage}")
         . $proxyArguments
         . $cacheArguments
-        . ' --output ' . escapeshellarg("type=local,dest={$outputDir}")
+        . ' --output ' . escapeshellarg("type=local,dest={$stagingDir}")
         . ' ' . escapeshellarg($repositoryRoot . '/tools/generator');
 
     echo "==> Generating {$target['php']} linux-{$arch}-{$target['ts']} from {$baseImage}\n";
     passthru($command, $exitCode);
     if ($exitCode !== 0) {
+        removeDirectory($stagingDir);
         fwrite(STDERR, "==> FAILED: {$target['php']} {$target['ts']} (exit {$exitCode})\n");
         $failures++;
         continue;
+    }
+    // The tag names the variant, the build decides the thread-safety mode: a
+    // pre-release docker-library `-cli` image has shipped as a ZTS build (8.6-rc,
+    // which has no nts variant at all), and emitting it into the nts directory
+    // would commit a ZTS layout under an nts name. Refuse the image instead; the
+    // "Generate linux headers" workflow regenerates natively from setup-php.
+    $builtZts = dockerBuildIsZts($stagingDir);
+    if ($builtZts !== ($target['ts'] === 'zts')) {
+        removeDirectory($stagingDir);
+        fwrite(STDERR, "==> FAILED: {$baseImage} is a " . ($builtZts ? 'zts' : 'nts') . ' build, so it cannot produce the '
+            . "{$target['ts']} target. Regenerate natively under a matching PHP build (generate.php --native) instead.\n");
+        $failures++;
+        continue;
+    }
+    removeDirectory($outputDir);
+    if (!rename($stagingDir, $outputDir)) {
+        abortWith("cannot move {$stagingDir} to {$outputDir}");
     }
     if ($targetCacheDir !== '' && is_dir("{$targetCacheDir}-new")) {
         passthru('rm -rf ' . escapeshellarg($targetCacheDir));
