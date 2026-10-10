@@ -138,7 +138,7 @@ return [
     'HASH_ADD_NEXT' => 16,
     'HT_MIN_MASK' => 4294967294,
     'HT_MIN_SIZE' => 8,
-    'ZEND_MODULE_API_NO' => 20250926,
+    'ZEND_MODULE_API_NO' => 20260924,
     'MODULE_PERSISTENT' => 1,
     'MODULE_TEMPORARY' => 2,
     'CONST_CS' => 0,
