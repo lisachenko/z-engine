@@ -48,7 +48,6 @@ final class ErrorCallbackHookTest extends TestCase
             @trigger_error('observable diagnostic', E_USER_WARNING);
 
             $this->assertCount(1, $log);
-            /** @var array{type: int, file: string, line: int, message: string} $entry */
             $entry = $log[0];
             $this->assertSame(E_USER_WARNING, $entry['type']);
             $this->assertSame(__FILE__, $entry['file']);
