@@ -279,10 +279,12 @@ trait FunctionLikeTrait
             // A subclass implementing an interface that declares the method holds an engine
             // CLONE of the entry instead of the entry pointer (FunctionBodySwap::cloneHolders()):
             // the clone dispatches for that subclass, so it follows the redefinition in place
-            foreach (FunctionBodySwap::cloneHolders($entryFunction) as [, $clone]) {
-                if ($clone->isImmutable()) {
+            foreach (FunctionBodySwap::cloneHolders($entryFunction) as [$holder, $clone]) {
+                if ($holder->isImmutable()) {
                     // A clone inside a shared-memory subclass is never written: that subclass
-                    // keeps the previous body, like every subclass linked against a shared entry
+                    // keeps the previous body, like every subclass linked against a shared entry.
+                    // (The class decides, not the clone's flags: a clone copied from an entry that
+                    // adopted a cached donor body carries ZEND_ACC_IMMUTABLE as a body-level flag)
                     continue;
                 }
                 $pendingSwaps[] = FunctionBodySwap::swapUserFunctionBody(

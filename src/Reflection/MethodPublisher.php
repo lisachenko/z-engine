@@ -520,7 +520,7 @@ final class MethodPublisher
         if (self::hasFlag($ownMethod, Core::ZEND_ACC_CHANGED)) {
             return;
         }
-        if ($ownMethod->isImmutable()) {
+        if ($subclass->isImmutable()) {
             // The flag cannot be written into shared memory, and without it the preserved
             // body could not reach its alias on instances of that subclass
             throw SharedMemoryException::sharedEntryHasLinkedSubclasses(
