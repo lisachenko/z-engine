@@ -85,7 +85,12 @@ handlers touch them.
 
 - **Worker loops** (RoadRunner, Swoole, ReactPHP, FrankenPHP worker mode): the whole worker
   is one PHP request. Install hooks once at boot; `Core::shutdown()` runs at worker exit.
-- **Classic FPM + opcache preload**: call `Core::preload()` in the preload script, then
+- **Classic FPM + opcache preload**: point `opcache.preload` at a script that requires the
+  Composer autoloader (the bundled `preload.php` does just that; `Core::preload()` in an
+  existing script stays harmless). Under PHP's default `ffi.enable=preload` this is the only
+  way a web SAPI can bind the engine: FFI calls at request time are allowed from preloaded code
+  only, so neither `ffi.preload` nor `ffi.enable=1` replaces the stage - `Core::init()` throws
+  the resolved php.ini recipe (`Core::preloadConfigurationHint()`) when it is missing. Then
   `Core::init()` and hook installation happen per request; `Core::shutdown()` guarantees the
   per-request trampolines are gone from persistent structures before the request ends.
 - **SAPIs that cycle FFI callback state between handled requests**: call
