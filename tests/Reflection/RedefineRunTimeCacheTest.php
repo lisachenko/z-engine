@@ -57,6 +57,16 @@ class RedefineRunTimeCacheTest extends TestCase
      */
     private const int FLATNESS_TOLERANCE_BYTES = 512;
 
+    /**
+     * State of the mid-flight scenario, reached by the swapped-in body through this class
+     * (see testFakeClosureRedefiningItsOwnMethodMidFlightKeepsItsCacheBlock)
+     */
+    public static ?ReflectionMethod $liveFrameEntry = null;
+
+    public static ?\Closure $liveFrameNext = null;
+
+    public static bool $liveFrameSwapped = false;
+
     public function testFakeClosuresOverARedefinedMethodSurviveTheNextSwap(): void
     {
         $method = (new ReflectionClass(CacheFakeClosureTarget::class))->getMethod('greet');
@@ -227,15 +237,20 @@ class RedefineRunTimeCacheTest extends TestCase
 
     public function testFakeClosureRedefiningItsOwnMethodMidFlightKeepsItsCacheBlock(): void
     {
-        $entry   = (new ReflectionClass(CacheFakeLiveFrameTarget::class))->getMethod('greet');
-        $v2      = fn(string $who): string => 'v2:' . strtolower($who);
-        $swapped = false;
-        $v1      = function (string $who) use ($entry, $v2, &$swapped): string {
+        $entry = (new ReflectionClass(CacheFakeLiveFrameTarget::class))->getMethod('greet');
+        // The state the swapped-in body needs lives in static properties of this test class: on
+        // PHP 8.5 a closure donor's bound variables (its live statics) stay with the closure
+        // object, so the entry adopting the body would read them unbound - and the target class
+        // itself is copied out of shared memory by the swap under an opcache-active runner
+        self::$liveFrameEntry   = $entry;
+        self::$liveFrameNext    = fn(string $who): string => 'v2:' . strtolower($who);
+        self::$liveFrameSwapped = false;
+        $v1                     = function (string $who): string {
             $head = 'v1:' . strtoupper($who);
-            if (!$swapped) {
-                $swapped = true;
+            if (!RedefineRunTimeCacheTest::$liveFrameSwapped) {
+                RedefineRunTimeCacheTest::$liveFrameSwapped = true;
                 // The frame of the fake closure below runs on the minted block being retired
-                $entry->redefine($v2);
+                RedefineRunTimeCacheTest::$liveFrameEntry?->redefine(RedefineRunTimeCacheTest::$liveFrameNext ?? static fn(string $who): string => $who);
             }
 
             // Inline-cache reads after the swap: the block this frame runs on must still be there
@@ -251,7 +266,7 @@ class RedefineRunTimeCacheTest extends TestCase
         // hasLiveFrame() cannot see this frame (it executes &closure->func, not the entry):
         // the block is kept because a frame on the stack reads its inline caches from it
         self::assertSame('v1:A..a', $fake('a'), 'the frame completes on the previous body');
-        self::assertTrue($swapped);
+        self::assertTrue(self::$liveFrameSwapped);
         self::assertSame('v2:b', $instance->greet('B'), 'the entry dispatches the new body once the frame returned');
         self::assertNotSame($firstCache, self::cacheAddress($entry));
 
