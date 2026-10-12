@@ -48,7 +48,7 @@ Engine memory layouts change between every PHP minor version, so each PHP minor 
 | 8.4 | linux-x64 (nts, zts), darwin-x64 (nts, zts), darwin-arm64 (nts, zts), windows-x64 (nts, zts) | `8.4` | ✅ supported |
 | 8.0 | linux-x64-nts | `8.0` | 🧊 frozen (legacy) |
 
-¹ PHP 8.6 is pre-release; definitions track the latest beta. darwin-* and windows-* artifacts land through the generation workflows as 8.6 builds become available on those runners. User opcode handlers under the 8.6 tail-call VM required a php-src fix ([#280](https://github.com/lisachenko/z-engine/issues/280), fixed upstream by [php/php-src#24109](https://github.com/php/php-src/pull/24109)) — builds older than that fix that select `ZEND_VM_KIND_TAILCALL` corrupt the process when a user opcode handler fires.
+¹ PHP 8.6 is pre-release; definitions track the latest beta. darwin-* and windows-* artifacts land through the generation workflows as 8.6 builds become available on those runners.
 
 ² `darwin-x64-zts` on 8.5 lands as soon as a ZTS PHP 8.5 build exists for Intel macOS runners — the generation workflow picks it up automatically.
 
