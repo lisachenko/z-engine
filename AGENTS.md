@@ -201,6 +201,8 @@ composer test:internal   # destructive/segfault-prone group, process-isolated
   build** (`tools/docker/php-debug.Dockerfile`, which CI builds inline and runs
   the group in). Process isolation keeps one crash from taking down the whole
   run.
+- `OpCodeHookLifecycleTest` keeps the user opcode handler install/uninstall
+  path covered in every CI leg (the full hook suite is internal-group only).
 - FFI must be enabled (`ffi.enable=1`) and the JIT disabled (`opcache.jit=off`)
   — the JIT rewrites the executor internals z-engine hooks into. The PHPUnit
   config sets what it can; `ffi.enable` and `zend.assertions` must come from

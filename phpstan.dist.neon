@@ -9,9 +9,8 @@ includes:
 
 parameters:
     level: max
-    # TODO: bump to 80600 once PHPStan accepts it (2.2.9 still caps phpVersion
-    # at 80599 while PHP 8.6 is in beta); the runtime target of this branch is 8.6
-    phpVersion: 80500
+    # The runtime target of this branch (PHPStan >= 2.2.16 accepts 80600)
+    phpVersion: 80600
     # Deterministic result-cache location (gitignored, /var/) so CI can cache it
     tmpDir: var/phpstan
     paths:
@@ -39,6 +38,11 @@ parameters:
         # Sacrificial child pinning the ext-ffi abort on zend_throw_exception_hook:
         # pokes the raw engine symbol through an ad-hoc FFI::cdef on purpose
         - tests/System/Hook/scenarios/throw-hook-ffi-abort.php
+        # Leak-check child iterating a stub that deliberately does NOT implement
+        # Traversable (engine-level get_iterator handlers are the feature under
+        # test): statically its foreach yields nothing, so PHPStan >= 2.3
+        # constant-folds the whole stress loop into always-true/unreachable noise
+        - tests/Memory/scenarios/get-iterator-hook.php
     # Analysis-only declarations of the runtime-generated specialized classes and the
     # deliberately-undefined placeholder type (see the file header for the rationale),
     # plus the generated engine struct stubs (ZEngine\Generated\*, emitted by
@@ -70,6 +74,13 @@ parameters:
         -
             identifier: offsetAccess.nonOffsetAccessible
             path: src/Type/StructArray.php
+        # Core::getVirtualMachineKind() binds a dedicated one-symbol cdef (`int zend_vm_kind(void)`):
+        # methods declared by cdef source are not statically resolvable, exactly like the
+        # engine binding behind call() - scoped to this one symbol in this one file.
+        -
+            identifier: method.notFound
+            message: '#Call to an undefined method FFI::zend_vm_kind\(\)#'
+            path: src/Core.php
         # The dimension tests exist to prove that a plain `count($object)` reaches the engine's
         # count_elements handler on a class that never declared the count itself. Rewriting them
         # as assertCount() would measure PHPUnit's Count constraint instead of the language
@@ -77,6 +88,18 @@ parameters:
         -
             identifier: phpunit.assertCount
             path: tests/Reflection/ReflectionClassDimensionTest.php
+        # The resolution-handler tests prove the get_properties handler rebuilds the
+        # property table on every (array) cast. PHPStan >= 2.3 constant-folds the cast
+        # from the last statically-visible property write instead, so the stress loop
+        # that overwrites the subject 1000 times reads as a single always-true pass.
+        -
+            identifier: smaller.alwaysTrue
+            message: '#Comparison operation "<" between 0 and 1000 is always true#'
+            path: tests/Reflection/ReflectionClassResolutionHandlersTest.php
+        -
+            identifier: notIdentical.alwaysTrue
+            message: '#between .second. and .value0.#'
+            path: tests/Reflection/ReflectionClassResolutionHandlersTest.php
     reportUnmatchedIgnoredErrors: false
     treatPhpDocTypesAsCertain: false
 

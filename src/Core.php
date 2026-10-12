@@ -27,6 +27,7 @@ use ZEngine\System\Hook\AstProcessHook;
 use ZEngine\System\Hook\ErrorCallbackHook;
 use ZEngine\System\Hook\InheritanceCacheAddHook;
 use ZEngine\System\Hook\InterruptHook;
+use ZEngine\System\VmKind;
 use ZEngine\Type\HashTable;
 
 /**
@@ -198,6 +199,11 @@ class Core
      * Stores an internal instance of low-level FFI binding
      */
     private static FFI $engine;
+
+    /**
+     * Cached zend_vm_kind() answer - a compile-time property of the php binary
+     */
+    private static ?VmKind $vmKind = null;
 
     /**
      * Windows only: binding to the C runtime that owns the malloc heap, for persistentFree()
@@ -746,6 +752,28 @@ class Core
             },
             ZEND_THREAD_SAFE ? 'zts' : 'nts',
         );
+    }
+
+    /**
+     * The engine's VM dispatch kind
+     *
+     * Read through a dedicated one-symbol FFI binding rather than the generated engine
+     * definitions: the answer may be needed BEFORE init() (a consumer may probe platform
+     * support without booting the whole engine), and a plain `int zend_vm_kind(void)`
+     * carries no struct layout that the generated artifacts would need to verify.
+     * zend_vm_kind() is ZEND_API since PHP 7, so the symbol resolves on every supported
+     * build.
+     */
+    public static function getVirtualMachineKind(): VmKind
+    {
+        if (self::$vmKind === null) {
+            $probe = FFI::cdef('int zend_vm_kind(void);', self::engineLibrary());
+            $kind  = $probe->zend_vm_kind();
+            \assert(\is_int($kind));
+            self::$vmKind = VmKind::from($kind);
+        }
+
+        return self::$vmKind;
     }
 
     /**
