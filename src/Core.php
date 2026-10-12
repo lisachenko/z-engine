@@ -764,7 +764,7 @@ class Core
      * zend_vm_kind() is ZEND_API since PHP 7, so the symbol resolves on every supported
      * build.
      */
-    public static function vmKind(): VmKind
+    public static function getVirtualMachineKind(): VmKind
     {
         if (self::$vmKind === null) {
             $probe = FFI::cdef('int zend_vm_kind(void);', self::engineLibrary());

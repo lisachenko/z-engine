@@ -74,7 +74,7 @@ parameters:
         -
             identifier: offsetAccess.nonOffsetAccessible
             path: src/Type/StructArray.php
-        # Core::vmKind() binds a dedicated one-symbol cdef (`int zend_vm_kind(void)`):
+        # Core::getVirtualMachineKind() binds a dedicated one-symbol cdef (`int zend_vm_kind(void)`):
         # methods declared by cdef source are not statically resolvable, exactly like the
         # engine binding behind call() - scoped to this one symbol in this one file.
         -

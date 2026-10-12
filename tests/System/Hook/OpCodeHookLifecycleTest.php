@@ -30,7 +30,7 @@ final class OpCodeHookLifecycleTest extends TestCase
 {
     public function testVmKindIsReported(): void
     {
-        $this->assertContains(Core::vmKind(), VmKind::cases(), 'zend_vm_kind() must answer one of the known VM kinds');
+        $this->assertContains(Core::getVirtualMachineKind(), VmKind::cases(), 'zend_vm_kind() must answer one of the known VM kinds');
     }
 
     public function testInstallAndUninstallLifecycle(): void

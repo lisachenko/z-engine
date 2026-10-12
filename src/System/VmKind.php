@@ -21,7 +21,7 @@ namespace ZEngine\System;
  * single case. They are preprocessor macros the header generator does not export, which is
  * why the decode lives here rather than behind Core::engineConstant().
  *
- * @see Core::vmKind()
+ * @see Core::getVirtualMachineKind()
  */
 enum VmKind: int
 {
