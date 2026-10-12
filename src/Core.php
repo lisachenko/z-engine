@@ -325,8 +325,8 @@ class Core
             try {
                 $engine = FFI::scope('ZEngine');
             } catch (FFI\Exception $e) {
-                if (ini_get('ffi.enable') === 'preload' && PHP_SAPI !== 'cli') {
-                    throw new RuntimeException('Preload mode requires that you call Core::preload before');
+                if (self::isFfiRestrictedToPreloadedCode()) {
+                    throw new RuntimeException(self::preloadConfigurationHint());
                 }
                 // If not, then load definitions by hand
                 $definition = file_get_contents(self::resolveArtifact('engine.h'));
@@ -483,12 +483,128 @@ class Core
         }
 
         self::assertSupportedEnvironment();
-        // The generated header is fully preprocessed and carries FFI_SCOPE, so
-        // it can be loaded as-is
-        FFI::load(self::resolveArtifact('engine.h'));
+        try {
+            // ffi.preload may already have published the definitions at module startup. The
+            // scope is then taken as is: FFI::load() of the same header on top of it, inside
+            // the opcache.preload stage, crashes the process with a segmentation fault (the
+            // persistent scope gets re-registered), so both preloading mechanisms may be
+            // configured together only because this probe comes first.
+            FFI::scope('ZEngine');
+        } catch (FFI\Exception) {
+            // The generated header is fully preprocessed and carries FFI_SCOPE, so
+            // it can be loaded as-is
+            FFI::load(self::resolveArtifact('engine.h'));
+        }
 
         // Performs initialization of properties, otherwise we will get an error about uninitialized properties
         Core::init();
+    }
+
+    /**
+     * Whether this process may use the FFI API only from code that opcache.preload loaded
+     *
+     * That is what `ffi.enable=preload` (PHP's default) means outside the CLI: at request
+     * time every FFI call must come from a function or class the preload stage compiled, so
+     * a bridge that was not preloaded cannot bind the engine definitions at all - not even
+     * FFI::scope() over definitions that ffi.preload published. The CLI is exempt.
+     */
+    private static function isFfiRestrictedToPreloadedCode(): bool
+    {
+        return strtolower((string) ini_get('ffi.enable')) === 'preload' && PHP_SAPI !== 'cli';
+    }
+
+    /**
+     * Absolute path of the generated engine header for the running PHP build - the value
+     * for `ffi.preload`, which publishes the definitions once at module startup
+     *
+     * Resolve it with the very PHP build the server runs (`php -r` on the CLI binary may be
+     * a different thread-safety mode or minor than php-fpm): the header is specific to the
+     * minor, the OS, the architecture and the thread-safety mode.
+     */
+    public static function engineHeaderPath(): string
+    {
+        $path = self::resolveArtifact('engine.h', false);
+        $real = realpath($path);
+
+        return $real === false ? $path : $real;
+    }
+
+    /**
+     * Absolute path of the bundled `opcache.preload` script
+     *
+     * It only requires the Composer autoloader, which is all the preload stage needs: the
+     * bootstrap recognises the stage and publishes the definitions for the server's life.
+     * Any existing preload script that requires the autoloader serves the same purpose.
+     */
+    public static function preloadScriptPath(): string
+    {
+        $path = realpath(dirname(__DIR__) . '/preload.php');
+
+        return $path === false ? dirname(__DIR__) . '/preload.php' : $path;
+    }
+
+    /**
+     * The php.ini recipe for running z-engine under `ffi.enable=preload`, with the paths
+     * resolved for this very build and a diagnosis of the settings already in place
+     *
+     * This is the message Core::init() throws when the bridge cannot bind under preload
+     * mode. It is public so a deployment can print it from the SAPI it configures:
+     *
+     *   php -r 'require "vendor/autoload.php"; echo ZEngine\Core::preloadConfigurationHint();'
+     */
+    public static function preloadConfigurationHint(): string
+    {
+        $preloadScript = (string) ini_get('opcache.preload');
+        $ffiPreload    = (string) ini_get('ffi.preload');
+        $bundledScript = self::preloadScriptPath();
+        $engineHeader  = self::engineHeaderPath();
+        $isWindows     = PHP_OS_FAMILY === 'Windows';
+        $lines         = [];
+        $lines[]       = 'z-engine cannot bind the engine definitions in this process: ffi.enable=preload (PHP\'s '
+            . 'default) restricts the FFI API outside the CLI to code that opcache.preload loaded at server '
+            . 'start, and z-engine was not part of that stage.';
+        $lines[] = '';
+        if ($isWindows) {
+            $lines[] = 'opcache.preload does not exist on Windows, so preload mode cannot serve a web SAPI there. '
+                . 'Allow FFI for every caller instead and let z-engine bind the definitions per request, or '
+                . 'once at startup with ffi.preload (php.ini, then restart the server):';
+            $lines[] = '';
+            $lines[] = '  ffi.enable=1';
+            $lines[] = '  ffi.preload=' . $engineHeader;
+        } else {
+            $lines[] = 'Point opcache.preload at a script that requires your Composer autoloader - the bundled one '
+                . 'does exactly that - in php.ini (system level: php.ini or an FPM php_admin_value, never '
+                . '.user.ini or ini_set()), then restart the server:';
+            $lines[] = '';
+            $lines[] = '  opcache.enable=1';
+            $lines[] = '  opcache.preload=' . $bundledScript;
+            $lines[] = '  opcache.preload_user=www-data   ; FPM only, when the master process runs as root';
+            if ($preloadScript !== '') {
+                $lines[] = '';
+                $lines[] = sprintf(
+                    'opcache.preload is already set to "%s", but that stage did not initialize z-engine: make sure '
+                    . 'the script requires vendor/autoload.php, that opcache is enabled for this SAPI, and check the '
+                    . 'error log for a failed preload stage (an FPM master running as root needs opcache.preload_user).',
+                    $preloadScript,
+                );
+            }
+            $lines[] = '';
+            $lines[] = 'Optional: ffi.preload=' . $engineHeader . ' additionally publishes the C definitions at '
+                . 'module startup. It is not a substitute for opcache.preload under ffi.enable=preload - the '
+                . 'restriction is on the code that calls FFI, not on the definitions - but it is harmless next to it.';
+            if ($ffiPreload !== '') {
+                $lines[] = sprintf(
+                    'ffi.preload is currently "%s"%s.',
+                    $ffiPreload,
+                    $ffiPreload === $engineHeader ? '' : ' - this build needs ' . $engineHeader,
+                );
+            }
+            $lines[] = '';
+            $lines[] = 'Alternatively ffi.enable=1 allows FFI for every caller; z-engine then binds the definitions '
+                . 'per request, or once at startup with the same ffi.preload line.';
+        }
+
+        return implode("\n", $lines);
     }
 
     /**
@@ -522,15 +638,15 @@ class Core
             throw new RuntimeException(
                 'z-engine requires the ffi extension, which is not loaded. Install it and enable it '
                 . 'with ffi.enable=1 (or ffi.enable=preload together with an opcache.preload script '
-                . 'that calls Core::preload()).',
+                . 'that requires the Composer autoloader - see Core::preloadConfigurationHint()).',
             );
         }
         $ffiEnable = strtolower((string) ini_get('ffi.enable'));
         if (in_array($ffiEnable, ['', '0', 'off', 'false', 'no'], true)) {
             throw new RuntimeException(sprintf(
                 'z-engine requires FFI to be usable, but ini setting ffi.enable is "%s". Set '
-                . 'ffi.enable=1, or use ffi.enable=preload with an opcache.preload script that calls '
-                . 'Core::preload().',
+                . 'ffi.enable=1, or use ffi.enable=preload with an opcache.preload script that requires '
+                . 'the Composer autoloader (see Core::preloadConfigurationHint()).',
                 (string) ini_get('ffi.enable'),
             ));
         }

@@ -66,6 +66,7 @@ use ZEngine\ClassExtension\ObjectWritePropertyInterface;
 use ZEngine\Core;
 use ZEngine\Generated\zend_class_entry;
 use ZEngine\Generated\zend_class_name;
+use ZEngine\Generated\zend_function;
 use ZEngine\Generated\zend_object;
 use ZEngine\Generated\zend_trait_precedence;
 use ZEngine\Generated\zval;
@@ -256,6 +257,85 @@ class ReflectionClass extends NativeReflectionClass
         }
 
         return static::fromCData($classEntryValue->getRawClass());
+    }
+
+    /**
+     * Looks a method up in the table of the class entry at the given address without building
+     * the class wrapper
+     *
+     * The class-table surveys of the swap machinery (EntryPublications) visit every linked
+     * class and keep the few that publish a given name: the wrapper, with its table views, is
+     * built for those alone. An internal class holds no user method and answers null.
+     *
+     * @param int         $classAddress Address of the zend_class_entry, as the class table stores it
+     * @param StringEntry $lowerName    Lower-cased method name, as the method table keys it
+     *
+     * @internal used by EntryPublications::survey()
+     */
+    public static function findUserMethodAt(int $classAddress, StringEntry $lowerName): ?ReflectionMethod
+    {
+        $classEntry = Core::pointerAtAddress(zend_class_entry::class, $classAddress);
+        if ($classEntry->type !== Core::ZEND_USER_CLASS) {
+            return null;
+        }
+        $bucket = Core::call('zend_hash_find', Core::addr($classEntry->function_table), $lowerName->getRawValue());
+        if ($bucket === null) {
+            return null;
+        }
+        assert($bucket instanceof CData);
+
+        return ReflectionMethod::fromRawEntry(ReflectionValue::fromValueEntry($bucket)->getRawFunction());
+    }
+
+    /**
+     * Returns every linked user class descending from this one, found in one walk over the
+     * class table that builds a wrapper for the descendants only
+     *
+     * A class alias (class_alias()) resolves to the entry it aliases and is not listed twice;
+     * a class the engine has not linked yet (an opcache lazy-linking temporary) descends
+     * from nothing yet and is left out.
+     *
+     * @return list<ReflectionClass>
+     *
+     * @internal used by MethodPublisher to reach the subclasses linked before a publication
+     */
+    public function getLinkedSubclasses(): array
+    {
+        $ownAddress = $this->getAddress();
+        $subclasses = [];
+        foreach (Core::$executor->classTable->pointerValueAddresses() as $classAddress) {
+            if ($classAddress === $ownAddress || !self::descendsFromAddress($classAddress, $ownAddress)) {
+                continue;
+            }
+            $subclasses[] = static::fromCData(Core::pointerAtAddress(zend_class_entry::class, $classAddress));
+        }
+
+        return $subclasses;
+    }
+
+    /**
+     * Whether the class entry at $classAddress is a linked user class with the entry at
+     * $ancestorAddress on its parent chain
+     */
+    private static function descendsFromAddress(int $classAddress, int $ancestorAddress): bool
+    {
+        $classEntry = Core::pointerAtAddress(zend_class_entry::class, $classAddress);
+        if ($classEntry->type !== Core::ZEND_USER_CLASS) {
+            return false;
+        }
+        // Until a class is linked, the parent slot holds the parent NAME (a union); the
+        // parent of a linked class is always linked itself
+        for ($entry = $classEntry; ($entry->ce_flags & Core::ZEND_ACC_LINKED) !== 0; $entry = $parent) {
+            $parent = $entry->parent;
+            if ($parent === null) {
+                return false;
+            }
+            if (Core::addressOf($parent) === $ancestorAddress) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -488,15 +568,49 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
-     * Adds a new method to the class in runtime
+     * Adds a method to the class at runtime, from a closure or from a donor method
      *
-     * Rejected for opcache-shared (immutable) classes: the method table lives inside
-     * the SHM class entry and cannot be written per-process (see docs/hot-swap.md).
+     * A closure becomes a public method of this class: its embedded zend_function is
+     * published directly (immortalized, see docs/memory-model.md) under a name the class
+     * does not know yet.
      *
-     * @internal
+     * A donor method (a user method of another class, obtained through
+     * ReflectionClass::getMethod()) has its body ADOPTED into an own entry of this class -
+     * declaration flags and signature follow the donor, `self::`/`parent::`/`$this` resolve
+     * against this class at run time. The name may be one this class only INHERITS so far:
+     * the own entry then overrides the inherited method with the engine's inheritance rules
+     * (prototype kept, no override of a final method, no narrowing of visibility, same
+     * static-ness; a method private in the ancestor is merely redeclared), the class's magic
+     * slots that referenced the inherited entry follow it, and so do subclasses that were
+     * linked before and still inherited the ancestor's entry. A method this class already
+     * declares itself is refused - that is ReflectionMethod::redefine()'s job.
+     *
+     * An opcache-shared (immutable) class is first copied out of shared memory
+     * (see docs/hot-swap.md); overriding an inherited method of a shared class is refused
+     * while a subclass linked against the shared entry exists.
+     *
+     * @throws RedefinitionException When the donor or the name cannot be accepted (nothing was modified)
+     * @throws SharedMemoryException When the class cannot be copied out of shared memory
      */
-    public function addMethod(string $methodName, \Closure $method): ReflectionMethod
+    public function addMethod(string $methodName, \Closure|FunctionLikeInterface $method): ReflectionMethod
     {
+        if (!$method instanceof \Closure) {
+            if (!$method->isUserDefined()) {
+                throw RedefinitionException::donorIsInternal(MethodPublisher::entryName($method));
+            }
+            $donorFlags = $method->getCommonPointer()->fn_flags;
+            assert(is_int($donorFlags));
+            if (($donorFlags & Core::ZEND_ACC_ABSTRACT) !== 0) {
+                throw RedefinitionException::donorIsAbstract(MethodPublisher::entryName($method));
+            }
+            // Checked before the copy-out: a subclass linked against the shared entry could
+            // never see an override published into the per-process copy
+            MethodPublisher::assertOverridePublishable($this, $methodName);
+            $this->ensureWritableEntry('add a method');
+
+            return MethodPublisher::publishOverride($this, $methodName, $method);
+        }
+
         $this->ensureWritableEntry('add a method');
 
         $closureEntry = new ClosureEntry($method);
@@ -913,9 +1027,9 @@ class ReflectionClass extends NativeReflectionClass
      * through (constructor/destructor/__get/...), or null when the method is not wired
      * as a magic slot
      *
-     * @internal used by ReflectionMethod::isRemovable()
+     * @internal used by ReflectionMethod::isRemovable() and the method publisher
      */
-    public function getMagicSlotFor(ReflectionMethod $method): ?string
+    public function getMagicSlotFor(FunctionLikeInterface $method): ?string
     {
         $methodAddress = $method->getAddress();
 
@@ -931,6 +1045,28 @@ class ReflectionClass extends NativeReflectionClass
                 return Core::addressOf($fieldFunction) === $methodAddress;
             },
         );
+    }
+
+    /**
+     * Points a magic shortcut field of the class entry (constructor/destructor/__get/...,
+     * see getMagicSlotFor()) at the given entry
+     *
+     * The engine dispatches constructors and magic methods through these fields rather
+     * than through the method table, so an entry that replaces the one a field references
+     * must be wired here as well.
+     *
+     * @param string $fieldName One of the INHERITED_FUNCTION_POINTERS field names
+     *
+     * @internal used by the method publisher (MethodPublisher)
+     */
+    public function setMagicSlot(string $fieldName, ?FunctionLikeInterface $method): void
+    {
+        if (!in_array($fieldName, self::INHERITED_FUNCTION_POINTERS, true)) {
+            throw new \InvalidArgumentException("{$fieldName} is not a magic method slot of zend_class_entry");
+        }
+        $this->pointer->{$fieldName} = $method === null
+            ? null
+            : Core::cast(zend_function::class, $method->getEntryPointer());
     }
 
     /**
@@ -981,7 +1117,15 @@ class ReflectionClass extends NativeReflectionClass
     {
         $this->ensureWritableEntry('remove methods');
         foreach ($methodNames as $methodName) {
-            $this->methodTable->delete(strtolower($methodName));
+            $lowerName = strtolower($methodName);
+            $bucket    = $this->methodTable->find($lowerName);
+            if ($bucket !== null) {
+                // The bucket destructor frees the body for its last holder only: the materialized
+                // statics of the entry and whatever z-engine minted for it (a published alias
+                // carries a run-time cache and may carry a statics duplicate) are released here
+                FunctionBodySwap::retireUnpublishedEntry(ReflectionMethod::fromRawEntry($bucket->getRawFunction()));
+            }
+            $this->methodTable->delete($lowerName);
         }
     }
 

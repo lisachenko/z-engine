@@ -319,6 +319,19 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
     }
 
     /**
+     * Links this method to the entry it overrides (the engine's prototype pointer), or
+     * detaches it
+     *
+     * @internal used by the method publisher (MethodPublisher)
+     */
+    public function setPrototype(?FunctionLikeInterface $prototype): void
+    {
+        $this->getCommonPointer()->prototype = $prototype === null
+            ? null
+            : Core::cast(zend_function::class, $prototype->getEntryPointer());
+    }
+
+    /**
      * Returns the method prototype or null if no prototype for this method
      */
     #[\ReturnTypeWillChange]
@@ -413,9 +426,13 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      */
     public function __debugInfo(): array
     {
+        // Pointer-based like ReflectionFunction::__debugInfo(): a trampoline wrapper has no
+        // native reflection state, and a debugger dumping it must not fatal the process
+        $scopeName = $this->getCommonPointer()->scope?->name;
+
         return [
-            'name'  => $this->getName(),
-            'class' => $this->getDeclaringClass()->getName(),
+            'name'  => $this->getFunctionName(),
+            'class' => $scopeName !== null ? StringEntry::fromCData($scopeName)->getStringValue() : null,
         ];
     }
 

@@ -186,11 +186,18 @@ class ReflectionFunction extends NativeReflectionFunction implements FunctionLik
 
     /**
      * Returns a user-friendly representation of internal structure to prevent segfault
+     *
+     * Purely pointer-based, like getFunctionName(): a debugger (Xdebug, PhpStorm) calls
+     * this on every wrapper in scope, closure-backed entries included - and those never
+     * get their native reflection state (fromCData() cannot run the parent constructor for
+     * a function that is not in the function table), so the native getName() throws
+     * "Failed to retrieve the reflection object" from here, and a throwing __debugInfo()
+     * is a fatal error that takes the debugged process down.
      */
     public function __debugInfo(): array
     {
         return [
-            'name' => $this->getName(),
+            'name' => $this->getFunctionName() ?? '{main}',
         ];
     }
 

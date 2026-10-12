@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace ZEngine\Reflection;
 
+use ZEngine\Generated\HashTable;
 use ZEngine\Generated\zend_function;
 use ZEngine\Generated\zend_function_common;
 use ZEngine\Generated\zend_internal_function;
@@ -51,6 +52,21 @@ interface FunctionLikeInterface
     public function getEntryPointer(): object;
 
     public function isUserDefined(): bool;
+
+    /**
+     * Materialized live static-variables table of a user function, null while no call bound the
+     * statics yet (see FunctionLikeTrait::getLiveStaticsPointer())
+     *
+     * @return HashTable|null
+     *
+     * @internal
+     */
+    public function getLiveStaticsPointer(): ?object;
+
+    /**
+     * Pointer-based name of the entry, null for unnamed entries (see FunctionLikeTrait::getFunctionName())
+     */
+    public function getFunctionName(): ?string;
 
     /**
      * Compiled-variable names by CV slot (see FunctionLikeTrait::getVariableNames())

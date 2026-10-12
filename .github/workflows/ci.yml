@@ -470,7 +470,7 @@ jobs:
       # restore/save rather than the combined action: on an exact hit every layer
       # in the directory is still valid, so there is nothing to write back and the
       # `--cache-to` export below can be skipped outright. That export is not free
-      # - the header-drift job measures it at 13-15s per target - and today it is
+      # - the generator's docker path measured it at 13-15s per target - and today it is
       # paid on every run only to be thrown away. The prefix keys still give a warm
       # start when the base image moved, which is what keeps that rebuild
       # incremental instead of a compile from zero.
@@ -534,98 +534,62 @@ jobs:
           docker run --rm -v "$PWD:/app" -w /app z-engine-php:debug \
             vendor/bin/phpunit ${{ matrix.opcache_args }}
 
+  # Regenerates the linux-x64-{nts,zts} artifacts natively on the runner - the
+  # same setup-php build the tests jobs run on - and diffs the committed ones
+  # against the result, exactly like the darwin and windows jobs below.
+  #
+  # Docker (`composer gen-headers`, the local developer path) cannot be the CI
+  # oracle while the minor is pre-release: docker-library ships the
+  # `php:<minor>-rc-cli` image as a ZTS build (there is no separate nts
+  # variant yet), so the nts target came out as a ZTS artifact and this job
+  # was red with a diff nobody could commit. generate.php now refuses such a
+  # mismatched image, and CI generates for the interpreter it actually runs.
+  #
+  # The nts leg is the canonical build: it also publishes stubs/ and
+  # .phpstorm.meta.php, so only that leg diffs them.
   header-drift:
-    name: Generated headers up to date
+    name: Generated linux headers up to date (${{ matrix.ts }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ts: [nts, zts]
     steps:
       - uses: actions/checkout@v7
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-      # Caches the generator image's toolchain layers (apt/clang/ext-ffi); the
-      # emit stage itself always re-runs - it is the step that produces the
-      # artifacts being drift-checked. generate.php rotates per-target subdirs.
-      #
-      # Both base images go into the key: this job builds one image per target
-      # and nts starts from `php:<minor>-cli` while zts starts from
-      # `php:<minor>-zts`, so either tag moving invalidates the toolchain layer.
-      # Without them the entry freezes at whatever the first run produced and can
-      # never be rewritten - which is the state this job was already in, paying
-      # ~16s to reinstall clang and ~15s to export a cache nobody would store, on
-      # every single run. See the same reasoning in tests-internal-debug.
-      - name: Resolve the base image digests
-        id: gen-cache-key
-        run: |
-          # Same helper as tests-internal-debug: prints the raw manifest only on
-          # success, so a failed attempt cannot feed half a response into the hash.
-          resolve() {
-            local raw
-            for attempt in 1 2 3; do
-              if raw="$(docker buildx imagetools inspect "$1" --raw)" && [ -n "$raw" ]; then
-                printf '%s' "$raw"
-                return 0
-              fi
-              sleep "$((attempt * 3))"
-            done
-            return 1
-          }
-          # While the minor is pre-release Docker publishes only the -rc family
-          # (which also covers betas); generate.php falls back the same way, so
-          # the key hashes whichever manifests the build will actually use
-          resolve_variant() {
-            resolve "php:${PHP_MINOR}-$1" || resolve "php:${PHP_MINOR}-rc-$1"
-          }
-          if cli="$(resolve_variant cli)" && zts="$(resolve_variant zts)"; then
-            digest="$(printf '%s%s' "$cli" "$zts" | sha256sum | cut -d' ' -f1)"
-            echo "php:${PHP_MINOR}[-rc]-cli + php:${PHP_MINOR}[-rc]-zts hash to ${digest}"
-          else
-            # As above: a registry hiccup costs an exact key, never the job.
-            digest="unresolved-${{ github.run_id }}"
-            echo "::warning::Could not resolve the php:${PHP_MINOR} base image digests - building without an exact cache key"
-          fi
-          prefix="docker-gen-${PHP_MINOR}-${{ runner.os }}-${{ runner.arch }}-"
-          {
-            echo "prefix=${prefix}"
-            echo "recipe=${prefix}${{ hashFiles('tools/generator/Dockerfile') }}-"
-            echo "key=${prefix}${{ hashFiles('tools/generator/Dockerfile') }}-${digest}"
-          } >> "$GITHUB_OUTPUT"
 
-      - name: Restore the generator image layer cache
-        id: gen-layer-cache
-        uses: actions/cache/restore@v6
-        with:
-          path: /tmp/.buildx-gen-cache
-          key: ${{ steps.gen-cache-key.outputs.key }}
-          restore-keys: |
-            ${{ steps.gen-cache-key.outputs.recipe }}
-            ${{ steps.gen-cache-key.outputs.prefix }}
-            docker-gen-${{ env.PHP_MINOR }}-
-
-      # On an exact hit the restored layers are still valid, so generate.php is
-      # told to read the cache without exporting it again - the export is the
-      # expensive half and there would be nowhere to put the result.
-      - name: Regenerate engine definitions
-        run: composer gen-headers
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
         env:
-          Z_ENGINE_BUILDX_CACHE_DIR: /tmp/.buildx-gen-cache
-          Z_ENGINE_BUILDX_CACHE_READONLY: ${{ steps.gen-layer-cache.outputs.cache-hit == 'true' && '1' || '' }}
-
-      - name: Save the generator image layer cache
-        if: steps.gen-layer-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
+          phpts: ${{ matrix.ts == 'zts' && 'ts' || 'nts' }}
         with:
-          path: /tmp/.buildx-gen-cache
-          key: ${{ steps.gen-cache-key.outputs.key }}
+          php-version: ${{ env.PHP_MINOR }}
+          extensions: ffi
+          ini-values: ffi.enable=1
+          coverage: none
+
+      - name: Assert the thread-safety mode matches the matrix leg
+        run: |
+          php -r 'exit(ZEND_THREAD_SAFE === ("'"${{ matrix.ts }}"'" === "zts") ? 0 : 1);' \
+            || { echo "::error::PHP thread-safety mode does not match the ${{ matrix.ts }} matrix leg"; exit 1; }
+
+      - name: Regenerate engine definitions natively
+        run: php tools/generator/generate.php --native --php=${{ env.PHP_MINOR }} --ts=${{ matrix.ts }}
+
       - name: Fail if the committed artifacts are stale
         run: |
-          if ! git diff --exit-code -- include/ stubs/ .phpstorm.meta.php; then
-            echo "::error::Generated engine definitions (or the struct stubs / phpstorm meta) are out of date. Run 'composer gen-headers' and commit the result."
+          paths="include/${PHP_MINOR}/linux-x64-${{ matrix.ts }}"
+          if [ "${{ matrix.ts }}" = nts ]; then
+            paths="${paths} stubs/ .phpstorm.meta.php"
+          fi
+          # shellcheck disable=SC2086 # the variable is a deliberate word list
+          if ! git diff --exit-code -- ${paths}; then
+            echo "::error::Generated linux engine definitions (or the struct stubs / phpstorm meta) are out of date. Run the 'Generate linux headers' workflow and merge its commit, or 'composer gen-headers' locally."
             exit 1
           fi
 
   # The darwin counterpart of header-drift: regenerates natively on a macOS
   # runner (docker cannot produce darwin artifacts) and diffs only the dir the
-  # runner's own architecture can regenerate. The linux job above stays safe
-  # unscoped - linux regeneration never touches the darwin directories.
+  # runner's own architecture can regenerate.
   header-drift-darwin:
     name: Generated darwin headers up to date (${{ matrix.runner-arch.arch }}, ${{ matrix.ts }})
     runs-on: ${{ matrix.runner-arch.runner }}

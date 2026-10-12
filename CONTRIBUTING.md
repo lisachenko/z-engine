@@ -35,7 +35,8 @@ composer test:internal
    `AGENTS.md`) — fixes cascade upward, never downward.
 2. Keep new code clean at PHPStan level max and passing `composer cs:check`.
 3. If you change the set of engine symbols the library uses, update
-   `tools/generator/symbols.php` and run `composer gen-headers` (needs Docker).
+   `tools/generator/symbols.php` and run `composer gen-headers` (needs Docker; without it, run the
+   "Generate linux headers" workflow against your branch - see AGENTS.md).
    Never hand-edit anything under `include/`.
 4. Add or update tests. If a struct is dereferenced by your code, make sure it
    is listed in `layout_structs` so its layout is verified against the C
