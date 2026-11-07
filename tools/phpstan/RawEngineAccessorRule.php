@@ -44,6 +44,15 @@ final class RawEngineAccessorRule implements Rule
 
     private const string STUB_NAMESPACE = 'ZEngine\\Generated\\';
 
+    /**
+     * Raw accessors that stay public until their API contract is decided, keyed
+     * `Class::method` => tracking issue
+     */
+    private const array EXEMPT_METHODS = [
+        // TODO(#192): AbstractModule exposes the globals through this method
+        'ZEngine\\Reflection\\ReflectionExtension::getGlobals' => '#192',
+    ];
+
     public function getNodeType(): string
     {
         return InClassMethodNode::class;
@@ -60,6 +69,9 @@ final class RawEngineAccessorRule implements Rule
             return [];
         }
         if (!$this->isGuarded($class->getName())) {
+            return [];
+        }
+        if (isset(self::EXEMPT_METHODS[$method->getDeclaringClass()->getName() . '::' . $method->getName()])) {
             return [];
         }
 

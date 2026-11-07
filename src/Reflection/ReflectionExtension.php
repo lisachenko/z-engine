@@ -112,8 +112,6 @@ class ReflectionExtension extends NativeReflectionExtension
      * the returned view is the CALLING thread's globals block, resolved the same way
      * as the engine's ZEND_MODULE_GLOBALS_ACCESSOR (entry->storage[id - 1]).
      *
-     * @internal raw-CData escape hatch for the core layer (see AGENTS.md)
-     *
      * @return \FFI\CData|null
      */
     public function getGlobals(): ?object
