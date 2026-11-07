@@ -13,6 +13,9 @@ struct _IO_FILE;
 typedef struct _IO_FILE FILE;
 typedef int64_t zend_long;
 typedef uint64_t zend_ulong;
+typedef struct zend_atomic_bool_s {
+ _Bool value;
+} zend_atomic_bool;
 typedef enum zend_result {
   SUCCESS = 0,
   FAILURE = -1,
@@ -154,6 +157,18 @@ struct _zend_reference {
 struct _zend_ast_ref {
  zend_refcounted_h gc;
 };
+typedef enum _zend_oom_state {
+ ZEND_OOM_STATE_NONE = 0,
+ ZEND_OOM_STATE_PENDING,
+ ZEND_OOM_STATE_HANDLING,
+ ZEND_OOM_STATE_HANDLED
+} zend_oom_state;
+typedef struct _zend_oom_info {
+ zend_oom_state state;
+ uint32_t lineno;
+ zend_string *message;
+ zend_string *filename;
+} zend_oom_info;
 typedef struct _zend_llist_element {
  struct _zend_llist_element *next;
  struct _zend_llist_element *prev;
@@ -686,9 +701,6 @@ struct __jmp_buf_tag
 typedef struct __jmp_buf_tag sigjmp_buf[1];
 typedef struct _zend_compiler_globals zend_compiler_globals;
 typedef struct _zend_executor_globals zend_executor_globals;
-typedef struct zend_atomic_bool_s {
- _Bool value;
-} zend_atomic_bool;
 typedef struct _zend_stack {
  int size, top, max;
  void *elements;
@@ -763,6 +775,7 @@ struct _zend_compiler_globals {
  _Bool multibyte;
  _Bool detect_unicode;
  _Bool encoding_declared;
+ _Bool interned_strings_fallible;
  zend_ast *ast;
  zend_arena *ast_arena;
  zend_stack delayed_oplines_stack;
@@ -873,6 +886,7 @@ struct _zend_executor_globals {
  zend_vm_stack fiber_vm_stack_page_cache;
  uint32_t fiber_vm_stack_page_cache_count;
  void *reserved[6];
+ zend_oom_info delayed_oom;
 };
 typedef enum {
  ON_TOKEN,
