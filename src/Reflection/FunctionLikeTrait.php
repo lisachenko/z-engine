@@ -758,19 +758,6 @@ trait FunctionLikeTrait
     }
 
     /**
-     * Dereferences the offset form of a ZEND_MAP_PTR field into the per-process map-ptr area
-     *
-     * The slot address is CG(map_ptr_base) + offset: the engine pre-biases the base, so no
-     * -1 adjustment is applied (see zend_map_ptr.h:ZEND_MAP_PTR_OFFSET2PTR and the identical
-     * arithmetic in StringEntry::setCachedClassEntry()). The bound check mirrors
-     * ZSTR_VALID_CE_CACHE: a slot beyond CG(map_ptr_last) was never handed out.
-     *
-     * @param int $slotOffset Raw field value with the low bit set (ZEND_MAP_PTR_IS_OFFSET)
-     *
-     * @return CData|null HashTable* stored in the slot, or null while the slot is not yet
-     *                    materialized (or the map-ptr area cannot vouch for it)
-     */
-    /**
      * Returns the materialized live static-variables table of this user function as the raw
      * `HashTable *`, or null while no call has bound the statics yet (both slot forms, see
      * getStaticVariables())
@@ -798,6 +785,19 @@ trait FunctionLikeTrait
         return Core::cast(HashTableStruct::class, $materialized);
     }
 
+    /**
+     * Dereferences the offset form of a ZEND_MAP_PTR field into the per-process map-ptr area
+     *
+     * The slot address is CG(map_ptr_base) + offset: the engine pre-biases the base, so no
+     * -1 adjustment is applied (see zend_map_ptr.h:ZEND_MAP_PTR_OFFSET2PTR and the identical
+     * arithmetic in StringEntry::setCachedClassEntry()). The bound check mirrors
+     * ZSTR_VALID_CE_CACHE: a slot beyond CG(map_ptr_last) was never handed out.
+     *
+     * @param int $slotOffset Raw field value with the low bit set (ZEND_MAP_PTR_IS_OFFSET)
+     *
+     * @return CData|null HashTable* stored in the slot, or null while the slot is not yet
+     *                    materialized (or the map-ptr area cannot vouch for it)
+     */
     private function dereferenceMapPointerSlot(int $slotOffset): ?CData
     {
         $mapPointerBase = Core::$compiler->getMapPointerBaseAddress();
@@ -1050,8 +1050,7 @@ trait FunctionLikeTrait
      *
      * @internal shared with the body-swap machinery (FunctionBodySwap), which performs
      *           the low-level engine surgery on the entry
-     */
-    /**
+     *
      * @return zend_function|zend_internal_function
      */
     public function getEntryPointer(): object

@@ -198,6 +198,8 @@ class StringEntry implements ReferenceCountedInterface
     /**
      * Returns raw C value entry
      *
+     * @internal raw-CData escape hatch for the core layer (see AGENTS.md)
+     *
      * @return zend_string
      */
     public function getRawValue(): object
