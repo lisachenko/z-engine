@@ -271,6 +271,25 @@ line, the fix is a named public method here, not a reach-through there: class-ta
 eviction became `ClassSpecializer::evict()` and `sizeof(type(...))` became
 `Core::sizeOfType()` for exactly that reason.
 
+**Every raw accessor carries `@internal`.** A public method that returns a raw
+`FFI\CData`/`FFI\CType`, or a generated stub view (a CData handle at run time), is marked
+`@internal` in the docblock right above it. Keep one docblock per method: PHP and PHPStan
+read only the last one, so an `@internal` in an earlier, stacked block is lost. A class
+marked `@internal` as a whole (`StructArray`, `FunctionLikeInterface`) covers its methods.
+`tools/phpstan/RawEngineAccessorRule.php` enforces this for `ZEngine\Type` and
+`ZEngine\Reflection`. Name a new accessor by what it hands out:
+
+- `getRawValue()`: the struct the wrapper owns (`StringEntry`, `ObjectEntry`, `HashTable`,
+  `ReflectionClass`, `ReflectionValue`, ...).
+- `getRaw<Thing>()`: a struct reached through the owned one
+  (`ReflectionValue::getRawString()`, `ClosureEntry::getRawFunction()`,
+  `ResourceEntry::getRawData()`).
+- `get<Field>Pointer()`: a view into one field or embedded part of the owned struct
+  (`ObjectEntry::getPropertyTablePointer()`, `getOpArrayPointer()`).
+
+`FunctionLikeInterface::getEntryPointer()` is older than this convention (by it, the name
+would be `getRawValue()`); existing names stay as they are, so callers do not break.
+
 ## Engine structs are owned by their reflection/type class, never poked from call sites
 
 This applies to EVERY class: if a class is responsible for a structure, then all external

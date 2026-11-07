@@ -106,6 +106,8 @@ class OpLine
     /**
      * Returns a raw pointer to the opcode handler
      *
+     * @internal raw-CData escape hatch for the core layer (see AGENTS.md)
+     *
      * @return \FFI\CData
      */
     public function getHandler(): object
