@@ -312,7 +312,7 @@
             }
         },
         "zend_executor_globals": {
-            "size": 2200,
+            "size": 2224,
             "fields": {
                 "uninitialized_zval": 0,
                 "error_zval": 16,
@@ -404,7 +404,8 @@
                 "vm_stack_page_cache_count": 2128,
                 "fiber_vm_stack_page_cache": 2136,
                 "fiber_vm_stack_page_cache_count": 2144,
-                "reserved": 2152
+                "reserved": 2152,
+                "delayed_oom": 2200
             }
         },
         "zend_compiler_globals": {
@@ -441,6 +442,7 @@
                 "multibyte": 440,
                 "detect_unicode": 441,
                 "encoding_declared": 442,
+                "interned_strings_fallible": 443,
                 "ast": 448,
                 "ast_arena": 456,
                 "delayed_oplines_stack": 464,

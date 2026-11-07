@@ -20,6 +20,7 @@ use ZEngine\ClassExtension\Hook\CompareValuesHook;
 use ZEngine\ClassExtension\ObjectCreateTrait;
 use ZEngine\OpCache\SharedMemoryException;
 use ZEngine\Reflection\ReflectionClass;
+use ZEngine\Type\ObjectEntry;
 
 class ClassDeltaTest extends TestCase
 {
@@ -140,6 +141,24 @@ class ClassDeltaTest extends TestCase
         $restoredInstance = self::newInstance($className);
         $this->assertTrue(method_exists($restoredInstance, 'speak'));
         $this->assertSame('base', self::callMethod($restoredInstance, 'speak'));
+    }
+
+    public function testNameLookupResolvesLiveClassAfterSwapOfLinkedClass(): void
+    {
+        $baseName  = 'HotSwapBaseForNameCache';
+        $className = 'HotSwapNameCacheTarget';
+        eval("class {$baseName} {}");
+        eval("class {$className} extends {$baseName} { public function speak(): string { return \"live\"; } }");
+        $liveAddress = (new ReflectionClass($className))->getAddress();
+
+        // Linking a donor with a parent stores it in the engine's class-name cache. A lookup
+        // by name must still reach the live entry once the donor is destroyed, on discard
+        // as well as on apply.
+        HotSwap::prepare($className, "class {$className} extends {$baseName} {}")->discard();
+        $this->assertSame($liveAddress, (new ObjectEntry(self::newInstance($className)))->getClass()->getAddress());
+
+        HotSwap::prepare($className, "class {$className} extends {$baseName} {}")->apply();
+        $this->assertSame($liveAddress, (new ObjectEntry(self::newInstance($className)))->getClass()->getAddress());
     }
 
     public function testConstantChangeAndAddition(): void

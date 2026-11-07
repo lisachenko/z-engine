@@ -306,7 +306,7 @@
             }
         },
         "zend_executor_globals": {
-            "size": 1960,
+            "size": 1984,
             "fields": {
                 "uninitialized_zval": 0,
                 "error_zval": 16,
@@ -391,7 +391,8 @@
                 "max_allowed_stack_size": 1816,
                 "reserved_stack_size": 1824,
                 "strtod_state": 1832,
-                "reserved": 1912
+                "reserved": 1912,
+                "delayed_oom": 1960
             }
         },
         "zend_compiler_globals": {
@@ -428,6 +429,7 @@
                 "multibyte": 440,
                 "detect_unicode": 441,
                 "encoding_declared": 442,
+                "interned_strings_fallible": 443,
                 "ast": 448,
                 "ast_arena": 456,
                 "delayed_oplines_stack": 464,

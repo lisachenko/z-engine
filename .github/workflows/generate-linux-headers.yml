@@ -132,6 +132,9 @@ jobs:
           path: |
             stubs/zend-engine-structs.php
             .phpstorm.meta.php
+          # upload-artifact drops dotfiles by default, which silently left
+          # .phpstorm.meta.php out of the commit
+          include-hidden-files: true
           if-no-files-found: error
 
   # A single commit job (instead of each runner pushing) serializes both
