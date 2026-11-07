@@ -135,9 +135,9 @@ offsets; the opcache file-cache relocator runs on ZTS since issue #118.
 The 8.4 artifacts are maintained on the `8.4` branch;
 `include/8.5/darwin-*` is maintained here - after changing the generator,
 refresh it with one `workflow_dispatch` run of the workflow on `master`.
-A leg whose thread-safety mode setup-php cannot provide (currently ZTS
-PHP 8.5 on Intel) skips cleanly and self-heals on a later run; the CI
-presence guards keep the gap visible as warnings.
+A leg whose thread-safety mode setup-php cannot provide skips cleanly and
+self-heals on a later run; the CI presence guards keep the gap visible as
+warnings.
 
 ### Windows artifacts
 

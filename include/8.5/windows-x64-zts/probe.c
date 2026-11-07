@@ -1276,6 +1276,7 @@ int main(void) {
     fprintf(layouts, ", \"reserved_stack_size\": %zu", offsetof(zend_executor_globals, reserved_stack_size));
     fprintf(layouts, ", \"strtod_state\": %zu", offsetof(zend_executor_globals, strtod_state));
     fprintf(layouts, ", \"reserved\": %zu", offsetof(zend_executor_globals, reserved));
+    fprintf(layouts, ", \"delayed_oom\": %zu", offsetof(zend_executor_globals, delayed_oom));
     fputs("}},\n", layouts);
     fputs("        \"zend_compiler_globals\": {", layouts);
     fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_compiler_globals));
@@ -1310,6 +1311,7 @@ int main(void) {
     fprintf(layouts, ", \"multibyte\": %zu", offsetof(zend_compiler_globals, multibyte));
     fprintf(layouts, ", \"detect_unicode\": %zu", offsetof(zend_compiler_globals, detect_unicode));
     fprintf(layouts, ", \"encoding_declared\": %zu", offsetof(zend_compiler_globals, encoding_declared));
+    fprintf(layouts, ", \"interned_strings_fallible\": %zu", offsetof(zend_compiler_globals, interned_strings_fallible));
     fprintf(layouts, ", \"ast\": %zu", offsetof(zend_compiler_globals, ast));
     fprintf(layouts, ", \"ast_arena\": %zu", offsetof(zend_compiler_globals, ast_arena));
     fprintf(layouts, ", \"delayed_oplines_stack\": %zu", offsetof(zend_compiler_globals, delayed_oplines_stack));

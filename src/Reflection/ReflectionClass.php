@@ -783,6 +783,36 @@ class ReflectionClass extends NativeReflectionClass
     }
 
     /**
+     * Points the engine's fast class-name cache at this class entry
+     *
+     * A class lookup by an interned name reads a memoized per-request slot BEFORE the
+     * class table, and the engine fills that slot itself whenever it links a class
+     * (zend_do_link_class). Code that swaps the entry a name resolves to behind the
+     * engine's back must repoint the slot too, or lookups keep returning the old entry.
+     *
+     * @param ReflectionClass|null $namesake Another entry declared under the same name
+     *                                       whose name string must stop resolving to it
+     *
+     * @internal shared with the hot-swap machinery (HotSwap)
+     */
+    public function bindClassNameCache(?ReflectionClass $namesake = null): void
+    {
+        $nameStrings = [$this->pointer->name];
+        if ($namesake !== null) {
+            // Usually the same interned string, but nothing guarantees it
+            $nameStrings[] = $namesake->pointer->name;
+        }
+        foreach ($nameStrings as $nameString) {
+            // Engine invariant: every class entry carries a name
+            assert($nameString !== null);
+            $nameEntry = StringEntry::fromCData($nameString);
+            if ($nameEntry->hasClassEntryCache()) {
+                $nameEntry->setCachedClassEntry($this->pointer);
+            }
+        }
+    }
+
+    /**
      * Returns the raw zend_class_entry pointer this reflection wraps
      *
      * The pointer is a live view into engine memory; prefer the typed accessors on
