@@ -207,6 +207,10 @@ final class HotSwap
                 self::unpublishClassEntry($lowerName);
             }
             self::publishClassEntry($lowerName, $liveClass);
+            // Linking the donor (a class with a parent or interfaces) memoized it in the
+            // engine's class-name cache. Repoint that slot at the live entry, or every later
+            // lookup by name resolves the donor, which is destroyed on apply or discard.
+            $liveClass->bindClassNameCache($donorClass);
         }
 
         if ($compileError !== null) {
