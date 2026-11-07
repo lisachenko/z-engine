@@ -16,6 +16,7 @@ namespace ZEngine\Type;
 use FFI\CData;
 use ReflectionClass;
 use ZEngine\Core;
+use ZEngine\Generated\zend_class_entry;
 use ZEngine\Generated\zend_refcounted_h;
 use ZEngine\Generated\zend_string;
 use ZEngine\Memory\Allocator;
@@ -335,7 +336,7 @@ class StringEntry implements ReferenceCountedInterface
      * sites compiled into cached scripts read the memoized entry, not the table, so without
      * this refresh they would keep dispatching the shared-memory class entry.
      *
-     * @param CData $classEntry zend_class_entry the name must resolve to from now on
+     * @param CData|zend_class_entry $classEntry zend_class_entry the name must resolve to from now on
      *
      * @see zend_types.h:ZSTR_SET_CE_CACHE
      */
