@@ -343,9 +343,9 @@ class ObjectEntry implements ReferenceCountedInterface
      *
      * No refcounting is performed on either the previous or the new table - the caller
      * keeps ownership of both, exactly like setClass() does for class entries.
+     *
      * @internal
-     */
-    /**
+     *
      * @param CData|HashTableStruct|null $hashTable
      */
     public function setDynamicPropertiesPointer(?object $hashTable): void
@@ -371,6 +371,8 @@ class ObjectEntry implements ReferenceCountedInterface
 
     /**
      * Returns raw C value entry
+     *
+     * @internal raw-CData escape hatch for the core layer (see AGENTS.md)
      *
      * @return zend_object
      */
@@ -439,8 +441,7 @@ class ObjectEntry implements ReferenceCountedInterface
 
     /**
      * Performs low-level initialization of object
-     */
-    /**
+     *
      * @param CData|zend_object $pointer
      */
     private function initLowLevelStructures(object $pointer): void

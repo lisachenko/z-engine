@@ -117,6 +117,8 @@ class ResourceEntry implements ReferenceCountedInterface
     /**
      * Returns the low-level raw data, associated with this resource
      *
+     * @internal raw-CData escape hatch for the core layer (see AGENTS.md)
+     *
      * @return \FFI\CData
      */
     public function getRawData(): object
