@@ -110,3 +110,8 @@ services:
     -
         class: ZEngine\PHPStan\TypedEntryPointReturnExtension
         tags: [phpstan.broker.dynamicStaticMethodReturnTypeExtension]
+
+# Every public method of ZEngine\Type / ZEngine\Reflection that returns a raw CData/CType or a
+# generated struct stub view must carry @internal (AGENTS.md, issue #194)
+rules:
+    - ZEngine\PHPStan\RawEngineAccessorRule

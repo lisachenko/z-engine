@@ -163,6 +163,8 @@ class ClosureEntry
     /**
      * Returns raw zend_function data for this closure
      *
+     * @internal raw-CData escape hatch for the core layer (see AGENTS.md)
+     *
      * @return zend_function
      */
     public function getRawFunction(): object

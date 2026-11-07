@@ -195,6 +195,31 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
     }
 
     /**
+     * Creates a low-level reflection over a raw zend_function structure without
+     * initializing the native reflection state
+     *
+     * Unlike fromCData() this never resolves the method through its class, so it works
+     * for methods that are not published under their declaring class's live name (eg
+     * hot-swap donor entries residing only as structures in memory, including methods
+     * the donor adds that do not exist on the live class yet). Only the pointer-level
+     * API (equals()/getCommonPointer()/getOpArrayPointer()/getDeclaringClass()/
+     * isUserDefined()/isRemovable()) is usable, native introspection is not.
+     *
+     * @internal used by the hot-swap machinery (ClassDelta)
+     *
+     * @param CData|zend_function|zend_internal_function $functionEntry
+     */
+    public static function fromRawEntry(object $functionEntry): ReflectionMethod
+    {
+        /** @var ReflectionMethod $reflectionMethod */
+        $reflectionMethod = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
+        /** @var zend_function|zend_internal_function $functionEntry Narrowed to the stub views at the owning boundary */
+        $reflectionMethod->pointer = $functionEntry;
+
+        return $reflectionMethod;
+    }
+
+    /**
      * Binds the zend_function embedded into a closure to the given class as a method
      *
      * All function surgery goes through the wrapper API: the entry is renamed, attached to
@@ -209,32 +234,6 @@ class ReflectionMethod extends NativeReflectionMethod implements FunctionLikeInt
      *
      * @internal
      */
-    /**
-     * Creates a low-level reflection over a raw zend_function structure without
-     * initializing the native reflection state
-     *
-     * Unlike fromCData() this never resolves the method through its class, so it works
-     * for methods that are not published under their declaring class's live name (eg
-     * hot-swap donor entries residing only as structures in memory, including methods
-     * the donor adds that do not exist on the live class yet). Only the pointer-level
-     * API (equals()/getCommonPointer()/getOpArrayPointer()/getDeclaringClass()/
-     * isUserDefined()/isRemovable()) is usable, native introspection is not.
-     *
-     * @internal used by the hot-swap machinery (ClassDelta)
-     */
-    /**
-     * @param CData|zend_function|zend_internal_function $functionEntry
-     */
-    public static function fromRawEntry(object $functionEntry): ReflectionMethod
-    {
-        /** @var ReflectionMethod $reflectionMethod */
-        $reflectionMethod = (new NativeReflectionClass(static::class))->newInstanceWithoutConstructor();
-        /** @var zend_function|zend_internal_function $functionEntry Narrowed to the stub views at the owning boundary */
-        $reflectionMethod->pointer = $functionEntry;
-
-        return $reflectionMethod;
-    }
-
     public static function fromClosureEntry(
         ClosureEntry $closureEntry,
         string $className,

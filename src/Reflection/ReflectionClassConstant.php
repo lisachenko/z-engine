@@ -117,6 +117,8 @@ class ReflectionClassConstant extends NativeReflectionClassConstant
      * The pointer is a live view into engine memory; prefer the typed accessors
      * (getReflectionValue(), equals(), getDeclaringClass()) over poking fields.
      *
+     * @internal raw-CData escape hatch for the core layer (see AGENTS.md)
+     *
      * @return zend_class_constant
      */
     public function getRawValue(): object

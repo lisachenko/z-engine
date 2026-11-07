@@ -821,8 +821,7 @@ class ReflectionClass extends NativeReflectionClass
      * this class over poking fields on the result.
      *
      * @internal shared with the hot-swap machinery (ClassDelta/HotSwap)
-     */
-    /**
+     *
      * @return zend_class_entry
      */
     public function getRawValue(): object
@@ -2177,8 +2176,7 @@ class ReflectionClass extends NativeReflectionClass
      * table (zend_class_init_statics) and every further access goes through it. Map-ptr
      * offsets (low bit set, opcache-shared classes) and the legacy case where the map ptr
      * aliases default_static_members_table are reported as null - nothing extra to fix then.
-     */
-    /**
+     *
      * @return zval|null Pointer to the first zval slot of the materialized table
      */
     private function getMaterializedStaticMembersTable(): ?object
@@ -2934,6 +2932,9 @@ class ReflectionClass extends NativeReflectionClass
      *
      * This method is useful within create_object handler
      *
+     * @internal hands out a raw zend_object pointer - consumers create objects through
+     *           CreateObjectHook::proceed() instead
+     *
      * @param CData|zend_class_entry $classType zend_class_entry type to create
      * @param bool $persistent Whether object should be allocated persistent or not. Low-level feature!
      *
@@ -2992,9 +2993,6 @@ class ReflectionClass extends NativeReflectionClass
     /**
      * Performs low-level initialization of fields
      *
-     * @param CData $classEntry
-     */
-    /**
      * @param CData|zend_class_entry $classEntry
      */
     private function initLowLevelStructures(object $classEntry): void
