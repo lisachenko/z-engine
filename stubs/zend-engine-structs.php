@@ -622,6 +622,7 @@ final class zend_compiler_globals
     public bool $multibyte;
     public bool $detect_unicode;
     public bool $encoding_declared;
+    public bool $interned_strings_fallible;
     public ?zend_ast $ast;
     public ?zend_arena $ast_arena;
     public zend_stack $delayed_oplines_stack;
@@ -809,6 +810,7 @@ final class zend_executor_globals
     public int $reserved_stack_size;
     public zend_strtod_state $strtod_state;
     public \FFI\CData $reserved;
+    public zend_oom_info $delayed_oom;
 
     private function __construct() {}
 }
@@ -1280,6 +1282,21 @@ final class zend_objects_store
     public int $top;
     public int $size;
     public int $free_list_head;
+
+    private function __construct() {}
+}
+
+/**
+ * Analysis-only view of the engine C struct 'zend_oom_info'; the runtime value is always FFI\CData.
+ *
+ * @internal
+ */
+final class zend_oom_info
+{
+    public int $state;
+    public int $lineno;
+    public ?zend_string $message;
+    public ?zend_string $filename;
 
     private function __construct() {}
 }
