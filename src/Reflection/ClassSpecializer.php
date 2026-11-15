@@ -80,11 +80,6 @@ class ClassSpecializer
     ];
 
     /**
-     * ce_flags that describe the storage location of the source class (shared memory,
-     * opcache file cache, preload region) and must never travel onto a runtime copy
-     * that lives in plain request memory
-     */
-    /**
      * The three operand slots of a zend_op, paired with the field naming their node type
      *
      * @var array<string, string>
@@ -95,6 +90,11 @@ class ClassSpecializer
         'result_type' => 'result',
     ];
 
+    /**
+     * ce_flags that describe the storage location of the source class (shared memory,
+     * opcache file cache, preload region) and must never travel onto a runtime copy
+     * that lives in plain request memory
+     */
     private const STORAGE_CE_FLAGS = ['ZEND_ACC_IMMUTABLE', 'ZEND_ACC_CACHED', 'ZEND_ACC_FILE_CACHED', 'ZEND_ACC_PRELOADED'];
 
     /**

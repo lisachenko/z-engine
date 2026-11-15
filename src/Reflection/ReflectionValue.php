@@ -386,6 +386,8 @@ class ReflectionValue implements ReferenceCountedInterface
     /**
      * Type-friendly getter to return zend_class_entry directly
      *
+     * @internal raw-CData escape hatch for the core layer (see AGENTS.md)
+     *
      * @return zend_class_entry
      */
     public function getRawClass(): object
@@ -401,6 +403,8 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * Type-friendly getter to return zend_function/zend_internal_function directly
+     *
+     * @internal raw-CData escape hatch for the core layer (see AGENTS.md)
      *
      * @return zend_function|zend_internal_function
      */
@@ -423,6 +427,8 @@ class ReflectionValue implements ReferenceCountedInterface
     /**
      * Type-friendly getter to return zend_string directly
      *
+     * @internal raw-CData escape hatch for the core layer (see AGENTS.md)
+     *
      * @return zend_string
      */
     public function getRawString(): object
@@ -438,6 +444,8 @@ class ReflectionValue implements ReferenceCountedInterface
 
     /**
      * Type-friendly getter to return zend_array directly
+     *
+     * @internal raw-CData escape hatch for the core layer (see AGENTS.md)
      *
      * @return zend_array
      */
@@ -455,6 +463,8 @@ class ReflectionValue implements ReferenceCountedInterface
     /**
      * Type-friendly getter to return zend_object directly
      *
+     * @internal raw-CData escape hatch for the core layer (see AGENTS.md)
+     *
      * @return zend_object
      */
     public function getRawObject(): object
@@ -471,6 +481,8 @@ class ReflectionValue implements ReferenceCountedInterface
     /**
      * Type-friendly getter to return zend_resource directly
      *
+     * @internal raw-CData escape hatch for the core layer (see AGENTS.md)
+     *
      * @return zend_resource
      */
     public function getRawResource(): object
@@ -485,7 +497,9 @@ class ReflectionValue implements ReferenceCountedInterface
     }
 
     /**
-     * Type-friendly getter to return zend_resource directly
+     * Type-friendly getter to return zend_reference directly
+     *
+     * @internal raw-CData escape hatch for the core layer (see AGENTS.md)
      *
      * @return zend_reference
      */
@@ -528,6 +542,8 @@ class ReflectionValue implements ReferenceCountedInterface
     /**
      * Type-friendly getter to return pointer
      *
+     * @internal raw-CData escape hatch for the core layer (see AGENTS.md)
+     *
      * @return \FFI\CData
      */
     public function getRawPointer(): object
@@ -547,6 +563,8 @@ class ReflectionValue implements ReferenceCountedInterface
      * The pointer is a live view into engine memory: reads reflect the current zval
      * state and writes go straight to the engine. Prefer the typed accessors
      * (getType(), getNativeValue(), equals()) over poking fields on the result.
+     *
+     * @internal raw-CData escape hatch for the core layer (see AGENTS.md)
      *
      * @return zval
      */

@@ -73,6 +73,8 @@ final class PersistentObjectFactory
      *                                        the caller releases it the same way it does the
      *                                        rest of that region.
      *
+     * @internal raw-CData escape hatch for the core layer (see AGENTS.md)
+     *
      * @return zend_object zend_object* in persistent memory, not yet registered in the store
      */
     public static function persistentClone(object $sourceObject, ?Allocator $allocator = null): object
