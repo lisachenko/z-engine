@@ -1,7 +1,7 @@
 {
     "meta": {
         "php": "8.6",
-        "api": 20260924,
+        "api": 20261112,
         "zts": 1,
         "debug": 0
     },
@@ -312,7 +312,7 @@
             }
         },
         "zend_executor_globals": {
-            "size": 2224,
+            "size": 2288,
             "fields": {
                 "uninitialized_zval": 0,
                 "error_zval": 16,
@@ -405,11 +405,12 @@
                 "fiber_vm_stack_page_cache": 2136,
                 "fiber_vm_stack_page_cache_count": 2144,
                 "reserved": 2152,
-                "delayed_oom": 2200
+                "delayed_oom": 2200,
+                "padding": 2224
             }
         },
         "zend_compiler_globals": {
-            "size": 624,
+            "size": 688,
             "fields": {
                 "loop_var_stack": 0,
                 "active_class_entry": 24,
@@ -460,7 +461,8 @@
                 "internal_run_time_cache": 576,
                 "internal_run_time_cache_size": 584,
                 "short_circuiting_opnums": 592,
-                "copied_functions_count": 616
+                "copied_functions_count": 616,
+                "padding": 624
             }
         },
         "zend_module_entry": {
