@@ -658,6 +658,7 @@ final class zend_compiler_globals
     public ?\FFI\CData $internal_run_time_cache;
     public int $internal_run_time_cache_size;
     public zend_stack $short_circuiting_opnums;
+    public \FFI\CData $padding;
 
     private function __construct() {}
 }
@@ -852,6 +853,7 @@ final class zend_executor_globals
     public int $fiber_vm_stack_page_cache_count;
     public \FFI\CData $reserved;
     public zend_oom_info $delayed_oom;
+    public \FFI\CData $padding;
 
     private function __construct() {}
 }
