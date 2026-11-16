@@ -1283,6 +1283,7 @@ int main(void) {
     fprintf(layouts, ", \"fiber_vm_stack_page_cache_count\": %zu", offsetof(zend_executor_globals, fiber_vm_stack_page_cache_count));
     fprintf(layouts, ", \"reserved\": %zu", offsetof(zend_executor_globals, reserved));
     fprintf(layouts, ", \"delayed_oom\": %zu", offsetof(zend_executor_globals, delayed_oom));
+    fprintf(layouts, ", \"padding\": %zu", offsetof(zend_executor_globals, padding));
     fputs("}},\n", layouts);
     fputs("        \"zend_compiler_globals\": {", layouts);
     fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_compiler_globals));
@@ -1336,6 +1337,7 @@ int main(void) {
     fprintf(layouts, ", \"internal_run_time_cache_size\": %zu", offsetof(zend_compiler_globals, internal_run_time_cache_size));
     fprintf(layouts, ", \"short_circuiting_opnums\": %zu", offsetof(zend_compiler_globals, short_circuiting_opnums));
     fprintf(layouts, ", \"copied_functions_count\": %zu", offsetof(zend_compiler_globals, copied_functions_count));
+    fprintf(layouts, ", \"padding\": %zu", offsetof(zend_compiler_globals, padding));
     fputs("}},\n", layouts);
     fputs("        \"zend_module_entry\": {", layouts);
     fprintf(layouts, "\"size\": %zu, \"fields\": {", sizeof(zend_module_entry));

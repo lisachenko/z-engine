@@ -791,6 +791,9 @@ struct _zend_compiler_globals {
  uint32_t internal_run_time_cache_size;
  zend_stack short_circuiting_opnums;
  uint32_t copied_functions_count;
+ union {
+  uint64_t padding[8];
+ };
 };
 struct _zend_executor_globals {
  zval uninitialized_zval;
@@ -885,6 +888,9 @@ struct _zend_executor_globals {
  uint32_t fiber_vm_stack_page_cache_count;
  void *reserved[6];
  zend_oom_info delayed_oom;
+ union {
+  uint64_t padding[8];
+ };
 };
 typedef enum {
  ON_TOKEN,
