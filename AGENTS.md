@@ -146,7 +146,7 @@ offsets; the opcache file-cache relocator runs on ZTS since issue #118.
 The 8.4 and 8.5 artifacts are maintained on the `8.4` and `8.5` branches;
 `include/8.6/darwin-*` is maintained here - after changing the generator,
 refresh it with one `workflow_dispatch` run of the workflow on `master`.
-A leg whose PHP build setup-php cannot provide (a pre-release 8.6, or a
+A leg whose PHP build setup-php cannot provide (a pre-release minor, or a
 thread-safety mode with no build) skips cleanly and self-heals on a later
 run; the CI presence guards keep the gap visible as warnings.
 
