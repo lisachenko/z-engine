@@ -43,12 +43,12 @@ Engine memory layouts change between every PHP minor version, so each PHP minor 
 
 | PHP | OS / Arch / TS | Branch | Status |
 |-----|----------------|--------|--------|
-| 8.6 | linux-x64 (nts, zts), darwin-x64 (nts, zts), darwin-arm64 (nts, zts) | `master` | ✅ supported¹ |
+| 8.6 | linux-x64 (nts, zts), darwin-x64 (nts, zts), darwin-arm64 (nts, zts), windows-x64 (nts, zts) | `master` | ✅ supported¹ |
 | 8.5 | linux-x64 (nts, zts), darwin-x64 (nts, zts), darwin-arm64 (nts, zts), windows-x64 (nts, zts) | `8.5` | ✅ supported |
 | 8.4 | linux-x64 (nts, zts), darwin-x64 (nts, zts), darwin-arm64 (nts, zts), windows-x64 (nts, zts) | `8.4` | ✅ supported |
 | 8.0 | linux-x64-nts | `8.0` | 🧊 frozen (legacy) |
 
-¹ Supported since the PHP 8.6.0 release: the committed linux definitions regenerate byte for byte from the 8.6.0 GA build, and CI re-verifies the darwin ones on macOS runners. The windows-x64 definitions are not committed yet; they land through one run of the "Generate windows headers" workflow on `master`, and until then the Windows legs warn and skip.
+¹ Supported since the PHP 8.6.0 release: the committed linux definitions regenerate byte for byte from the 8.6.0 GA build, and CI re-verifies the darwin ones on macOS runners. The windows-x64 definitions come from the "Generate windows headers" workflow, run against the windows.php.net 8.6 builds.
 
 > **Version matching is not optional.** Running Z-Engine against a PHP minor it was not built for corrupts memory. `Core::init()` enforces the match and aborts with a clear message rather than letting you crash.
 
