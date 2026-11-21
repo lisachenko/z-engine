@@ -58,9 +58,10 @@ $finder = PhpCsFixer\Finder::create()
 
 return (new PhpCsFixer\Config())
     ->setRiskyAllowed(true)
-    // This branch targets PHP 8.6, which php-cs-fixer does not list as
-    // supported while it is pre-release; the codebase uses no 8.6-only syntax,
-    // so the fixer output stays stable. Drop once the fixer supports 8.6.
+    // This branch targets PHP 8.6, whose syntax php-cs-fixer does not list as
+    // supported yet (PHP_VERSION_SYNTAX_SUPPORTED is still 8.5); the codebase
+    // uses no 8.6-only syntax, so the fixer output stays stable. Drop once the
+    // fixer supports 8.6.
     ->setUnsupportedPhpVersionAllowed(true)
     ->setRules([
         '@PER-CS2.0'             => true,
