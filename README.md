@@ -22,13 +22,87 @@
 
 Ordinary PHP lets you write programs **on top of** the language. Z-Engine lets you change **the runtime those programs run on**, from a Composer package and in plain PHP.
 
-You hit this limit sooner or later when you write a framework, a test tool, a profiler or a long-running worker. You need behaviour that only a C extension can give you, so you are left with four choices: write and maintain C, give up the feature, depend on a PECL extension your users cannot install, or fake it with code generation, proxies and stream-wrapper tricks. Z-Engine adds a fifth: do what the C extension would do, from PHP, at runtime, on code that is **already loaded**.
+You hit this limit sooner or later when you write a framework, a test tool, a profiler or a long-running worker. You need behaviour that only a C extension can give you, so you are left with four choices: write and maintain C, give up the feature, depend on a PECL extension your users cannot install, or fake it with code generation, proxies and stream-wrapper tricks. Z-Engine adds a fifth: do what the C extension would do, from PHP, at runtime, on code that is **already loaded**. The projects [below](#used-in-the-wild-instead-of-a-c-extension) already do exactly that.
 
 **It is a tool for people who build tools:** framework and library authors, testing and tooling authors, people who run long-lived workers (RoadRunner, Swoole, FrankenPHP, ReactPHP, AMPHP), and anyone prototyping a language idea before writing an RFC. It is not meant for the business logic of a typical application.
 
-## Real-world use cases
+## Used in the wild: instead of a C extension
 
-Each case below starts with the conventional PHP answer and its limit, then shows the Z-Engine way.
+Every project below needed something PHP does not offer from userland. The usual answer would have been a C extension, a patched PHP build, or no feature at all. Each one shipped a `composer require` instead.
+
+| Project | What it needed | What it would have needed without Z-Engine |
+|---|---|---|
+| [Swoole Bundle](https://github.com/symfony-swoole/swoole-bundle) (Symfony on Swoole) | Per-coroutine proxies for stateful services, including `final` classes from vendor libraries | uopz or runkit7 on every server, or forking each vendor class |
+| [Moxio SQLite Extended API](https://github.com/Moxio/sqlite-extended-api) | Load the SpatiaLite extension into a PDO SQLite connection behind Doctrine DBAL | A patched `pdo_sqlite`. PHP only gained `Pdo\Sqlite::loadExtension()` in 8.4, four years later |
+| [rikudou/units](https://github.com/RikudouSage/Units) | `$meter + $feet` arithmetic on unit objects | An operator-overloading extension such as pecl/operator |
+| [phpinnacle/mure](https://github.com/phpinnacle/mure) | C#-style extension methods on classes you do not own, such as `DateTime` | runkit7 |
+| [ZDebug](https://github.com/lisachenko/zdebug) | Step debugging from PhpStorm or VS Code | **Xdebug** |
+| [Scalar Objects](https://github.com/lisachenko/scalar-objects) | Methods on strings, ints and arrays | **nikic/scalar_objects**, compiled for each PHP version |
+| [Shared Data Extension](https://github.com/lisachenko/php-shared-data-extension) | Objects that survive across requests, with no serialization | APCu, which serializes and copies on every fetch |
+
+### Swoole Bundle: proxy `final` vendor classes for coroutines
+
+With coroutines, one worker serves many requests at the same time, so every stateful service needs a proxy that keeps separate state per coroutine. A proxy has to extend the class, and many vendor classes are `final`. The bundle's [docs](https://github.com/symfony-swoole/swoole-bundle/blob/master/docs/configuration-reference.md) say they found no better solution than removing the flag at runtime:
+
+```php
+// swoole-bundle, src/Reflection/ClassModifier.php (shortened)
+$reflClass = new \ZEngine\Reflection\ReflectionClass($className);
+$reflClass->setFinal(false);
+foreach ($reflClass->getMethods(\ReflectionMethod::IS_PUBLIC | \ReflectionMethod::IS_FINAL) as $reflMethod) {
+    $reflMethod->setFinal(false);
+}
+// the container can now generate a per-coroutine proxy that extends $className
+```
+
+### Moxio: load SpatiaLite into PDO
+
+Moxio ran integration tests on SQLite with the SpatiaLite geospatial extension and wanted to move to Doctrine DBAL, which is built on PDO. PDO had no way to load an SQLite extension, and the php-src pull request that would have added it had not been merged. Z-Engine let them resolve the `PDO` object to the engine's own `zend_object`, follow it to the native `sqlite3*` connection, and call the SQLite C API through FFI ([the full story](https://www.moxio.com/blog/47/how-to-load-an-sqlite-extension-in-pdo)):
+
+```php
+use Moxio\SQLiteExtendedAPI\Facade;
+
+$pdo = new \PDO('sqlite::memory:');
+Facade::wrapPDO($pdo)->loadExtension('mod_spatialite.so');  // sqlite3_load_extension() on PDO's own handle
+```
+
+### rikudou/units and phpinnacle/mure: new language behaviour for ordinary objects
+
+```php
+// rikudou/units: operators through the engine's do_operation handler
+$result = new Meter(5) + new Foot(15);   // Meter, value 9.572 (BigNumber precision)
+
+// phpinnacle/mure: C#-style extension methods
+class MyDate {
+    public static function addDays(\DateTime $date, int $num) { return $date->modify("+$num days"); }
+}
+\PHPinnacle\Mure\ExtensionManager::init(MyDate::class);
+echo (new \DateTime())->addDays(2)->format('d.m.Y');
+```
+
+### ZDebug, Scalar Objects, Shared Data: C extensions rewritten as Composer packages
+
+```bash
+# ZDebug: your IDE attaches over DBGp, Xdebug's own protocol; nothing is compiled
+composer require --dev lisachenko/zdebug:dev-main
+php -d ffi.enable=1 -d opcache.jit=off -d auto_prepend_file=vendor/lisachenko/zdebug/bootstrap/zdebug.php app.php
+```
+
+```php
+// Scalar Objects: a compile-time AST rewrite, in place of the nikic/scalar_objects extension
+"  hello  "->trim()->upper();                          // "HELLO"
+[1, 2, 3, 4]->filter(fn ($x) => $x % 2 === 0)->sum(); // 6
+
+// Shared Data: build once per worker, get the same live object back in every later request
+$config = $store->has(AppConfig::class)
+    ? $store->get(AppConfig::class)
+    : $store->persist(AppConfig::class, buildExpensiveConfig());
+```
+
+Users also ask about: intercepting every call through the engine's observer API ([#51](https://github.com/lisachenko/z-engine/issues/51)), hooking `===` ([#39](https://github.com/lisachenko/z-engine/issues/39)), dead-code detection ([#35](https://github.com/lisachenko/z-engine/issues/35)), custom keywords ([#17](https://github.com/lisachenko/z-engine/issues/17)) and redefining functions REPL-style ([#15](https://github.com/lisachenko/z-engine/issues/15), now `redefine()`).
+
+## More use cases
+
+Beyond the projects above, these are things the library supports today. Each case starts with the conventional PHP answer and its limit, then shows the Z-Engine way.
 
 ### 1. Hot-reload code in a long-running worker
 
@@ -466,8 +540,21 @@ allocations.
 
 ## Built on Z-Engine
 
-These projects are built entirely on Z-Engine and are good, real-world reading:
+These projects are built on Z-Engine and are good, real-world reading.
 
+By other authors:
+
+- **[symfony-swoole/swoole-bundle](https://github.com/symfony-swoole/swoole-bundle)**: Symfony on Swoole; strips `final` so per-coroutine service proxies can extend vendor classes
+- **[Moxio/sqlite-extended-api](https://github.com/Moxio/sqlite-extended-api)**: SQLite C APIs that PDO does not expose, such as loading extensions
+- **[RikudouSage/Units](https://github.com/RikudouSage/Units)**: unit conversion and arithmetic with overloaded operators
+- **[phpinnacle/mure](https://github.com/phpinnacle/mure)**: C#-style extension methods
+
+By the Z-Engine author:
+
+- **[lisachenko/zdebug](https://github.com/lisachenko/zdebug)**: an Xdebug-compatible step debugger with no C extension
+- **[lisachenko/scalar-objects](https://github.com/lisachenko/scalar-objects)**: methods on scalars through a compile-time AST rewrite
+- **[lisachenko/php-shared-data-extension](https://github.com/lisachenko/php-shared-data-extension)**: objects that survive the request boundary
+- **[lisachenko/native-php-coroutines](https://github.com/lisachenko/native-php-coroutines)**: Fiber coroutines plus forked workers that share real PHP objects
 - **[lisachenko/immutable-object](https://github.com/lisachenko/immutable-object)** — mark a class immutable with a single interface; property writes outside the constructor throw
 - **[lisachenko/native-php-matrix](https://github.com/lisachenko/native-php-matrix)** — a `Matrix` type with fully overloaded arithmetic operators
 - **[lisachenko/userland-php-generics](https://github.com/lisachenko/userland-php-generics)** — reified generics: `Box::of('int')` monomorphizes a template into a real class entry whose `int` the engine enforces, and measures what that costs
