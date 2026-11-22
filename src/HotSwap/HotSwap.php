@@ -71,6 +71,13 @@ final class HotSwap
             throw HotSwapException::classNotLoaded($normalizedName);
         }
         $liveClass = ReflectionClass::fromCData($classEntryValue->getRawClass());
+        if ($classEntryValue->isClassAlias()) {
+            // A class_alias() name resolves to the original class: swap that one under its own
+            // name, so the class table bucket that is unpublished around the donor compilation
+            // is the one the source redeclares, not the alias pointing at it
+            $normalizedName = (string) $liveClass->getName();
+            $lowerName      = strtolower($normalizedName);
+        }
         if ($liveClass->isImmutable()) {
             // The delta is applied in place, which opcache shared memory never allows: the
             // class entry is copied out into a writable per-process copy first (the class

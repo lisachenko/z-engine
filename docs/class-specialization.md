@@ -37,7 +37,9 @@ $instance = $specialized->newInstance();     // or: new \App\Specialized\SomeTem
 (method bodies, via the op_array refcount) stays alive — the memory-ownership contract
 below is exercised at that moment rather than at request end. It refuses internal classes
 and shared-memory (immutable/preloaded) entries with a `ClassSpecializationException`;
-eviction is for runtime-registered copies, which are always plain userland classes.
+eviction is for runtime-registered copies, which are always plain userland classes. A
+`class_alias()` name is refused too: the engine never destroys a class through an alias
+bucket, so the class is evicted by its own name.
 
 A *placeholder* is a class-like type name used in the template declaration (for example
 `public TPlaceholder $value;` where `TPlaceholder` is never defined as a real class).

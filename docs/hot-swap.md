@@ -243,6 +243,10 @@ class entry pointer never changes and no handler field is written.
 | Added constant | An immortal `zend_class_constant` container adopting the donor constant is published. |
 | Changed default property value | The slot in `default_properties_table` (or `default_static_members_table` for static declarations) is replaced. Live objects keep their current property values; statics that were already materialized keep their runtime values. |
 
+A `class_alias()` name is accepted as the target and resolves to the original class: the
+swap runs against that class under its own name, so the source declares the class by its
+real name, as the file on disk does. Every alias keeps publishing the swapped class.
+
 ### Validation (rejected with `HotSwapException`)
 
 - unknown/internal/unlinked classes; interfaces, traits and enums;

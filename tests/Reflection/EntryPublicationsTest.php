@@ -91,11 +91,11 @@ final class EntryPublicationsTest extends TestCase
     {
         $expected = [];
         foreach (Core::$executor->classTable as $classValue) {
-            try {
-                $expected[] = Core::addressOf($classValue->getRawClass());
-            } catch (\UnexpectedValueException $e) {
+            if ($classValue->isClassAlias()) {
                 // An alias bucket resolves to an entry listed under its own name
+                continue;
             }
+            $expected[] = Core::addressOf($classValue->getRawClass());
         }
         $addresses = Core::$executor->classTable->pointerValueAddresses();
 
