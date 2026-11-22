@@ -18,18 +18,160 @@
 
 > **⚠️ Experimental — not for production.** Z-Engine operates on raw engine memory. Segfaults are a feature of the territory, not a bug in your code.
 
-## Why this is different
+## Why would you use it?
 
-Every other "runtime magic" library for PHP stops at the boundary of userland. Z-Engine walks straight through it. Using [PHP FFI](https://www.php.net/manual/en/book.ffi.php), it loads the exact C struct definitions of the running engine — `zend_class_entry`, `zval`, `zend_object_handlers`, `zend_module_entry` — and manipulates them the same way a compiled C extension would. The result is a set of capabilities that simply do not exist anywhere else in pure PHP:
+Ordinary PHP lets you write programs **on top of** the language. Z-Engine lets you change **the runtime those programs run on**, from a Composer package and in plain PHP.
 
-| Capability | What you can do |
-|---|---|
-| 🧮 **Operator overloading** | Give your objects real `+`, `-`, `*`, `/`, `**`, `==` semantics via the engine's `do_operation` and `compare` handlers |
-| 🔒 **Custom object handlers** | Hook `create_object`, `read`/`write`/`unset_property`, `cast_object`, `get_property_ptr_ptr` — build truly immutable objects, copy-on-write types, proxies |
-| 🧩 **Runtime engine modules** | Register a genuine `zend_module_entry` at runtime, with persistent globals shared across requests — an extension written entirely in PHP |
-| 🌳 **Abstract Syntax Tree access** | Parse source to the engine's own AST, inspect it, and rewrite it through the `zend_ast_process` hook |
-| 🪞 **Reflection on steroids** | Make a `final` class non-final, add interfaces and methods at runtime, redefine method bodies, change a method's declaring class |
-| ⚙️ **Opcode handlers** | Install your own handler for any VM opcode |
+You hit this limit sooner or later when you write a framework, a test tool, a profiler or a long-running worker. You need behaviour that only a C extension can give you, so you are left with four choices: write and maintain C, give up the feature, depend on a PECL extension your users cannot install, or fake it with code generation, proxies and stream-wrapper tricks. Z-Engine adds a fifth: do what the C extension would do, from PHP, at runtime, on code that is **already loaded**.
+
+**It is a tool for people who build tools:** framework and library authors, testing and tooling authors, people who run long-lived workers (RoadRunner, Swoole, FrankenPHP, ReactPHP, AMPHP), and anyone prototyping a language idea before writing an RFC. It is not meant for the business logic of a typical application.
+
+## Real-world use cases
+
+Each case below starts with the conventional PHP answer and its limit, then shows the Z-Engine way.
+
+### 1. Hot-reload code in a long-running worker
+
+**Usually:** a worker that keeps the framework booted between requests must be **restarted** to pick up a code change, which throws away warm caches, open connections and in-memory state. Dev servers do it on every file save.
+
+**With Z-Engine:** swap the new class definition into the running process. Live objects run the new method bodies straight away. The swap is atomic: all of it applies or none of it does.
+
+```php
+use ZEngine\HotSwap\HotSwap;
+
+// Called by your file watcher when src/Pricing/PriceCalculator.php changes
+$source = preg_replace('/^<\?php\s*/', '', file_get_contents($changedFile));
+$delta  = HotSwap::prepare(PriceCalculator::class, $source);
+
+$delta->getChangedMethods();  // ['calculate', ...]: log or confirm before applying
+$delta->apply();              // every existing PriceCalculator now runs the new code
+```
+
+Changed or added methods, constants and default values are supported. Changes that would break live instances (a different property layout or class hierarchy) are refused with a `HotSwapException` before anything is touched. [→ docs/hot-swap.md](docs/hot-swap.md)
+
+### 2. Mock `final` classes and patch vendor code in tests
+
+**Usually:** PHPUnit cannot mock a `final` class. Workarounds such as `dg/bypass-finals` rewrite the source in a stream wrapper, which only works for classes **not loaded yet** and conflicts with opcache. `uopz` works, but it is a C extension you have to install on every CI image.
+
+**With Z-Engine:** change the loaded class itself.
+
+```php
+use ZEngine\Reflection\ReflectionClass;
+use ZEngine\Reflection\ReflectionMethod;
+
+// A final SDK client from vendor/ that would otherwise hit a real payment API
+(new ReflectionClass(PaymentClient::class))->setFinal(false); // createMock() works now
+
+// ...or patch one method, keeping the original callable
+(new ReflectionMethod(PaymentClient::class, 'charge'))->redefine(
+    fn (Money $amount): Receipt => Receipt::fake($amount),
+    preserveAs: 'chargeForReal',
+);
+```
+
+### 3. Trace or profile any method without proxies or code generation
+
+**Usually:** to time or log calls on a class you do not own, you generate a decorator or proxy class, wire it into the container, and hope nobody calls `new` directly. Or you install a C-level APM agent.
+
+**With Z-Engine:** wrap the method body in place. Every caller is covered, `new` and static calls included, because the engine's own function entry is changed.
+
+```php
+(new ReflectionMethod(OrderRepository::class, 'find'))->redefine(
+    function (int $id): ?Order {
+        $start = hrtime(true);
+        try {
+            return $this->findUntraced($id);       // the original body
+        } finally {
+            Tracer::record('OrderRepository::find', hrtime(true) - $start);
+        }
+    },
+    preserveAs: 'findUntraced',
+);
+```
+
+For compile-time rewriting, a `zend_ast_process` hook (`Core::setASTProcessHandler()`) lets you change the AST of **every file as it is compiled**. You can also patch opcache's file-cache binaries so the cached code is transformed before it runs ([→ docs/opcache-binary.md](docs/opcache-binary.md)).
+
+### 4. Value objects that behave like numbers
+
+**Usually:** money, decimals, vectors and matrices end up as `$total->add($tax)->multiply($qty)`, and `==` compares properties instead of values.
+
+**With Z-Engine:** give the class real operators through the engine's `do_operation` and `compare` handlers, the same mechanism `GMP` and `BcMath\Number` use in C.
+
+```php
+$total = $price * $quantity + $shipping;   // Money objects, not floats
+if ($total > $creditLimit) { /* ... */ }   // compared by amount
+```
+
+The full example is under [Operator overloading](#operator-overloading). [native-php-matrix](https://github.com/lisachenko/native-php-matrix) is a complete `Matrix` type built this way.
+
+### 5. Reified generics, enforced by the engine
+
+**Usually:** `Collection<User>` exists only in docblocks. PHPStan and Psalm check it, but at runtime anything can be pushed in.
+
+**With Z-Engine:** turn a template class into a real, separate class whose type declarations are rewritten, so the engine's own type checks enforce them.
+
+```php
+$users = (new ReflectionClass(TypedList::class))->specialize(
+    'App\TypedList_User',
+    new TypeSubstitutionMap(['App\T' => User::class]),
+)->newInstance();
+
+$users->add(new User());  // fine
+$users->add('bob');       // TypeError, raised by the engine
+```
+
+[userland-php-generics](https://github.com/lisachenko/userland-php-generics) builds `Box::of('int')`-style generics on top of this. [→ docs/class-specialization.md](docs/class-specialization.md)
+
+### 6. Keep object graphs warm across requests, without `unserialize()`
+
+**Usually:** a routing tree, compiled container or parsed config is cached in APCu or a file and **copied back with `unserialize()` on every request**, and that cost grows with the size of the graph.
+
+**With Z-Engine:** store the graph once in persistent memory. Later requests in the same worker process attach to it directly.
+
+```php
+use ZEngine\EngineExtension\ExtensionManager;
+use ZEngine\EngineExtension\ZEngineModule;
+use ZEngine\Memory\PersistentHeap;
+
+ExtensionManager::register(new ZEngineModule());
+$heap = PersistentHeap::global();
+
+if (($routes = $heap->get('routes')) === null) {
+    $heap->put('routes', RouteCompiler::compile());  // deep persistent clone, done once
+    $routes = $heap->get('routes');
+}
+```
+
+Unsupported values (closures, resources, internal objects) are rejected up front, before anything is allocated. [→ docs/persistent-heap.md](docs/persistent-heap.md)
+
+### 7. Step-debug where Xdebug cannot be installed
+
+**Usually:** step debugging means installing Xdebug, which you cannot do on locked-down hosts, some managed containers or a colleague's laptop on short notice.
+
+**With Z-Engine:** statement-level hooks and access to live frame variables are enough to build a debugger in PHP. **[ZDebug](https://github.com/lisachenko/zdebug)** is one: a DBGp debugger your IDE attaches to, with no C extension. [→ docs/self-debugging.md](docs/self-debugging.md)
+
+### 8. Prototype a language feature before writing the RFC
+
+**Usually:** trying out new syntax or semantics means patching php-src in C, rebuilding PHP, and asking reviewers to do the same.
+
+**With Z-Engine:** rewrite the AST at compile time, install your own handler for any VM opcode, add functions to the engine's function table, or register a full engine module with persistent globals. A prototype becomes a `composer require` that anyone can try.
+
+## Strengths
+
+- **No C, no compiler, no PECL.** `composer require` works anywhere ext-ffi is enabled: Linux, macOS and Windows, NTS and ZTS.
+- **Works on code that is already loaded**, including vendor classes and opcache-cached code. Source-rewriting tools only see a class before it is loaded; Z-Engine changes the live engine structures, so preloaded and cached code is in scope too.
+- **Real engine semantics, not emulation.** A specialized class is a real class entry, a substituted type is checked by the engine, and a generated function (`ReflectionFunction::addFunction()`) runs through the normal VM with no FFI overhead per call.
+- **Atomic, reversible changes.** Hot swaps commit completely or roll back byte for byte. Hooks have `install()`/`uninstall()`, and all of them are restored at shutdown.
+- **Byte-exact by construction.** Engine definitions are generated from the real PHP build for each version, OS, architecture and thread-safety mode. `Core::init()` refuses to run on a PHP minor it was not built for, and can check every struct layout before it touches memory.
+- **Built for long-running processes.** A clear ownership model with deterministic releases (see [Memory safety](#memory-safety--long-running-php)) keeps worker loops and FPM with preload stable.
+- **Typed, analysable API.** Consumers get PHP objects (`ReflectionClass`, `ReflectionValue`, `PersistentHeap`, …), not raw pointers. The codebase passes PHPStan at level max, and generated stubs type every engine struct.
+
+## When not to use it
+
+- **When PHP already has the feature.** Use `readonly`, property hooks, asymmetric visibility, enums or first-class callables where they are enough.
+- **In production request paths, for now.** The project is experimental, and a wrong move crashes the process instead of throwing an exception.
+- **When the JIT is required.** The JIT rewrites the executor internals Z-Engine hooks into, so it must be off (`opcache.jit=off`).
+- **When FFI is disabled.** Hosts that set `ffi.enable=0`, and cannot set `ffi.enable=preload` together with opcache preload, cannot run it.
 
 ## How it works
 
@@ -51,28 +193,6 @@ Engine memory layouts change between every PHP minor version, so each PHP minor 
 ¹ Supported since the PHP 8.6.0 release: the committed linux definitions regenerate byte for byte from the 8.6.0 GA build, and CI re-verifies the darwin ones on macOS runners. The windows-x64 definitions come from the "Generate windows headers" workflow, run against the windows.php.net 8.6 builds.
 
 > **Version matching is not optional.** Running Z-Engine against a PHP minor it was not built for corrupts memory. `Core::init()` enforces the match and aborts with a clear message rather than letting you crash.
-
-## Memory safety & long-running PHP
-
-Every value wrapper follows an explicit ownership model: owning constructors take their own
-engine reference and release it deterministically (`release()`/destruction), `fromCData()`
-factories stay borrowed, and all releases go through the engine's own primitives
-(`zval_ptr_dtor`/`rc_dtor_func`) — never through the FFI allocator. Engine hooks have a full
-lifecycle (`install()`/`uninstall()`/`reinstall()`) backed by a registry, and `Core::shutdown()`
-(registered automatically) restores every hooked engine pointer before the engine could ever
-call a freed trampoline — which is what makes worker loops and FPM + opcache preload viable.
-
-Notable behaviour changes compared to older releases:
-
-- `new StringEntry()` / `new ObjectEntry()` / `new ResourceEntry()` addref and keep their
-  target alive for the wrapper lifetime; `ClosureEntry::setThis()` releases the old bound
-  `$this` and references the new one (no more "object must outlive the closure").
-- `Compiler::parseString()` trees free themselves when the last node wrapper is collected.
-- `AbstractHook::__destruct()` no longer force-restores pointers at arbitrary GC moments.
-
-See [docs/long-running.md](docs/long-running.md) for the ownership tables, the hook
-lifecycle, runtime models (worker vs FPM), and the short list of immortal-by-design
-allocations.
 
 ## Installation
 
@@ -154,6 +274,19 @@ eval('class Extended extends Sealed {}'); // ...it just works.
 ```
 
 ## A tour of the API
+
+Using [PHP FFI](https://www.php.net/manual/en/book.ffi.php), Z-Engine loads the exact C struct definitions of the running engine (`zend_class_entry`, `zval`, `zend_object_handlers`, `zend_module_entry`) and changes them the way a compiled C extension would:
+
+| Capability | What you can do |
+|---|---|
+| 🪞 **Reflection on steroids** | Make a `final` class non-final, add interfaces and methods at runtime, redefine method bodies, hot-swap whole classes |
+| 🧮 **Operator overloading** | Give your objects real `+`, `-`, `*`, `/`, `**`, `==` semantics via the engine's `do_operation` and `compare` handlers |
+| 🔒 **Custom object handlers** | Hook `create_object`, `read`/`write`/`unset_property`, `cast_object`, `get_property_ptr_ptr` to build truly immutable objects, copy-on-write types and proxies |
+| 🧬 **Class specialization** | Clone a class under a new name with its types rewritten (the basis for reified generics) |
+| 🧩 **Runtime engine modules** | Register a genuine `zend_module_entry` at runtime, with persistent globals shared across requests: an extension written entirely in PHP |
+| 💾 **Persistent heap** | Keep whole object graphs alive across requests in a worker process |
+| 🌳 **Abstract Syntax Tree access** | Parse source to the engine's own AST, inspect it, and rewrite it through the `zend_ast_process` hook |
+| ⚙️ **Opcode handlers** | Install your own handler for any VM opcode |
 
 ### Reflection, extended
 
@@ -309,9 +442,31 @@ $module->startup();
 $globals = $module->getGlobals(); // FFI-backed, survives across requests
 ```
 
-## See it in action
+## Memory safety & long-running PHP
 
-These libraries are built entirely on Z-Engine and make good, real-world reading:
+Every value wrapper follows an explicit ownership model: owning constructors take their own
+engine reference and release it deterministically (`release()`/destruction), `fromCData()`
+factories stay borrowed, and all releases go through the engine's own primitives
+(`zval_ptr_dtor`/`rc_dtor_func`) — never through the FFI allocator. Engine hooks have a full
+lifecycle (`install()`/`uninstall()`/`reinstall()`) backed by a registry, and `Core::shutdown()`
+(registered automatically) restores every hooked engine pointer before the engine could ever
+call a freed trampoline — which is what makes worker loops and FPM + opcache preload viable.
+
+Notable behaviour changes compared to older releases:
+
+- `new StringEntry()` / `new ObjectEntry()` / `new ResourceEntry()` addref and keep their
+  target alive for the wrapper lifetime; `ClosureEntry::setThis()` releases the old bound
+  `$this` and references the new one (no more "object must outlive the closure").
+- `Compiler::parseString()` trees free themselves when the last node wrapper is collected.
+- `AbstractHook::__destruct()` no longer force-restores pointers at arbitrary GC moments.
+
+See [docs/long-running.md](docs/long-running.md) for the ownership tables, the hook
+lifecycle, runtime models (worker vs FPM), and the short list of immortal-by-design
+allocations.
+
+## Built on Z-Engine
+
+These projects are built entirely on Z-Engine and are good, real-world reading:
 
 - **[lisachenko/immutable-object](https://github.com/lisachenko/immutable-object)** — mark a class immutable with a single interface; property writes outside the constructor throw
 - **[lisachenko/native-php-matrix](https://github.com/lisachenko/native-php-matrix)** — a `Matrix` type with fully overloaded arithmetic operators
