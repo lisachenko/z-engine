@@ -196,35 +196,7 @@ $users->add('bob');       // TypeError, raised by the engine
 
 [userland-php-generics](https://github.com/lisachenko/userland-php-generics) builds `Box::of('int')`-style generics on top of this. [→ docs/class-specialization.md](docs/class-specialization.md)
 
-### 6. Keep object graphs warm across requests, without `unserialize()`
-
-**Usually:** a routing tree, compiled container or parsed config is cached in APCu or a file and **copied back with `unserialize()` on every request**, and that cost grows with the size of the graph.
-
-**With Z-Engine:** store the graph once in persistent memory. Later requests in the same worker process attach to it directly.
-
-```php
-use ZEngine\EngineExtension\ExtensionManager;
-use ZEngine\EngineExtension\ZEngineModule;
-use ZEngine\Memory\PersistentHeap;
-
-ExtensionManager::register(new ZEngineModule());
-$heap = PersistentHeap::global();
-
-if (($routes = $heap->get('routes')) === null) {
-    $heap->put('routes', RouteCompiler::compile());  // deep persistent clone, done once
-    $routes = $heap->get('routes');
-}
-```
-
-Unsupported values (closures, resources, internal objects) are rejected up front, before anything is allocated. [→ docs/persistent-heap.md](docs/persistent-heap.md)
-
-### 7. Step-debug where Xdebug cannot be installed
-
-**Usually:** step debugging means installing Xdebug, which you cannot do on locked-down hosts, some managed containers or a colleague's laptop on short notice.
-
-**With Z-Engine:** statement-level hooks and access to live frame variables are enough to build a debugger in PHP. **[ZDebug](https://github.com/lisachenko/zdebug)** is one: a DBGp debugger your IDE attaches to, with no C extension. [→ docs/self-debugging.md](docs/self-debugging.md)
-
-### 8. Prototype a language feature before writing the RFC
+### 6. Prototype a language feature before writing the RFC
 
 **Usually:** trying out new syntax or semantics means patching php-src in C, rebuilding PHP, and asking reviewers to do the same.
 
@@ -538,26 +510,10 @@ See [docs/long-running.md](docs/long-running.md) for the ownership tables, the h
 lifecycle, runtime models (worker vs FPM), and the short list of immortal-by-design
 allocations.
 
-## Built on Z-Engine
+## More projects built on Z-Engine
 
-These projects are built on Z-Engine and are good, real-world reading.
-
-By other authors:
-
-- **[symfony-swoole/swoole-bundle](https://github.com/symfony-swoole/swoole-bundle)**: Symfony on Swoole; strips `final` so per-coroutine service proxies can extend vendor classes
-- **[Moxio/sqlite-extended-api](https://github.com/Moxio/sqlite-extended-api)**: SQLite C APIs that PDO does not expose, such as loading extensions
-- **[RikudouSage/Units](https://github.com/RikudouSage/Units)**: unit conversion and arithmetic with overloaded operators
-- **[phpinnacle/mure](https://github.com/phpinnacle/mure)**: C#-style extension methods
-
-By the Z-Engine author:
-
-- **[lisachenko/zdebug](https://github.com/lisachenko/zdebug)**: an Xdebug-compatible step debugger with no C extension
-- **[lisachenko/scalar-objects](https://github.com/lisachenko/scalar-objects)**: methods on scalars through a compile-time AST rewrite
-- **[lisachenko/php-shared-data-extension](https://github.com/lisachenko/php-shared-data-extension)**: objects that survive the request boundary
 - **[lisachenko/native-php-coroutines](https://github.com/lisachenko/native-php-coroutines)**: Fiber coroutines plus forked workers that share real PHP objects
-- **[lisachenko/immutable-object](https://github.com/lisachenko/immutable-object)** — mark a class immutable with a single interface; property writes outside the constructor throw
-- **[lisachenko/native-php-matrix](https://github.com/lisachenko/native-php-matrix)** — a `Matrix` type with fully overloaded arithmetic operators
-- **[lisachenko/userland-php-generics](https://github.com/lisachenko/userland-php-generics)** — reified generics: `Box::of('int')` monomorphizes a template into a real class entry whose `int` the engine enforces, and measures what that costs
+- **[lisachenko/immutable-object](https://github.com/lisachenko/immutable-object)**: mark a class immutable with a single interface; property writes outside the constructor throw
 
 ## Contributing
 
