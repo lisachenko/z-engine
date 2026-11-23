@@ -17,6 +17,8 @@ declare(strict_types=1);
  *
  *  - an image whose script was never loaded here reports every entry as not
  *    loaded and applies as a loud no-op (never a crash, never an invention);
+ *  - so does an image class whose name is held here only by a class_alias()
+ *    of an unrelated class;
  *  - an UNCHANGED enum in a loaded image is not an operation and passes;
  *  - a CHANGED enum method is refused loudly (throw-or-work, never silent),
  *    and the live enum keeps executing its old body.
@@ -70,6 +72,29 @@ if ($orphanReport->notLoadedClasses !== ['zengineimagesyncchannel']) {
     $fail('the image-only enum is not reported as not loaded');
 }
 echo "not-loaded-report: ok\n";
+
+// 1b. The image's class name held by a class_alias() of ANOTHER class: the image's class
+//     was still never declared here, so it is reported as not loaded instead of being
+//     diffed against (or synchronized into) the unrelated class the alias points at
+final class ZEngineImageSyncAliasHolder
+{
+    public function describe(): string
+    {
+        return 'unrelated';
+    }
+}
+class_alias(ZEngineImageSyncAliasHolder::class, 'ZEngineImageSyncChannel');
+$aliased = CacheImageSync::prepare($image);
+if (!$aliased->isEmpty() || $aliased->getRefusalReasons() !== []) {
+    $fail('an image class whose name is only an alias here must diff as empty, without refusals');
+}
+if ($aliased->apply()->notLoadedClasses !== ['zengineimagesyncchannel']) {
+    $fail('an image class whose name is only an alias here is not reported as not loaded');
+}
+// Unpublish the alias again (the engine never destroys a class through an alias bucket),
+// so the fixture can declare the real enum under that name below
+Core::$executor->classTable->delete('zengineimagesyncchannel');
+echo "aliased-name-report: ok\n";
 
 // 2. Loaded and untouched: an enum in the image is not an operation, so
 //    nothing is refused and the apply stays a no-op

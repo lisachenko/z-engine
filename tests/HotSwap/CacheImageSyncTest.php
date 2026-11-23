@@ -95,6 +95,7 @@ class CacheImageSyncTest extends TestCase
 
         self::assertSame(0, $exitCode, "Refusal child exited with code {$exitCode}\n{$report}");
         self::assertStringContainsString('not-loaded-report: ok', $stdout, $report);
+        self::assertStringContainsString('aliased-name-report: ok', $stdout, $report);
         self::assertStringContainsString('unchanged-enum: ok', $stdout, $report);
         self::assertStringContainsString('refused-enum: ok', $stdout, $report);
         self::assertStringContainsString('IMAGE SYNC REFUSALS OK', $stdout, $report);

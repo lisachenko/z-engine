@@ -132,6 +132,22 @@ class ReflectionValueTest extends TestCase
         $this->assertSame(self::class, $className->getStringValue());
     }
 
+    public function testGetRawClassResolvesClassAlias(): void
+    {
+        // class_alias() registers the alias in the class table as IS_ALIAS_PTR, not IS_PTR
+        // like a declared class; getRawClass() must resolve it to the original class entry
+        $aliasName = __NAMESPACE__ . '\ReflectionValueTestAlias';
+        class_alias(self::class, $aliasName);
+
+        $classEntry = Core::$executor->classTable->find(strtolower($aliasName));
+        $this->assertNotNull($classEntry);
+        $this->assertSame(ReflectionValue::IS_ALIAS_PTR, $classEntry->getType() & 0xFF);
+
+        $rawName = $classEntry->getRawClass()->name;
+        $this->assertNotNull($rawName);
+        $this->assertSame(self::class, StringEntry::fromCData($rawName)->getStringValue());
+    }
+
     public function testGetRawFunction(): void
     {
         $functionEntry = Core::$executor->functionTable->find('var_dump');

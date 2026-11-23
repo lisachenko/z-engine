@@ -165,12 +165,17 @@ class ClassSpecializer
     public function evict(string $className): bool
     {
         $lowerName  = strtolower($className);
-        $classEntry = $this->findClassEntry($className);
-        if ($classEntry === null) {
+        $classValue = Core::$executor->classTable->find($lowerName);
+        if ($classValue === null) {
             return false;
         }
 
-        $registeredClass = ReflectionClass::fromCData($classEntry);
+        $registeredClass = ReflectionClass::fromCData($classValue->getRawClass());
+        if ($classValue->isClassAlias()) {
+            // Deleting an alias bucket only unpublishes the name: the engine never destroys a
+            // class through an alias, so reporting an eviction here would be false
+            throw ClassSpecializationException::aliasEviction($className, $registeredClass->getName());
+        }
         if (!$registeredClass->isUserDefined()) {
             throw new ClassSpecializationException(
                 "Cannot evict internal class {$className}: only userland classes are supported",
