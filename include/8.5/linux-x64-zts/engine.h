@@ -108,6 +108,9 @@ struct _IO_FILE;
 typedef struct _IO_FILE FILE;
 typedef int64_t zend_long;
 typedef uint64_t zend_ulong;
+typedef struct zend_atomic_bool_s {
+ _Bool value;
+} zend_atomic_bool;
 typedef enum {
   SUCCESS = 0,
   FAILURE = -1,
@@ -770,9 +773,6 @@ struct _zend_execute_data {
 typedef struct __jmp_buf_tag sigjmp_buf[1];
 typedef struct _zend_compiler_globals zend_compiler_globals;
 typedef struct _zend_executor_globals zend_executor_globals;
-typedef struct zend_atomic_bool_s {
- _Bool value;
-} zend_atomic_bool;
 typedef struct _zend_stack {
  int size, top, max;
  void *elements;
