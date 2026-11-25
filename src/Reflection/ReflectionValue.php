@@ -384,7 +384,23 @@ class ReflectionValue implements ReferenceCountedInterface
     }
 
     /**
+     * Checks whether this class-table bucket is an alias registered by class_alias()
+     *
+     * A declared class is published as an IS_PTR bucket; class_alias() publishes each further
+     * name as an IS_ALIAS_PTR bucket pointing at the same class entry. The engine never destroys
+     * a class through an alias bucket, so code that rewrites or removes the bucket it looked up
+     * must act on the original class's own bucket instead.
+     */
+    public function isClassAlias(): bool
+    {
+        return $this->pointer->u1->v->type === self::IS_ALIAS_PTR;
+    }
+
+    /**
      * Type-friendly getter to return zend_class_entry directly
+     *
+     * Accepts both class-table bucket kinds: IS_PTR (a declared class) and IS_ALIAS_PTR (a name
+     * published by class_alias()), which resolves to the entry of the original class.
      *
      * @internal raw-CData escape hatch for the core layer (see AGENTS.md)
      *
@@ -392,8 +408,9 @@ class ReflectionValue implements ReferenceCountedInterface
      */
     public function getRawClass(): object
     {
-        if ($this->pointer->u1->v->type !== self::IS_PTR) {
-            throw new \UnexpectedValueException('Class entry available only for the type IS_PTR');
+        $type = $this->pointer->u1->v->type;
+        if ($type !== self::IS_PTR && $type !== self::IS_ALIAS_PTR) {
+            throw new \UnexpectedValueException('Class entry available only for the type IS_PTR or IS_ALIAS_PTR');
         }
         $classEntry = $this->pointer->value->ce;
         assert($classEntry !== null);

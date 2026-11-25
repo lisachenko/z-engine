@@ -30,6 +30,9 @@ typedef struct _iobuf FILE;
 struct _iobuf;
 typedef int64_t zend_long;
 typedef uint64_t zend_ulong;
+typedef struct zend_atomic_bool_s {
+ volatile char value;
+} zend_atomic_bool;
 typedef enum {
   SUCCESS = 0,
   FAILURE = -1,
@@ -687,9 +690,6 @@ typedef SETJMP_FLOAT128 _JBTYPE;
 typedef _JBTYPE jmp_buf[16];
 typedef struct _zend_compiler_globals zend_compiler_globals;
 typedef struct _zend_executor_globals zend_executor_globals;
-typedef struct zend_atomic_bool_s {
- volatile char value;
-} zend_atomic_bool;
 typedef struct _zend_stack {
  int size, top, max;
  void *elements;
