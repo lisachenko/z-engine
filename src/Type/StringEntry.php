@@ -139,6 +139,7 @@ class StringEntry implements ReferenceCountedInterface
      *                                  block this method has always minted. A foreign
      *                                  allocator puts the string into ITS memory instead.
      */
+    #[\NoDiscard('the persistent string is only reachable through the returned entry')]
     public static function persistent(string $value, ?Allocator $allocator = null): StringEntry
     {
         $length    = strlen($value);
@@ -180,6 +181,7 @@ class StringEntry implements ReferenceCountedInterface
      *
      * @param Allocator|null $allocator Source of the string block (see persistent())
      */
+    #[\NoDiscard('the immortal string block is only reachable through the returned entry')]
     public static function persistentInterned(string $value, ?Allocator $allocator = null): StringEntry
     {
         $stringEntry = static::persistent($value, $allocator);

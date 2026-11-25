@@ -74,6 +74,7 @@ interface Allocator
      *
      * @throws AllocationException when the request cannot be satisfied
      */
+    #[\NoDiscard('the returned address is the only handle to the allocated block')]
     public function allocate(int $size, int $alignment = self::DEFAULT_ALIGNMENT): int;
 
     /**
