@@ -92,10 +92,9 @@ final class ProbeGenerator
         // Only the minor version is recorded: ABI is stable within a minor and
         // recording the patch level would make the CI drift check fail on
         // every patch release.
-        $lines[]     = '    fprintf(layouts, "    \"meta\": {\"php\": \"%d.%d\", \"api\": %d, \"zts\": %d, \"debug\": %d},\n", PHP_MAJOR_VERSION, PHP_MINOR_VERSION, ZEND_MODULE_API_NO, (int)USING_ZTS, (int)ZEND_DEBUG);';
-        $lines[]     = '    fputs("    \"structs\": {\n", layouts);';
-        $structNames = array_keys($this->layoutFields);
-        $lastStruct  = end($structNames);
+        $lines[]    = '    fprintf(layouts, "    \"meta\": {\"php\": \"%d.%d\", \"api\": %d, \"zts\": %d, \"debug\": %d},\n", PHP_MAJOR_VERSION, PHP_MINOR_VERSION, ZEND_MODULE_API_NO, (int)USING_ZTS, (int)ZEND_DEBUG);';
+        $lines[]    = '    fputs("    \"structs\": {\n", layouts);';
+        $lastStruct = array_key_last($this->layoutFields);
         foreach ($this->layoutFields as $struct => $fields) {
             $isUnion = $this->layoutIsUnion[$struct] ?? false;
             $lines[] = "    fputs(\"        \\\"{$struct}\\\": {\", layouts);";
