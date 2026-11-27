@@ -313,7 +313,7 @@ class RedefineRunTimeCacheTest extends TestCase
         self::assertSame(0, $exitCode, "Plateau child exited with code {$exitCode}\n{$report}");
 
         $stdoutLines = array_values(array_filter(array_map('trim', explode("\n", $stdout))));
-        $lastLine    = $stdoutLines === [] ? '' : end($stdoutLines);
+        $lastLine    = array_last($stdoutLines) ?? '';
         $metrics     = json_decode($lastLine, true);
         self::assertIsArray($metrics, "Plateau child produced no metrics\n{$report}");
         self::assertIsInt($metrics['cycles']);

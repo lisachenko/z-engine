@@ -21,4 +21,13 @@ namespace ZEngine\Reflection;
  * modified: a failed specialize() call never leaves a half-built class behind.
  * The support matrix is documented in docs/class-specialization.md.
  */
-final class ClassSpecializationException extends \ReflectionException {}
+final class ClassSpecializationException extends \ReflectionException
+{
+    public static function aliasEviction(string $aliasName, string $className): self
+    {
+        return new self(
+            "Cannot evict {$aliasName}: {$aliasName} is an alias of {$className}, and the engine "
+            . 'never destroys a class through an alias - evict the class by its own name',
+        );
+    }
+}

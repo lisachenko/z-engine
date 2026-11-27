@@ -92,7 +92,7 @@ class RedefineLeakPlateauTest extends TestCase
 
         // The metrics are the last stdout line (diagnostics may precede them)
         $stdoutLines = array_values(array_filter(array_map('trim', explode("\n", $stdout))));
-        $lastLine    = $stdoutLines === [] ? '' : end($stdoutLines);
+        $lastLine    = array_last($stdoutLines) ?? '';
         $metrics     = json_decode($lastLine, true);
         self::assertIsArray($metrics, "Plateau child produced no metrics\n{$report}");
         self::assertIsInt($metrics['evalOnly']);

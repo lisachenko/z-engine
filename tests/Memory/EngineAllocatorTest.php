@@ -81,7 +81,7 @@ class EngineAllocatorTest extends TestCase
         $this->expectException(AllocationException::class);
         $this->expectExceptionMessageMatches('/positive number of bytes/');
 
-        EngineAllocator::trackedPersistent()->allocate(0);
+        (void) EngineAllocator::trackedPersistent()->allocate(0);
     }
 
     public function testAlignmentThatIsNotAPowerOfTwoIsRefused(): void
@@ -89,7 +89,7 @@ class EngineAllocatorTest extends TestCase
         $this->expectException(AllocationException::class);
         $this->expectExceptionMessageMatches('/power of two/');
 
-        EngineAllocator::trackedPersistent()->allocate(16, 24);
+        (void) EngineAllocator::trackedPersistent()->allocate(16, 24);
     }
 
     public function testAlignmentBeyondTheAllocatorGuaranteeIsRefused(): void
@@ -99,7 +99,7 @@ class EngineAllocatorTest extends TestCase
         $this->expectException(AllocationException::class);
         $this->expectExceptionMessageMatches('/guarantees 8-byte alignment/');
 
-        EngineAllocator::trackedRequest()->allocate(16, 16);
+        (void) EngineAllocator::trackedRequest()->allocate(16, 16);
     }
 
     public function testMallocBackedModesSatisfyTheDefaultAlignment(): void

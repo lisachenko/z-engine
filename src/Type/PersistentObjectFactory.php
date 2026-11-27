@@ -77,6 +77,7 @@ final class PersistentObjectFactory
      *
      * @return zend_object zend_object* in persistent memory, not yet registered in the store
      */
+    #[\NoDiscard('the pinned persistent clone is only reachable through the returned pointer')]
     public static function persistentClone(object $sourceObject, ?Allocator $allocator = null): object
     {
         /** @var zend_object $source Narrowed to the stub view at the owning boundary */

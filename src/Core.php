@@ -1082,6 +1082,7 @@ class Core
      *                                     or a stub class
      * @return ($type is class-string<T> ? T : CData)
      */
+    #[\NoDiscard('the tracked block is only reachable through the returned handle')]
     public static function trackedNew(string $type, bool $persistent = false): object
     {
         $memory                                                    = self::new($type, false, $persistent);
@@ -1198,9 +1199,7 @@ class Core
      */
     public static function isTopHook(HookInterface $hook): bool
     {
-        $chain = self::$installedHooks[$hook->getHookFieldKey()] ?? [];
-
-        return $chain !== [] && end($chain) === $hook;
+        return array_last(self::$installedHooks[$hook->getHookFieldKey()] ?? []) === $hook;
     }
 
     /**
@@ -1210,9 +1209,7 @@ class Core
      */
     public static function topHook(string $fieldKey): ?HookInterface
     {
-        $chain = self::$installedHooks[$fieldKey] ?? [];
-
-        return $chain === [] ? null : end($chain);
+        return array_last(self::$installedHooks[$fieldKey] ?? []);
     }
 
     /**

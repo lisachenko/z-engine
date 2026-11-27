@@ -2941,6 +2941,7 @@ class ReflectionClass extends NativeReflectionClass
      * @return CData Instance of zend_object *
      * @see zend_objects.c:zend_objects_new
      */
+    #[\NoDiscard('the unmanaged zend_object is only reachable through the returned pointer')]
     public static function newInstanceRaw(object $classType, bool $persistent = false): object
     {
         $objectSize = Core::sizeOfType(zend_object::class);

@@ -38,10 +38,15 @@ final class CacheMetaInfo
     public const string MAGIC = "OPCACHE\0";
 
     /**
-     * The fields are published as public readonly and every reconstruction below passes them by
+     * The fields are published as public readonly and every construction below passes them by
      * NAME: four of the six are plain ints, so a positional call that transposes two of them
      * compiles, runs and silently writes a corrupt cache header that only surfaces as a cache
-     * miss or a wrong payload much later.
+     * miss or a wrong payload much later. The with*() derivations do not reconstruct at all:
+     * they clone-with the one field that changes (from inside the class a public readonly
+     * property is writable once during clone()), so the other five are carried over by the
+     * engine instead of being re-listed - and possibly transposed - by hand. Note that the
+     * engine does NOT reject a misspelt clone-with key, it only emits the dynamic-property
+     * deprecation and adds the stray property; each with*() is pinned by CacheMetaInfoTest.
      */
     private function __construct(
         public readonly SystemId $systemId,
@@ -167,26 +172,12 @@ final class CacheMetaInfo
      */
     public function withTimestamp(int $timestamp): self
     {
-        return new self(
-            systemId: $this->systemId,
-            memSize: $this->memSize,
-            strSize: $this->strSize,
-            scriptOffset: $this->scriptOffset,
-            timestamp: $timestamp,
-            checksum: $this->checksum,
-        );
+        return clone($this, ['timestamp' => $timestamp]);
     }
 
     public function withChecksum(int $checksum): self
     {
-        return new self(
-            systemId: $this->systemId,
-            memSize: $this->memSize,
-            strSize: $this->strSize,
-            scriptOffset: $this->scriptOffset,
-            timestamp: $this->timestamp,
-            checksum: $checksum,
-        );
+        return clone($this, ['checksum' => $checksum]);
     }
 
     /**
@@ -194,14 +185,7 @@ final class CacheMetaInfo
      */
     public function withStrSize(int $strSize): self
     {
-        return new self(
-            systemId: $this->systemId,
-            memSize: $this->memSize,
-            strSize: $strSize,
-            scriptOffset: $this->scriptOffset,
-            timestamp: $this->timestamp,
-            checksum: $this->checksum,
-        );
+        return clone($this, ['strSize' => $strSize]);
     }
 
     /**

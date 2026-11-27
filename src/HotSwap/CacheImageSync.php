@@ -338,7 +338,9 @@ final class CacheImageSync
         ksort($imageClasses);
         foreach ($imageClasses as $classKey => $imageClass) {
             $liveValue = $liveClassTable->find($classKey);
-            if ($liveValue === null) {
+            // A name held by class_alias() belongs to another class: this image's class was
+            // never declared in the process, so there is nothing live to synchronize it into
+            if ($liveValue === null || $liveValue->isClassAlias()) {
                 $this->notLoadedClasses[] = $classKey;
                 continue;
             }

@@ -91,6 +91,7 @@ final class EngineAllocator implements Allocator
      * @inheritDoc
      */
     #[\Override]
+    #[\NoDiscard('the returned address is the only handle to the allocated block')]
     public function allocate(int $size, int $alignment = Allocator::DEFAULT_ALIGNMENT): int
     {
         if ($size <= 0) {

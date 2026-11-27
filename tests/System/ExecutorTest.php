@@ -103,6 +103,26 @@ class ExecutorTest extends TestCase
         }
     }
 
+    /**
+     * PHP 8.5's get_error_handler()/get_exception_handler() read the same EG slots natively
+     * without touching them, so they are an independent oracle for the FFI readers: checked
+     * against whatever handlers the runner has ambiently installed, with no set/restore dance
+     */
+    public function testUserHandlerReadersAgreeWithTheNativeAccessors(): void
+    {
+        $ambientErrorHandler = get_error_handler();
+        $this->assertSame($ambientErrorHandler, Core::$executor->getUserErrorHandler());
+        $this->assertSame(get_exception_handler(), Core::$executor->getUserExceptionHandler());
+
+        set_error_handler(static fn(int $code, string $message): bool => false);
+        try {
+            $this->assertSame(get_error_handler(), Core::$executor->getUserErrorHandler());
+        } finally {
+            restore_error_handler();
+        }
+        $this->assertSame($ambientErrorHandler, Core::$executor->getUserErrorHandler());
+    }
+
     public function testGetUserExceptionHandlerReturnsInstalledHandlerOrNull(): void
     {
         // Uninstall any current handler first to check the IS_UNDEF path deterministically

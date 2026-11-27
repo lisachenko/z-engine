@@ -437,9 +437,8 @@ abstract class AbstractModule extends ReflectionExtension implements ModuleInter
      */
     private static function detectModuleName(): string
     {
-        $classNameParts = explode('\\', static::class);
-        $className      = end($classNameParts);
-        $prefixName     = strstr($className, 'Module', true);
+        $className  = array_last(explode('\\', static::class));
+        $prefixName = strstr($className, 'Module', true);
         if ($prefixName !== false) {
             $className = $prefixName;
         }
