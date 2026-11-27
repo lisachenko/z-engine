@@ -38,8 +38,35 @@ env:
   PHP_MINOR: '8.4'
 
 jobs:
+  # A merge-up pull request (its head is a long-lived branch: a version branch or
+  # master) must never get artifacts generated and committed onto that head. Such a
+  # run takes this workflow from the merge result with the BASE branch, so it targets
+  # the base's PHP minor: it pushed 8.6 headers and stubs onto 8.5 through the 8.5 ->
+  # master cascade (#320). After a merge-up, regenerate on the target branch instead
+  # (AGENTS.md). Feature-branch pull requests and workflow_dispatch run unchanged.
+  guard:
+    name: Skip merge-up pull requests
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        shell: bash
+        run: |
+          if [ "$EVENT_NAME" = pull_request ] && [[ "$HEAD_REF" =~ ^([0-9]+\.[0-9]+|master)$ ]]; then
+            echo "::notice::${HEAD_REF} is a long-lived branch (merge-up pull request): not generating or committing artifacts onto it"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
   generate:
     name: Generate windows-x64-${{ matrix.ts }}
+    needs: guard
+    if: needs.guard.outputs.run == 'true'
     strategy:
       fail-fast: false
       matrix:
